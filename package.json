@@ -1,0 +1,28 @@
+{
+  "name": "unlab",
+  "version": "0.1.0",
+  "description": "A browser Linux lab: many unkernel machines on one virtual layer-2 network",
+  "scripts": {
+    "test": "node --test test/*.test.ts",
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -p .",
+    "distros": "node scripts/fetch-distros.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
+    "unkernel": "^0.2.0-261121-8988cfd"
+  },
+  "private": true,
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.8"
+  }
+}

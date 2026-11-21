@@ -1,0 +1,7 @@
+node_modules/
+dist/
+# Mirrored distro images: fetched and SHA-256 checked by scripts/fetch-distros.ts
+public/distros/*.erofs
+
+# Personal Claude Code settings
+.claude/settings.local.json
