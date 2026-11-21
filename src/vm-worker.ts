@@ -4,13 +4,17 @@
 // sends: lab traffic goes to the page's switch over postMessage and reaches
 // the other machines at layer 2, while anything else goes to a NetStack that
 // NATs to the internet over Wisp.
+//
+// Terminals come in two kinds. The kernel console (one per machine) carries
+// the boot log and a shell. Beyond that each tab opens its own pty through
+// vm.spawn(), so a machine can have several independent shells.
 
-import { DEFAULT_WISP_SERVERS, NetStack, createKernel, wispBackend, type KernelInstance } from "unkernel";
+import { DEFAULT_WISP_SERVERS, NetStack, createKernel, wispBackend, type KernelInstance, type Pty } from "unkernel";
 import { Subnet } from "./lab/frames.ts";
-import { MemoryDisk } from "./lab/image.ts";
 import { execAsRoot, setupScript } from "./lab/guest.ts";
+import { MemoryDisk } from "./lab/image.ts";
 import { LabNic } from "./lab/nic.ts";
-import type { FromVm, ToVm, VmConfig } from "./lab/protocol.ts";
+import type { FromVm, PtySpec, ToVm, VmConfig } from "./lab/protocol.ts";
 
 function post(m: FromVm, transfer: Transferable[] = []): void {
 	self.postMessage(m, transfer);
@@ -23,6 +27,8 @@ function fail(message: string, fatal: boolean): void {
 let vm: KernelInstance | undefined;
 let nic: LabNic | undefined;
 let cfg: VmConfig | undefined;
+/** Shells opened beside the console, by session id. */
+const ptys = new Map<number, Pty>();
 /** Messages that arrive while the kernel is still booting. */
 const queued: ToVm[] = [];
 let booting = true;
@@ -58,7 +64,23 @@ function handle(m: ToVm): void {
 		case "reconfigure":
 			void reconfigure(m);
 			return;
+		case "pty-open":
+			void openPty(m.spec);
+			return;
+		case "pty-data":
+			// Ordered with other writes on this pty; a rejection means it ended.
+			void ptys.get(m.sid)?.write(m.data).catch(() => {});
+			return;
+		case "pty-resize":
+			ptys.get(m.sid)?.resize(m.cols, m.rows);
+			return;
+		case "pty-close":
+			void ptys.get(m.sid)?.kill();
+			ptys.delete(m.sid);
+			return;
 		case "stop":
+			for (const p of ptys.values()) void p.kill();
+			ptys.clear();
 			vm.stop({ code: 0, reason: "powered off" });
 			return;
 	}
@@ -79,6 +101,53 @@ async function reconfigure(m: Extract<ToVm, { type: "reconfigure" }>): Promise<v
 	cfg = { ...cfg, name: m.name, ip: m.ip, prefixBits: m.prefixBits, hosts: m.hosts, internet: m.internet };
 	const r = await execAsRoot(vm, setupScript({ hostname: m.name, ip: m.ip, prefixBits: m.prefixBits, hosts: m.hosts, dhcp: m.internet }));
 	if (r.exitCode !== 0) fail(`reconfigure: ${String(r.stderr).trim()}`, false);
+}
+
+/**
+ * A shell on its own pty (/dev/pts/N), independent of the kernel console, so
+ * one machine can have several terminals open at once. The guest's default
+ * login shell and user are used, as the console's are.
+ */
+async function openPty(spec: PtySpec): Promise<void> {
+	if (!vm) return;
+	let pty: Pty;
+	try {
+		pty = await vm.spawn(undefined, undefined, { pty: true, cols: spec.cols, rows: spec.rows, term: "xterm-256color" });
+	} catch (e) {
+		post({ type: "pty-exit", sid: spec.sid, code: null, reason: e instanceof Error ? e.message : String(e) });
+		return;
+	}
+	ptys.set(spec.sid, pty);
+	post({ type: "pty-ready", sid: spec.sid, pid: pty.pid, pts: pty.pts });
+
+	// A pull stream: vsock credit follows what is read, so keep reading or the
+	// guest blocks once its window is full.
+	void (async () => {
+		const reader = pty.output.getReader();
+		try {
+			for (;;) {
+				const { done, value } = await reader.read();
+				if (done) break;
+				const copy = value.slice();
+				post({ type: "pty-output", sid: spec.sid, bytes: copy }, [copy.buffer]);
+			}
+		} catch {
+			// Whatever went wrong is reported through `ended` below.
+		}
+	})();
+
+	try {
+		const end = await pty.ended;
+		post({
+			type: "pty-exit",
+			sid: spec.sid,
+			code: end.type === "exit" ? end.code : null,
+			reason: end.type === "exit" ? "" : end.type === "signal" ? `signal ${end.signal}` : end.type,
+		});
+	} catch (e) {
+		post({ type: "pty-exit", sid: spec.sid, code: null, reason: e instanceof Error ? e.message : String(e) });
+	}
+	ptys.delete(spec.sid);
 }
 
 async function boot(c: VmConfig): Promise<void> {
@@ -110,7 +179,7 @@ async function boot(c: VmConfig): Promise<void> {
 			net: nic,
 			memoryMiB: c.memoryMiB,
 			consoleSize: { cols: c.cols, rows: c.rows },
-			onProgress: (p) => post({ type: "stage", stage: p.stage, detail: p.stage === "download" ? `${Math.round((p.loaded / Math.max(1, p.total)) * 100)}%` : undefined }),
+			onProgress: (p) => post({ type: "stage", stage: p.stage }),
 			log: (line) => post({ type: "stage", stage: "log", detail: line }),
 		});
 	} catch (e) {

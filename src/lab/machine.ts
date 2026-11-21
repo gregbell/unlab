@@ -1,13 +1,80 @@
-// A machine as the page sees it: a worker, a port on the switch, a console.
+// A machine as the page sees it: a worker, a port on the switch, and the
+// terminal sessions open on it.
+//
+// Every machine has one console (the kernel's own, which carries the boot log)
+// and any number of shells, each on its own pty in the guest. A tab is a view
+// of one session, so several tabs can watch the same machine.
 
-import type { LabSwitch } from "./switch.ts";
 import type { FromVm, HostEntry, ToVm, VmConfig } from "./protocol.ts";
+import type { LabSwitch } from "./switch.ts";
 
 export type MachineState = "booting" | "ready" | "exited" | "error";
+export type SessionKind = "console" | "shell";
+export type SessionState = "opening" | "open" | "closed";
 
 export interface MachineEvents {
 	onChange: () => void;
-	onConsole: (bytes: Uint8Array) => void;
+}
+
+/** Bytes kept per session so a terminal can be rebuilt with its history. */
+const SCROLLBACK_BYTES = 256 * 1024;
+
+export class Session {
+	readonly id: string;
+	readonly machine: Machine;
+	readonly kind: SessionKind;
+	/** Shells are numbered per machine: the first is "shell", then "shell 2". */
+	readonly label: string;
+	state: SessionState;
+	/** /dev/pts/N once the guest has opened it. */
+	detail = "";
+	readonly scrollback: Uint8Array[] = [];
+	#bytes = 0;
+	readonly #listeners = new Set<(bytes: Uint8Array) => void>();
+	cols = 100;
+	rows = 30;
+
+	constructor(machine: Machine, kind: SessionKind, id: string, label: string) {
+		this.machine = machine;
+		this.kind = kind;
+		this.id = id;
+		this.label = label;
+		this.state = kind === "console" ? "open" : "opening";
+	}
+
+	get title(): string {
+		return `${this.machine.name} · ${this.label}`;
+	}
+
+	/** @internal Output from the guest. */
+	emit(bytes: Uint8Array): void {
+		this.scrollback.push(bytes);
+		this.#bytes += bytes.length;
+		while (this.#bytes > SCROLLBACK_BYTES && this.scrollback.length > 1) {
+			this.#bytes -= this.scrollback.shift()!.length;
+		}
+		for (const fn of this.#listeners) fn(bytes);
+	}
+
+	onData(fn: (bytes: Uint8Array) => void): () => void {
+		this.#listeners.add(fn);
+		return () => this.#listeners.delete(fn);
+	}
+
+	write(data: string): void {
+		this.machine.sessionWrite(this, data);
+	}
+
+	resize(cols: number, rows: number): void {
+		if (cols === this.cols && rows === this.rows) return;
+		this.cols = cols;
+		this.rows = rows;
+		this.machine.sessionResize(this, cols, rows);
+	}
+
+	close(): void {
+		this.machine.closeSession(this);
+	}
 }
 
 export class Machine {
@@ -20,20 +87,24 @@ export class Machine {
 	internet: boolean;
 
 	state: MachineState = "booting";
-	/** The host-table version this guest has been given (see Lab#sync). */
-	hostsVersion = 0;
 	/** The last stage the kernel reported, or the error message. */
 	status = "starting";
 	bootMs = 0;
-	/** Console bytes kept so a terminal can be re-created with its history. */
-	readonly scrollback: Uint8Array[] = [];
+	/** The host-table version this guest has been given (see Lab#sync). */
+	hostsVersion = 0;
+
+	readonly sessions: Session[] = [];
+	readonly console: Session;
 
 	readonly #worker: Worker;
 	readonly #sw: LabSwitch;
 	readonly #events: MachineEvents;
 	readonly #pending = new Map<number, (r: { exitCode: number | null; stdout: string; stderr: string }) => void>();
+	/** Shells by the session id the worker knows them as. */
+	readonly #ptys = new Map<number, Session>();
 	#nextExecId = 1;
-	#scrollbackBytes = 0;
+	#nextSid = 1;
+	#shellCount = 0;
 
 	constructor(cfg: Omit<VmConfig, "image">, image: Promise<ArrayBufferLike>, sw: LabSwitch, events: MachineEvents) {
 		this.id = cfg.id;
@@ -45,6 +116,9 @@ export class Machine {
 		this.internet = cfg.internet;
 		this.#sw = sw;
 		this.#events = events;
+
+		this.console = new Session(this, "console", `${this.id}:console`, "console");
+		this.sessions.push(this.console);
 
 		// The new URL(...) must sit inside the new Worker(...) call: that literal
 		// form is what the bundler recognises, and anything else ships the
@@ -89,8 +163,7 @@ export class Machine {
 				this.#sw.receive(this.id, m.frame);
 				return;
 			case "console":
-				this.#remember(m.bytes);
-				this.#events.onConsole(m.bytes);
+				this.console.emit(m.bytes);
 				return;
 			case "stage":
 				if (m.stage !== "log") this.status = m.stage;
@@ -110,6 +183,7 @@ export class Machine {
 			case "exited":
 				this.state = "exited";
 				this.status = m.reason || `exit ${m.code}`;
+				for (const s of this.sessions) s.state = "closed";
 				this.#sw.setLink(this.id, false);
 				this.#events.onChange();
 				return;
@@ -124,24 +198,81 @@ export class Machine {
 				r?.({ exitCode: m.exitCode, stdout: m.stdout, stderr: m.stderr });
 				return;
 			}
+			case "pty-ready": {
+				const s = this.#ptys.get(m.sid);
+				if (!s) return;
+				s.state = "open";
+				s.detail = `pts/${m.pts} · pid ${m.pid}`;
+				this.#events.onChange();
+				return;
+			}
+			case "pty-output":
+				this.#ptys.get(m.sid)?.emit(m.bytes);
+				return;
+			case "pty-exit": {
+				const s = this.#ptys.get(m.sid);
+				if (!s) return;
+				s.state = "closed";
+				if (m.reason) s.detail = m.reason;
+				this.#ptys.delete(m.sid);
+				this.#events.onChange();
+				return;
+			}
 		}
 	}
 
-	#remember(bytes: Uint8Array): void {
-		this.scrollback.push(bytes);
-		this.#scrollbackBytes += bytes.length;
-		// Enough to redraw a terminal, not enough to grow without bound.
-		while (this.#scrollbackBytes > 256 * 1024 && this.scrollback.length > 1) {
-			this.#scrollbackBytes -= this.scrollback.shift()!.length;
+	/** Open another shell on this machine, on its own pty. */
+	openShell(cols = 100, rows = 30): Session {
+		const sid = this.#nextSid++;
+		this.#shellCount++;
+		const label = this.#shellCount === 1 ? "shell" : `shell ${this.#shellCount}`;
+		const s = new Session(this, "shell", `${this.id}:pty${sid}`, label);
+		s.cols = cols;
+		s.rows = rows;
+		this.#ptys.set(sid, s);
+		this.sessions.push(s);
+		this.#send({ type: "pty-open", spec: { sid, cols, rows } });
+		this.#events.onChange();
+		return s;
+	}
+
+	/** @internal */
+	sessionWrite(s: Session, data: string): void {
+		if (s.kind === "console") {
+			this.#send({ type: "input", data });
+			return;
 		}
+		const sid = this.#sidOf(s);
+		if (sid !== undefined) this.#send({ type: "pty-data", sid, data });
 	}
 
-	write(data: string): void {
-		this.#send({ type: "input", data });
+	/** @internal */
+	sessionResize(s: Session, cols: number, rows: number): void {
+		if (s.kind === "console") {
+			this.#send({ type: "resize", cols, rows });
+			return;
+		}
+		const sid = this.#sidOf(s);
+		if (sid !== undefined) this.#send({ type: "pty-resize", sid, cols, rows });
 	}
 
-	resize(cols: number, rows: number): void {
-		this.#send({ type: "resize", cols, rows });
+	/** The console cannot be closed; it belongs to the machine. */
+	closeSession(s: Session): void {
+		if (s.kind === "console") return;
+		const sid = this.#sidOf(s);
+		if (sid !== undefined) {
+			this.#send({ type: "pty-close", sid });
+			this.#ptys.delete(sid);
+		}
+		const i = this.sessions.indexOf(s);
+		if (i >= 0) this.sessions.splice(i, 1);
+		s.state = "closed";
+		this.#events.onChange();
+	}
+
+	#sidOf(s: Session): number | undefined {
+		for (const [sid, sess] of this.#ptys) if (sess === s) return sid;
+		return undefined;
 	}
 
 	exec(cmd: string, root = false): Promise<{ exitCode: number | null; stdout: string; stderr: string }> {
@@ -165,6 +296,10 @@ export class Machine {
 	setLink(up: boolean): void {
 		this.#sw.setLink(this.id, up);
 		this.#events.onChange();
+	}
+
+	counters(): ReturnType<LabSwitch["counters"]> {
+		return this.#sw.counters(this.id);
 	}
 
 	/** Power off and drop the thread. */

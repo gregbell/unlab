@@ -18,6 +18,7 @@ the same tab.
 | | |
 |---|---|
 | Machine | one unkernel kernel in its own Web Worker |
+| Terminal | libghostty's VT engine on WebAssembly, through wterm |
 | Network | a learning layer-2 switch on the page's main thread |
 | Segment | `10.88.0.0/24`, one address per machine |
 | Internet | optional per machine, over a NAT uplink |
@@ -38,6 +39,21 @@ up with both addresses on `eth0`:
 3: eth0  inet 10.0.2.15/24   scope global eth0    <- uplink, default route
 3: eth0  inet 10.88.0.13/24  scope global eth0    <- the lab segment
 ```
+
+### Terminals and tabs
+
+Panes run on [libghostty](https://ghostty.org) — Ghostty's own VT engine
+compiled to WebAssembly — driven by [wterm](https://wterm.dev), which is also
+the terminal unkernel.dev uses. Escape sequences, graphemes, wide glyphs and
+SGR behave as they do in Ghostty itself, and the DOM renderer keeps native
+selection, clipboard, browser find and screen-reader support.
+
+Every machine has a **console** (the kernel's own, which carries the boot log)
+and as many **shells** as you open. A shell is a real pty in the guest, from
+`vm.spawn()`, so `tty` says `/dev/pts/0` and `stty size` follows the pane.
+That means several tabs can point at the same machine: watch `tcpdump` in one
+and run `ping` in another. Inactive panes keep parsing output and only stop
+painting, so nothing is missed while you are looking elsewhere.
 
 ### Why one worker per machine
 
@@ -120,7 +136,6 @@ These are worth knowing before you chase a ghost:
   opt-in per machine.
 * **Nothing is persisted.** Every machine starts from the read-only image
   with a fresh overlay; closing the tab discards the lot.
-* **One console per machine**, not multiple shells.
 
 ## Layout
 
@@ -130,12 +145,22 @@ src/lab/switch.ts    the learning layer-2 switch, with counters and a tap
 src/lab/nic.ts       the NetDevice each machine gets
 src/lab/image.ts     one shared copy of a distro image; a read-only block device
 src/lab/guest.ts     running things as root, and the setup each machine boots into
-src/lab/machine.ts   a machine as the page sees it: worker, port, console
 src/lab/lab.ts       addresses, names, /etc/hosts, the machine list
+src/lab/machine.ts   a machine and its sessions: console, shells, counters
 src/vm-worker.ts     one machine, alone in its thread
+src/ui/terminal.ts   a pane: wterm on the libghostty WASM core
+src/ui/sidebar.ts    the machines list and the selected machine's detail
+src/ui/wire.ts       the packet list, switch stats and MAC table
 src/ui/topology.ts   the lab drawn as it is wired
 test/lab.test.ts     two machines in Node: ARP, ICMP and TCP across the switch
 ```
+
+## The interface
+
+The layout follows [Herdr](https://herdr.dev): machines where its spaces are,
+the selected machine's detail where its agents are, tabs along the top, and
+the terminal taking the rest. **Wire** in the top bar opens the inspector:
+topology, every frame on the segment, and the switch's MAC table.
 
 ## Licence
 

@@ -28,7 +28,6 @@ export interface LabOptions {
 	manifest: DistroManifest;
 	wispServers?: string[];
 	onChange: () => void;
-	onConsole: (machine: Machine, bytes: Uint8Array) => void;
 }
 
 /** Addresses below this are left for the gateway and future fixtures. */
@@ -111,7 +110,6 @@ export class Lab {
 				this.#sync();
 				this.#opts.onChange();
 			},
-			onConsole: (bytes) => this.#opts.onConsole(m, bytes),
 		});
 		// It boots with the host table as it stands, so it is already current.
 		m.hostsVersion = ++this.#hostsVersion;

@@ -1,31 +1,34 @@
-import "@xterm/xterm/css/xterm.css";
+// The terminal's stylesheet first, so ours can override it.
+import "@wterm/dom/css";
 import "./style.css";
 
-import { FitAddon } from "@xterm/addon-fit";
-import { Terminal } from "@xterm/xterm";
-import { decode } from "./lab/decode.ts";
 import { Lab, type DistroManifest } from "./lab/lab.ts";
-import type { TapEvent } from "./lab/switch.ts";
+import type { Machine, Session } from "./lab/machine.ts";
+import { badgeColor, renderDetail, renderMachines, type SidebarHandlers } from "./ui/sidebar.ts";
+import { TerminalPane } from "./ui/terminal.ts";
 import { renderTopology } from "./ui/topology.ts";
+import { MAX_PACKETS, renderMacTable, renderPackets, renderStats, toPacket, type Packet } from "./ui/wire.ts";
 
-const MAX_PACKETS = 600;
-
-interface TermView {
-	term: Terminal;
-	fit: FitAddon;
-	el: HTMLDivElement;
+interface Tab {
+	session: Session;
+	pane: TerminalPane;
 }
 
 const app = document.getElementById("app") as HTMLDivElement;
-const terms = new Map<string, TermView>();
-const packets: Array<TapEvent & { decoded: ReturnType<typeof decode> }> = [];
+const tabs: Tab[] = [];
+const packets: Packet[] = [];
 
 let lab: Lab;
-let activeId: string | undefined;
+let activeSessionId: string | undefined;
+let selectedMachineId: string | undefined;
 let paused = false;
 let filter = "";
 let wireOpen = true;
 let dirty = false;
+
+function byId<T extends HTMLElement = HTMLElement>(id: string): T {
+	return document.getElementById(id) as T;
+}
 
 function toast(message: string): void {
 	const el = document.createElement("div");
@@ -41,47 +44,52 @@ function invalidate(): void {
 	dirty = true;
 	requestAnimationFrame(() => {
 		dirty = false;
-		renderSide();
-		renderTabs();
-		renderWire();
+		render();
 	});
 }
 
-// ---------------------------------------------------------------- structure
+// ------------------------------------------------------------------ layout
 
 function shell(): void {
 	app.innerHTML = `
-		<header>
-			<h1>un<span>lab</span></h1>
-			<span class="meta" id="meta"></span>
-			<span class="spacer"></span>
-			<button class="ghost" id="toggle-wire">Hide wire</button>
-		</header>
-		<aside class="side">
-			<h2>Machines</h2>
-			<div class="add-form">
-				<input type="text" id="new-name" placeholder="name (e.g. web1)" />
-				<button class="primary" id="add">Add</button>
-				<div class="row">
-					<select id="new-distro"></select>
-					<label title="Route non-lab traffic through a public Wisp proxy so apk works"><input type="checkbox" id="new-net" /> internet</label>
-				</div>
+		<header class="topbar">
+			<div class="brand">un<span>lab</span></div>
+			<div class="tabstrip" id="tabstrip"></div>
+			<div class="right">
+				<button id="new-shell" title="New shell on the selected machine">+</button>
+				<button id="toggle-wire" title="Show or hide the network inspector">Wire</button>
 			</div>
-			<div id="machines"></div>
-			<h2>MAC address table</h2>
-			<div class="mac-table" id="macs"></div>
+		</header>
+
+		<aside class="side">
+			<div class="sect">Machines <button id="add" title="Add a machine">+</button></div>
+			<div class="addrow"><input type="text" id="new-name" placeholder="name (e.g. web1)" /></div>
+			<div class="opts">
+				<select id="new-distro"></select>
+				<label title="Route non-lab traffic through a public Wisp proxy so apk works">
+					<input type="checkbox" id="new-net" /> internet
+				</label>
+			</div>
+			<div class="machines" id="machines"></div>
+			<div class="sect top">Machine</div>
+			<div class="detail" id="detail"></div>
 		</aside>
+
 		<section class="main">
-			<div class="tabs" id="tabs"></div>
-			<div class="terms" id="terms"></div>
+			<div class="panes" id="panes"></div>
+			<div class="nothing" id="nothing">
+				<b>No terminal open</b>
+				<div>Pick a machine on the left, or press <code>+</code> for another shell.</div>
+			</div>
 		</section>
+
 		<section class="wire" id="wire">
-			<h2>Topology</h2>
+			<div class="sect">Topology</div>
 			<div id="topo"></div>
-			<h2>The wire — every frame on the segment</h2>
+			<div class="sect">The wire</div>
 			<div class="controls">
 				<input type="text" id="pkt-filter" placeholder="filter: icmp, arp, 10.88.0.12 …" />
-				<button id="pause">Pause</button>
+				<button id="pause" title="Stop collecting frames">Pause</button>
 				<button id="clear-pkts">Clear</button>
 			</div>
 			<div class="packets" id="packets"></div>
@@ -92,225 +100,196 @@ function shell(): void {
 	byId<HTMLInputElement>("new-name").addEventListener("keydown", (e) => {
 		if ((e as KeyboardEvent).key === "Enter") addMachine();
 	});
+	byId("new-shell").addEventListener("click", () => {
+		const m = selectedMachine();
+		if (m) handlers.newShell(m);
+	});
 	byId("toggle-wire").addEventListener("click", () => {
 		wireOpen = !wireOpen;
 		byId("wire").classList.toggle("hidden", !wireOpen);
-		byId("toggle-wire").textContent = wireOpen ? "Hide wire" : "Show wire";
+		byId("toggle-wire").classList.toggle("on", wireOpen);
 		fitActive();
+		invalidate();
 	});
+	byId("toggle-wire").classList.toggle("on", wireOpen);
 	byId("pause").addEventListener("click", () => {
 		paused = !paused;
 		byId("pause").textContent = paused ? "Resume" : "Pause";
+		invalidate();
 	});
 	byId("clear-pkts").addEventListener("click", () => {
 		packets.length = 0;
-		renderWire();
+		invalidate();
 	});
 	byId<HTMLInputElement>("pkt-filter").addEventListener("input", (e) => {
 		filter = (e.target as HTMLInputElement).value.trim().toLowerCase();
-		renderWire();
+		invalidate();
 	});
 }
 
-function byId<T extends HTMLElement = HTMLElement>(id: string): T {
-	return document.getElementById(id) as T;
-}
+// ----------------------------------------------------------------- machines
 
-// ---------------------------------------------------------------- machines
+function selectedMachine(): Machine | undefined {
+	return selectedMachineId ? lab.byId(selectedMachineId) : undefined;
+}
 
 function addMachine(): void {
 	const nameEl = byId<HTMLInputElement>("new-name");
-	const distro = byId<HTMLSelectElement>("new-distro").value;
-	const internet = byId<HTMLInputElement>("new-net").checked;
 	try {
-		const m = lab.add({ name: nameEl.value, distro, internet });
+		const m = lab.add({
+			name: nameEl.value,
+			distro: byId<HTMLSelectElement>("new-distro").value,
+			internet: byId<HTMLInputElement>("new-net").checked,
+		});
 		nameEl.value = "";
-		select(m.id);
+		selectedMachineId = m.id;
+		void openTab(m.console);
 	} catch (e) {
 		toast(e instanceof Error ? e.message : String(e));
 	}
 }
 
-function select(id: string): void {
-	activeId = id;
-	ensureTerm(id);
-	for (const [tid, v] of terms) v.el.classList.toggle("hidden", tid !== id);
-	fitActive();
+const handlers: SidebarHandlers = {
+	selectMachine: (id) => {
+		selectedMachineId = id;
+		// Show something from that machine: a tab it already has, or its console.
+		const existing = tabs.find((t) => t.session.machine.id === id);
+		void openTab(existing ? existing.session : lab.byId(id)?.console);
+	},
+	openSession: (s) => void openTab(s),
+	newShell: (m) => {
+		if (m.state !== "ready") {
+			toast(`${m.name} is not up yet`);
+			return;
+		}
+		void openTab(m.openShell());
+	},
+	removeMachine: (m) => {
+		for (const t of tabs.filter((t) => t.session.machine.id === m.id)) closeTab(t, false);
+		lab.remove(m.id);
+		if (selectedMachineId === m.id) selectedMachineId = lab.machines[0]?.id;
+		invalidate();
+	},
+	pingOthers: (m) => {
+		const others = lab.machines.filter((x) => x.id !== m.id);
+		if (!others.length) return;
+		const s = tabs.find((t) => t.session.machine.id === m.id)?.session ?? m.console;
+		void openTab(s).then(() => s.write(`for h in ${others.map((o) => o.name).join(" ")}; do ping -c 2 -W 2 $h; done\n`));
+	},
+};
+
+// --------------------------------------------------------------------- tabs
+
+async function openTab(session: Session | undefined): Promise<void> {
+	if (!session) return;
+	selectedMachineId = session.machine.id;
+	const found = tabs.find((t) => t.session.id === session.id);
+	if (found) {
+		activate(session.id);
+		return;
+	}
+	const pane = new TerminalPane(session);
+	const tab: Tab = { session, pane };
+	tabs.push(tab);
+	activeSessionId = session.id;
+	// Hide the pane that was showing before the new one mounts, or both paint.
+	applyActive();
+	invalidate();
+	await pane.mount(byId("panes"), activeSessionId === session.id);
+	// Another tab may have been opened while the WASM core loaded.
+	applyActive();
 	invalidate();
 }
 
-function renderSide(): void {
-	const host = byId("machines");
-	host.innerHTML = "";
-	for (const m of lab.machines) {
-		const row = document.createElement("div");
-		row.className = `machine ${m.state}${m.id === activeId ? " active" : ""}${m.link ? "" : " down"}`;
-		row.innerHTML = `
-			<div class="dot"></div>
-			<div class="name"></div>
-			<div class="acts">
-				<button class="link" title="pull or plug the cable">${m.link ? "⇅" : "✕"}</button>
-				<button class="kill" title="power off and remove">⌫</button>
-			</div>
-			<div class="ip"></div>
-			<div class="status"></div>`;
-		(row.querySelector(".name") as HTMLElement).textContent = m.name;
-		(row.querySelector(".ip") as HTMLElement).textContent = `${m.ip}  ${m.mac}`;
-		(row.querySelector(".status") as HTMLElement).textContent =
-			m.state === "ready" ? `up in ${m.bootMs} ms${m.internet ? " · internet" : ""}` : m.status;
-		row.addEventListener("click", () => select(m.id));
-		(row.querySelector(".link") as HTMLElement).addEventListener("click", (e) => {
-			e.stopPropagation();
-			m.setLink(!m.link);
-		});
-		(row.querySelector(".kill") as HTMLElement).addEventListener("click", (e) => {
-			e.stopPropagation();
-			terms.get(m.id)?.term.dispose();
-			terms.get(m.id)?.el.remove();
-			terms.delete(m.id);
-			lab.remove(m.id);
-			if (activeId === m.id) activeId = lab.machines[0]?.id;
-			if (activeId) select(activeId);
-		});
-		host.append(row);
-	}
+/** Exactly one pane paints: the active one. */
+function applyActive(): void {
+	for (const t of tabs) t.pane.setActive(t.session.id === activeSessionId);
+}
 
-	const macs = byId("macs");
-	const table = lab.sw.macTable();
-	macs.innerHTML = table.length ? "" : `<div>nothing learned yet</div>`;
-	for (const e of table.sort((a, b) => a.name.localeCompare(b.name))) {
-		const d = document.createElement("div");
-		d.innerHTML = `<span>${e.mac}</span><b>${e.name}</b>`;
-		macs.append(d);
+function activate(sessionId: string): void {
+	activeSessionId = sessionId;
+	applyActive();
+	const t = tabs.find((x) => x.session.id === sessionId);
+	if (t) selectedMachineId = t.session.machine.id;
+	invalidate();
+}
+
+function closeTab(tab: Tab, pick = true): void {
+	const i = tabs.indexOf(tab);
+	if (i < 0) return;
+	tabs.splice(i, 1);
+	tab.pane.destroy();
+	// A shell belongs to its tab; the console belongs to the machine.
+	if (tab.session.kind === "shell") tab.session.close();
+	if (pick && activeSessionId === tab.session.id) {
+		const next = tabs[Math.min(i, tabs.length - 1)];
+		if (next) activate(next.session.id);
+		else activeSessionId = undefined;
 	}
+	invalidate();
 }
 
 function renderTabs(): void {
-	const tabs = byId("tabs");
-	tabs.innerHTML = "";
-	for (const m of lab.machines) {
-		const b = document.createElement("button");
+	const strip = byId("tabstrip");
+	strip.textContent = "";
+	for (const t of tabs) {
+		const m = t.session.machine;
+		const el = document.createElement("div");
+		el.className = `tab${t.session.id === activeSessionId ? " active" : ""}`;
+
+		const badge = document.createElement("span");
+		badge.className = "badge";
+		badge.style.background = badgeColor(lab, m);
+		badge.textContent = m.name.slice(0, 1);
+
+		const label = document.createElement("span");
+		label.className = "label";
+		const b = document.createElement("b");
 		b.textContent = m.name;
-		b.className = m.id === activeId ? "active" : "";
-		b.addEventListener("click", () => select(m.id));
-		tabs.append(b);
+		const i = document.createElement("i");
+		i.textContent = ` ${t.session.label}`;
+		label.append(b, i);
+
+		const dot = document.createElement("span");
+		dot.className = `dot ${t.session.state === "open" ? m.state : t.session.state}`;
+
+		const close = document.createElement("button");
+		close.className = "close";
+		close.textContent = "×";
+		close.title = t.session.kind === "shell" ? "Close this shell" : "Close this tab";
+		close.addEventListener("click", (e) => {
+			e.stopPropagation();
+			closeTab(t);
+		});
+
+		el.append(badge, label, dot, close);
+		el.addEventListener("click", () => activate(t.session.id));
+		strip.append(el);
 	}
-	if (lab.machines.length > 1) {
-		const sp = document.createElement("span");
-		sp.className = "spacer";
-		tabs.append(sp);
-		const ping = document.createElement("button");
-		ping.textContent = "ping the others";
-		ping.addEventListener("click", pingOthers);
-		tabs.append(ping);
-	}
-	if (!lab.machines.length) {
-		byId("terms").innerHTML = `<div class="empty">
-			<div>No machines yet. Add one on the left.</div>
-			<div>Each machine is a real Linux kernel in its own thread, on one virtual switch.</div>
-			<div>Try <code>ping node2</code> once you have two.</div>
-		</div>`;
-	}
-}
-
-/** Type a ping at the active machine's console, aimed at every other one. */
-function pingOthers(): void {
-	const m = activeId ? lab.byId(activeId) : undefined;
-	if (!m) return;
-	const others = lab.machines.filter((x) => x.id !== m.id);
-	if (!others.length) return;
-	m.write(`for h in ${others.map((o) => o.name).join(" ")}; do ping -c 2 -W 2 $h; done\n`);
-}
-
-// ---------------------------------------------------------------- terminals
-
-function ensureTerm(id: string): TermView {
-	const found = terms.get(id);
-	if (found) return found;
-	const m = lab.byId(id);
-	if (!m) throw new Error(`no such machine: ${id}`);
-
-	const el = document.createElement("div");
-	el.className = "term";
-	byId("terms").append(el);
-
-	const term = new Terminal({
-		convertEol: false,
-		cursorBlink: true,
-		fontFamily: `"Geist Mono", ui-monospace, Menlo, Consolas, monospace`,
-		fontSize: 13,
-		scrollback: 5000,
-		theme: { background: "#000000", foreground: "#d7e0ea", cursor: "#5fd3bc" },
-	});
-	const fit = new FitAddon();
-	term.loadAddon(fit);
-	term.open(el);
-	term.onData((d) => m.write(d));
-	term.onResize(({ cols, rows }) => m.resize(cols, rows));
-
-	// Whatever the machine printed before this terminal existed.
-	for (const chunk of m.scrollback) term.write(chunk);
-
-	const view: TermView = { term, fit, el };
-	terms.set(id, view);
-	return view;
+	byId("nothing").style.display = tabs.length ? "none" : "grid";
 }
 
 function fitActive(): void {
-	if (!activeId) return;
-	const v = terms.get(activeId);
-	if (!v) return;
-	// After layout: the pane may have just changed width.
-	requestAnimationFrame(() => {
-		try {
-			v.fit.fit();
-		} catch {
-			// A hidden or zero-sized pane: nothing to fit yet.
-		}
-	});
+	const t = tabs.find((x) => x.session.id === activeSessionId);
+	if (!t) return;
+	requestAnimationFrame(() => t.pane.fit());
 }
 
-// ---------------------------------------------------------------- the wire
+// ------------------------------------------------------------------- render
 
-function renderWire(): void {
+function render(): void {
+	renderTabs();
+	renderMachines(byId("machines"), lab, selectedMachineId, handlers);
+	renderDetail(byId("detail"), lab, selectedMachine(), new Set(tabs.map((t) => t.session.id)), handlers);
+	byId<HTMLButtonElement>("new-shell").disabled = selectedMachine()?.state !== "ready";
 	if (!wireOpen) return;
-	renderTopology(byId("topo"), lab, activeId, select);
-	const host = byId("packets");
-	const rows = filter ? packets.filter((p) => matches(p, filter)) : packets;
-	const shown = rows.slice(-200);
-	const atBottom = host.scrollTop + host.clientHeight >= host.scrollHeight - 30;
-
-	host.innerHTML = shown
-		.map((p) => {
-			const d = p.decoded;
-			return `<div class="pkt${p.flooded ? " flood" : ""}"><span class="t">${(p.t / 1000).toFixed(2)}</span><span class="p ${d.proto}">${d.proto}</span><span class="d">${esc(d.src)} <span class="arrow">&rarr;</span> ${esc(d.dst)} <span class="info">${esc(d.info)}</span></span></div>`;
-		})
-		.join("");
-	if (atBottom) host.scrollTop = host.scrollHeight;
-
-	let rx = 0;
-	let tx = 0;
-	let flooded = 0;
-	for (const m of lab.machines) {
-		const c = lab.sw.counters(m.id);
-		if (!c) continue;
-		rx += c.rxFrames;
-		tx += c.txFrames;
-		flooded += c.flooded;
-	}
-	byId("stats").textContent = `${lab.machines.length} machines · ${rx} frames in · ${tx} delivered · ${flooded} flooded${paused ? " · paused" : ""}`;
+	renderTopology(byId("topo"), lab, selectedMachineId, (id) => handlers.selectMachine(id));
+	renderPackets(byId("packets"), packets, filter);
+	renderStats(byId("stats"), lab, paused);
+	renderMacTable(byId("mac"), lab);
 }
 
-function matches(p: TapEvent & { decoded: ReturnType<typeof decode> }, q: string): boolean {
-	const d = p.decoded;
-	return `${d.proto} ${d.src} ${d.dst} ${d.info} ${p.fromName}`.toLowerCase().includes(q);
-}
-
-function esc(s: string): string {
-	return s.replace(/[&<>]/g, (c) => (c === "&" ? "&amp;" : c === "<" ? "&lt;" : "&gt;"));
-}
-
-// ---------------------------------------------------------------- start
+// -------------------------------------------------------------------- start
 
 async function main(): Promise<void> {
 	shell();
@@ -322,31 +301,36 @@ async function main(): Promise<void> {
 	}
 	const manifest = (await res.json()) as DistroManifest;
 
-	lab = new Lab({
-		manifest,
-		onChange: invalidate,
-		onConsole: (m, bytes) => terms.get(m.id)?.term.write(bytes),
-	});
+	lab = new Lab({ manifest, onChange: invalidate });
 
-	byId("meta").textContent = `${lab.subnet} · unkernel ${manifest.unkernel}`;
+	document.title = `unlab — ${lab.subnet}`;
 	const sel = byId<HTMLSelectElement>("new-distro");
 	sel.innerHTML = manifest.distros
 		.map((d) => `<option value="${d.name}">${d.name} — ${d.image.split("-").slice(0, 2).join(" ")}</option>`)
 		.join("");
 
+	// The MAC table lives under the stats line; it is added here so the panel's
+	// grid rows stay in the markup above.
+	const mac = document.createElement("div");
+	mac.className = "mac";
+	mac.id = "mac";
+	byId("stats").after(mac);
+
 	lab.sw.onTap((e) => {
 		if (paused) return;
-		packets.push({ ...e, decoded: decode(e.frame) });
+		packets.push(toPacket(e));
 		if (packets.length > MAX_PACKETS) packets.splice(0, packets.length - MAX_PACKETS);
 		invalidate();
 	});
 
-	new ResizeObserver(() => fitActive()).observe(byId("terms"));
+	new ResizeObserver(() => fitActive()).observe(byId("panes"));
 	window.addEventListener("resize", fitActive);
 
 	// Two machines, so the point of the place is visible at once.
-	select(lab.add({ name: "node1" }).id);
+	const first = lab.add({ name: "node1" });
 	lab.add({ name: "node2" });
+	selectedMachineId = first.id;
+	await openTab(first.console);
 }
 
 void main();

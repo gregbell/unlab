@@ -28,6 +28,13 @@ export interface VmConfig {
 	rows: number;
 }
 
+/** A shell on its own pty, beside the kernel console. */
+export interface PtySpec {
+	sid: number;
+	cols: number;
+	rows: number;
+}
+
 export type ToVm =
 	| { type: "boot"; cfg: VmConfig }
 	| { type: "frame"; frame: Uint8Array }
@@ -35,6 +42,10 @@ export type ToVm =
 	| { type: "resize"; cols: number; rows: number }
 	| { type: "exec"; id: number; cmd: string; root?: boolean }
 	| { type: "reconfigure"; name: string; ip: string; prefixBits: number; hosts: HostEntry[]; internet: boolean }
+	| { type: "pty-open"; spec: PtySpec }
+	| { type: "pty-data"; sid: number; data: string }
+	| { type: "pty-resize"; sid: number; cols: number; rows: number }
+	| { type: "pty-close"; sid: number }
 	| { type: "stop" };
 
 export type FromVm =
@@ -45,4 +56,7 @@ export type FromVm =
 	| { type: "console"; bytes: Uint8Array }
 	| { type: "exec-result"; id: number; exitCode: number | null; stdout: string; stderr: string }
 	| { type: "exited"; code: number; reason: string }
+	| { type: "pty-ready"; sid: number; pid: number; pts: number }
+	| { type: "pty-output"; sid: number; bytes: Uint8Array }
+	| { type: "pty-exit"; sid: number; code: number | null; reason: string }
 	| { type: "error"; message: string; fatal: boolean };
