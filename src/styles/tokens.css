@@ -1,0 +1,62 @@
+/* The design tokens from the handoff, verbatim. Custom properties on :root
+   inherit into shadow roots, so every element reads these directly. */
+:root {
+	/* surfaces */
+	--crust: #11111b;
+	--mantle: #181825;
+	--base: #1e1e2e;
+	--pane-focus: #262637;
+
+	/* lines */
+	--line: #313244;
+	--line-strong: #45475a;
+
+	/* text */
+	--text: #cdd6f4;
+	--text-2: #a6adc8;
+	--text-3: #9399b2;
+
+	/* state */
+	--ok: #a6e3a1;
+	--down: #f38ba8;
+	--warn: #f9e2af;
+	--agent: #89b4fa;
+	--link-hover: #b4befe;
+
+	/* machine hues, handed out in this order */
+	--hue-1: #cba6f7;
+	--hue-2: #94e2d5;
+	--hue-3: #fab387;
+	--hue-4: #f5c2e7;
+	--hue-5: #89dceb;
+	--hue-6: #b4befe;
+	--hue-7: #f2cdcd;
+	--hue-8: #f5e0dc;
+
+	/* type: size / line height */
+	--font: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+	--fs-status: 11px;
+	--lh-status: 16px;
+	--fs-ui: 12px;
+	--lh-ui: 18px;
+	--fs-term: 12.5px;
+	--lh-term: 20px;
+	--fs-input: 14px;
+	--lh-input: 20px;
+	--fs-title: 16px;
+	--lh-title: 22px;
+	--fs-page: 28px;
+	--lh-page: 36px;
+
+	/* sizes */
+	--gutter: 14px;
+	--h-xs: 24px;
+	--h-sm: 28px;
+	--h-md: 32px;
+	--h-lg: 44px;
+	--r-port: 3px;
+	--r-control: 4px;
+	--r-panel: 6px;
+
+	color-scheme: dark;
+}

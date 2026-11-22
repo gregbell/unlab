@@ -1,0 +1,14 @@
+ts	phase	decision	why	evidence	result
+2026-11-22T01:15:05Z	frame	rebuild everything above src/lab and the worker; keep the runtime layer	runtime boots real kernels and has a passing integration test; the UI has no store or command layer the spec requires	test/lab.test.ts pass 7.7s; .audit/arch/grounding.md	scope set
+2026-11-22T01:15:05Z	frame	committed the uncommitted prototype restyle before starting	the rewrite needs a recorded baseline and the WIP must not be lost	commit eaf12b2	baseline recorded
+2026-11-22T01:15:05Z	frame	playbook: figure-it-out, rigor high	full rewrite of a working app, many phases, owner reviews later	HANDOFF.md build order	open
+2026-11-22T01:15:05Z	design	ran a 3-model architecture bakeoff before writing code	store + command registry + component model is a one-way door for every later step	scratchpad/arena-arch/candidate-{1,2,3}	running
+2026-11-22T01:17:16Z	scaffold	Biome for lint and format instead of ESLint	TypeScript 7 is the native compiler; typescript-eslint depends on the JS TS API	biome.json; commit bebcb6c	lint clean on runtime layer
+2026-11-22T01:17:16Z	scaffold	one test runner (Vitest) with unit and integration projects; moved kernel test off node:test	one runner, one config, one watch mode	vitest.config.ts; npm run test:integration 1 passed 7.6s	green
+2026-11-22T01:17:16Z	scaffold	e2e asserts the guest computed $((40+2)) instead of only seeing boot text	first version passed in 0.8s which was too easy to trust	e2e/boot.spec.ts; 1 passed 4.2s	green against prototype
+2026-11-22T01:17:16Z	scaffold	Playwright falls back to system chromium	Playwright's downloaded headless shell is missing/unrunnable on this NixOS host	playwright.config.ts chromiumExecutable()	works
+2026-11-22T01:35:03Z	design	picked candidate 3 as the base: pure reducer returning state plus effects as data	scored highest on one owner per fact and pure domain; effects make ordering testable	.audit/arch/synthesis.md rubric scores	decided
+2026-11-22T01:35:03Z	design	grafted: panes and terminals never move in the DOM (from candidate 2)	removes candidate 3's unproven off-screen terminal garage; hide/unhide is proven in the prototype	.audit/arch/synthesis.md Grafts	decided
+2026-11-22T01:35:03Z	design	grafted: Vitest browser mode for component tests, contrast unit test (candidate 1)	Vitest is already installed and verified; real Chromium, no jsdom	.audit/arch/synthesis.md	decided
+2026-11-22T01:35:03Z	design	skipped the arena cross-judge	every model in the configured judge pool is the parent's vendor, which arena forbids	~/.claude/rules/pstack-models.md	skipped
+2026-11-22T01:35:03Z	design	wrote the shared type contract myself before fanning out	parallel workers need one fixed set of state, event and effect types	src/model/types.ts	typechecks

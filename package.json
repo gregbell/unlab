@@ -21,17 +21,22 @@
 	"license": "MIT",
 	"type": "module",
 	"dependencies": {
+		"@fontsource/ibm-plex-mono": "^5.3.0",
+		"@lit/context": "^1.1.6",
 		"@wterm/dom": "^0.6.0",
 		"@wterm/ghostty": "^0.6.0",
+		"lit": "^3.3.3",
 		"unkernel": "^0.2.0-261121-8988cfd"
 	},
 	"private": true,
 	"devDependencies": {
+		"@axe-core/playwright": "^4.14.0",
 		"@biomejs/biome": "^2.6.8",
 		"@playwright/test": "^1.65.1",
 		"@types/node": "^26.6.6",
 		"@vitest/browser-playwright": "^5.1.1",
 		"@vitest/coverage-v8": "^5.1.1",
+		"fast-check": "^4.11.0",
 		"playwright": "^1.65.1",
 		"typescript": "^7.0.2",
 		"vite": "^8.3.8",
