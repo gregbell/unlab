@@ -9,6 +9,7 @@ import {
 	type SessionId,
 } from "../../model/index.ts";
 import { defineVerb, refuse } from "../define.ts";
+import { globMatch } from "../grammar/glob.ts";
 import * as slots from "../grammar/slots.ts";
 import type { ReportBlock } from "../types.ts";
 import { andList, count } from "./words.ts";
@@ -49,11 +50,6 @@ const NOT_READY: Readonly<Record<Exclude<Phase, "ready">, string>> = {
 	removing: "being removed",
 };
 const BUSY = "running a program";
-
-function globPattern(glob: string): RegExp {
-	const escaped = glob.split("*").map((s) => s.replace(/[.+?^${}()|[\]\\]/g, "\\$&"));
-	return new RegExp(`^${escaped.join(".*")}$`);
-}
 
 function youHave(lab: LabState): string {
 	return lab.rail.length === 0 ? "The lab has no machines yet." : `You have ${lab.rail.join(", ")}.`;
@@ -105,8 +101,7 @@ function consoles(): slots.Value<ExecTargets> {
 				} else if (part === "all") {
 					all.forEach(pick);
 				} else if (part.includes("*")) {
-					const pattern = globPattern(part);
-					const matched = all.filter((m) => pattern.test(m.name));
+					const matched = all.filter((m) => globMatch(part, m.name));
 					if (matched.length === 0) return new slots.Miss(`No machine matches ${part}. ${youHave(ctx.lab)}`, span);
 					matched.forEach(pick);
 				} else {

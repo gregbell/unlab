@@ -1,5 +1,6 @@
 import type { LabState, Machine, MachineName, Phase, SessionId } from "../../model/index.ts";
 import type { JsonSchema, Suggestion } from "../types.ts";
+import { globMatch } from "./glob.ts";
 
 export interface ReadContext {
 	readonly verb: string;
@@ -243,11 +244,6 @@ export function target(): Value<MachineName | SessionId> {
 	};
 }
 
-function globPattern(glob: string): RegExp {
-	const escaped = glob.split("*").map((s) => s.replace(/[.+?^${}()|[\]\\]/g, "\\$&"));
-	return new RegExp(`^${escaped.join(".*")}$`);
-}
-
 /**
  * `node2`, `node1,node3`, `node*` or `all`. Expands to the machines in the
  * verb's phases and records the rest as skipped, so `link down all` acts on
@@ -271,8 +267,7 @@ export function machines(): Value<Selection> {
 				if (part === "all") {
 					matched = all;
 				} else if (part.includes("*")) {
-					const pattern = globPattern(part);
-					matched = all.filter((m) => pattern.test(m.name));
+					matched = all.filter((m) => globMatch(part, m.name));
 					if (matched.length === 0) return new Miss(`No machine matches ${part}. ${youHave(ctx.lab)}`, span);
 				} else {
 					const m = findMachine(ctx.lab, part);
