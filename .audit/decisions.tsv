@@ -12,3 +12,4 @@ ts	phase	decision	why	evidence	result
 2026-11-22T01:35:03Z	design	grafted: Vitest browser mode for component tests, contrast unit test (candidate 1)	Vitest is already installed and verified; real Chromium, no jsdom	.audit/arch/synthesis.md	decided
 2026-11-22T01:35:03Z	design	skipped the arena cross-judge	every model in the configured judge pool is the parent's vendor, which arena forbids	~/.claude/rules/pstack-models.md	skipped
 2026-11-22T01:35:03Z	design	wrote the shared type contract myself before fanning out	parallel workers need one fixed set of state, event and effect types	src/model/types.ts	typechecks
+2026-11-22T01:38:19Z	spike	exit codes come from OSC 133 marks in a prompt installed by guest setup; console shell respawned to adopt it	busybox ash and bash both expand $? in PS1 and pass OSC through; respawn shows one clean prompt	.audit/spikes/osc133-prompt.md	VERIFIED alpine and debian
