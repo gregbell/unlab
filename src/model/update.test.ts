@@ -758,6 +758,14 @@ describe("the command log", () => {
 });
 
 describe("agent calls", () => {
+	test("a looping agent cannot grow the call list without bound, and a waiting call is never dropped", () => {
+		let s = run(emptyLab(), { type: "agent/call", call: agentCall(1, 0, { status: "waiting" }) });
+		for (let id = 2; id <= LOG_LIMIT + 50; id++) s = run(s, { type: "agent/call", call: agentCall(id, id) });
+		expect(s.agent.calls.length).toBeLessThanOrEqual(LOG_LIMIT);
+		expect(s.agent.calls[0]).toMatchObject({ id: 1, status: "waiting" });
+		expect(s.agent.calls.at(-1)).toMatchObject({ id: LOG_LIMIT + 50 });
+	});
+
 	test("a call is logged oldest first, and stamps when the agent first and last called", () => {
 		let s = run(emptyLab(), { type: "agent/call", call: agentCall(1, 1000) });
 		expect(s.agent).toMatchObject({ firstCallAt: 1000, lastCallAt: 1000 });

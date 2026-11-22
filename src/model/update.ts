@@ -272,12 +272,27 @@ function logged(state: LabState, entry: Omit<LogEntry, "id">): LabState {
 	};
 }
 
+/** At most LOG_LIMIT calls, dropping the oldest finished ones first. A call still waiting or running stays. */
+function bounded(calls: readonly AgentCall[]): readonly AgentCall[] {
+	let excess = calls.length - LOG_LIMIT;
+	if (excess <= 0) return calls;
+	return calls.filter((call) => {
+		if (excess <= 0 || call.status === "waiting" || call.status === "running") return true;
+		excess--;
+		return false;
+	});
+}
+
 function agentCalled(state: LabState, call: AgentCall): Step {
 	const { calls, firstCallAt, lastCallAt } = state.agent;
 	if (calls.some((known) => known.id === call.id)) return step(state);
 	const next = agent(
 		{ ...state, now: later(state.now, call.at) },
-		{ calls: [...calls, call], firstCallAt: firstCallAt ?? call.at, lastCallAt: later(lastCallAt ?? call.at, call.at) },
+		{
+			calls: bounded([...calls, call]),
+			firstCallAt: firstCallAt ?? call.at,
+			lastCallAt: later(lastCallAt ?? call.at, call.at),
+		},
 	);
 	const waiting = call.status === "waiting";
 	return step(next, waiting ? [{ type: "announce", text: `Agent call waiting for you: ${call.line}` }] : []);

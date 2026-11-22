@@ -324,6 +324,8 @@ export function createEngine(deps: EngineDeps): Engine {
 						if (entry && entry.phase !== "stopping") entry.vm.deliver(frame);
 					},
 				});
+				// Reserved, not live: the model raises the link when the machine is ready.
+				sw.setLink(port, false);
 				return;
 			}
 			case "port/detach":

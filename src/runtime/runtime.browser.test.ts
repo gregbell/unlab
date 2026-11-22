@@ -96,6 +96,11 @@ describe.skipIf(!haveImage)("real kernels", () => {
 
 		await until("node1 ready", (e) => e.type === "vm/ready" && e.machine === "node1");
 		await until("node2 ready", (e) => e.type === "vm/ready" && e.machine === "node2");
+		// What the model does at ready: a reserved port goes live.
+		run(
+			{ type: "link/set", port: 1, machine: "node1", up: true, cause: "runtime" },
+			{ type: "link/set", port: 2, machine: "node2", up: true, cause: "runtime" },
+		);
 
 		const firstPrompt = events.findIndex((e) => e.type === "session/shell" && e.session === "node1:console");
 		const ready = events.findIndex((e) => e.type === "vm/ready" && e.machine === "node1");

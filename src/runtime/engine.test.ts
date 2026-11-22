@@ -353,11 +353,30 @@ describe("vm/stop", () => {
 });
 
 describe("ports and frames", () => {
+	test("a port reserved at spawn carries nothing until its link comes up at ready", () => {
+		const t = setup();
+		t.run({ type: "port/attach", port: 1, machine: "node1" }, { type: "port/attach", port: 2, machine: "node2" });
+		const a = t.ready(1);
+		const b = t.ready(2);
+		a.sink.frame(a.ref, arpRequest(1, 2));
+		expect(b.sent).toEqual([]);
+		expect(t.sw.isUp(1)).toBe(false);
+
+		t.run(
+			{ type: "link/set", port: 1, machine: "node1", up: true, cause: "runtime" },
+			{ type: "link/set", port: 2, machine: "node2", up: true, cause: "runtime" },
+		);
+		a.sink.frame(a.ref, arpRequest(1, 2));
+		expect(b.sent).toHaveLength(1);
+	});
+
 	test("a frame from a plugged machine goes through the switch to its neighbour and into the capture log", () => {
 		const t = setup();
 		const a = t.ready(1);
 		const b = t.ready(2);
 		t.run({ type: "port/attach", port: 1, machine: "node1" }, { type: "port/attach", port: 2, machine: "node2" });
+		t.sw.setLink(1, true);
+		t.sw.setLink(2, true);
 
 		const frame = arpRequest(1, 2);
 		a.sink.frame(a.ref, frame);
@@ -374,6 +393,8 @@ describe("ports and frames", () => {
 	test("a port may be attached before its machine boots", () => {
 		const t = setup();
 		t.run({ type: "port/attach", port: 1, machine: "node1" }, { type: "port/attach", port: 2, machine: "node2" });
+		t.sw.setLink(1, true);
+		t.sw.setLink(2, true);
 		const a = t.ready(1);
 		const b = t.ready(2);
 		a.sink.frame(a.ref, arpRequest(1, 2));
@@ -401,6 +422,8 @@ describe("ports and frames", () => {
 			{ type: "port/detach", port: 2 },
 			{ type: "port/detach", port: 2 },
 		);
+		t.sw.setLink(1, true);
+		t.sw.setLink(2, true);
 		a.sink.frame(a.ref, arpRequest(1, 2));
 		expect(b.sent).toEqual([]);
 		expect(t.capture.tail(1)).toMatchObject([{ note: "flooded, no other port is up" }]);
@@ -416,6 +439,8 @@ describe("ports and frames", () => {
 			{ type: "port/attach", port: 2, machine: "node2" },
 			{ type: "port/attach", port: 2, machine: "node3" },
 		);
+		t.sw.setLink(1, true);
+		t.sw.setLink(2, true);
 		a.sink.frame(a.ref, arpRequest(1, 2));
 		expect(b.sent).toEqual([]);
 		expect(c.sent).toHaveLength(1);
@@ -633,6 +658,7 @@ describe("capture/clear, announce, clock", () => {
 		const t = setup();
 		const a = t.ready(1);
 		t.run({ type: "port/attach", port: 1, machine: "node1" });
+		t.sw.setLink(1, true);
 		a.sink.frame(a.ref, arpRequest(1, 2));
 		expect(t.capture.size).toBe(1);
 		t.run({ type: "capture/clear" });
@@ -675,6 +701,7 @@ describe("capture/clear, announce, clock", () => {
 		const t = setup();
 		const a = t.ready(1);
 		t.run({ type: "port/attach", port: 1, machine: "node1" }, { type: "clock", hz: 1 });
+		t.sw.setLink(1, true);
 		a.sink.frame(a.ref, arpRequest(1, 2));
 		expect(t.capture.tail(1)[0]).toMatchObject({ note: "flooded, no other port is up" });
 
