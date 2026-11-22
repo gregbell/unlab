@@ -74,18 +74,18 @@ describe("the rail", () => {
 		expect(row(s, "node3")).toMatchObject({ line2: "10.88.0.13", word: "unplugged" });
 	});
 
-	test("a booting machine counts its boot time in tenths", () => {
+	test("a booting machine shows its address and counts its boot time in tenths on the right", () => {
 		const s = oneOfEach();
-		expect(row(s, "node4")).toMatchObject({ phase: "booting", line2: "booting 1.4 s", word: "booting" });
-		expect(row(run(s, tick(11_499)), "node4")?.line2).toBe("booting 1.4 s");
-		expect(row(run(s, tick(11_500)), "node4")?.line2).toBe("booting 1.5 s");
-		expect(row(run(s, tick(72_000)), "node4")?.line2).toBe("booting 62.0 s");
+		expect(row(s, "node4")).toMatchObject({ phase: "booting", line2: "10.88.0.14", word: "booting 1.4 s" });
+		expect(row(run(s, tick(11_499)), "node4")?.word).toBe("booting 1.4 s");
+		expect(row(run(s, tick(11_500)), "node4")?.word).toBe("booting 1.5 s");
+		expect(row(run(s, tick(72_000)), "node4")?.word).toBe("booting 62.0 s");
 	});
 
 	test("a boot that has only just begun reads 0.0 s", () => {
 		let s = emptyLab();
 		s = run(s, spawnEvent(s, 1, { at: 500 }));
-		expect(row(s, "node1")?.line2).toBe("booting 0.0 s");
+		expect(row(s, "node1")?.word).toBe("booting 0.0 s");
 	});
 
 	test("a failed machine reads did not boot", () => {
@@ -144,10 +144,10 @@ describe("machine details", () => {
 
 	const value = (s: LabState, label: string) => selectDetails(s)?.rows.find((r) => r.label === label)?.value;
 
-	test("the link row reads connected, cut or unplugged", () => {
+	test("the link row reads connected, cable cut or unplugged", () => {
 		const s = oneOfEach();
 		expect(value(run(s, focus("node1")), "link")).toBe("connected");
-		expect(value(run(s, focus("node2")), "link")).toBe("cut");
+		expect(value(run(s, focus("node2")), "link")).toBe("cable cut");
 		expect(value(run(s, focus("node3")), "link")).toBe("unplugged");
 		expect(selectDetails(run(s, focus("node2")))).toMatchObject({ link: "cut", port: 2 });
 		expect(selectDetails(run(s, focus("node3")))).toMatchObject({ link: "unplugged", port: null });

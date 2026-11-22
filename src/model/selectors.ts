@@ -41,7 +41,7 @@ const bootClock = (state: LabState): number => (clockHz(state) === 10 ? state.no
 const plural = (count: number, one: string): string => `${count} ${one}${count === 1 ? "" : "s"}`;
 
 /** Counted in tenths and rounded down, so the counter never shows time that has not passed. */
-function bootingFor(since: number, now: number): string {
+function bootingFor(since: number, now: number): `booting ${string} s` {
 	const tenths = Math.max(0, Math.floor((now - since) / 100));
 	return `booting ${(tenths / 10).toFixed(1)} s`;
 }
@@ -60,10 +60,10 @@ export interface RailRow {
 	readonly name: MachineName;
 	readonly hue: HueNo;
 	readonly phase: Phase;
-	/** `10.88.0.12`, `10.88.0.12 · parked`, `booting 1.4 s`, `did not boot`. */
+	/** `10.88.0.12`, `10.88.0.12 · parked`, `did not boot`. */
 	readonly line2: string;
-	/** State always has a word. It is the link state once ready, and the phase before and after. */
-	readonly word: LinkWord | "booting" | "failed" | "removing";
+	/** State always has a word: `booting 1.4 s` while booting, the link state once ready, the phase after. */
+	readonly word: LinkWord | `booting ${string} s` | "failed" | "removing";
 	readonly focused: boolean;
 	readonly parked: boolean;
 }
@@ -74,14 +74,16 @@ export const selectRail: (state: LabState) => readonly RailRow[] = memo(
 		machineList({ machines, rail }).map((machine): RailRow => {
 			const { life, name } = machine;
 			const isParked = parked[name] !== undefined;
-			const line2 =
-				life.phase === "booting" ? bootingFor(life.since, now) : life.phase === "failed" ? "did not boot" : machine.ip;
+			const line2 = life.phase === "failed" ? "did not boot" : machine.ip;
 			return {
 				name,
 				hue: machine.hue,
 				phase: life.phase,
 				line2: isParked ? `${line2} · parked` : line2,
-				word: linkWord(machine) ?? (life.phase === "ready" ? "unplugged" : life.phase),
+				word:
+					life.phase === "booting"
+						? bootingFor(life.since, now)
+						: (linkWord(machine) ?? (life.phase === "ready" ? "unplugged" : life.phase)),
 				focused: name === focused,
 				parked: isParked,
 			};
@@ -123,7 +125,7 @@ function linkValue(machine: Machine): string {
 	if (port === null) return "unplugged";
 	if (life.phase === "booting") return "reserved";
 	if (life.phase === "removing") return "down";
-	return linkWord(machine) === "cut" ? "cut" : "connected";
+	return linkWord(machine) === "cut" ? "cable cut" : "connected";
 }
 
 /** The details panel under the rail shows the machine that has the keyboard. */
