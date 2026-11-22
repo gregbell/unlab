@@ -6,7 +6,15 @@
 		"useIgnoreFile": true
 	},
 	"files": {
-		"includes": ["**", "!!**/dist", "!!public/distros", "!!.audit", "!!test-results", "!!playwright-report"]
+		"includes": [
+			"**",
+			"!!**/dist",
+			"!!public/distros",
+			"!!.audit",
+			"!!test-results",
+			"!!playwright-report",
+			"!!.claude"
+		]
 	},
 	"formatter": {
 		"enabled": true,

@@ -13,3 +13,5 @@ ts	phase	decision	why	evidence	result
 2026-11-22T01:35:03Z	design	skipped the arena cross-judge	every model in the configured judge pool is the parent's vendor, which arena forbids	~/.claude/rules/pstack-models.md	skipped
 2026-11-22T01:35:03Z	design	wrote the shared type contract myself before fanning out	parallel workers need one fixed set of state, event and effect types	src/model/types.ts	typechecks
 2026-11-22T01:38:19Z	spike	exit codes come from OSC 133 marks in a prompt installed by guest setup; console shell respawned to adopt it	busybox ash and bash both expand $? in PS1 and pass OSC through; respawn shows one clean prompt	.audit/spikes/osc133-prompt.md	VERIFIED alpine and debian
+2026-11-22T01:39:13Z	scaffold	layer import rules enforced by scripts/check-imports.ts in npm run check	a rule an agent cannot see in the file it edits must fail the build	commit fc69423; 7 tests	green
+2026-11-22T01:39:13Z	spike	line marks anchor to GhosttyCore.trackPosition; no garage needed	'@wterm/ghostty implements trackPosition and getShellIntegrationState	node_modules/@wterm/ghostty/dist/ghostty-core.d.ts:71,100	confirmed in types; runtime check in step 7

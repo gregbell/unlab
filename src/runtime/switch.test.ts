@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { arpReply, arpRequest, ping } from "../../test/support/frames.ts";
-import type { PortNo } from "../model/types.ts";
+import type { PortNo } from "../model/index.ts";
 import { LabSwitch, type TapEvent } from "./switch.ts";
 
 const bit = (p: number) => 1 << (p - 1);

@@ -8,3 +8,4 @@ public/distros/*.erofs
 test-results/
 playwright-report/
 coverage/
+.claude/worktrees/

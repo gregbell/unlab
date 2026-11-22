@@ -5,7 +5,7 @@
 // filter change rebuilds it once. Subscribers hear at most once per scheduled
 // flush, whatever the frame rate.
 
-import type { Cause, MachineName, PortNo } from "../model/types.ts";
+import type { Cause, MachineName, PortNo } from "../model/index.ts";
 import { arpAddrs, type CaptureFilter, ETH_ARP, type Flood, MATCH_ALL } from "../net/index.ts";
 import { type CaptureRow, captureRow } from "./rows.ts";
 

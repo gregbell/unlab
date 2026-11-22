@@ -3,7 +3,7 @@
 // handed an Ethernet frame, so the same switch runs over Web Worker messages
 // in the browser and worker_threads in Node.
 
-import type { PortNo } from "../model/types.ts";
+import type { PortNo } from "../model/index.ts";
 import { BROADCAST_MAC, dstMac, type Flood, isGroupMac, srcMac } from "../net/index.ts";
 
 export interface PortCounters {

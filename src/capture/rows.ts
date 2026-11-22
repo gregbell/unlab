@@ -1,7 +1,7 @@
 // What a capture row shows, built from an entry only when the row is on
 // screen: decoding runs per visible row, never per frame.
 
-import type { Cause, MachineName, PortNo } from "../model/types.ts";
+import type { Cause, MachineName, PortNo } from "../model/index.ts";
 import { arpAddrs, decode, ipAddrs, isGroupMac, nodeOfIp, nodeOfMac } from "../net/index.ts";
 import type { CaptureCounters, CaptureEntry, FrameEntry, LinkEntry } from "./log.ts";
 

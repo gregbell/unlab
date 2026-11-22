@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { arpReply, arpRequest, BROADCAST, eth, ipv4Packet, mac, ping } from "../../test/support/frames.ts";
-import type { PortNo } from "../model/types.ts";
+import type { PortNo } from "../model/index.ts";
 import { type CaptureFilter, compileFilter, type Flood } from "../net/index.ts";
 import { type CaptureLog, createCaptureLog } from "./log.ts";
 import { formatCounters } from "./rows.ts";

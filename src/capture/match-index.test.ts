@@ -1,7 +1,7 @@
 import fc from "fast-check";
 import { expect, test } from "vitest";
 import { arpReply, arpRequest, eth, ipv4Packet, ping, tcpSegment, udpSegment } from "../../test/support/frames.ts";
-import type { Cause, MachineName, PortNo } from "../model/types.ts";
+import type { Cause, MachineName, PortNo } from "../model/index.ts";
 import { type CaptureFilter, compileFilter, type Flood, MATCH_ALL } from "../net/index.ts";
 import { createCaptureLog, type SwitchedFrame } from "./log.ts";
 

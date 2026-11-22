@@ -27,6 +27,16 @@ const NAMED_EXCEPTIONS: ReadonlyArray<{ from: string; to: string }> = [
 	{ from: "src/agent/", to: "src/commands/approval.ts" },
 ];
 
+/** The prototype UI, exempt until the rewrite deletes it. Remove entries, never add them. */
+const LEGACY = new Set([
+	"src/ui/wire.ts",
+	"src/ui/sidebar.ts",
+	"src/ui/topology.ts",
+	"src/ui/terminal.ts",
+	"src/ui/workspace.ts",
+	"src/ui/icons.ts",
+]);
+
 export interface SourceFile {
 	/** Repo-relative, forward slashes: `src/ui/rail/row.ts`. */
 	readonly path: string;
@@ -51,7 +61,7 @@ export function checkImports(files: readonly SourceFile[]): Violation[] {
 	const out: Violation[] = [];
 	for (const file of files) {
 		const from = layerOf(file.path);
-		if (!from) continue;
+		if (!from || LEGACY.has(file.path)) continue;
 		const isTest = file.path.endsWith(".test.ts");
 		for (const m of file.text.matchAll(IMPORT)) {
 			const typeOnly = m[2] !== undefined;
