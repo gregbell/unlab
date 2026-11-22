@@ -1,11 +1,15 @@
 import { expect, test } from "@playwright/test";
 
-test("a fresh lab boots a real machine that runs what you type", async ({ page }) => {
+test("a new lab boots two real machines to ready and plugs them into switch0", async ({ page }) => {
 	const errors: string[] = [];
 	page.on("pageerror", (e) => errors.push(e.message));
 	await page.goto("/");
-	await expect(page.getByText("Welcome to Alpine Linux").first()).toBeVisible({ timeout: 60_000 });
-	await page.keyboard.type("echo unlab-$((40+2))\n");
-	await expect(page.getByText("unlab-42", { exact: true }).first()).toBeVisible();
+
+	const rail = page.getByRole("complementary", { name: "Machines" });
+	await expect(page.getByText("2 of 2 machines ready")).toBeVisible({ timeout: 60_000 });
+	for (const name of ["node1", "node2"]) {
+		await expect(rail.getByRole("button", { name: new RegExp(`^${name}\\b`) })).toContainText("up");
+	}
+	await expect(page.getByText("switch0: 2 of 2 links up")).toBeVisible();
 	expect(errors).toEqual([]);
 });

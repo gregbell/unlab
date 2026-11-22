@@ -37,7 +37,6 @@ export type ToVm =
 	| { type: "frame"; frame: Uint8Array }
 	| { type: "input"; data: string }
 	| { type: "resize"; cols: number; rows: number }
-	| { type: "exec"; id: number; cmd: string; root?: boolean }
 	| {
 			type: "reconfigure";
 			name: string;
@@ -58,7 +57,6 @@ export type FromVm =
 	| { type: "ready"; ms: number }
 	| { type: "frame"; frame: Uint8Array }
 	| { type: "console"; bytes: Uint8Array }
-	| { type: "exec-result"; id: number; exitCode: number | null; stdout: string; stderr: string }
 	| { type: "exited"; code: number; reason: string }
 	| { type: "pty-ready"; sid: number; pid: number; pts: number }
 	| { type: "pty-output"; sid: number; bytes: Uint8Array }

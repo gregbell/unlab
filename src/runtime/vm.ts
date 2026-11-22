@@ -128,9 +128,6 @@ export function startVm(boot: VmBoot, sink: VmSink, deps: VmDeps): Vm {
 					if (m.fatal) fail(m.message);
 					else console.warn(`${ref.machine}: ${m.message}`);
 					return;
-				case "exec-result":
-					// Answers `exec`, which only the prototype's Machine sends.
-					return;
 				default:
 					m satisfies never;
 			}

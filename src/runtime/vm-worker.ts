@@ -63,9 +63,6 @@ function handle(m: Queued): void {
 		case "resize":
 			vm.resize(m.cols, m.rows);
 			return;
-		case "exec":
-			void runExec(m.id, m.cmd, m.root ?? false);
-			return;
 		case "reconfigure":
 			void reconfigure(m);
 			return;
@@ -91,16 +88,6 @@ function handle(m: Queued): void {
 			ptys.clear();
 			vm.stop({ code: 0, reason: "powered off" });
 			return;
-	}
-}
-
-async function runExec(id: number, cmd: string, root: boolean): Promise<void> {
-	if (!vm) return;
-	try {
-		const r = root ? await execAsRoot(vm, cmd) : await vm.exec("/bin/sh", ["-c", cmd]);
-		post({ type: "exec-result", id, exitCode: r.exitCode, stdout: String(r.stdout), stderr: String(r.stderr) });
-	} catch (e) {
-		post({ type: "exec-result", id, exitCode: null, stdout: "", stderr: e instanceof Error ? e.message : String(e) });
 	}
 }
 
