@@ -1,0 +1,44 @@
+/* Restated so the order holds whichever sheet loads first. */
+@layer tokens, base, components;
+
+@layer components {
+	@scope (unlab-terminal) {
+		/* The screen sets its own padding: 10px above the first row, the 14px gutter beside it, rows 20px. */
+		:scope {
+			--pad-top: 10px;
+			--row: 20px;
+			position: relative;
+			display: block;
+			height: 100%;
+			min-height: 0;
+			overflow: hidden;
+			background: var(--base);
+		}
+
+		.screen {
+			height: 100%;
+		}
+
+		.gutter {
+			position: absolute;
+			inset: 0 auto 0 0;
+			width: var(--gutter);
+			overflow: hidden;
+			pointer-events: none;
+		}
+
+		/* Who typed a line: 2px at the pane's left edge over the command and its output. */
+		.rule {
+			position: absolute;
+			left: 0;
+			top: calc(var(--pad-top) + var(--from) * var(--row));
+			width: 2px;
+			height: calc(var(--rows) * var(--row));
+			background: var(--text-3);
+		}
+
+		.rule[data-source="agent"] {
+			background: var(--agent);
+		}
+	}
+}

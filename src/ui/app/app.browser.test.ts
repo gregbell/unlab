@@ -97,7 +97,8 @@ describe("<unlab-app> regions", () => {
 		expect(centre.right).toBe(1440);
 		expect(style(".body").backgroundColor).toBe(tokenColor("line"));
 		expect(style("unlab-rail").backgroundColor).toBe(tokenColor("mantle"));
-		expect(style(".pane-area").backgroundColor).toBe(tokenColor("base"));
+		expect(style("unlab-pane").backgroundColor).toBe(tokenColor("base"));
+		expect(style("unlab-pane-area").backgroundColor).toBe(tokenColor("line"));
 	});
 
 	it("keeps the rail at 216px or more on a narrow window", async () => {
