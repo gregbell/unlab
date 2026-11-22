@@ -1,0 +1,294 @@
+import { parseMachineName, parseSessionId } from "./identity.ts";
+import {
+	bootAgain,
+	expireBoots,
+	fail,
+	gone,
+	link,
+	machineList,
+	openShell,
+	ready,
+	remove,
+	selectTab,
+	sessionEnded,
+	sessionMarked,
+	sessionOpened,
+	sessionShell,
+	spawn,
+	stage,
+} from "./machines.ts";
+import {
+	addPanes,
+	emptyPanes,
+	focusPane,
+	gridFor,
+	keyboardHolder,
+	lastFocused,
+	parkPane,
+	promotePane,
+	removePane,
+	resizeArea,
+	toggleMaximise,
+	visiblePanes,
+} from "./panes.ts";
+import { later, patch, step } from "./step.ts";
+import {
+	type AgentCall,
+	type AgentState,
+	type CaptureUi,
+	type ImageInfo,
+	type Keyboard,
+	type LabEvent,
+	type LabState,
+	LOG_LIMIT,
+	type LogEntry,
+	type MachineName,
+	type Panes,
+	type Policy,
+	type SessionId,
+	type Step,
+	type ToolName,
+} from "./types.ts";
+
+/** From the handoff's tools table. Every tool runs at once except spawn and remove, which ask first. */
+export const DEFAULT_POLICIES: Readonly<Record<ToolName, Policy>> = {
+	machines_list: "run",
+	machines_spawn: "ask",
+	machines_remove: "ask",
+	shell_exec: "run",
+	shell_read: "run",
+	link_set: "run",
+	capture_read: "run",
+};
+
+const NOWHERE: Keyboard = { kind: "none" };
+
+export function initialState(
+	images: readonly ImageInfo[],
+	area: { readonly width: number; readonly height: number },
+): LabState {
+	return {
+		now: 0,
+		nextN: 1,
+		machines: {},
+		rail: [],
+		sessions: {},
+		panes: emptyPanes(gridFor(area.width, area.height)),
+		keyboard: NOWHERE,
+		view: "lab",
+		agentPanel: false,
+		capture: { filter: "", paused: false, selected: null },
+		agent: { policies: DEFAULT_POLICIES, paused: false, calls: [], firstCallAt: null, lastCallAt: null },
+		log: [],
+		nextLogId: 1,
+		images,
+	};
+}
+
+/** How often `tick` should arrive. Ten times a second while a boot counter counts tenths, once a second otherwise. */
+export function clockHz(state: LabState): 1 | 10 {
+	return machineList(state).some((machine) => machine.life.phase === "booting") ? 10 : 1;
+}
+
+/**
+ * The only way the lab changes. It is total. An event about a machine that
+ * is not there, a boot attempt that was replaced, or a phase that does not
+ * accept it returns the same state object and no effects, so a late or
+ * repeated message is harmless.
+ */
+export function update(state: LabState, event: LabEvent): Step {
+	const reduced = reduce(state, event);
+	return reduced.state === state ? reduced : settle(state, reduced);
+}
+
+function reduce(state: LabState, event: LabEvent): Step {
+	switch (event.type) {
+		case "tick":
+			return expireBoots(patch(state, { now: later(state.now, event.now) }));
+		case "vm/stage":
+			return stage(state, event.machine, event.attempt, event.stage);
+		case "vm/ready":
+			return ready(state, event.machine, event.attempt, event.bootMs);
+		case "vm/failed":
+			return fail(state, event.machine, event.attempt, event.reason);
+		case "vm/stopped":
+			return gone(state, event.machine, event.attempt);
+		case "session/opened":
+			return sessionOpened(state, event.session);
+		case "session/ended":
+			return sessionEnded(state, event.session);
+		case "session/shell":
+			return sessionShell(state, event.session, event.shell);
+		case "session/marked":
+			return sessionMarked(state, event.session, event.source);
+
+		case "cmd/spawn": {
+			const spawned = spawn(state, event.plan, event.at);
+			// Booting is one of the ways the Add machines view closes.
+			return spawned.state !== state && state.view === "spawn"
+				? step({ ...spawned.state, view: "lab" }, spawned.effects)
+				: spawned;
+		}
+		case "cmd/remove":
+			return remove(state, event.machines, event.cause);
+		case "cmd/boot-again":
+			return bootAgain(state, event.machine, event.port, event.at);
+		case "cmd/link":
+			return link(state, event.changes, event.cause);
+		case "cmd/shell":
+			return openShell(state, event.machine);
+		case "cmd/focus":
+			return focus(state, event.target, event.mode);
+		case "cmd/capture":
+			return step(patch(capture(state, { filter: event.filter }), { view: "wire" }));
+		case "cmd/logged":
+			return step(logged(state, { line: event.line, source: event.source, at: event.at, outcome: event.outcome }));
+
+		case "ui/pane-focused":
+		case "ui/unpark":
+			return takeKeyboard(state, event.machine, focusPane(state.panes, event.machine));
+		case "ui/maximise":
+			return takeKeyboard(state, event.machine, toggleMaximise(focusPane(state.panes, event.machine), event.machine));
+		case "ui/tab-selected":
+			return selectTab(state, event.session);
+		case "ui/park":
+			return step(patch(state, { panes: parkPane(state.panes, event.machine) }));
+		case "ui/area-resized":
+			return step(patch(state, { panes: resizeArea(state.panes, event.width, event.height) }));
+		case "ui/view":
+			return step(patch(state, { view: event.view }));
+		case "ui/agent-panel":
+			return step(patch(state, { agentPanel: event.open }));
+		case "ui/bar":
+			return event.open ? openBar(state) : closeBar(state);
+		case "ui/capture-filter":
+			return step(capture(state, { filter: event.filter }));
+		case "ui/capture-pause":
+			return step(capture(state, { paused: event.paused }));
+		case "ui/capture-clear":
+			return step(capture(state, { selected: null }), [{ type: "capture/clear" }]);
+		case "ui/frame-selected":
+			return step(capture(state, { selected: event.seq }));
+		case "ui/policy":
+			return state.agent.policies[event.tool] === event.policy
+				? step(state)
+				: step(agent(state, { policies: { ...state.agent.policies, [event.tool]: event.policy } }));
+		case "ui/tools-paused":
+			return step(agent(state, { paused: event.paused }));
+
+		case "agent/call":
+			return agentCalled(state, event.call);
+		case "agent/settled":
+			return agentSettled(state, event.id, event.status, event.result);
+	}
+}
+
+/**
+ * What must hold after every change, kept in one place. Each machine has a
+ * pane and no pane outlives its machine. The keyboard is on a visible pane
+ * whenever there is one. The clock runs fast only while something boots.
+ */
+function settle(before: LabState, reduced: Step): Step {
+	const state = settleKeyboard(followMachines(reduced.state));
+	const hz = clockHz(state);
+	return hz === clockHz(before)
+		? step(state, reduced.effects)
+		: step(state, [...reduced.effects, { type: "clock", hz }]);
+}
+
+function followMachines(state: LabState): LabState {
+	let panes = state.panes;
+	for (const name of panes.order) if (!state.machines[name]) panes = removePane(panes, name);
+	return patch(state, { panes: addPanes(panes, state.rail) });
+}
+
+/** When the pane that held the keyboard parks or goes, the visible pane focused before it takes over. */
+function settleKeyboard(state: LabState): LabState {
+	const { keyboard, panes } = state;
+	const visible = visiblePanes(panes);
+	const holder = keyboardHolder(keyboard);
+	if (holder !== null && visible.includes(holder)) return state;
+	const heir = lastFocused(panes, visible) ?? (visible.length > 0 ? visible[0] : null);
+	if (keyboard.kind === "bar") return withKeyboard(state, { kind: "bar", returnTo: heir });
+	if (heir === null) return withKeyboard(state, NOWHERE);
+	return withKeyboard(patch(state, { panes: focusPane(panes, heir) }), { kind: "pane", machine: heir });
+}
+
+function withKeyboard(state: LabState, keyboard: Keyboard): LabState {
+	const same = state.keyboard.kind === keyboard.kind && keyboardHolder(state.keyboard) === keyboardHolder(keyboard);
+	return same ? state : { ...state, keyboard };
+}
+
+/** Focus was seen or asked for in a pane, so the pane has the keyboard now, whatever had it before. */
+function takeKeyboard(state: LabState, name: MachineName, panes: Panes): Step {
+	if (!state.machines[name]) return step(state);
+	return step(withKeyboard(patch(state, { panes }), { kind: "pane", machine: name }));
+}
+
+/**
+ * `focus`, from the bar or a rail row. A session target also selects its tab.
+ * While the bar is open it keeps the keyboard and this decides where it returns.
+ */
+function focus(state: LabState, target: MachineName | SessionId, mode: "plain" | "main" | "max"): Step {
+	const address = parseSessionId(target);
+	const name = address ? address.machine : parseMachineName(target);
+	if (!name || !state.machines[name] || (address && !state.sessions[address.session])) return step(state);
+	const tabbed = address ? selectTab(state, address.session).state : state;
+	const promoted = mode === "main" ? promotePane(tabbed.panes, name) : tabbed.panes;
+	// Focus before maximising, so the layout that maximise restores has this pane in it.
+	const focused = focusPane(promoted, name);
+	const panes = mode === "max" ? toggleMaximise(focused, name) : focused;
+	const keyboard: Keyboard =
+		tabbed.keyboard.kind === "bar" ? { kind: "bar", returnTo: name } : { kind: "pane", machine: name };
+	return step(withKeyboard(patch(tabbed, { panes }), keyboard));
+}
+
+function openBar(state: LabState): Step {
+	if (state.keyboard.kind === "bar") return step(state);
+	return step({ ...state, keyboard: { kind: "bar", returnTo: keyboardHolder(state.keyboard) } });
+}
+
+function closeBar(state: LabState): Step {
+	if (state.keyboard.kind !== "bar") return step(state);
+	const back = state.keyboard.returnTo;
+	if (back === null || !state.machines[back]) return step({ ...state, keyboard: NOWHERE });
+	return takeKeyboard(state, back, focusPane(state.panes, back));
+}
+
+function capture(state: LabState, fields: Partial<CaptureUi>): LabState {
+	return patch(state, { capture: patch(state.capture, fields) });
+}
+
+function agent(state: LabState, fields: Partial<AgentState>): LabState {
+	return patch(state, { agent: patch(state.agent, fields) });
+}
+
+function logged(state: LabState, entry: Omit<LogEntry, "id">): LabState {
+	return {
+		...state,
+		now: later(state.now, entry.at),
+		log: [...state.log, { id: state.nextLogId, ...entry }].slice(-LOG_LIMIT),
+		nextLogId: state.nextLogId + 1,
+	};
+}
+
+function agentCalled(state: LabState, call: AgentCall): Step {
+	const { calls, firstCallAt, lastCallAt } = state.agent;
+	if (calls.some((known) => known.id === call.id)) return step(state);
+	const next = agent(
+		{ ...state, now: later(state.now, call.at) },
+		{ calls: [...calls, call], firstCallAt: firstCallAt ?? call.at, lastCallAt: later(lastCallAt ?? call.at, call.at) },
+	);
+	const waiting = call.status === "waiting";
+	return step(next, waiting ? [{ type: "announce", text: `Agent call waiting for you: ${call.line}` }] : []);
+}
+
+/** A call settles once. Before that it may go from waiting to running, never back. */
+function agentSettled(state: LabState, id: number, status: AgentCall["status"], result: string | null): Step {
+	const call = state.agent.calls.find((known) => known.id === id);
+	const pending = call?.status === "waiting" || call?.status === "running";
+	if (!call || !pending || status === "waiting") return step(state);
+	const settled = patch(call, { status, result });
+	if (settled === call) return step(state);
+	return step(agent(state, { calls: state.agent.calls.map((known) => (known === call ? settled : known)) }));
+}
