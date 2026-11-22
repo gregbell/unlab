@@ -14,6 +14,8 @@ export type {
 	DangerCommand,
 	DangerLine,
 	DangerVerbDefinition,
+	ExecOutcome,
+	ExecPort,
 	ParsedLine,
 	SafeCommand,
 	SafeLine,
@@ -28,6 +30,7 @@ export type { Parsed } from "./grammar/parse.ts";
 export type { ArgsOf, Flag, Grammar, Options, ReadContext, Selection, Slot, Value, Variant } from "./grammar/slots.ts";
 export * as slots from "./grammar/slots.ts";
 export { tokenize } from "./grammar/tokenize.ts";
+export { type CommandService, type CommandServiceDeps, createCommandService } from "./service.ts";
 export type {
 	Completion,
 	ConfirmText,
@@ -42,6 +45,7 @@ export type {
 	Tokenized,
 } from "./types.ts";
 export { isLineError, NOTHING_CHANGED } from "./types.ts";
+export * from "./verbs/index.ts";
 
 /** The single list of commands. The bar's verbs group, completion and the agent tool table all read it. */
 export interface Registry {

@@ -65,7 +65,10 @@ export interface ReportBlock {
 	readonly status:
 		| { readonly kind: "exit"; readonly code: number }
 		| { readonly kind: "unknown" }
-		| { readonly kind: "skipped"; readonly reason: string };
+		| { readonly kind: "skipped"; readonly reason: string }
+		/** An `ls` row: `ready`, `booting`, `failed`. */
+		| { readonly kind: "state"; readonly text: string };
+	/** The last line of output, or for `ls` the machine in one line. */
 	readonly lastLine: string;
 	readonly focus: SessionId | null;
 }

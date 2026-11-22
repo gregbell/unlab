@@ -1,6 +1,8 @@
 import type { CaptureView } from "../capture/index.ts";
-import type { Completion, LineError, ParsedLine, Result } from "../commands/index.ts";
-import type { PortNo, ReadStore, SessionId, Source, UiEvent } from "../model/index.ts";
+import type { CommandService } from "../commands/index.ts";
+import type { PortNo, ReadStore, SessionId, UiEvent } from "../model/index.ts";
+
+export type { CommandService };
 
 /**
  * Everything an element may touch, handed down from <unlab-app> through Lit
@@ -14,19 +16,6 @@ export interface AppServices {
 	readonly capture: CaptureView;
 	readonly switch: SwitchReadout;
 	readonly terminals: TerminalService;
-}
-
-export interface CommandService {
-	/** Parse against the current state: the bar's preview, error and confirm all start here. */
-	parse(line: string): ParsedLine | LineError;
-	complete(line: string, caret: number): Completion;
-	/**
-	 * Run a line that is not dangerous, as `source`. A dangerous line (`rm node3`)
-	 * is refused here: it needs a person's yes, so a button calls `confirmInBar`.
-	 */
-	run(line: string, source: Exclude<Source, "agent">, signal?: AbortSignal): Promise<Result | LineError>;
-	/** Open the command bar on `line`, already showing its confirmation. */
-	confirmInBar(line: string): void;
 }
 
 /** Live figures the switch owns; read on render, never copied into state. */
