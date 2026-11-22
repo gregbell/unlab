@@ -1,0 +1,44 @@
+/* Restated so the order holds whichever sheet loads first. */
+@layer tokens, base, components;
+
+@layer components {
+	@scope (unlab-confirm) {
+		:scope {
+			display: block;
+		}
+
+		.block {
+			display: flex;
+			flex-direction: column;
+			gap: 10px;
+			padding: 12px 14px;
+			border: 1px solid var(--warn);
+			border-radius: var(--r-control);
+			background: var(--base);
+		}
+
+		.heading {
+			font-size: var(--fs-input);
+			line-height: var(--lh-input);
+		}
+
+		.detail {
+			color: var(--text-2);
+		}
+
+		.machine {
+			color: var(--machine-hue);
+		}
+
+		.actions {
+			display: flex;
+			flex-wrap: wrap;
+			gap: 8px;
+			margin-top: 2px;
+		}
+
+		.key {
+			font-weight: 400;
+		}
+	}
+}

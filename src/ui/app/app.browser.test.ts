@@ -147,18 +147,18 @@ describe("<unlab-app> top bar", () => {
 
 	it("rests the command field at 28px, as wide as 520px, with an example line and its shortcut", async () => {
 		await mountApp();
-		const field = box(".command-field");
+		const field = box("unlab-command-bar");
 		expect([field.height, field.width]).toEqual([28, 520]);
-		const input = page.getByRole("textbox", { name: "Command" });
+		const input = page.getByRole("combobox", { name: "Command" });
 		await expect.element(input).toHaveAttribute("placeholder", "spawn 2 alpine --net switch0");
 		await expect.element(input).toHaveAttribute("aria-keyshortcuts", "Control+/");
-		expect(the(".command-field kbd").textContent).toBe("Ctrl+/");
+		expect(the("unlab-command-bar kbd").textContent).toBe("Ctrl+/");
 	});
 
 	it("never narrows the command field under 320px while it shares the bar", async () => {
 		await page.viewport(1000, 700);
 		await mountApp();
-		const field = box(".command-field");
+		const field = box("unlab-command-bar");
 		expect(field.width).toBeGreaterThanOrEqual(320);
 		expect(field.width).toBeLessThanOrEqual(520);
 		expect(field.top).toBe(6);
