@@ -4,6 +4,7 @@ import "@wterm/dom/css";
 import "./ui/styles/index.css";
 import "./ui/app/app.ts";
 
+import { detectModelContext, startAgent } from "./agent/index.ts";
 import { createCaptureLog } from "./capture/index.ts";
 import { createCommandService, createRegistry, VERBS } from "./commands/index.ts";
 import { createStore, type Effect, type ImageInfo, initialState, type Store } from "./model/index.ts";
@@ -102,6 +103,14 @@ async function main(): Promise<void> {
 		openBar: (line) => app.dispatchEvent(new CustomEvent("unlab-open-bar", { detail: line })),
 	});
 
+	const agent = startAgent({
+		store,
+		registry,
+		screens: engine.screens,
+		capture,
+		modelContext: detectModelContext(document, navigator),
+	});
+
 	const services: AppServices = {
 		store,
 		commands,
@@ -121,10 +130,14 @@ async function main(): Promise<void> {
 				};
 			},
 		},
+		agent,
 	};
 	app.services = services;
 	document.body.append(app);
-	window.addEventListener("pagehide", () => engine.dispose());
+	window.addEventListener("pagehide", () => {
+		agent.dispose();
+		engine.dispose();
+	});
 }
 
 void main().catch((error: unknown) => {

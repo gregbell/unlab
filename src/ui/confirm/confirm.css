@@ -17,6 +17,10 @@
 			background: var(--base);
 		}
 
+		.note {
+			color: var(--warn);
+		}
+
 		.heading {
 			font-size: var(--fs-input);
 			line-height: var(--lh-input);

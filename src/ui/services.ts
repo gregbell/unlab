@@ -1,6 +1,6 @@
 import type { CaptureView } from "../capture/index.ts";
 import type { CommandService } from "../commands/index.ts";
-import type { PortNo, ReadStore, SessionId, UiEvent } from "../model/index.ts";
+import type { PortNo, ReadStore, SessionId, ToolName, UiEvent } from "../model/index.ts";
 
 export type { CommandService };
 
@@ -16,6 +16,17 @@ export interface AppServices {
 	readonly capture: CaptureView;
 	readonly switch: SwitchReadout;
 	readonly terminals: TerminalService;
+	readonly agent: AgentService;
+}
+
+/** The WebMCP side the agent panel needs beyond the store: the tool list, and the person's answer to a waiting call. */
+export interface AgentService {
+	/** False when this browser has no WebMCP: the panel still lists the tools, and nothing can call them. */
+	readonly available: boolean;
+	/** In the panel's order, with each tool's argument names. */
+	readonly tools: readonly { readonly name: ToolName; readonly args: readonly string[] }[];
+	/** Allow or Deny. Only a waiting call listens. */
+	answer(call: number, allow: boolean): void;
 }
 
 /** Live figures the switch owns; read on render, never copied into state. */

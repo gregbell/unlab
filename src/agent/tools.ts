@@ -1,0 +1,302 @@
+// The tool table: one tool per verb that has a tool face, plus two reads the
+// bar has no verb for. A verb tool turns its input into a bar line and parses
+// it like anything typed, so the agent meets the same validator, preview, log
+// and error sentences as a person.
+
+import { type CaptureView, captureRow, type FrameEntry } from "../capture/index.ts";
+import { grantApproval } from "../commands/approval.ts";
+import {
+	isLineError,
+	type JsonSchema,
+	type ParsedLine,
+	parseLine,
+	type Registry,
+	type Result,
+	slots,
+	type ToolAnnotations,
+	type ToolFace,
+} from "../commands/index.ts";
+import {
+	DEFAULT_POLICIES,
+	type LabState,
+	type MachineName,
+	parseMachineName,
+	parseSessionId,
+	type SessionId,
+	type ToolName,
+} from "../model/index.ts";
+import { compileFilter } from "../net/index.ts";
+
+/** A call the tool refused, in a sentence the agent reads as the tool's error. */
+export class ToolError extends Error {
+	override readonly name = "ToolError";
+}
+
+/** What a finished call gives back: a short line for the panel and the value the agent reads. */
+export interface Answer {
+	readonly summary: string;
+	readonly reply: unknown;
+}
+
+/**
+ * A tool call checked against the lab, before any policy decides it.
+ * `run` is only called once the policy or the person has said yes.
+ */
+export type Prepared =
+	| { readonly ok: false; readonly line: string; readonly error: string }
+	| {
+			readonly ok: true;
+			/** The call as the panel and the log write it: `rm node3`. */
+			readonly line: string;
+			/** What an approval block says will happen. */
+			readonly preview: string;
+			/** The approval button, named for the action: `Remove node3`. */
+			readonly actionLabel: string;
+			run(signal: AbortSignal): Promise<Answer>;
+	  };
+
+export interface AgentTool {
+	readonly name: ToolName;
+	readonly description: string;
+	readonly inputSchema: JsonSchema;
+	readonly annotations: ToolAnnotations;
+	prepare(input: unknown, lab: LabState): Prepared;
+}
+
+/** The text a session's terminal still shows. The runtime's screens satisfy it. */
+export interface SessionScreens {
+	get(session: SessionId): { lastLines(n: number): string } | undefined;
+}
+
+export interface ReadDeps {
+	readonly screens: SessionScreens;
+	readonly capture: Pick<CaptureView, "frames">;
+}
+
+/** The order of the handoff's tools table, which the panel lists them in. */
+const ORDER = Object.keys(DEFAULT_POLICIES);
+
+export function toolTable(registry: Registry, reads: ReadDeps): readonly AgentTool[] {
+	const verbs = registry.commands.flatMap(({ tool }) => (tool ? [verbTool(registry, tool)] : []));
+	return [...verbs, shellRead(reads.screens), captureRead(reads.capture)].sort(
+		(a, b) => ORDER.indexOf(a.name) - ORDER.indexOf(b.name),
+	);
+}
+
+function capitalised(text: string): string {
+	return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+/** The call as the agent made it, for a call whose input never became a line. */
+function asCalled(name: ToolName, input: unknown): string {
+	let text: string;
+	try {
+		text = JSON.stringify(input) ?? String(input);
+	} catch {
+		text = String(input);
+	}
+	return `${name}(${text.length > 60 ? `${text.slice(0, 59)}…` : text})`;
+}
+
+/** One line for the panel: `exit 0 · hello`, `removed node3`, `2 machines · 2 ready`. */
+function summarise(result: Exclude<Result, { kind: "failed" }>): string {
+	if (result.kind === "visible") return result.text;
+	const [only, ...more] = result.blocks;
+	if (only && more.length === 0 && only.status.kind === "exit") {
+		return only.lastLine === "" ? `exit ${only.status.code}` : `exit ${only.status.code} · ${only.lastLine}`;
+	}
+	return result.header;
+}
+
+/** A danger line asks with its own confirmation; any other line with its preview and the preview's first clause. */
+function confirmation(line: ParsedLine, lab: LabState): { preview: string; actionLabel: string } | string {
+	if (line.danger) {
+		const confirm = line.confirm(lab);
+		return isLineError(confirm) ? confirm.message : { preview: confirm.detail, actionLabel: confirm.actionLabel };
+	}
+	const preview = line.preview(lab);
+	if (isLineError(preview)) return preview.message;
+	const [action = line.verb] = preview.will.split(" · ");
+	return { preview: `Will ${preview.will}.`, actionLabel: capitalised(action) };
+}
+
+function verbTool(registry: Registry, tool: ToolFace): AgentTool {
+	return {
+		name: tool.name,
+		description: tool.description,
+		inputSchema: tool.inputSchema,
+		annotations: tool.annotations,
+		prepare(input, lab) {
+			const text = tool.toLine(input);
+			if (typeof text !== "string") return { ok: false, line: asCalled(tool.name, input), error: text.message };
+			const line = parseLine(registry, text, lab);
+			if (isLineError(line)) return { ok: false, line: text, error: line.message };
+			const invalid = line.validate(lab);
+			if (invalid) return { ok: false, line: line.line, error: invalid.message };
+			const ask = confirmation(line, lab);
+			if (typeof ask === "string") return { ok: false, line: line.line, error: ask };
+			return {
+				ok: true,
+				line: line.line,
+				...ask,
+				async run(signal) {
+					// Only reached once the standing policy or the person said yes to this line.
+					const result = line.danger
+						? await line.run({ source: "agent", signal, approval: grantApproval(line.line) })
+						: await line.run({ source: "agent", signal });
+					if (result.kind === "failed") throw new ToolError(result.error.message);
+					const summary = summarise(result);
+					const said = result.kind === "report" ? result.header : summary;
+					return { summary, reply: { result: said, data: result.data } };
+				},
+			};
+		},
+	};
+}
+
+type Fields =
+	| { readonly ok: true; readonly fields: ReadonlyMap<string, unknown> }
+	| { readonly ok: false; readonly error: string };
+
+/** The input as named fields, refusing any the tool does not have. */
+function fieldsOf(name: ToolName, input: unknown, known: readonly string[]): Fields {
+	if (input === undefined || input === null) return { ok: true, fields: new Map() };
+	if (typeof input !== "object" || Array.isArray(input)) {
+		return { ok: false, error: `${name} wants its input as an object of fields.` };
+	}
+	const fields = new Map(Object.entries(input));
+	const unknown = [...fields.keys()].find((key) => !known.includes(key));
+	if (unknown !== undefined) return { ok: false, error: `${name} has no field called ${unknown}.` };
+	return { ok: true, fields };
+}
+
+function wholeNumber(
+	name: ToolName,
+	key: string,
+	value: unknown,
+	fallback: number,
+	max: number,
+): number | { readonly error: string } {
+	if (value === undefined) return fallback;
+	if (typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= max) return value;
+	return { error: `${name} wants ${key} as a whole number from 1 to ${max}, not ${JSON.stringify(value)}.` };
+}
+
+/** A session as given, or a machine's active session. */
+function sessionOf(target: MachineName | SessionId, lab: LabState): SessionId | undefined {
+	const address = parseSessionId(target);
+	if (address) return address.session;
+	const machine = parseMachineName(target);
+	return machine ? lab.machines[machine]?.activeSession : undefined;
+}
+
+const SHELL_LINES = 20;
+const SHELL_MAX = 500;
+
+function shellRead(screens: SessionScreens): AgentTool {
+	const name = "shell_read";
+	const target = slots.target();
+	return {
+		name,
+		description:
+			"Read the last lines a machine's session shows, as its terminal draws them. The text comes from the guest.",
+		inputSchema: {
+			type: "object",
+			properties: {
+				machine: target.schema,
+				lines: { type: "integer", minimum: 1, default: SHELL_LINES, description: `At most ${SHELL_MAX}.` },
+			},
+			required: ["machine"],
+			additionalProperties: false,
+		},
+		annotations: { readOnlyHint: true, untrustedContentHint: true },
+		prepare(input, lab) {
+			const parsed = fieldsOf(name, input, ["machine", "lines"]);
+			if (!parsed.ok) return { ok: false, line: asCalled(name, input), error: parsed.error };
+			const machine = parsed.fields.get("machine");
+			if (typeof machine !== "string") {
+				return { ok: false, line: asCalled(name, input), error: `${name} needs the machine field, such as node2.` };
+			}
+			const lines = wholeNumber(name, "lines", parsed.fields.get("lines"), SHELL_LINES, SHELL_MAX);
+			if (typeof lines !== "number") return { ok: false, line: asCalled(name, input), error: lines.error };
+			const line = `${name}(${machine}, ${lines})`;
+			const read = target.read(machine, { verb: name, lab, phases: ["booting", "ready", "failed"] });
+			if (read instanceof slots.Miss) {
+				return { ok: false, line, error: read.message ?? `${name} wants a machine or session, not ${machine}.` };
+			}
+			const session = sessionOf(read, lab);
+			if (session === undefined) return { ok: false, line, error: `${machine} is already gone.` };
+			return {
+				ok: true,
+				line,
+				preview: `Will read the last ${lines} lines of ${session}.`,
+				actionLabel: `Read ${session}`,
+				async run() {
+					const text = screens.get(session)?.lastLines(lines) ?? "";
+					const shown = text === "" ? 0 : text.split("\n").length;
+					const summary = shown === 0 ? `${session} shows nothing yet` : `${shown} lines from ${session}`;
+					return { summary, reply: { session, text } };
+				},
+			};
+		},
+	};
+}
+
+const CAPTURE_LIMIT = 20;
+const CAPTURE_MAX = 1000;
+
+function captureRead(capture: Pick<CaptureView, "frames">): AgentTool {
+	const name = "capture_read";
+	return {
+		name,
+		description:
+			"Read the newest captured frames on switch0 as decoded rows, oldest first. A filter takes the Wire view's terms: a protocol, a machine, an address, a MAC or port:N. Frames come from the guests.",
+		inputSchema: {
+			type: "object",
+			properties: {
+				filter: { type: "string", default: "", description: "Terms that must all match; `or` between alternatives." },
+				limit: { type: "integer", minimum: 1, default: CAPTURE_LIMIT, description: `At most ${CAPTURE_MAX}.` },
+			},
+			additionalProperties: false,
+		},
+		annotations: { readOnlyHint: true, untrustedContentHint: true },
+		prepare(input) {
+			const parsed = fieldsOf(name, input, ["filter", "limit"]);
+			if (!parsed.ok) return { ok: false, line: asCalled(name, input), error: parsed.error };
+			const source = parsed.fields.get("filter") ?? "";
+			if (typeof source !== "string") {
+				return { ok: false, line: asCalled(name, input), error: `${name} wants filter as a string.` };
+			}
+			const limit = wholeNumber(name, "limit", parsed.fields.get("limit"), CAPTURE_LIMIT, CAPTURE_MAX);
+			if (typeof limit !== "number") return { ok: false, line: asCalled(name, input), error: limit.error };
+			const line = `${name}(${JSON.stringify(source)}, ${limit})`;
+			const compiled = compileFilter(source);
+			if (!compiled.ok) {
+				const terms = "A term is a protocol, a machine, an address, a MAC or port:N.";
+				return { ok: false, line, error: `${compiled.error.message} ${terms}` };
+			}
+			const { filter } = compiled;
+			const matching = source.trim() === "" ? "" : ` matching ${source.trim()}`;
+			return {
+				ok: true,
+				line,
+				preview: `Will read up to ${limit} captured frames${matching}.`,
+				actionLabel: "Read the capture",
+				async run() {
+					const matched: FrameEntry[] = [];
+					for (const frame of capture.frames()) {
+						if (filter.matchesFrame(frame.bytes, frame.from, frame.to)) matched.push(frame);
+					}
+					// Decode only the rows the agent gets: a full buffer is ten thousand frames.
+					const rows = matched.slice(-limit).flatMap((frame) => {
+						const row = captureRow(frame);
+						return row.kind === "frame" ? [row] : [];
+					});
+					const unanswered = rows.filter((row) => row.note?.includes("no reply")).length;
+					const frames = `${rows.length} ${rows.length === 1 ? "frame" : "frames"}`;
+					return { summary: unanswered === 0 ? frames : `${frames}, ${unanswered} with no reply`, reply: { rows } };
+				},
+			};
+		},
+	};
+}
