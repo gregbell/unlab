@@ -1,0 +1,174 @@
+/* Restated so the order holds whichever sheet loads first. */
+@layer tokens, base, components;
+
+@layer components {
+	@scope (unlab-switch) {
+		:scope {
+			--socket: 28px;
+			--port-gap: 10px;
+			display: flex;
+			flex-direction: column;
+			min-width: 0;
+			background: var(--mantle);
+		}
+
+		:scope[compact] {
+			--socket: 26px;
+			--port-gap: 6px;
+		}
+
+		.header {
+			display: flex;
+			flex-wrap: wrap;
+			align-items: center;
+			gap: 4px 12px;
+			min-height: 34px;
+			padding: 0 var(--gutter);
+			border-bottom: 1px solid var(--line);
+		}
+
+		.title {
+			font-weight: 500;
+		}
+
+		.subnet,
+		.links {
+			color: var(--text-3);
+		}
+
+		.links[data-cut="true"] {
+			color: var(--down);
+		}
+
+		.spacer {
+			flex-grow: 1;
+		}
+
+		.ports {
+			display: grid;
+			grid-template-columns: repeat(8, minmax(0, 1fr));
+			gap: var(--port-gap);
+			max-width: 760px;
+			padding: var(--gutter);
+		}
+
+		:scope[compact] .ports {
+			max-width: none;
+			padding-bottom: 0;
+		}
+
+		/* Name, cable, socket, word. An empty port keeps the rows so its socket lines up. */
+		.port {
+			display: grid;
+			grid-template-rows: 18px 43px var(--socket) 21px;
+			justify-items: center;
+			min-width: 0;
+			color: var(--text);
+			font-size: var(--fs-status);
+		}
+
+		.face {
+			display: contents;
+		}
+
+		.port:has(.hit) {
+			position: relative;
+		}
+
+		.hit {
+			position: absolute;
+			inset: 0;
+			padding: 0;
+			border: 0;
+			border-radius: var(--r-port);
+			background: transparent;
+			cursor: pointer;
+		}
+
+		/* A leaving machine draws its cable and socket at half strength; its text stays legible. */
+		.port[data-state="removing"] :is(.cable, .socket) {
+			opacity: 0.5;
+		}
+
+		.name {
+			max-width: 100%;
+			overflow: hidden;
+			color: var(--machine-hue);
+			font-weight: 500;
+			text-overflow: ellipsis;
+			white-space: nowrap;
+		}
+
+		.cable {
+			align-self: end;
+			width: 0;
+			height: 40px;
+			border-left: 2px solid var(--machine-hue);
+		}
+
+		.port[data-state="booting"] .cable {
+			border-left-style: dotted;
+		}
+
+		.port[data-state="cut"] .cable {
+			border-left: 2px dashed var(--down);
+		}
+
+		.socket {
+			grid-row: 3;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			gap: 5px;
+			width: 100%;
+			height: var(--socket);
+			border: 1px solid var(--line-strong);
+			border-radius: var(--r-port);
+			background: var(--crust);
+			color: var(--text-3);
+		}
+
+		.port[data-state="empty"] .socket {
+			border-color: var(--line);
+		}
+
+		.port:has(.hit:hover) .socket {
+			border-color: var(--text-3);
+		}
+
+		.light {
+			width: 6px;
+			height: 6px;
+			border-radius: 50%;
+			background: var(--line-strong);
+		}
+
+		.port[data-state="up"] .light {
+			background: var(--ok);
+		}
+
+		.word {
+			align-self: end;
+			color: var(--text-3);
+		}
+
+		.port[data-state="up"] .word {
+			color: var(--ok);
+		}
+
+		.port[data-state="cut"] .word {
+			color: var(--down);
+		}
+
+		.port[data-state="booting"] .word {
+			color: var(--text-2);
+		}
+
+		.note {
+			margin-top: auto;
+			padding: 12px var(--gutter) 10px;
+			color: var(--text-3);
+			font-size: var(--fs-status);
+		}
+	}
+}

@@ -106,7 +106,7 @@ async function main(): Promise<void> {
 		store,
 		commands,
 		capture,
-		switch: { ...engine.reads, now: () => Date.now() },
+		switch: { ...engine.reads, now },
 		terminals: {
 			host(session): TerminalHost | null {
 				const screen = engine.screens.get(session);

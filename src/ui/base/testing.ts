@@ -10,6 +10,7 @@ import {
 	type AgentCall,
 	type AgentEvent,
 	createStore,
+	type Effect,
 	initialState,
 	isPlanError,
 	type LabEvent,
@@ -23,7 +24,7 @@ import {
 	type Store,
 	update,
 } from "../../model/index.ts";
-import type { AppServices, TerminalService } from "../services.ts";
+import type { AppServices, SwitchReadout, TerminalService } from "../services.ts";
 import { servicesContext } from "./context.ts";
 
 const TEST_IMAGES = [{ name: "alpine", label: "alpine 3.24" }] as const;
@@ -108,6 +109,12 @@ export interface MountOptions<E extends HTMLElement> {
 	readonly state?: LabState;
 	/** What `services.switch.counters(port)` answers from the start. */
 	readonly counters?: Iterable<readonly [PortNo, Counters]>;
+	/** Receives every effect the store emits, as the runtime would. */
+	readonly onEffect?: (effect: Effect) => void;
+	/** The capture the element reads. Defaults to an empty one that never changes. */
+	readonly capture?: CaptureView;
+	/** The switch's MAC table and clock. Defaults to an empty table at time 0; `counters` still applies. */
+	readonly switch?: Pick<SwitchReadout, "macTable" | "now">;
 	/** The terminal screens. Defaults to none: every `host` is null. */
 	readonly terminals?: TerminalService;
 	/** Runs before the element connects: <unlab-app> takes its services here. */
@@ -135,7 +142,7 @@ export async function mount<K extends keyof HTMLElementTagNameMap>(
 	tag: K,
 	options: MountOptions<HTMLElementTagNameMap[K]> = {},
 ): Promise<Mounted<HTMLElementTagNameMap[K]>> {
-	const store = createStore(options.state ?? lab(), () => {});
+	const store = createStore(options.state ?? lab(), (effect) => options.onEffect?.(effect));
 	const runs: Mounted<HTMLElement>["runs"] = [];
 	const confirms: string[] = [];
 	const counters = new Map<PortNo, Counters>(options.counters);
@@ -163,8 +170,8 @@ export async function mount<K extends keyof HTMLElementTagNameMap>(
 				confirms.push(line);
 			},
 		},
-		capture: EMPTY_CAPTURE,
-		switch: { counters: (port) => counters.get(port), macTable: () => [], now: () => 0 },
+		capture: options.capture ?? EMPTY_CAPTURE,
+		switch: { macTable: () => [], now: () => 0, ...options.switch, counters: (port) => counters.get(port) },
 		terminals: options.terminals ?? { host: () => null },
 	};
 

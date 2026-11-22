@@ -5,6 +5,9 @@ import "../pane-area/pane-area.ts";
 import "../parked-strip/parked-strip.ts";
 import "../rail/rail.ts";
 import "../statusline/statusline.ts";
+import "../capture/capture.ts";
+import "../switch/switch.ts";
+import "../wire/wire.ts";
 import { ContextProvider } from "@lit/context";
 import { html, LitElement, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { selectAgentIndicator, type UiEvent } from "../../model/index.ts";
@@ -93,10 +96,13 @@ export class UnlabApp extends LitElement {
 					<main class="centre">
 						<unlab-pane-area></unlab-pane-area>
 						<unlab-parked-strip></unlab-parked-strip>
-						<div class="dock"></div>
+						<div class="dock">
+							<unlab-capture mode="dock"></unlab-capture>
+							<unlab-switch compact></unlab-switch>
+						</div>
 					</main>
 				</div>
-				<main class="wire-view" ?hidden=${view !== "wire"}></main>
+				<main class="wire-view" ?hidden=${view !== "wire"}>${view === "wire" ? html`<unlab-wire></unlab-wire>` : nothing}</main>
 				<div id=${AGENT_PANEL} class="agent-panel" ?hidden=${!agentPanel}></div>
 			</div>
 			<main class="spawn-view" ?hidden=${view !== "spawn"}></main>

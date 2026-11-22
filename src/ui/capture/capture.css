@@ -1,0 +1,234 @@
+/* Restated so the order holds whichever sheet loads first. */
+@layer tokens, base, components;
+
+@layer components {
+	@scope (unlab-capture) to (unlab-frame-detail) {
+		:scope {
+			--row: 22px;
+			--columns: 62px 40px 176px minmax(0, 1fr);
+			--track-min: 620px;
+			display: flex;
+			flex-direction: column;
+			min-width: 0;
+			background: var(--mantle);
+		}
+
+		:scope[mode="full"] {
+			--row: 26px;
+			--columns: 62px 40px 176px 34px minmax(0, 1fr);
+			--track-min: 700px;
+			gap: 1px;
+			background: var(--line);
+		}
+
+		.toolbar {
+			display: flex;
+			flex-wrap: wrap;
+			align-items: center;
+			gap: 4px 12px;
+			min-height: 34px;
+			padding: 4px var(--gutter);
+			border-bottom: 1px solid var(--line);
+			background: var(--mantle);
+		}
+
+		:scope[mode="full"] .toolbar {
+			gap: 6px 12px;
+			min-height: 40px;
+			border-bottom: 0;
+		}
+
+		.title {
+			font-weight: 500;
+		}
+
+		.status {
+			color: var(--ok);
+		}
+
+		.status[data-paused="true"] {
+			color: var(--warn);
+		}
+
+		.spacer {
+			flex-grow: 1;
+		}
+
+		.filter-label,
+		.matches {
+			color: var(--text-3);
+		}
+
+		.filter {
+			width: 168px;
+			border-color: var(--line);
+		}
+
+		:scope[mode="full"] .filter-label {
+			margin-left: 8px;
+		}
+
+		:scope[mode="full"] .filter {
+			flex: 0 1 300px;
+			width: auto;
+			min-width: 120px;
+			min-height: 26px;
+			border-color: var(--line-strong);
+		}
+
+		.filter[aria-invalid="true"] {
+			border-color: var(--down);
+		}
+
+		.button {
+			min-height: var(--h-xs);
+			padding-inline: 8px;
+		}
+
+		:scope[mode="full"] .button {
+			min-height: 26px;
+			padding-inline: 10px;
+		}
+
+		.body {
+			display: grid;
+			flex: 1 1 auto;
+			grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+			gap: 1px;
+			min-height: 0;
+		}
+
+		.list-column {
+			display: flex;
+			flex-direction: column;
+			min-width: 0;
+			min-height: 0;
+			background: var(--base);
+		}
+
+		/* Rows never wrap: a narrow region scrolls sideways instead. */
+		.rows {
+			overflow-x: auto;
+			padding: 6px 0;
+		}
+
+		:scope[mode="full"] .rows {
+			position: relative;
+			flex: 1 1 0;
+			min-height: 260px;
+			overflow: auto;
+			padding: 0;
+		}
+
+		.track {
+			position: relative;
+			display: flex;
+			flex-direction: column;
+			min-width: var(--track-min);
+			white-space: nowrap;
+		}
+
+		:scope[mode="dock"] .track {
+			min-height: calc(8 * var(--row));
+		}
+
+		.track:focus-visible {
+			outline-offset: -2px;
+		}
+
+		.row {
+			display: grid;
+			grid-template-columns: var(--columns);
+			gap: 0 14px;
+			align-items: center;
+			height: var(--row);
+			padding: 0 var(--gutter);
+		}
+
+		/* The info runs on past the row rather than clip; the list scrolls sideways to it. */
+		.row > span:not(.info) {
+			overflow: hidden;
+			text-overflow: ellipsis;
+		}
+
+		:scope[mode="full"] .row {
+			position: absolute;
+			right: 0;
+			left: 0;
+			padding-left: 11px;
+			border-left: 3px solid transparent;
+		}
+
+		:scope[mode="full"] .row.heading {
+			position: sticky;
+			top: 0;
+			z-index: 1;
+			background: var(--base);
+			color: var(--text-3);
+		}
+
+		.row.frame[role="option"] {
+			cursor: pointer;
+		}
+
+		.time,
+		.len,
+		.everyone {
+			color: var(--text-3);
+		}
+
+		.machine[data-hue] {
+			color: var(--machine-hue);
+		}
+
+		.info {
+			color: var(--text-2);
+		}
+
+		.note {
+			color: var(--warn);
+		}
+
+		:scope[mode="full"] .row[aria-selected="true"] {
+			border-left-color: var(--machine-hue, var(--text-3));
+			background: var(--line);
+		}
+
+		.row[aria-selected="true"] :is(.time, .len, .everyone) {
+			color: var(--text-2);
+		}
+
+		.row[aria-selected="true"] .info {
+			color: var(--text);
+		}
+
+		/* An event row spans every column between dashed rules. */
+		.row.event {
+			display: flex;
+			gap: 14px;
+			border-top: 1px dashed currentcolor;
+			border-bottom: 1px dashed currentcolor;
+			color: var(--down);
+		}
+
+		.row.event[data-up="true"] {
+			color: var(--ok);
+		}
+
+		.row.event .time {
+			color: inherit;
+		}
+
+		.counters {
+			margin-top: auto;
+			padding: 6px var(--gutter) 10px;
+			color: var(--text-3);
+			font-size: var(--fs-status);
+		}
+
+		:scope[mode="full"] .counters {
+			padding-top: 8px;
+			border-top: 1px solid var(--line);
+		}
+	}
+}

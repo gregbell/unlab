@@ -1,0 +1,31 @@
+/* Restated so the order holds whichever sheet loads first. */
+@layer tokens, base, components;
+
+@layer components {
+	@scope (unlab-wire) {
+		:scope {
+			display: flex;
+			flex: 1 1 auto;
+			flex-direction: column;
+			gap: 1px;
+			min-width: 0;
+			background: var(--line);
+		}
+
+		.top {
+			display: grid;
+			grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+			gap: 1px;
+		}
+
+		:scope > unlab-capture {
+			flex: 1 1 auto;
+		}
+
+		@media (width < 900px) {
+			.top {
+				grid-template-columns: minmax(0, 1fr);
+			}
+		}
+	}
+}
