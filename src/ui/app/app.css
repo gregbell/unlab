@@ -1,0 +1,166 @@
+/* Restated so the order holds whichever sheet loads first. */
+@layer tokens, base, components;
+
+@layer components {
+	/* Regions sit edge to edge; the 1px gaps over --line are the dividers. */
+	@scope (unlab-app) to (unlab-rail, unlab-statusline) {
+		:scope {
+			display: flex;
+			flex-direction: column;
+			gap: 1px;
+			min-height: 100vh;
+			background: var(--line);
+		}
+
+		.top-bar {
+			display: flex;
+			flex-wrap: wrap;
+			align-items: center;
+			gap: 0 16px;
+			min-height: 40px;
+			padding: 0 var(--gutter);
+			background: var(--crust);
+		}
+
+		.wordmark {
+			min-height: var(--h-sm);
+			padding: 0;
+			border: 0;
+			background: transparent;
+			color: var(--text);
+			font-size: 14px;
+			font-weight: 600;
+			letter-spacing: -0.2px;
+			cursor: pointer;
+		}
+
+		.lab-name {
+			color: var(--text-3);
+		}
+
+		.command-field {
+			display: flex;
+			flex: 1 1 320px;
+			align-items: center;
+			gap: 8px;
+			max-width: 520px;
+			min-height: var(--h-sm);
+			margin: 6px 0;
+			padding: 0 10px;
+			border: 1px solid var(--line);
+			border-radius: var(--r-control);
+			background: var(--mantle);
+		}
+
+		.command-field:focus-within {
+			outline: 2px solid var(--agent);
+			outline-offset: 2px;
+		}
+
+		.command-field .prompt {
+			color: var(--text-3);
+		}
+
+		.command-field input {
+			flex-grow: 1;
+			min-width: 0;
+			padding: 0;
+			border: 0;
+			outline: 0;
+			background: transparent;
+			color: var(--text);
+		}
+
+		.command-field input::placeholder {
+			color: var(--text-3);
+			opacity: 1;
+		}
+
+		.command-field kbd {
+			font: inherit;
+			font-size: var(--fs-status);
+			color: var(--text-3);
+		}
+
+		.spacer {
+			flex-grow: 1;
+		}
+
+		.agent-indicator {
+			display: inline-flex;
+			align-items: center;
+			gap: 7px;
+			min-height: var(--h-sm);
+			padding: 0;
+			border: 0;
+			background: transparent;
+			color: var(--text-3);
+			cursor: pointer;
+		}
+
+		.agent-indicator[data-state="agent active"] {
+			color: var(--agent);
+		}
+
+		.agent-indicator .square {
+			width: 6px;
+			height: 6px;
+			background: var(--agent);
+		}
+
+		.body {
+			display: flex;
+			flex: 1 1 auto;
+			flex-wrap: wrap;
+			align-items: stretch;
+			gap: 1px;
+			background: var(--line);
+		}
+
+		/* The rail and the centre are the body's own flex items; the wrapper only hides them together. */
+		.lab {
+			display: contents;
+		}
+
+		/* Takes all the slack, so the rail keeps its 232px until a narrow window wraps it above. */
+		.centre,
+		.wire-view {
+			display: flex;
+			flex: 999 1 560px;
+			flex-direction: column;
+			gap: 1px;
+			min-width: 0;
+			background: var(--line);
+		}
+
+		.pane-area {
+			flex: 1 1 auto;
+			background: var(--base);
+		}
+
+		.parked-strip,
+		.dock,
+		.agent-panel {
+			background: var(--mantle);
+		}
+
+		/* An empty slot takes no room and draws no divider. */
+		.parked-strip:empty,
+		.dock:empty {
+			display: none;
+		}
+
+		.agent-panel {
+			flex: 0 0 460px;
+		}
+
+		.wire-view,
+		.spawn-view {
+			background: var(--base);
+		}
+
+		.spawn-view {
+			flex: 1 1 auto;
+		}
+	}
+}
