@@ -165,6 +165,9 @@ export interface LogEntry {
 
 export type View = "lab" | "wire" | "spawn";
 
+/** The network dock under the panes: the capture and the switch, or one strip that sums them up. */
+export type Dock = "open" | "collapsed";
+
 export interface LabState {
 	/** ms since the lab started; advanced by `tick` and stamped events. */
 	readonly now: number;
@@ -178,6 +181,7 @@ export interface LabState {
 	readonly keyboard: Keyboard;
 	readonly view: View;
 	readonly agentPanel: boolean;
+	readonly dock: Dock;
 	readonly capture: CaptureUi;
 	readonly agent: AgentState;
 	/** Bounded. `recent` and bar history are selectors over it. */
@@ -261,6 +265,7 @@ export type UiEvent =
 	| { readonly type: "ui/area-resized"; readonly width: number; readonly height: number }
 	| { readonly type: "ui/view"; readonly view: View }
 	| { readonly type: "ui/agent-panel"; readonly open: boolean }
+	| { readonly type: "ui/dock"; readonly dock: Dock }
 	| { readonly type: "ui/bar"; readonly open: boolean }
 	| { readonly type: "ui/capture-filter"; readonly filter: string }
 	| { readonly type: "ui/capture-pause"; readonly paused: boolean }

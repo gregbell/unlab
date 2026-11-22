@@ -77,6 +77,7 @@ export function initialState(
 		keyboard: NOWHERE,
 		view: "lab",
 		agentPanel: false,
+		dock: "open",
 		capture: { filter: "", paused: false, selected: null },
 		agent: { policies: DEFAULT_POLICIES, paused: false, calls: [], firstCallAt: null, lastCallAt: null },
 		log: [],
@@ -159,6 +160,8 @@ function reduce(state: LabState, event: LabEvent): Step {
 			return step(patch(state, { view: event.view }));
 		case "ui/agent-panel":
 			return step(patch(state, { agentPanel: event.open }));
+		case "ui/dock":
+			return step(patch(state, { dock: event.dock }));
 		case "ui/bar":
 			return event.open ? openBar(state) : closeBar(state);
 		case "ui/capture-filter":

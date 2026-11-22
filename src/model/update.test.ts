@@ -49,6 +49,7 @@ describe("initialState", () => {
 			keyboard: { kind: "none" },
 			view: "lab",
 			agentPanel: false,
+			dock: "open",
 			capture: { filter: "", paused: false, selected: null },
 			log: [],
 			images: [{ name: "alpine", label: "alpine 3.24" }],
@@ -721,6 +722,16 @@ describe("views and capture", () => {
 		}
 		s = run(s, { type: "ui/view", view: "lab" });
 		expect(s.view).toBe("lab");
+	});
+
+	test("the dock starts open, collapses and opens again, and a repeat changes nothing", () => {
+		const open = emptyLab();
+		expect(open.dock).toBe("open");
+		expect(update(open, { type: "ui/dock", dock: "open" }).state).toBe(open);
+		const collapsed = update(open, { type: "ui/dock", dock: "collapsed" });
+		expect(collapsed).toEqual({ state: { ...open, dock: "collapsed" }, effects: [] });
+		expect(update(collapsed.state, { type: "ui/dock", dock: "collapsed" }).state).toBe(collapsed.state);
+		expect(run(collapsed.state, { type: "ui/dock", dock: "open" }).dock).toBe("open");
 	});
 
 	test("clear empties the capture and drops the selection", () => {
