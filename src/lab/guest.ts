@@ -15,7 +15,12 @@ shift
 exec \${SUDO:+$SUDO -n} /bin/sh -c "$s" sh "$@"`;
 
 /** Run a shell script as root in the guest, with args as $1... */
-export function execAsRoot(vm: KernelHandle, script: string, args: string[] = [], opts?: ExecOptions & { encoding?: "utf8" }): Promise<ExecResult> {
+export function execAsRoot(
+	vm: KernelHandle,
+	script: string,
+	args: string[] = [],
+	opts?: ExecOptions & { encoding?: "utf8" },
+): Promise<ExecResult> {
 	return vm.exec("/bin/sh", ["-c", AS_ROOT_SH, "sh", script, ...args], opts);
 }
 
@@ -42,7 +47,11 @@ export interface SetupOptions {
  * `apk add` and anything else bound for the internet.
  */
 export function setupScript(o: SetupOptions): string {
-	const hosts = [`127.0.0.1 localhost`, `${o.ip} ${o.hostname}`, ...o.hosts.filter((h) => h.name !== o.hostname).map((h) => `${h.ip} ${h.name}`)];
+	const hosts = [
+		`127.0.0.1 localhost`,
+		`${o.ip} ${o.hostname}`,
+		...o.hosts.filter((h) => h.name !== o.hostname).map((h) => `${h.ip} ${h.name}`),
+	];
 	return [
 		`set -e`,
 		`hostname ${sh(o.hostname)}`,

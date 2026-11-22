@@ -57,7 +57,13 @@ export function renderFrames(host: HTMLElement, machine: Machine): void {
 	host.textContent = c ? `${c.rxFrames} in · ${c.txFrames} out · ${c.flooded} flooded` : "—";
 }
 
-export function renderDetail(host: HTMLElement, lab: Lab, m: Machine | undefined, openSessionIds: Set<string>, h: SidebarHandlers): void {
+export function renderDetail(
+	host: HTMLElement,
+	lab: Lab,
+	m: Machine | undefined,
+	openSessionIds: Set<string>,
+	h: SidebarHandlers,
+): void {
 	host.replaceChildren();
 	if (!m) {
 		host.append(span("empty", "Select a machine."));

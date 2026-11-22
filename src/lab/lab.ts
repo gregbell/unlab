@@ -1,7 +1,7 @@
 // The lab: one layer-2 segment, a machine on each port, and the bookkeeping
 // that keeps names and addresses agreeing across every guest.
 
-import { Subnet, labMac } from "./frames.ts";
+import { labMac, Subnet } from "./frames.ts";
 import { loadImage } from "./image.ts";
 import { Machine } from "./machine.ts";
 import type { HostEntry, VmConfig } from "./protocol.ts";

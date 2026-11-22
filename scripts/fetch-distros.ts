@@ -37,7 +37,9 @@ async function sha256(path: URL): Promise<string> {
 
 async function main(): Promise<void> {
 	const wanted = new Set(process.argv.slice(2).filter((a) => !a.startsWith("-")));
-	const pkg = JSON.parse(await readFile(new URL("node_modules/unkernel/package.json", ROOT), "utf8")) as { version: string };
+	const pkg = JSON.parse(await readFile(new URL("node_modules/unkernel/package.json", ROOT), "utf8")) as {
+		version: string;
+	};
 	const base = `https://github.com/${RELEASE_REPO}/releases/download/v${pkg.version}/`;
 	console.log(`unkernel ${pkg.version}`);
 	console.log(`release  ${base}`);
@@ -48,7 +50,8 @@ async function main(): Promise<void> {
 
 	await mkdir(OUT, { recursive: true });
 	const picked = index.distros.filter((d) => wanted.size === 0 || wanted.has(d.name));
-	if (!picked.length) throw new Error(`no such distro: ${[...wanted].join(", ")} (have ${index.distros.map((d) => d.name).join(", ")})`);
+	if (!picked.length)
+		throw new Error(`no such distro: ${[...wanted].join(", ")} (have ${index.distros.map((d) => d.name).join(", ")})`);
 
 	for (const d of picked) {
 		const out = new URL(d.file, OUT);

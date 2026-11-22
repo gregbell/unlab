@@ -15,13 +15,13 @@ the same tab.
 
 ## What it actually is
 
-| | |
-|---|---|
-| Machine | one unkernel kernel in its own Web Worker |
+|          |                                                      |
+| -------- | ---------------------------------------------------- |
+| Machine  | one unkernel kernel in its own Web Worker            |
 | Terminal | libghostty's VT engine on WebAssembly, through wterm |
-| Network | a learning layer-2 switch on the page's main thread |
-| Segment | `10.88.0.0/24`, one address per machine |
-| Internet | optional per machine, over a NAT uplink |
+| Network  | a learning layer-2 switch on the page's main thread  |
+| Segment  | `10.88.0.0/24`, one address per machine              |
+| Internet | optional per machine, over a NAT uplink              |
 
 Each machine gets a `NetDevice` — the kernel's own NIC interface, which deals
 in raw Ethernet frames. Frames addressed to the lab subnet go to the switch,
@@ -30,7 +30,7 @@ the rest to one port. Nothing in between parses or rewrites them, so what the
 guests do is real: ARP resolution, ICMP, UDP, TCP handshakes, retransmits,
 `tcpdump`. Two kernels' network stacks talking to each other.
 
-Anything *not* addressed to the lab goes instead to a `NetStack`, unkernel's
+Anything _not_ addressed to the lab goes instead to a `NetStack`, unkernel's
 NAT gateway on `10.0.2.0/24`, which reaches the internet over a Wisp proxy.
 That is what makes `apk add` work. A machine with the internet enabled ends
 up with both addresses on `eth0`:
@@ -83,9 +83,9 @@ npm run typecheck
 
 Nothing here is rebuilt or repacked.
 
-* The kernel is `unkernel.wasm` from the pinned `unkernel` npm package, which
+- The kernel is `unkernel.wasm` from the pinned `unkernel` npm package, which
   is what the SDK ships and what the bundler emits as an asset.
-* The root images are the `.erofs` assets from the GitHub release matching
+- The root images are the `.erofs` assets from the GitHub release matching
   that package version — the same release unkernel.dev builds its own
   `/distros/` from. `scripts/fetch-distros.ts` reads the release's
   `distros.json`, downloads each image and checks its size and SHA-256
@@ -102,39 +102,39 @@ what was mirrored, down to the upstream build id:
 
 **Networking**
 
-* `ping node2`, then pull node2's cable in the topology panel and watch the
+- `ping node2`, then pull node2's cable in the topology panel and watch the
   ARP retries pile up on the wire.
-* `nc -l -p 9000` on one machine, `nc node1 9000` on another.
-* `ip neigh show` — the ARP table, filled by frames that really crossed.
-* Watch the wire panel while you work: the first frame to an unlearned
+- `nc -l -p 9000` on one machine, `nc node1 9000` on another.
+- `ip neigh show` — the ARP table, filled by frames that really crossed.
+- Watch the wire panel while you work: the first frame to an unlearned
   address is flooded (marked `~`), the rest are delivered to one port.
-* Give one machine two roles: `ip addr add 10.88.0.200/24 dev eth0`.
+- Give one machine two roles: `ip addr add 10.88.0.200/24 dev eth0`.
 
 **Sysadmin**
 
-* Enable the internet on a machine, then `sudo apk add tcpdump` and run
+- Enable the internet on a machine, then `sudo apk add tcpdump` and run
   `tcpdump -i eth0 -n` while another machine pings it.
-* `sudo apk add python3` and serve a directory with
+- `sudo apk add python3` and serve a directory with
   `python3 -m http.server 80`, then `wget -qO- node1` from a neighbour.
-* Break name resolution on purpose: edit `/etc/hosts` and see what still
+- Break name resolution on purpose: edit `/etc/hosts` and see what still
   works by address.
 
 ## Limits
 
 These are worth knowing before you chase a ghost:
 
-* **IPv6 is dropped.** The uplink has no IPv6 and the switch discards it, so
+- **IPv6 is dropped.** The uplink has no IPv6 and the switch discards it, so
   the lab is IPv4 only.
-* **One NIC per machine.** unkernel gives a kernel a single network device,
+- **One NIC per machine.** unkernel gives a kernel a single network device,
   so routers between separate segments need address aliases rather than a
   second interface.
-* **The uplink carries TCP, DNS and DHCP only** — no outbound ping to the
-  internet, no arbitrary UDP. Traffic *inside* the lab has no such limit:
+- **The uplink carries TCP, DNS and DHCP only** — no outbound ping to the
+  internet, no arbitrary UDP. Traffic _inside_ the lab has no such limit:
   that is the guests' own stacks over raw frames.
-* **The internet path leaves your browser.** It goes through a public Wisp
+- **The internet path leaves your browser.** It goes through a public Wisp
   proxy (`wss://wisp.pi0.io`), unkernel's default. It is off by default and
   opt-in per machine.
-* **Nothing is persisted.** Every machine starts from the read-only image
+- **Nothing is persisted.** Every machine starts from the read-only image
   with a fresh overlay; closing the tab discards the lot.
 
 ## Layout

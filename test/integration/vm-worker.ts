@@ -1,15 +1,21 @@
 // One machine, in its own thread. Mirrors what the browser worker does.
 import { parentPort, workerData } from "node:worker_threads";
-import { createKernel } from "unkernel";
-import { Subnet } from "../src/lab/frames.ts";
-import { LabNic } from "../src/lab/nic.ts";
-import { execAsRoot, setupScript } from "../src/lab/guest.ts";
+import { createKernel } from "unkernel/node";
+import { Subnet } from "../../src/lab/frames.ts";
+import { execAsRoot, setupScript } from "../../src/lab/guest.ts";
+import { LabNic } from "../../src/lab/nic.ts";
 
 const port = parentPort;
 if (!port) throw new Error("not a worker");
 
 const { name, ip, mac, labCidr, distro, memoryMiB, prefixBits, hosts } = workerData as {
-	name: string; ip: string; mac: string; labCidr: string; distro: string; memoryMiB: number; prefixBits: number;
+	name: string;
+	ip: string;
+	mac: string;
+	labCidr: string;
+	distro: string;
+	memoryMiB: number;
+	prefixBits: number;
 	hosts?: Array<{ ip: string; name: string }>;
 };
 
@@ -17,7 +23,7 @@ const lab = new Subnet(labCidr);
 const nic = new LabNic({
 	mac,
 	lab,
-	toSwitch: (frame) => port.postMessage({ type: "frame", frame }, [frame.buffer]),
+	toSwitch: (frame) => port.postMessage({ type: "frame", frame }, [frame.buffer as ArrayBuffer]),
 });
 
 const say = (type: string, extra: Record<string, unknown> = {}) => port.postMessage({ type, ...extra });
@@ -44,7 +50,12 @@ try {
 		if (m.type !== "exec" || !m.cmd) return;
 		try {
 			const out = m.root ? await execAsRoot(vm, m.cmd) : await vm.exec("/bin/sh", ["-c", m.cmd]);
-			say("exec-result", { id: m.id, exitCode: out.exitCode, stdout: String(out.stdout ?? ""), stderr: String(out.stderr ?? "") });
+			say("exec-result", {
+				id: m.id,
+				exitCode: out.exitCode,
+				stdout: String(out.stdout ?? ""),
+				stderr: String(out.stderr ?? ""),
+			});
 		} catch (e) {
 			say("exec-result", { id: m.id, exitCode: -1, stdout: "", stderr: String(e) });
 		}

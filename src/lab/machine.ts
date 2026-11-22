@@ -51,7 +51,8 @@ export class Session {
 		this.scrollback.push(bytes);
 		this.#bytes += bytes.length;
 		while (this.#bytes > SCROLLBACK_BYTES && this.scrollback.length > 1) {
-			this.#bytes -= this.scrollback.shift()!.length;
+			const dropped = this.scrollback.shift();
+			if (dropped) this.#bytes -= dropped.length;
 		}
 		for (const fn of this.#listeners) fn(bytes);
 	}
@@ -123,7 +124,10 @@ export class Machine {
 		// The new URL(...) must sit inside the new Worker(...) call: that literal
 		// form is what the bundler recognises, and anything else ships the
 		// worker as an unprocessed source file.
-		this.#worker = new Worker(new URL("../vm-worker.ts", import.meta.url), { type: "module", name: `unlab:${cfg.name}` });
+		this.#worker = new Worker(new URL("../vm-worker.ts", import.meta.url), {
+			type: "module",
+			name: `unlab:${cfg.name}`,
+		});
 		this.#worker.addEventListener("message", (ev: MessageEvent<FromVm>) => this.#onMessage(ev.data));
 		this.#worker.addEventListener("error", (ev) => {
 			this.state = "error";

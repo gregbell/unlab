@@ -35,7 +35,12 @@ function escapeText(text: string): string {
 	return text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
 }
 
-export function renderTopology(host: HTMLElement, lab: Lab, activeId: string | undefined, onSelect: (id: string) => void): void {
+export function renderTopology(
+	host: HTMLElement,
+	lab: Lab,
+	activeId: string | undefined,
+	onSelect: (id: string) => void,
+): void {
 	if (!lab.machines.length) {
 		host.innerHTML = '<div class="map-empty">Add a machine to connect it to the switch.</div>';
 		return;

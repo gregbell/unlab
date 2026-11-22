@@ -1,7 +1,8 @@
 // Shared line icons for workspace controls.
 const paths = {
 	machine: '<rect x="3" y="3" width="18" height="13" rx="2"/><path d="M8 21h8m-4-5v5m-5-13 2 2-2 2m4 0h3"/>',
-	network: '<rect x="9" y="2" width="6" height="5" rx="1"/><path d="M12 7v5M5 16v-4h14v4"/><rect x="2" y="16" width="6" height="5" rx="1"/><rect x="16" y="16" width="6" height="5" rx="1"/>',
+	network:
+		'<rect x="9" y="2" width="6" height="5" rx="1"/><path d="M12 7v5M5 16v-4h14v4"/><rect x="2" y="16" width="6" height="5" rx="1"/><rect x="16" y="16" width="6" height="5" rx="1"/>',
 	terminal: '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m6 9 3 3-3 3m6 0h5"/>',
 	pulse: '<path d="M2 12h5l3-8 4 16 3-8h5"/>',
 	plus: '<path d="M12 5v14M5 12h14"/>',

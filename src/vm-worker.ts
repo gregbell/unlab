@@ -9,7 +9,7 @@
 // the boot log and a shell. Beyond that each tab opens its own pty through
 // vm.spawn(), so a machine can have several independent shells.
 
-import { DEFAULT_WISP_SERVERS, NetStack, createKernel, wispBackend, type KernelInstance, type Pty } from "unkernel";
+import { createKernel, DEFAULT_WISP_SERVERS, type KernelInstance, NetStack, type Pty, wispBackend } from "unkernel";
 import { Subnet } from "./lab/frames.ts";
 import { execAsRoot, setupScript } from "./lab/guest.ts";
 import { MemoryDisk } from "./lab/image.ts";
@@ -69,7 +69,10 @@ function handle(m: ToVm): void {
 			return;
 		case "pty-data":
 			// Ordered with other writes on this pty; a rejection means it ended.
-			void ptys.get(m.sid)?.write(m.data).catch(() => {});
+			void ptys
+				.get(m.sid)
+				?.write(m.data)
+				.catch(() => {});
 			return;
 		case "pty-resize":
 			ptys.get(m.sid)?.resize(m.cols, m.rows);
@@ -99,7 +102,10 @@ async function runExec(id: number, cmd: string, root: boolean): Promise<void> {
 async function reconfigure(m: Extract<ToVm, { type: "reconfigure" }>): Promise<void> {
 	if (!vm || !cfg) return;
 	cfg = { ...cfg, name: m.name, ip: m.ip, prefixBits: m.prefixBits, hosts: m.hosts, internet: m.internet };
-	const r = await execAsRoot(vm, setupScript({ hostname: m.name, ip: m.ip, prefixBits: m.prefixBits, hosts: m.hosts, dhcp: m.internet }));
+	const r = await execAsRoot(
+		vm,
+		setupScript({ hostname: m.name, ip: m.ip, prefixBits: m.prefixBits, hosts: m.hosts, dhcp: m.internet }),
+	);
 	if (r.exitCode !== 0) fail(`reconfigure: ${String(r.stderr).trim()}`, false);
 }
 
@@ -197,7 +203,10 @@ async function boot(c: VmConfig): Promise<void> {
 	// Name, lab address and /etc/hosts; with an uplink, udhcpc also brings up
 	// 10.0.2.15 and the default route.
 	try {
-		const r = await execAsRoot(vm, setupScript({ hostname: c.name, ip: c.ip, prefixBits: c.prefixBits, hosts: c.hosts, dhcp: c.internet }));
+		const r = await execAsRoot(
+			vm,
+			setupScript({ hostname: c.name, ip: c.ip, prefixBits: c.prefixBits, hosts: c.hosts, dhcp: c.internet }),
+		);
 		if (r.exitCode !== 0) fail(`setup: ${String(r.stderr).trim() || `exit ${r.exitCode}`}`, false);
 	} catch (e) {
 		fail(`setup: ${e instanceof Error ? e.message : String(e)}`, false);

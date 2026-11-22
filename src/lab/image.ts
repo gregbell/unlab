@@ -17,7 +17,11 @@ export interface ImageProgress {
 }
 
 /** Fetch an image once; later callers share the first result. */
-export function loadImage(url: string, size: number, onProgress?: (p: ImageProgress) => void): Promise<ArrayBufferLike> {
+export function loadImage(
+	url: string,
+	size: number,
+	onProgress?: (p: ImageProgress) => void,
+): Promise<ArrayBufferLike> {
 	const found = images.get(url);
 	if (found) return found;
 	const p = fetchImage(url, size, onProgress);
@@ -27,7 +31,11 @@ export function loadImage(url: string, size: number, onProgress?: (p: ImageProgr
 	return p;
 }
 
-async function fetchImage(url: string, size: number, onProgress?: (p: ImageProgress) => void): Promise<ArrayBufferLike> {
+async function fetchImage(
+	url: string,
+	size: number,
+	onProgress?: (p: ImageProgress) => void,
+): Promise<ArrayBufferLike> {
 	const res = await fetch(url);
 	if (!res.ok) throw new Error(`${url}: HTTP ${res.status}`);
 	const total = Number(res.headers.get("content-length")) || size;
@@ -76,7 +84,8 @@ export class MemoryDisk implements BlockDevice {
 		let at = off;
 		for (const v of views) {
 			// A read past the end would otherwise copy a short slice silently.
-			if (at + v.length > this.#bytes.length) throw new Error(`read past the end of the image: ${at}+${v.length} > ${this.#bytes.length}`);
+			if (at + v.length > this.#bytes.length)
+				throw new Error(`read past the end of the image: ${at}+${v.length} > ${this.#bytes.length}`);
 			v.set(this.#bytes.subarray(at, at + v.length));
 			at += v.length;
 		}

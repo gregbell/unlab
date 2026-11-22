@@ -2,14 +2,14 @@
 import "@wterm/dom/css";
 import "./style.css";
 
-import { Lab, type DistroManifest } from "./lab/lab.ts";
+import { type DistroManifest, Lab } from "./lab/lab.ts";
 import type { Machine, Session } from "./lab/machine.ts";
-import { workspace } from "./ui/workspace.ts";
 import { icon } from "./ui/icons.ts";
 import { renderDetail, renderFrames, renderMachines, type SidebarHandlers } from "./ui/sidebar.ts";
 import { TerminalPane } from "./ui/terminal.ts";
 import { renderTopology } from "./ui/topology.ts";
-import { MAX_PACKETS, renderMacTable, renderPackets, renderStats, toPacket, type Packet } from "./ui/wire.ts";
+import { MAX_PACKETS, type Packet, renderMacTable, renderPackets, renderStats, toPacket } from "./ui/wire.ts";
+import { workspace } from "./ui/workspace.ts";
 
 interface Tab {
 	session: Session;
@@ -157,7 +157,9 @@ const handlers: SidebarHandlers = {
 		const others = lab.machines.filter((x) => x.id !== m.id);
 		if (!others.length) return;
 		const s = tabs.find((t) => t.session.machine.id === m.id)?.session ?? m.console;
-		void openTab(s).then(() => s.write(`for h in ${others.map((o) => o.name).join(" ")}; do ping -c 2 -W 2 $h; done\n`));
+		void openTab(s).then(() =>
+			s.write(`for h in ${others.map((o) => o.name).join(" ")}; do ping -c 2 -W 2 $h; done\n`),
+		);
 	},
 };
 
@@ -255,7 +257,8 @@ function fitActive(): void {
 
 function render(): void {
 	const ready = lab.machines.filter((m) => m.state === "ready").length;
-	byId("lab-status").textContent = `${ready} of ${lab.machines.length} ${lab.machines.length === 1 ? "machine" : "machines"} ready`;
+	byId("lab-status").textContent =
+		`${ready} of ${lab.machines.length} ${lab.machines.length === 1 ? "machine" : "machines"} ready`;
 	byId("lab-dot").className = `dot ${ready > 0 && ready === lab.machines.length ? "ready" : "booting"}`;
 	byId("machine-count").textContent = String(lab.machines.length);
 	byId("session-count").textContent = `${tabs.length} open ${tabs.length === 1 ? "session" : "sessions"}`;

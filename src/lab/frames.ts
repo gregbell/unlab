@@ -31,11 +31,13 @@ export function ip4str(n: number): string {
 export function parseMac(s: string): Uint8Array {
 	const parts = s.split(/[:-]/);
 	if (parts.length !== 6) throw new Error(`bad MAC: ${s}`);
-	return new Uint8Array(parts.map((p) => {
-		const b = Number.parseInt(p, 16);
-		if (!Number.isInteger(b) || b < 0 || b > 255) throw new Error(`bad MAC: ${s}`);
-		return b;
-	}));
+	return new Uint8Array(
+		parts.map((p) => {
+			const b = Number.parseInt(p, 16);
+			if (!Number.isInteger(b) || b < 0 || b > 255) throw new Error(`bad MAC: ${s}`);
+			return b;
+		}),
+	);
 }
 
 export function macStr(b: Uint8Array, off = 0): string {
@@ -65,7 +67,7 @@ export function isGroupMac(f: Uint8Array): boolean {
 }
 
 function u32(f: Uint8Array, off: number): number {
-	return (((f[off] << 24) | (f[off + 1] << 16) | (f[off + 2] << 8) | f[off + 3]) >>> 0);
+	return ((f[off] << 24) | (f[off + 1] << 16) | (f[off + 2] << 8) | f[off + 3]) >>> 0;
 }
 
 /** ARP sender/target protocol addresses, or null if this is not an ARP frame. */
@@ -77,7 +79,7 @@ export function arpAddrs(f: Uint8Array): { op: number; spa: number; tpa: number 
 /** IPv4 source/destination/protocol, or null if this is not an IPv4 frame. */
 export function ipAddrs(f: Uint8Array): { proto: number; src: number; dst: number; ihl: number } | null {
 	if (ethertype(f) !== ETH_IPV4 || f.length < ETH_HDR + 20) return null;
-	if ((f[ETH_HDR] >> 4) !== 4) return null;
+	if (f[ETH_HDR] >> 4 !== 4) return null;
 	return { proto: f[ETH_HDR + 9], src: u32(f, ETH_HDR + 12), dst: u32(f, ETH_HDR + 16), ihl: (f[ETH_HDR] & 15) * 4 };
 }
 
@@ -102,7 +104,7 @@ export class Subnet {
 		this.network = (ip4(addr) & this.mask) >>> 0;
 	}
 	contains(ip: number): boolean {
-		return ((ip & this.mask) >>> 0) === this.network;
+		return (ip & this.mask) >>> 0 === this.network;
 	}
 	/** The directed broadcast address, e.g. 10.88.0.255. */
 	get broadcast(): number {

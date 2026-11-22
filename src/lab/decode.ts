@@ -1,8 +1,20 @@
 // Decode a frame into one tcpdump-ish line for the inspector.
 
 import {
-	arpAddrs, dstMac, ETH_ARP, ETH_IPV4, ETH_IPV6, ETH_HDR, ethertype,
-	ip4str, ipAddrs, IP_ICMP, IP_TCP, IP_UDP, l4Ports, srcMac,
+	arpAddrs,
+	dstMac,
+	ETH_ARP,
+	ETH_HDR,
+	ETH_IPV4,
+	ETH_IPV6,
+	ethertype,
+	IP_ICMP,
+	IP_TCP,
+	IP_UDP,
+	ip4str,
+	ipAddrs,
+	l4Ports,
+	srcMac,
 } from "./frames.ts";
 
 export interface Decoded {
@@ -41,11 +53,12 @@ export function decode(frame: Uint8Array): Decoded {
 
 	const arp = arpAddrs(frame);
 	if (arp) {
-		const who = arp.op === 1
-			? `who has ${ip4str(arp.tpa)}? tell ${ip4str(arp.spa)}`
-			: arp.op === 2
-				? `${ip4str(arp.spa)} is at ${src}`
-				: `opcode ${arp.op}`;
+		const who =
+			arp.op === 1
+				? `who has ${ip4str(arp.tpa)}? tell ${ip4str(arp.spa)}`
+				: arp.op === 2
+					? `${ip4str(arp.spa)} is at ${src}`
+					: `opcode ${arp.op}`;
 		return { proto: "ARP", src, dst, info: who };
 	}
 
@@ -59,7 +72,12 @@ export function decode(frame: Uint8Array): Decoded {
 			const o = ETH_HDR + ip.ihl;
 			const type = frame[o];
 			const seq = frame.length >= o + 8 ? (frame[o + 6] << 8) | frame[o + 7] : 0;
-			return { proto: "ICMP", src: s, dst: d, info: `${ICMP_TYPES[type] ?? `type ${type}`} seq ${seq}, ${payload} bytes` };
+			return {
+				proto: "ICMP",
+				src: s,
+				dst: d,
+				info: `${ICMP_TYPES[type] ?? `type ${type}`} seq ${seq}, ${payload} bytes`,
+			};
 		}
 		if (ip.proto === IP_TCP && l4) {
 			const o = ETH_HDR + ip.ihl;
@@ -73,11 +91,21 @@ export function decode(frame: Uint8Array): Decoded {
 		}
 		if (ip.proto === IP_UDP && l4) {
 			const what = l4.dport === 67 || l4.sport === 68 ? " (DHCP)" : l4.dport === 53 || l4.sport === 53 ? " (DNS)" : "";
-			return { proto: "UDP", src: `${s}:${l4.sport}`, dst: `${d}:${l4.dport}`, info: `${Math.max(0, payload - 8)} bytes${what}` };
+			return {
+				proto: "UDP",
+				src: `${s}:${l4.sport}`,
+				dst: `${d}:${l4.dport}`,
+				info: `${Math.max(0, payload - 8)} bytes${what}`,
+			};
 		}
 		return { proto: `IP/${ip.proto}`, src: s, dst: d, info: `${payload} bytes` };
 	}
 
-	const label = et === ETH_IPV6 ? "IPv6" : et === ETH_ARP || et === ETH_IPV4 ? "truncated" : `0x${(et < 0 ? 0 : et).toString(16).padStart(4, "0")}`;
+	const label =
+		et === ETH_IPV6
+			? "IPv6"
+			: et === ETH_ARP || et === ETH_IPV4
+				? "truncated"
+				: `0x${Math.max(et, 0).toString(16).padStart(4, "0")}`;
 	return { proto: label, src, dst, info: `${frame.length} bytes` };
 }

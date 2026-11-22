@@ -1,28 +1,40 @@
 {
-  "name": "unlab",
-  "version": "0.1.0",
-  "description": "A browser Linux lab: many unkernel machines on one virtual layer-2 network",
-  "scripts": {
-    "test": "node --test test/*.test.ts",
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview",
-    "typecheck": "tsc -p .",
-    "distros": "node scripts/fetch-distros.ts"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "module",
-  "dependencies": {
-    "@wterm/dom": "^0.6.0",
-    "@wterm/ghostty": "^0.6.0",
-    "unkernel": "^0.2.0-261121-8988cfd"
-  },
-  "private": true,
-  "devDependencies": {
-    "@types/node": "^26.6.6",
-    "typescript": "^7.0.2",
-    "vite": "^8.3.8"
-  }
+	"name": "unlab",
+	"version": "0.1.0",
+	"description": "A browser Linux lab: many unkernel machines on one virtual layer-2 network",
+	"scripts": {
+		"dev": "vite",
+		"build": "vite build",
+		"preview": "vite preview",
+		"typecheck": "tsc -p .",
+		"lint": "biome check .",
+		"format": "biome check --write .",
+		"test": "vitest run --project unit",
+		"test:watch": "vitest --project unit",
+		"test:integration": "vitest run --project integration",
+		"test:e2e": "playwright test",
+		"check": "npm run typecheck && npm run lint && npm test && npm run build",
+		"distros": "node scripts/fetch-distros.ts"
+	},
+	"keywords": [],
+	"author": "",
+	"license": "MIT",
+	"type": "module",
+	"dependencies": {
+		"@wterm/dom": "^0.6.0",
+		"@wterm/ghostty": "^0.6.0",
+		"unkernel": "^0.2.0-261121-8988cfd"
+	},
+	"private": true,
+	"devDependencies": {
+		"@biomejs/biome": "^2.6.8",
+		"@playwright/test": "^1.65.1",
+		"@types/node": "^26.6.6",
+		"@vitest/browser-playwright": "^5.1.1",
+		"@vitest/coverage-v8": "^5.1.1",
+		"playwright": "^1.65.1",
+		"typescript": "^7.0.2",
+		"vite": "^8.3.8",
+		"vitest": "^5.1.1"
+	}
 }
