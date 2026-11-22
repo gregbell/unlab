@@ -12,7 +12,7 @@ import {
 	type Session,
 	type SessionId,
 } from "../../model/index.ts";
-import type { CommandDeps } from "../define.ts";
+import type { CommandDeps, ExecPort } from "../define.ts";
 
 export interface MachineFixture {
 	readonly n: number;
@@ -115,8 +115,13 @@ export function labWith(fixtures: readonly MachineFixture[], images: readonly Im
 	};
 }
 
+/** For tests that never exec: any inject fails loudly. */
+export const NO_EXEC: ExecPort = {
+	inject: () => Promise.reject(new Error("This test has no exec port.")),
+};
+
 /** Deps over a mutable lab: tests swap the state to simulate the store changing under a command. */
-export function fakeDeps(initial: LabState) {
+export function fakeDeps(initial: LabState, exec: ExecPort = NO_EXEC) {
 	let state = initial;
 	let clock = 1000;
 	const events: CommandEvent[] = [];
@@ -142,6 +147,7 @@ export function fakeDeps(initial: LabState) {
 			});
 		},
 		now: () => clock++,
+		exec,
 	};
 	return {
 		deps,

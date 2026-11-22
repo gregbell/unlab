@@ -1,4 +1,4 @@
-import type { CommandEvent, LabState, Phase, Policy, ToolName } from "../model/index.ts";
+import type { CommandEvent, LabState, Phase, Policy, SessionId, Source, ToolName } from "../model/index.ts";
 import type { Approval } from "./approval.ts";
 import { complete } from "./grammar/complete.ts";
 import { format as formatLine, signature as signatureOf } from "./grammar/format.ts";
@@ -18,6 +18,25 @@ import {
 	type Tokenized,
 } from "./types.ts";
 
+/** What one line typed into a session came to. */
+export interface ExecOutcome {
+	/** Null when the shell reported no status before it settled. */
+	readonly exitCode: number | null;
+	readonly output: string;
+	readonly lastLine: string;
+	readonly ms: number;
+}
+
+/** The runtime types into sessions for `exec`. Request and response only: any state it implies comes back as runtime events. */
+export interface ExecPort {
+	/**
+	 * Types `line` into the session as if typed, marked with its source, and
+	 * resolves when the shell finishes it. Rejects with an Error whose message
+	 * is a sentence when the session is busy running a program.
+	 */
+	inject(session: SessionId, line: string, source: Source, signal: AbortSignal): Promise<ExecOutcome>;
+}
+
 /** What a command needs from the lab. The store satisfies it; tests pass a fake. */
 export interface CommandDeps {
 	state(): LabState;
@@ -25,6 +44,7 @@ export interface CommandDeps {
 	/** Resolves with the first state that satisfies the predicate; rejects when the signal aborts. */
 	until(predicate: (state: LabState) => boolean, signal: AbortSignal): Promise<LabState>;
 	now(): number;
+	readonly exec: ExecPort;
 }
 
 /** A plan's "no", in the verb's words. `at` names the argument the carets go under. */
