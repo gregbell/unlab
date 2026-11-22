@@ -13,8 +13,9 @@ import "../spawn-form/spawn-form.ts";
 import "../agent-panel/agent-panel.ts";
 import { ContextProvider } from "@lit/context";
 import { html, LitElement, nothing, type PropertyValues, type TemplateResult } from "lit";
-import { selectAgentIndicator, type UiEvent } from "../../model/index.ts";
+import { type Dock, SWITCH_NAME, selectAgentIndicator, selectLinks, type UiEvent } from "../../model/index.ts";
 import { Select, servicesContext } from "../base/index.ts";
+import { DOCK_ID } from "../capture/capture.ts";
 import type { AppServices } from "../services.ts";
 
 const ANNOUNCER = "unlab-announcer";
@@ -36,6 +37,11 @@ export class UnlabApp extends LitElement {
 	readonly #agentPanel = new Select(this, (state) => state.agentPanel);
 	readonly #indicator = new Select(this, selectAgentIndicator);
 	readonly #empty = new Select(this, (state) => state.rail.length === 0);
+	readonly #dock = new Select(this, (state) => state.dock);
+	readonly #paused = new Select(this, (state) => state.capture.paused);
+	readonly #links = new Select(this, selectLinks);
+	#shownDock: Dock | null = null;
+	#refocusDock = false;
 
 	get app(): AppServices {
 		if (!this.services) throw new Error("<unlab-app> needs its services before it connects");
@@ -67,6 +73,17 @@ export class UnlabApp extends LitElement {
 	protected override willUpdate(changed: PropertyValues<this>): void {
 		super.willUpdate(changed);
 		if (changed.has("services") && this.services) this.#provider.setValue(this.services);
+		const dock = this.#dock.value;
+		if (this.#shownDock !== null && dock !== this.#shownDock)
+			this.#refocusDock = this.querySelector(`#${DOCK_ID}`)?.contains(document.activeElement) ?? false;
+		this.#shownDock = dock;
+	}
+
+	protected override updated(changed: PropertyValues<this>): void {
+		super.updated(changed);
+		if (!this.#refocusDock) return;
+		this.#refocusDock = false;
+		void this.#focusDockToggle();
 	}
 
 	override render(): TemplateResult {
@@ -102,9 +119,12 @@ export class UnlabApp extends LitElement {
 						<unlab-start ?hidden=${!empty}></unlab-start>
 						<unlab-pane-area ?hidden=${empty}></unlab-pane-area>
 						<unlab-parked-strip></unlab-parked-strip>
-						<div class="dock" ?hidden=${empty}>
-							<unlab-capture mode="dock"></unlab-capture>
-							<unlab-switch compact></unlab-switch>
+						<div id=${DOCK_ID} class="dock" ?hidden=${empty}>
+							${
+								this.#dock.value === "open"
+									? html`<unlab-capture mode="dock"></unlab-capture><unlab-switch compact></unlab-switch>`
+									: this.#dockStrip()
+							}
 						</div>
 					</main>
 				</div>
@@ -116,6 +136,34 @@ export class UnlabApp extends LitElement {
 			<main class="spawn-view" ?hidden=${view !== "spawn"}>${view === "spawn" ? html`<unlab-spawn-form></unlab-spawn-form>` : nothing}</main>
 			<unlab-statusline role="contentinfo"></unlab-statusline>
 			<div id=${ANNOUNCER} class="visually-hidden" role="status"></div>`;
+	}
+
+	/** The collapsed dock: whether the capture runs, how many links are up, and the way back. */
+	#dockStrip(): TemplateResult {
+		const paused = this.#paused.value;
+		const links = this.#links.value;
+		return html`<div class="dock-strip">
+			<span class="title">network</span>
+			<span class="status" data-paused=${paused}>${paused ? "paused" : "live"}</span>
+			<span class="spacer"></span>
+			<span class="links" data-cut=${links.cut > 0}>${SWITCH_NAME} · ${links.up} of ${links.total} links up</span>
+			<button
+				type="button"
+				class="button"
+				aria-expanded="false"
+				aria-controls=${DOCK_ID}
+				@click=${() => this.#ui({ type: "ui/dock", dock: "open" })}
+			>
+				show
+			</button>
+		</div>`;
+	}
+
+	/** The button that toggled the dock is gone; its counterpart takes the focus, once the capture has drawn its own. */
+	async #focusDockToggle(): Promise<void> {
+		const dock = this.querySelector(`#${DOCK_ID}`);
+		await dock?.querySelector("unlab-capture")?.updateComplete;
+		dock?.querySelector<HTMLElement>(`button[aria-controls="${DOCK_ID}"]`)?.focus();
 	}
 
 	#ui(event: UiEvent): void {

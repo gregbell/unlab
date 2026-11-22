@@ -248,6 +248,34 @@ describe("<unlab-app> views", () => {
 	});
 });
 
+describe("<unlab-app> dock", () => {
+	it("hides to one strip that gives the panes its height, and shows again, the focus staying on the toggle", async () => {
+		const { settle } = await mountApp(lab(spawn(3), ready(), link("down", "node3")));
+		const open = box("unlab-pane-area").height;
+		const hide = page.getByRole("button", { name: "hide" });
+		await expect.element(hide).toHaveAttribute("aria-expanded", "true");
+		await expect.element(hide).toHaveAttribute("aria-controls", the(".dock").id);
+
+		await hide.click();
+		await settle();
+		const show = page.getByRole("button", { name: "show" });
+		await expect.element(show).toHaveFocus();
+		await expect.element(show).toHaveAttribute("aria-expanded", "false");
+		await expect.element(show).toHaveAttribute("aria-controls", the(".dock").id);
+		expect(document.querySelector("unlab-app :is(unlab-capture, unlab-switch)")).toBeNull();
+		const links = page.getByText("switch0 · 2 of 3 links up");
+		await expect.element(links).toBeVisible();
+		expect(getComputedStyle(links.element()).color).toBe(tokenColor("down"));
+		expect(box(".dock").height).toBe(34);
+		expect(box("unlab-pane-area").height).toBeGreaterThan(open + 150);
+
+		await userEvent.keyboard("{Enter}");
+		await settle();
+		await expect.element(page.getByRole("button", { name: "hide" })).toHaveFocus();
+		expect(box("unlab-pane-area").height).toBe(open);
+	});
+});
+
 describe("<unlab-app> announcements", () => {
 	it("speaks through one polite live region", async () => {
 		const { element } = await mountApp();

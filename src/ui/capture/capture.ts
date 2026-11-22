@@ -12,6 +12,9 @@ import { FollowCapture } from "./follow.ts";
 
 export type CaptureMode = "dock" | "full";
 
+/** The id of the app's dock, which the dock's hide button controls. */
+export const DOCK_ID = "unlab-dock";
+
 const DOCK_ROWS = 8;
 /** Row height in Wire. Every row, event rows too, is this tall, so the list can place any row by arithmetic. */
 const ROW = 26;
@@ -90,7 +93,16 @@ export class UnlabCapture extends UnlabElement {
 				${
 					full
 						? html`<button type="button" class="button" @click=${this.#save}>save .pcap</button>`
-						: html`<a class="expand" href="#wire" @click=${this.#expand}>expand</a>`
+						: html`<a class="expand" href="#wire" @click=${this.#expand}>expand</a>
+								<button
+									type="button"
+									class="button"
+									aria-expanded="true"
+									aria-controls=${DOCK_ID}
+									@click=${() => this.#dispatch({ type: "ui/dock", dock: "collapsed" })}
+								>
+									hide
+								</button>`
 				}
 			</div>
 			${full ? html`<div class="body"><div class="list-column">${list}</div><unlab-frame-detail></unlab-frame-detail></div>` : list}`;
