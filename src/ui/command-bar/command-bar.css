@@ -1,0 +1,355 @@
+/* Restated so the order holds whichever sheet loads first. */
+@layer tokens, base, components;
+
+@layer components {
+	/* The host holds the field's place in the top bar; the open panel lies over the lab from the same corner. */
+	@scope (unlab-command-bar) to (unlab-confirm) {
+		:scope {
+			--group-label: 28px;
+			position: relative;
+			display: block;
+			flex: 1 1 320px;
+			max-width: 520px;
+			height: var(--h-sm);
+			margin: 6px 0;
+		}
+
+		.panel {
+			display: flex;
+			flex-direction: column;
+			height: 100%;
+			border: 1px solid var(--line);
+			border-radius: var(--r-control);
+			background: var(--mantle);
+		}
+
+		.panel:focus-within {
+			outline: 2px solid var(--agent);
+			outline-offset: 2px;
+		}
+
+		:scope[open] .panel {
+			position: absolute;
+			top: 0;
+			left: 0;
+			z-index: 10;
+			width: 720px;
+			max-width: calc(100vw - 2 * var(--gutter));
+			height: auto;
+			max-height: calc(100vh - 12px);
+			overflow-y: auto;
+			border-color: var(--line-strong);
+			border-radius: var(--r-panel);
+			outline: 0;
+		}
+
+		.input-row {
+			display: flex;
+			flex: 0 0 auto;
+			align-items: center;
+			gap: 8px;
+			min-height: calc(var(--h-sm) - 2px);
+			padding: 0 10px;
+		}
+
+		:scope[open] .input-row {
+			gap: 10px;
+			min-height: var(--h-lg);
+			padding: 0 var(--gutter);
+			font-size: var(--fs-input);
+			line-height: var(--lh-input);
+		}
+
+		.prompt {
+			color: var(--text-3);
+		}
+
+		:scope[open] .prompt {
+			color: var(--ok);
+		}
+
+		input {
+			flex-grow: 1;
+			min-width: 0;
+			padding: 0;
+			border: 0;
+			outline: 0;
+			background: transparent;
+			color: var(--text);
+		}
+
+		input::placeholder {
+			color: var(--text-3);
+			opacity: 1;
+		}
+
+		.hint {
+			flex: 0 0 auto;
+			font: inherit;
+			font-size: var(--fs-status);
+			color: var(--text-3);
+		}
+
+		:scope[open] .hint {
+			font-size: var(--fs-ui);
+		}
+
+		.hint[data-tone="warn"] {
+			color: var(--warn);
+		}
+
+		.machine {
+			color: var(--machine-hue);
+		}
+
+		.signature {
+			padding: 6px var(--gutter);
+			border-top: 1px solid var(--line);
+			color: var(--text-3);
+		}
+
+		.signature .current {
+			color: var(--text);
+			text-decoration: underline;
+			text-underline-offset: 3px;
+		}
+
+		/* Eight rows show, then the list scrolls; the empty input's two group labels come on top. */
+		[role="listbox"] {
+			flex: 0 0 auto;
+			max-height: calc(8 * var(--h-md) + 2 * var(--group-label));
+			overflow-y: auto;
+			border-top: 1px solid var(--line);
+		}
+
+		[role="listbox"].values {
+			max-height: calc(8 * var(--h-md));
+		}
+
+		[role="group"] + [role="group"] {
+			border-top: 1px solid var(--line);
+		}
+
+		.group-label {
+			height: var(--group-label);
+			padding: 8px var(--gutter) 2px;
+			color: var(--text-3);
+		}
+
+		.row {
+			display: flex;
+			align-items: center;
+			gap: var(--gutter);
+			min-height: var(--h-md);
+			padding: 0 var(--gutter);
+			cursor: pointer;
+		}
+
+		.row[aria-selected="true"] {
+			background: var(--line);
+		}
+
+		.row[data-source="agent"] {
+			padding-left: 12px;
+			border-left: 2px solid var(--agent);
+		}
+
+		.row .line {
+			flex: 1 1 auto;
+			min-width: 0;
+			overflow: hidden;
+			text-overflow: ellipsis;
+			white-space: nowrap;
+		}
+
+		.row[data-kind="fix"] .line {
+			flex: 0 0 180px;
+		}
+
+		.row .who {
+			flex: 0 0 auto;
+			color: var(--text-3);
+		}
+
+		.row[data-source="agent"] .who {
+			color: var(--agent);
+		}
+
+		.row .verb {
+			flex: 0 0 64px;
+		}
+
+		.row .parts {
+			flex: 0 0 250px;
+			color: var(--text-3);
+		}
+
+		.row[aria-selected="true"] .parts {
+			color: var(--text-2);
+		}
+
+		.row .value {
+			flex: 0 0 96px;
+		}
+
+		.row .value[data-hue] {
+			color: var(--machine-hue);
+		}
+
+		.row .note {
+			min-width: 0;
+			overflow: hidden;
+			color: var(--text-2);
+			text-overflow: ellipsis;
+			white-space: nowrap;
+		}
+
+		.live:empty {
+			display: none;
+		}
+
+		.preview,
+		.running {
+			display: grid;
+			grid-template-columns: auto 1fr;
+			gap: 0 10px;
+			padding: 10px var(--gutter);
+			border-top: 1px solid var(--line);
+		}
+
+		.label {
+			color: var(--text-3);
+		}
+
+		.preview[data-tone="warn"] .will {
+			color: var(--warn);
+		}
+
+		.preview .assumed {
+			grid-column: 2;
+			color: var(--text-3);
+		}
+
+		.error {
+			display: flex;
+			flex-direction: column;
+			gap: 8px;
+			padding: 12px var(--gutter);
+			border-top: 1px solid var(--line);
+		}
+
+		.echo {
+			display: flex;
+			flex-direction: column;
+			overflow-x: auto;
+			font-size: 13px;
+			white-space: pre;
+		}
+
+		.echo .bad,
+		.echo .carets,
+		.error .sentence {
+			color: var(--down);
+		}
+
+		.error .unchanged {
+			color: var(--text-3);
+		}
+
+		.confirm {
+			padding: 12px var(--gutter) 14px;
+			border-top: 1px solid var(--line);
+		}
+
+		.summary {
+			display: flex;
+			flex-wrap: wrap;
+			gap: 0 10px;
+			padding: 8px var(--gutter);
+			border-top: 1px solid var(--line);
+		}
+
+		.summary .header {
+			margin-left: auto;
+		}
+
+		.summary .failed {
+			color: var(--down);
+		}
+
+		.expansion [data-hue] {
+			color: var(--machine-hue);
+		}
+
+		.machine-result {
+			display: flex;
+			flex-direction: column;
+			gap: 4px;
+			padding: 10px var(--gutter) 10px 11px;
+			border-top: 1px solid var(--line);
+			border-left: 3px solid var(--machine-hue);
+		}
+
+		.machine-result .top {
+			display: flex;
+			gap: 12px;
+		}
+
+		.name {
+			font-weight: 500;
+			color: var(--machine-hue);
+		}
+
+		.status[data-ok="true"],
+		.status[data-state="ready"] {
+			color: var(--ok);
+		}
+
+		.status[data-ok="false"],
+		.status[data-state="failed"] {
+			color: var(--down);
+		}
+
+		.open-console {
+			margin-left: auto;
+		}
+
+		.machine-result .last {
+			overflow-x: auto;
+			color: var(--text-2);
+			white-space: pre;
+		}
+
+		.skipped {
+			display: flex;
+			flex-wrap: wrap;
+			gap: 4px 14px;
+			padding: 10px var(--gutter);
+			border-top: 1px solid var(--line);
+		}
+
+		.skipped .status {
+			color: var(--text-3);
+		}
+
+		.footnote {
+			padding: 10px var(--gutter);
+			border-top: 1px solid var(--line);
+			color: var(--text-3);
+		}
+
+		.keys {
+			display: flex;
+			flex: 0 0 auto;
+			flex-wrap: wrap;
+			align-items: center;
+			gap: 0 18px;
+			min-height: var(--h-sm);
+			padding: 0 var(--gutter);
+			border-top: 1px solid var(--line);
+			background: var(--crust);
+			font-size: var(--fs-status);
+			color: var(--text-3);
+		}
+	}
+}

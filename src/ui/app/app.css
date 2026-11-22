@@ -3,7 +3,7 @@
 
 @layer components {
 	/* Regions sit edge to edge; the 1px gaps over --line are the dividers. */
-	@scope (unlab-app) to (unlab-rail, unlab-statusline, unlab-pane-area, unlab-parked-strip) {
+	@scope (unlab-app) to (unlab-rail, unlab-statusline, unlab-pane-area, unlab-parked-strip, unlab-command-bar) {
 		:scope {
 			display: flex;
 			flex-direction: column;
@@ -35,50 +35,6 @@
 		}
 
 		.lab-name {
-			color: var(--text-3);
-		}
-
-		.command-field {
-			display: flex;
-			flex: 1 1 320px;
-			align-items: center;
-			gap: 8px;
-			max-width: 520px;
-			min-height: var(--h-sm);
-			margin: 6px 0;
-			padding: 0 10px;
-			border: 1px solid var(--line);
-			border-radius: var(--r-control);
-			background: var(--mantle);
-		}
-
-		.command-field:focus-within {
-			outline: 2px solid var(--agent);
-			outline-offset: 2px;
-		}
-
-		.command-field .prompt {
-			color: var(--text-3);
-		}
-
-		.command-field input {
-			flex-grow: 1;
-			min-width: 0;
-			padding: 0;
-			border: 0;
-			outline: 0;
-			background: transparent;
-			color: var(--text);
-		}
-
-		.command-field input::placeholder {
-			color: var(--text-3);
-			opacity: 1;
-		}
-
-		.command-field kbd {
-			font: inherit;
-			font-size: var(--fs-status);
 			color: var(--text-3);
 		}
 

@@ -1,5 +1,6 @@
 import "../styles/index.css";
 import "./app.css";
+import "../command-bar/command-bar.ts";
 import "../pane-area/pane-area.ts";
 import "../parked-strip/parked-strip.ts";
 import "../rail/rail.ts";
@@ -10,8 +11,6 @@ import { selectAgentIndicator, type UiEvent } from "../../model/index.ts";
 import { Select, servicesContext } from "../base/index.ts";
 import type { AppServices } from "../services.ts";
 
-const MAC = /Mac|iPhone|iPad/.test(navigator.platform);
-const SHORTCUT = MAC ? { label: "⌘K", aria: "Meta+K" } : { label: "Ctrl+/", aria: "Control+/" };
 const ANNOUNCER = "unlab-announcer";
 const AGENT_PANEL = "unlab-agent-panel";
 
@@ -72,11 +71,7 @@ export class UnlabApp extends LitElement {
 					unlab
 				</button>
 				<span class="lab-name">scratch</span>
-				<div class="command-field">
-					<span class="prompt" aria-hidden="true">:</span>
-					<input type="text" aria-label="Command" aria-keyshortcuts=${SHORTCUT.aria} placeholder="spawn 2 alpine --net switch0" />
-					<kbd>${SHORTCUT.label}</kbd>
-				</div>
+				<unlab-command-bar></unlab-command-bar>
 				<span class="spacer"></span>
 				<button
 					type="button"
