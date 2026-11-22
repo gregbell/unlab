@@ -1,4 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
+import { openWithTwoMachines } from "./lab.ts";
 
 /** When set, the test also saves screenshots of the dock and of Wire there, for comparing with the artboards. */
 const shots = process.env.UI_SHOTS;
@@ -12,8 +13,7 @@ async function shoot(page: Page, name: string): Promise<void> {
 test("pings show in the dock; cutting a cable by its port floods, flushes and reconnects", async ({ page }) => {
 	const errors: string[] = [];
 	page.on("pageerror", (e) => errors.push(e.message));
-	await page.goto("/");
-	await expect(page.getByText("2 of 2 machines ready")).toBeVisible({ timeout: 60_000 });
+	await openWithTwoMachines(page);
 
 	const dock = page.locator("unlab-capture[mode=dock]");
 	const faceplate = page.locator("unlab-switch[compact]");

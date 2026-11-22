@@ -1,10 +1,10 @@
 import { expect, test } from "@playwright/test";
+import { openWithTwoMachines } from "./lab.ts";
 
 test("the bar cuts a real cable, then removes a machine after asking", async ({ page }) => {
 	const errors: string[] = [];
 	page.on("pageerror", (e) => errors.push(e.message));
-	await page.goto("/");
-	await expect(page.getByText("2 of 2 machines ready")).toBeVisible({ timeout: 60_000 });
+	await openWithTwoMachines(page);
 
 	const rail = page.getByRole("complementary", { name: "Machines" });
 	const node2 = rail.getByRole("button", { name: /^node2\b/ });

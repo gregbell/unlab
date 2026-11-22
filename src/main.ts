@@ -125,9 +125,6 @@ async function main(): Promise<void> {
 	app.services = services;
 	document.body.append(app);
 	window.addEventListener("pagehide", () => engine.dispose());
-
-	// Until the empty-lab view and the Add machines form land, a new lab boots two machines.
-	void commands.run("spawn 2 alpine", "button");
 }
 
 void main().catch((error: unknown) => {

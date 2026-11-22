@@ -8,6 +8,8 @@ import "../statusline/statusline.ts";
 import "../capture/capture.ts";
 import "../switch/switch.ts";
 import "../wire/wire.ts";
+import "../start/start.ts";
+import "../spawn-form/spawn-form.ts";
 import { ContextProvider } from "@lit/context";
 import { html, LitElement, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { selectAgentIndicator, type UiEvent } from "../../model/index.ts";
@@ -32,6 +34,7 @@ export class UnlabApp extends LitElement {
 	readonly #view = new Select(this, (state) => state.view);
 	readonly #agentPanel = new Select(this, (state) => state.agentPanel);
 	readonly #indicator = new Select(this, selectAgentIndicator);
+	readonly #empty = new Select(this, (state) => state.rail.length === 0);
 
 	get app(): AppServices {
 		if (!this.services) throw new Error("<unlab-app> needs its services before it connects");
@@ -69,6 +72,7 @@ export class UnlabApp extends LitElement {
 		const view = this.#view.value;
 		const indicator = this.#indicator.value;
 		const agentPanel = this.#agentPanel.value;
+		const empty = this.#empty.value;
 		return html`<header class="top-bar">
 				<button type="button" class="wordmark" aria-label="unlab, back to the lab" @click=${() => this.#ui({ type: "ui/view", view: "lab" })}>
 					unlab
@@ -94,9 +98,10 @@ export class UnlabApp extends LitElement {
 				<div class="lab" ?hidden=${view !== "lab"}>
 					<unlab-rail role="complementary" aria-label="Machines"></unlab-rail>
 					<main class="centre">
-						<unlab-pane-area></unlab-pane-area>
+						<unlab-start ?hidden=${!empty}></unlab-start>
+						<unlab-pane-area ?hidden=${empty}></unlab-pane-area>
 						<unlab-parked-strip></unlab-parked-strip>
-						<div class="dock">
+						<div class="dock" ?hidden=${empty}>
 							<unlab-capture mode="dock"></unlab-capture>
 							<unlab-switch compact></unlab-switch>
 						</div>
@@ -105,7 +110,7 @@ export class UnlabApp extends LitElement {
 				<main class="wire-view" ?hidden=${view !== "wire"}>${view === "wire" ? html`<unlab-wire></unlab-wire>` : nothing}</main>
 				<div id=${AGENT_PANEL} class="agent-panel" ?hidden=${!agentPanel}></div>
 			</div>
-			<main class="spawn-view" ?hidden=${view !== "spawn"}></main>
+			<main class="spawn-view" ?hidden=${view !== "spawn"}>${view === "spawn" ? html`<unlab-spawn-form></unlab-spawn-form>` : nothing}</main>
 			<unlab-statusline role="contentinfo"></unlab-statusline>
 			<div id=${ANNOUNCER} class="visually-hidden" role="status"></div>`;
 	}
