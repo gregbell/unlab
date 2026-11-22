@@ -46,6 +46,7 @@ function boot(attempt = 1) {
 			config: NODE3,
 			cols: 100,
 			rows: 30,
+			promptToken: "00112233aabbccdd",
 			image: new Promise((resolve, reject) => {
 				image = { resolve, reject };
 			}),
@@ -116,6 +117,7 @@ describe("boot", () => {
 					internet: false,
 					cols: 100,
 					rows: 30,
+					promptToken: "00112233aabbccdd",
 				},
 			},
 		]);

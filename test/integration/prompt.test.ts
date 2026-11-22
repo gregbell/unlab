@@ -4,11 +4,19 @@ import assert from "node:assert/strict";
 import { createKernel, fetchDistro, type KernelInstance } from "unkernel/node";
 import { test } from "vitest";
 import { labMac, Subnet } from "../../src/net/index.ts";
-import { execAsRoot, setupScript } from "../../src/runtime/guest.ts";
+import { execAsRoot, hostsScript, setupScript } from "../../src/runtime/guest.ts";
 import { LabNic } from "../../src/runtime/nic.ts";
 import { createShellTracker, type ShellEvent } from "../../src/runtime/shell-tracker.ts";
 
-const SETUP = setupScript({ hostname: "node1", ip: "10.88.0.11", prefixBits: 24, hosts: [], dhcp: false });
+const TOKEN = "0123456789abcdef";
+const SETUP = setupScript({
+	hostname: "node1",
+	ip: "10.88.0.11",
+	prefixBits: 24,
+	hosts: [],
+	dhcp: false,
+	promptToken: TOKEN,
+});
 const LOGIN_SHELL_PID = `for p in /proc/[0-9]*; do
   case "$(head -c1 "$p/cmdline" 2>/dev/null)" in -) ;; *) continue ;; esac
   [ "$(readlink "$p/fd/0" 2>/dev/null)" = /dev/hvc0 ] && echo "\${p#/proc/}"
@@ -17,6 +25,7 @@ done; true`;
 /** A session's output run through the tracker, with a way to wait for what it reports. */
 function tracked() {
 	const tracker = createShellTracker();
+	tracker.expectToken(TOKEN);
 	const events: ShellEvent[] = [];
 	let text = "";
 	let wake = () => {};
@@ -91,6 +100,19 @@ test("setup gives every shell a prompt that reports exit codes, and running it a
 		assert.equal(again.exitCode, 0, `second setup failed: ${String(again.stderr)}`);
 		const pidAfter = String((await execAsRoot(vm, LOGIN_SHELL_PID)).stdout).trim();
 		assert.equal(pidAfter, pidBefore, "a second setup does not hang up the console shell again");
+
+		await execAsRoot(vm, "echo '10.0.0.9 mine' >> /etc/hosts && ip addr del 10.88.0.11/24 dev eth0");
+		const update = await execAsRoot(
+			vm,
+			hostsScript({ hostname: "node1", ip: "10.88.0.11", hosts: [{ ip: "10.88.0.12", name: "node2" }] }),
+		);
+		assert.equal(update.exitCode, 0, `hosts update failed: ${String(update.stderr)}`);
+		const hosts = String((await execAsRoot(vm, "cat /etc/hosts")).stdout);
+		assert.match(hosts, /^10\.0\.0\.9 mine$/m, "a line someone added by hand survives a host table update");
+		assert.match(hosts, /^10\.88\.0\.12 node2$/m, "the new machine is in");
+		assert.equal(hosts.match(/# unlab: begin/g)?.length, 1, "one managed block, not one per update");
+		const address = String((await execAsRoot(vm, "ip -4 -o addr show eth0")).stdout);
+		assert.doesNotMatch(address, /10\.88\.0\.11/, "a host table update does not put back an address someone removed");
 
 		const pty = await vm.spawn(undefined, undefined, { pty: true, cols: 80, rows: 24, term: "xterm-256color" });
 		const shell = tracked();

@@ -57,6 +57,8 @@ export interface VmBoot {
 	readonly rows: number;
 	/** Shared by every machine on the same image. */
 	readonly image: Promise<ArrayBufferLike>;
+	/** This boot's prompt token. */
+	readonly promptToken: string;
 }
 
 export interface WorkerLike {
@@ -150,6 +152,7 @@ export function startVm(boot: VmBoot, sink: VmSink, deps: VmDeps): Vm {
 		internet: false,
 		cols: boot.cols,
 		rows: boot.rows,
+		promptToken: boot.promptToken,
 	};
 
 	sink.stage(ref, "fetching image");

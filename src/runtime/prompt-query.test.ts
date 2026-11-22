@@ -17,6 +17,12 @@ describe("the prompt's cursor query", () => {
 		expect(through([`${PROMPT}\x1b[6n`])).toBe(PROMPT);
 	});
 
+	it("is removed after a mark that carries parameters, such as the boot's token", () => {
+		const mark = "\x1b]133;B;unlab=3f9c2a71e0b4d5c8\x07";
+		expect(through([`${mark}\x1b[6n`])).toBe(mark);
+		expect(through([mark.slice(0, 12), mark.slice(12), "\x1b[6", "n"])).toBe(mark);
+	});
+
 	it("is removed after a mark ended with ST as well as BEL", () => {
 		expect(through(["\x1b]133;B\x1b\\\x1b[6n"])).toBe("\x1b]133;B\x1b\\");
 	});

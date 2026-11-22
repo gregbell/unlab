@@ -64,6 +64,8 @@ export interface Screen {
 	readonly session: SessionId;
 	/** What the session's shell is doing, from every byte written so far. */
 	readonly shell: ShellPhase;
+	/** Believe only prompt marks with this boot's token, starting over at unknown. */
+	expectPromptToken(token: string): void;
 	/** The grid the guest should be drawing for. */
 	readonly size: { readonly cols: number; readonly rows: number };
 	/**
@@ -279,6 +281,9 @@ function createScreen(session: SessionId, io: ScreenIo, loadCore: () => Promise<
 		session,
 		get shell() {
 			return tracker.phase;
+		},
+		expectPromptToken(token) {
+			tracker.expectToken(token);
 		},
 		get size() {
 			return size;

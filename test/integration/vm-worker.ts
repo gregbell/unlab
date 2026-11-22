@@ -42,7 +42,10 @@ try {
 		else if (m.type === "stop") vm.stop?.({ code: 0, reason: "stopped" });
 	});
 
-	const r = await execAsRoot(vm, setupScript({ hostname: name, ip, prefixBits, hosts: hosts ?? [], dhcp: false }));
+	const r = await execAsRoot(
+		vm,
+		setupScript({ hostname: name, ip, prefixBits, hosts: hosts ?? [], dhcp: false, promptToken: "0123456789abcdef" }),
+	);
 	booted = true;
 	say("booted", { exitCode: r.exitCode, stderr: String(r.stderr ?? "") });
 

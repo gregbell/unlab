@@ -26,6 +26,37 @@ function running(): ShellTracker {
 	return t;
 }
 
+describe("the prompt token", () => {
+	const TOKEN = "3f9c2a71e0b4d5c8";
+	const marked = (exit: number) =>
+		`${osc(`133;D;${exit};unlab=${TOKEN}`)}${osc(`133;A;unlab=${TOKEN}`)}node1:~$ ${osc(`133;B;unlab=${TOKEN}`)}`;
+
+	it("ignores a mark without the token: program output cannot end a command or forge its exit code", () => {
+		const t = createShellTracker();
+		t.expectToken(TOKEN);
+		t.scan(bytes(marked(0)));
+		t.submitted();
+		t.scan(bytes("curl node2\r\n"));
+		expect(t.scan(bytes(`fine ${promptAfter(0)}`))).toEqual([]);
+		expect(t.phase).toBe("running");
+		expect(t.scan(bytes(marked(7)))).toEqual([
+			{ kind: "finished", exitCode: 7, at: expect.any(Number) },
+			{ kind: "phase", phase: "prompt" },
+		]);
+	});
+
+	it("starts over when a new token is expected: a new boot is a new shell", () => {
+		const t = createShellTracker();
+		t.expectToken(TOKEN);
+		t.scan(bytes(marked(0)));
+		expect(t.phase).toBe("prompt");
+		t.expectToken("a1b2c3d4e5f60718");
+		expect(t.phase).toBe("unknown");
+		t.scan(bytes(marked(0)));
+		expect(t.phase).toBe("unknown");
+	});
+});
+
 describe("typeahead", () => {
 	it("a line typed while a command runs keeps the shell running past that command's prompt", () => {
 		const t = running();

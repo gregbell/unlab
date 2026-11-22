@@ -13,7 +13,8 @@
 const ESC = 0x1b;
 const BEL = 0x07;
 const BACKSLASH = 0x5c;
-/** `ESC ] 1 3 3 ; B`, then BEL or `ESC \`. */
+const SEMICOLON = 0x3b;
+/** `ESC ] 1 3 3 ; B`, any `;` parameters such as the boot's token, then BEL or `ESC \`. */
 const MARK = [ESC, 0x5d, 0x31, 0x33, 0x33, 0x3b, 0x42];
 /** `ESC [ 6 n` */
 const QUERY = [ESC, 0x5b, 0x36, 0x6e];
@@ -22,11 +23,12 @@ const QUERY = [ESC, 0x5b, 0x36, 0x6e];
 export function createPromptQueryFilter(): (bytes: Uint8Array) => Uint8Array {
 	let mark = 0;
 	let stringTerminator = false;
+	let params = false;
 	/** -1 outside the window after a mark; otherwise how many query bytes are held back. */
 	let held = -1;
 
 	return (bytes) => {
-		if (held < 0 && mark === 0 && !stringTerminator && !bytes.includes(ESC)) return bytes;
+		if (held < 0 && mark === 0 && !stringTerminator && !params && !bytes.includes(ESC)) return bytes;
 		const out = new Uint8Array(bytes.length + QUERY.length);
 		let n = 0;
 		let dropped = false;
@@ -44,6 +46,16 @@ export function createPromptQueryFilter(): (bytes: Uint8Array) => Uint8Array {
 				held = -1;
 			}
 			out[n++] = b;
+			if (params) {
+				if (b === BEL) {
+					params = false;
+					held = 0;
+				} else if (b === ESC) {
+					params = false;
+					stringTerminator = true;
+				}
+				continue;
+			}
 			if (stringTerminator) {
 				stringTerminator = false;
 				if (b === BACKSLASH) {
@@ -60,6 +72,10 @@ export function createPromptQueryFilter(): (bytes: Uint8Array) => Uint8Array {
 				}
 				if (b === ESC) {
 					stringTerminator = true;
+					continue;
+				}
+				if (b === SEMICOLON) {
+					params = true;
 					continue;
 				}
 			}

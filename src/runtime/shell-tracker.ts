@@ -30,6 +30,12 @@ export interface ShellTracker {
 	scan(bytes: Uint8Array): readonly ShellEvent[];
 	/** A line was sent to the session. It only counts while the shell is at a prompt. */
 	submitted(): readonly ShellEvent[];
+	/**
+	 * From now on, believe only marks carrying `unlab=<token>`: a new boot's
+	 * prompt. Any program can print `ESC]133;D;0`, but none can know this.
+	 * Starts over at unknown, because a new boot is a new shell.
+	 */
+	expectToken(token: string): void;
 }
 
 const ESC = 0x1b;
@@ -39,13 +45,9 @@ const CAN = 0x18;
 const SUB = 0x1a;
 const BACKSLASH = 0x5c;
 const OSC_INTRODUCER = 0x5d;
-const SEMICOLON = 0x3b;
-const ZERO = 0x30;
-const NINE = 0x39;
 
-const PREFIX = [0x31, 0x33, 0x33, SEMICOLON] as const;
-/** `133;D;255` is nine bytes. Anything past this is options the tracker does not read. */
-const KEPT = 16;
+/** `133;D;255;unlab=` and a sixteen-digit token fit. A longer OSC is not one of ours. */
+const KEPT = 48;
 const NONE: readonly ShellEvent[] = Object.freeze([]);
 
 type ScanState = "ground" | "esc" | "osc" | "osc-esc";
@@ -61,6 +63,7 @@ export function createShellTracker(): ShellTracker {
 	 * shell reads as running until its next prompt: the safe side.
 	 */
 	let queued = 0;
+	let token: string | null = null;
 	let state: ScanState = "ground";
 	const body = new Uint8Array(KEPT);
 	let length = 0;
@@ -75,18 +78,6 @@ export function createShellTracker(): ShellTracker {
 		if (phase === next) return;
 		phase = next;
 		emit({ kind: "phase", phase: next });
-	};
-
-	const exitCode = (): number | null => {
-		if (body[5] !== SEMICOLON) return null;
-		let code: number | null = null;
-		for (let i = 6; i < Math.min(length, KEPT); i++) {
-			const digit = body[i];
-			if (digit === SEMICOLON) break;
-			if (digit < ZERO || digit > NINE) return null;
-			code = (code ?? 0) * 10 + (digit - ZERO);
-		}
-		return code;
 	};
 
 	/** A, B or D: the shell is showing a prompt. */
@@ -105,9 +96,11 @@ export function createShellTracker(): ShellTracker {
 
 	const sequenceEnded = (at: number) => {
 		state = "ground";
-		if (length < 5 || PREFIX.some((byte, i) => body[i] !== byte)) return;
-		if (length > 5 && body[5] !== SEMICOLON) return;
-		switch (String.fromCharCode(body[4])) {
+		if (length > KEPT) return;
+		const [osc, kind, ...params] = String.fromCharCode(...body.subarray(0, length)).split(";");
+		if (osc !== "133") return;
+		if (token !== null && !params.includes(`unlab=${token}`)) return;
+		switch (kind) {
 			case "A":
 			case "B":
 				prompted(null, at);
@@ -116,9 +109,11 @@ export function createShellTracker(): ShellTracker {
 				echoed = true;
 				enter("running");
 				return;
-			case "D":
-				prompted(exitCode(), at);
+			case "D": {
+				const code = params[0];
+				prompted(code !== undefined && /^\d{1,3}$/.test(code) ? Number(code) : null, at);
 				return;
+			}
 		}
 	};
 
@@ -170,6 +165,13 @@ export function createShellTracker(): ShellTracker {
 			const events = found ?? NONE;
 			found = null;
 			return events;
+		},
+
+		expectToken(next) {
+			token = next;
+			phase = "unknown";
+			echoed = false;
+			queued = 0;
 		},
 
 		submitted() {

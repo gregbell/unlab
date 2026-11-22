@@ -11,7 +11,7 @@
 
 import { createKernel, DEFAULT_WISP_SERVERS, type KernelInstance, NetStack, type Pty, wispBackend } from "unkernel";
 import { Subnet } from "../net/index.ts";
-import { execAsRoot, setupScript } from "./guest.ts";
+import { execAsRoot, hostsScript, setupScript } from "./guest.ts";
 import { MemoryDisk } from "./image.ts";
 import { LabNic } from "./nic.ts";
 import type { FromVm, PtySpec, ToVm, VmConfig } from "./protocol.ts";
@@ -94,10 +94,7 @@ function handle(m: Queued): void {
 async function reconfigure(m: Extract<ToVm, { type: "reconfigure" }>): Promise<void> {
 	if (!vm || !cfg) return;
 	cfg = { ...cfg, name: m.name, ip: m.ip, prefixBits: m.prefixBits, hosts: m.hosts, internet: m.internet };
-	const r = await execAsRoot(
-		vm,
-		setupScript({ hostname: m.name, ip: m.ip, prefixBits: m.prefixBits, hosts: m.hosts, dhcp: m.internet }),
-	);
+	const r = await execAsRoot(vm, hostsScript({ hostname: m.name, ip: m.ip, hosts: m.hosts }));
 	if (r.exitCode !== 0) fail(`reconfigure: ${String(r.stderr).trim()}`, false);
 }
 
@@ -208,7 +205,14 @@ async function boot(c: VmConfig): Promise<void> {
 	try {
 		const r = await execAsRoot(
 			vm,
-			setupScript({ hostname: c.name, ip: c.ip, prefixBits: c.prefixBits, hosts: c.hosts, dhcp: c.internet }),
+			setupScript({
+				hostname: c.name,
+				ip: c.ip,
+				prefixBits: c.prefixBits,
+				hosts: c.hosts,
+				dhcp: c.internet,
+				promptToken: c.promptToken,
+			}),
 		);
 		if (r.exitCode !== 0) {
 			fail(`setup: ${String(r.stderr).trim() || `exit ${r.exitCode}`}`, true);

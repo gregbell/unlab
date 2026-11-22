@@ -23,6 +23,8 @@ export interface VmConfig {
 	wispServers?: string[];
 	cols: number;
 	rows: number;
+	/** Carried in the guest prompt's OSC 133 marks; see shell-tracker.ts. */
+	promptToken: string;
 }
 
 /** A shell on its own pty, beside the kernel console. */

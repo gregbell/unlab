@@ -11,7 +11,9 @@ import type { StartVm, Tty, Vm, VmBoot, VmRef, VmSink } from "./vm.ts";
 const ESC = "\x1b";
 const BEL = "\x07";
 const bytes = (s: string) => new TextEncoder().encode(s);
-const prompt = (exit: number) => `${ESC}]133;D;${exit}${BEL}${ESC}]133;A${BEL}node1:~$ ${ESC}]133;B${BEL}`;
+const TOKEN = "00112233aabbccdd";
+const prompt = (exit: number) =>
+	`${ESC}]133;D;${exit};unlab=${TOKEN}${BEL}${ESC}]133;A;unlab=${TOKEN}${BEL}node1:~$ ${ESC}]133;B;unlab=${TOKEN}${BEL}`;
 /** The terminal echoes Enter, the command prints nothing, and the shell is back with a status. */
 const returns = (exit: number) => `\r\n${prompt(exit)}`;
 const settle = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
@@ -63,6 +65,9 @@ function fakeScreens() {
 				text: () => written.map((b) => new TextDecoder().decode(b)).join(""),
 				get shell() {
 					return tracker.phase;
+				},
+				expectPromptToken(token) {
+					tracker.expectToken(token);
 				},
 				get size() {
 					return size;
@@ -192,6 +197,7 @@ function setup() {
 			};
 		},
 		now: () => clock,
+		promptToken: () => TOKEN,
 	});
 
 	const run = (...effects: Effect[]) => {

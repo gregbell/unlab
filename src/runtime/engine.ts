@@ -60,6 +60,8 @@ export interface EngineDeps {
 	readonly every: (ms: number, fn: () => void) => () => void;
 	/** ms since the lab started: the capture log's clock and the model's. */
 	readonly now: () => number;
+	/** A fresh secret per boot for the guest prompt's marks. Hex. */
+	readonly promptToken: () => string;
 }
 
 interface VmEntry {
@@ -69,6 +71,8 @@ interface VmEntry {
 	phase: "booting" | "ready" | "over" | "stopping";
 	/** The table the guest was last given. */
 	hosts: readonly HostEntry[];
+	/** Every prompt this boot's shells print carries it. */
+	readonly promptToken: string;
 }
 
 /** An injected line, from the call to its result. */
@@ -261,6 +265,8 @@ export function createEngine(deps: EngineDeps): Engine {
 			}),
 		};
 		sessions.set(id, s);
+		const booted = vms.get(parsed.machine);
+		if (booted) s.screen.expectPromptToken(booted.promptToken);
 	};
 
 	const tick = () => {
@@ -279,12 +285,16 @@ export function createEngine(deps: EngineDeps): Engine {
 					endSessions(machine);
 					void previous.vm.stop();
 				}
-				const size = sessions.get(`${machine}:console`)?.screen.size ?? DEFAULT_TTY_SIZE;
+				const console = sessions.get(`${machine}:console`);
+				const size = console?.screen.size ?? DEFAULT_TTY_SIZE;
+				const promptToken = deps.promptToken();
+				console?.screen.expectPromptToken(promptToken);
+				const image = deps.image(config.spec.image);
 				const vm = deps.startVm(
-					{ machine, attempt, config, cols: size.cols, rows: size.rows, image: deps.image(config.spec.image) },
+					{ machine, attempt, config, cols: size.cols, rows: size.rows, image, promptToken },
 					sink,
 				);
-				vms.set(machine, { attempt, vm, phase: "booting", hosts: config.hosts });
+				vms.set(machine, { attempt, vm, phase: "booting", hosts: config.hosts, promptToken });
 				return;
 			}
 			case "vm/stop": {

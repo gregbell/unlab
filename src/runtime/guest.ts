@@ -34,6 +34,14 @@ export interface SetupOptions {
 	hosts: readonly HostEntry[];
 	/** Ask udhcpc for the uplink address (10.0.2.15) so the internet works. */
 	dhcp: boolean;
+	/** Carried in every prompt mark, so marks printed by programs are not believed. Hex only. */
+	promptToken: string;
+}
+
+export interface HostsOptions {
+	hostname: string;
+	ip: string;
+	hosts: readonly HostEntry[];
 }
 
 const PROMPT_FILE = "/etc/profile.d/kw-unlab.sh";
@@ -41,10 +49,15 @@ const PROMPT_FILE = "/etc/profile.d/kw-unlab.sh";
 /**
  * The prompt every shell in the guest prints: the last command's exit status
  * (OSC 133 D), a prompt-start mark (A), the image's own prompt, then an
- * input-start mark (B). shell-tracker.ts reads these to learn exit codes and
- * whether a session is busy. busybox ash and bash both expand it.
+ * input-start mark (B), each carrying this boot's token. shell-tracker.ts reads
+ * these to learn exit codes and whether a session is busy, and ignores marks
+ * without the token. busybox ash and bash both expand it.
  */
-const PROMPT = String.raw`PS1='\[\033]133;D;$?\007\033]133;A\007\]'"$PS1"'\[\033]133;B\007\]'`;
+function promptLine(token: string): string {
+	if (!/^[0-9a-f]+$/.test(token)) throw new Error("the prompt token must be hex");
+	const tag = `;unlab=${token}`;
+	return String.raw`PS1='\[\033]133;D;$?${tag}\007\033]133;A${tag}\007\]'"$PS1"'\[\033]133;B${tag}\007\]'`;
+}
 
 /**
  * Login shells read the profile, and so does the image's ENV file, which
@@ -53,18 +66,19 @@ const PROMPT = String.raw`PS1='\[\033]133;D;$?\007\033]133;A\007\]'"$PS1"'\[\033
  * over the old line. Only a changed profile does that, so a second run leaves
  * the shell someone is using alone.
  */
-const PROMPT_SH = [
-	`want=${sh(PROMPT)}`,
-	`if [ "$(cat ${PROMPT_FILE} 2>/dev/null)" != "$want" ]; then`,
-	`  mkdir -p /etc/profile.d`,
-	`  printf '%s\\n' "$want" > ${PROMPT_FILE}`,
-	`  printf '\\r\\033[K' > /dev/hvc0 || true`,
-	`  for p in /proc/[0-9]*; do`,
-	`    case "$(head -c1 "$p/cmdline" 2>/dev/null)" in -) ;; *) continue ;; esac`,
-	`    if [ "$(readlink "$p/fd/0" 2>/dev/null)" = /dev/hvc0 ]; then kill -HUP "\${p#/proc/}" 2>/dev/null || true; fi`,
-	`  done`,
-	`fi`,
-].join("\n");
+const promptScript = (token: string) =>
+	[
+		`want=${sh(promptLine(token))}`,
+		`if [ "$(cat ${PROMPT_FILE} 2>/dev/null)" != "$want" ]; then`,
+		`  mkdir -p /etc/profile.d`,
+		`  printf '%s\\n' "$want" > ${PROMPT_FILE}`,
+		`  printf '\\r\\033[K' > /dev/hvc0 || true`,
+		`  for p in /proc/[0-9]*; do`,
+		`    case "$(head -c1 "$p/cmdline" 2>/dev/null)" in -) ;; *) continue ;; esac`,
+		`    if [ "$(readlink "$p/fd/0" 2>/dev/null)" = /dev/hvc0 ]; then kill -HUP "\${p#/proc/}" 2>/dev/null || true; fi`,
+		`  done`,
+		`fi`,
+	].join("\n");
 
 /**
  * Bring the machine onto the lab segment: its name, its lab address on eth0,
@@ -76,16 +90,10 @@ const PROMPT_SH = [
  * with a new host table changes only /etc/hosts.
  */
 export function setupScript(o: SetupOptions): string {
-	const hosts = [
-		`127.0.0.1 localhost`,
-		`${o.ip} ${o.hostname}`,
-		...o.hosts.filter((h) => h.name !== o.hostname).map((h) => `${h.ip} ${h.name}`),
-	];
 	return [
 		`set -e`,
 		`hostname ${sh(o.hostname)}`,
-		// A matching /etc/hosts entry keeps sudo from stalling on a name lookup.
-		`printf '%s\\n' ${hosts.map((l) => sh(l)).join(" ")} > /etc/hosts`,
+		hostsScript(o),
 		// Let the unprivileged console shell use ICMP sockets, so `ping node2`
 		// works without sudo. Harmless: it only widens who may send echoes.
 		`sysctl -w net.ipv4.ping_group_range='0 2147483647' >/dev/null 2>&1 || true`,
@@ -95,7 +103,30 @@ export function setupScript(o: SetupOptions): string {
 		o.dhcp ? `udhcpc -i eth0 -n -q -t 4 -T 1 >/dev/null 2>&1 || true` : `:`,
 		`ip addr replace ${o.ip}/${o.prefixBits} dev eth0`,
 		// Last, so the first marked prompt appears on a machine that is already configured.
-		PROMPT_SH,
+		promptScript(o.promptToken),
+	].join("\n");
+}
+
+const BEGIN = "# unlab: begin";
+const END = "# unlab: end";
+
+/**
+ * The lab's machines in /etc/hosts, between marker lines, so names work with
+ * no DNS. Only that block is ever rewritten: lines someone added by hand stay.
+ * This is all a new host table changes in a running guest, so it never undoes
+ * a link, an address or a hostname someone set on purpose.
+ */
+export function hostsScript(o: HostsOptions): string {
+	const entries = [
+		// A matching entry keeps sudo from stalling on a name lookup.
+		`${o.ip} ${o.hostname}`,
+		...o.hosts.filter((h) => h.name !== o.hostname).map((h) => `${h.ip} ${h.name}`),
+	];
+	const block = [BEGIN, ...entries, END].map((line) => sh(line)).join(" ");
+	return [
+		`{ sed ${sh(`/^${BEGIN}$/,/^${END}$/d`)} /etc/hosts 2>/dev/null || true; printf '%s\\n' ${block}; } > /etc/hosts.unlab`,
+		// cat, not mv: some images bind-mount /etc/hosts, and a rename would not reach it.
+		`cat /etc/hosts.unlab > /etc/hosts && rm -f /etc/hosts.unlab`,
 	].join("\n");
 }
 
