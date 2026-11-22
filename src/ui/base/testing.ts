@@ -5,11 +5,12 @@ import "../styles/index.css";
 import { ContextProvider } from "@lit/context";
 import { ReactiveElement } from "lit";
 import type { CaptureView } from "../../capture/index.ts";
-import { completeLine, createRegistry, parseLine, VERBS } from "../../commands/index.ts";
+import { completeLine, createRegistry, parseLine, type Registry, VERBS } from "../../commands/index.ts";
 import {
 	type AgentCall,
 	type AgentEvent,
 	createStore,
+	DEFAULT_POLICIES,
 	type Effect,
 	initialState,
 	isPlanError,
@@ -24,7 +25,7 @@ import {
 	type Store,
 	update,
 } from "../../model/index.ts";
-import type { AppServices, SwitchReadout, TerminalService } from "../services.ts";
+import type { AgentService, AppServices, SwitchReadout, TerminalService } from "../services.ts";
 import { servicesContext } from "./context.ts";
 
 const TEST_IMAGES = [{ name: "alpine", label: "alpine 3.24" }] as const;
@@ -98,6 +99,8 @@ export interface Mounted<E extends HTMLElement> {
 	readonly runs: { readonly line: string; readonly source: Exclude<Source, "agent"> }[];
 	/** Every line handed to `services.commands.confirmInBar`. */
 	readonly confirms: string[];
+	/** Every answer given through `services.agent.answer`, in order. */
+	readonly answers: { readonly call: number; readonly allow: boolean }[];
 	/** What `services.switch.counters(port)` answers. */
 	readonly counters: Map<PortNo, Counters>;
 	/** Resolves once every element in the tree has rendered. */
@@ -117,6 +120,8 @@ export interface MountOptions<E extends HTMLElement> {
 	readonly switch?: Pick<SwitchReadout, "macTable" | "now">;
 	/** The terminal screens. Defaults to none: every `host` is null. */
 	readonly terminals?: TerminalService;
+	/** Whether the browser has WebMCP. Defaults to true. */
+	readonly webmcp?: boolean;
 	/** Runs before the element connects: <unlab-app> takes its services here. */
 	readonly prepare?: (element: E, services: AppServices) => void;
 }
@@ -145,6 +150,7 @@ export async function mount<K extends keyof HTMLElementTagNameMap>(
 	const store = createStore(options.state ?? lab(), (effect) => options.onEffect?.(effect));
 	const runs: Mounted<HTMLElement>["runs"] = [];
 	const confirms: string[] = [];
+	const answers: Mounted<HTMLElement>["answers"] = [];
 	const counters = new Map<PortNo, Counters>(options.counters);
 	const registry = createRegistry(
 		{
@@ -173,6 +179,13 @@ export async function mount<K extends keyof HTMLElementTagNameMap>(
 		capture: options.capture ?? EMPTY_CAPTURE,
 		switch: { macTable: () => [], now: () => 0, ...options.switch, counters: (port) => counters.get(port) },
 		terminals: options.terminals ?? { host: () => null },
+		agent: {
+			available: options.webmcp ?? true,
+			tools: toolRows(registry),
+			answer: (call, allow) => {
+				answers.push({ call, allow });
+			},
+		},
 	};
 
 	const host = document.createElement("div");
@@ -184,7 +197,20 @@ export async function mount<K extends keyof HTMLElementTagNameMap>(
 	host.append(element);
 	const settle = () => settled(host);
 	await settle();
-	return { element, store, services, runs, confirms, counters, settle };
+	return { element, store, services, runs, confirms, answers, counters, settle };
+}
+
+/** The tool list the agent layer derives, rebuilt here because ui may not import agent. */
+function toolRows(registry: Registry): AgentService["tools"] {
+	const order = Object.keys(DEFAULT_POLICIES);
+	const verbs = registry.commands.flatMap(({ tool }) =>
+		tool ? [{ name: tool.name, args: Object.keys(tool.inputSchema.properties ?? {}) }] : [],
+	);
+	return [
+		...verbs,
+		{ name: "shell_read" as const, args: ["machine", "lines"] },
+		{ name: "capture_read" as const, args: ["filter", "limit"] },
+	].sort((a, b) => order.indexOf(a.name) - order.indexOf(b.name));
 }
 
 /** A token's colour as computed styles report it, `rgb(49, 50, 68)` for --line. */

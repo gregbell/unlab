@@ -1,0 +1,132 @@
+/* Restated so the order holds whichever sheet loads first. */
+@layer tokens, base, components;
+
+@layer components {
+	@scope (unlab-agent-panel) to (unlab-confirm) {
+		:scope {
+			display: flex;
+			flex-direction: column;
+			height: 100%;
+			min-height: 0;
+			background: var(--mantle);
+		}
+
+		.head {
+			display: flex;
+			flex-wrap: wrap;
+			align-items: center;
+			gap: 4px 12px;
+			min-height: 34px;
+			padding: 0 var(--gutter);
+			border-bottom: 1px solid var(--line);
+		}
+
+		.title {
+			font-size: inherit;
+			font-weight: 500;
+		}
+
+		.state {
+			color: var(--agent);
+		}
+
+		.state[data-paused="true"],
+		.since {
+			color: var(--text-3);
+		}
+
+		.spacer {
+			flex-grow: 1;
+		}
+
+		/* The approvals stay in view however long the log grows. */
+		.scroll {
+			flex: 1 1 auto;
+			min-height: 0;
+			overflow-y: auto;
+		}
+
+		.about {
+			padding: 12px var(--gutter) 4px;
+			color: var(--text-2);
+		}
+
+		.tools {
+			display: flex;
+			flex-direction: column;
+			padding: 8px var(--gutter) 12px;
+			border-bottom: 1px solid var(--line);
+			list-style: none;
+		}
+
+		.tool {
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			gap: 12px;
+			min-height: 30px;
+		}
+
+		.tool .args {
+			color: var(--text-3);
+		}
+
+		/* Off, or paused: unregistered, but the row and its select stay. */
+		.tool[data-exposed="false"] .name {
+			color: var(--text-3);
+		}
+
+		.calls-head {
+			display: flex;
+			justify-content: space-between;
+			padding: 12px var(--gutter) 6px;
+			font-size: inherit;
+			font-weight: 400;
+			color: var(--text-3);
+		}
+
+		.log {
+			display: flex;
+			flex-direction: column;
+			gap: 8px;
+			padding: 0 var(--gutter) 12px;
+			list-style: none;
+		}
+
+		.call {
+			display: grid;
+			grid-template-columns: 16px minmax(0, 1fr);
+			gap: 0 8px;
+		}
+
+		.call .n {
+			color: var(--text-3);
+		}
+
+		.call .line {
+			overflow-wrap: anywhere;
+		}
+
+		.call .result {
+			overflow-wrap: anywhere;
+			color: var(--text-2);
+		}
+
+		.machine {
+			color: var(--machine-hue);
+		}
+
+		.approvals {
+			display: flex;
+			flex-direction: column;
+			gap: 8px;
+			margin: 0 var(--gutter) var(--gutter);
+		}
+	}
+
+	/* An approval's call reads at the panel's size, as in the artboard; the bar's question is larger. */
+	unlab-agent-panel unlab-confirm .heading {
+		font-size: inherit;
+		line-height: inherit;
+	}
+}

@@ -15,7 +15,7 @@ export const LAYERS: Readonly<Record<Layer, Rule>> = {
 	model: { values: ["net"], types: [] },
 	capture: { values: ["net", "model"], types: [] },
 	commands: { values: ["net", "model"], types: [] },
-	agent: { values: ["model", "commands"], types: ["capture"] },
+	agent: { values: ["net", "model", "capture", "commands"], types: [] },
 	runtime: { values: ["net", "model", "capture"], types: ["commands"] },
 	ui: { values: ["net", "model", "commands"], types: ["capture"] },
 };

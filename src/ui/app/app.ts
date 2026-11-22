@@ -10,6 +10,7 @@ import "../switch/switch.ts";
 import "../wire/wire.ts";
 import "../start/start.ts";
 import "../spawn-form/spawn-form.ts";
+import "../agent-panel/agent-panel.ts";
 import { ContextProvider } from "@lit/context";
 import { html, LitElement, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { selectAgentIndicator, type UiEvent } from "../../model/index.ts";
@@ -108,7 +109,9 @@ export class UnlabApp extends LitElement {
 					</main>
 				</div>
 				<main class="wire-view" ?hidden=${view !== "wire"}>${view === "wire" ? html`<unlab-wire></unlab-wire>` : nothing}</main>
-				<div id=${AGENT_PANEL} class="agent-panel" ?hidden=${!agentPanel}></div>
+				<div id=${AGENT_PANEL} class="agent-panel" role="complementary" aria-label="Agent" ?hidden=${!agentPanel}>
+					${agentPanel ? html`<unlab-agent-panel></unlab-agent-panel>` : nothing}
+				</div>
 			</div>
 			<main class="spawn-view" ?hidden=${view !== "spawn"}>${view === "spawn" ? html`<unlab-spawn-form></unlab-spawn-form>` : nothing}</main>
 			<unlab-statusline role="contentinfo"></unlab-statusline>

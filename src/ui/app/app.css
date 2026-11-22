@@ -11,7 +11,8 @@
 		unlab-command-bar,
 		unlab-capture,
 		unlab-switch,
-		unlab-wire
+		unlab-wire,
+		unlab-agent-panel
 	) {
 		:scope {
 			display: flex;
