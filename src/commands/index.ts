@@ -1,4 +1,4 @@
-import type { LabState } from "../model/types.ts";
+import type { LabState } from "../model/index.ts";
 import type { AnyVerb, Command, CommandDeps, CommandFace, ParsedLine, VerbSpec } from "./define.ts";
 import { oneEditFix } from "./grammar/fix.ts";
 import { tokenize } from "./grammar/tokenize.ts";

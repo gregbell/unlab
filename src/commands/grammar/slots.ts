@@ -1,4 +1,4 @@
-import type { LabState, Machine, MachineName, Phase, SessionId } from "../../model/types.ts";
+import type { LabState, Machine, MachineName, Phase, SessionId } from "../../model/index.ts";
 import type { JsonSchema, Suggestion } from "../types.ts";
 
 export interface ReadContext {

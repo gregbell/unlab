@@ -1,4 +1,4 @@
-import type { HueNo, MachineName, SessionId, Source } from "../model/types.ts";
+import type { HueNo, MachineName, SessionId, Source } from "../model/index.ts";
 
 export interface Token {
 	readonly text: string;

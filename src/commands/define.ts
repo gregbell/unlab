@@ -1,4 +1,4 @@
-import type { CommandEvent, LabState, Phase, Policy, ToolName } from "../model/types.ts";
+import type { CommandEvent, LabState, Phase, Policy, ToolName } from "../model/index.ts";
 import type { Approval } from "./approval.ts";
 import { complete } from "./grammar/complete.ts";
 import { format as formatLine, signature as signatureOf } from "./grammar/format.ts";

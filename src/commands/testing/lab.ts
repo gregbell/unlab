@@ -11,7 +11,7 @@ import {
 	type PortNo,
 	type Session,
 	type SessionId,
-} from "../../model/types.ts";
+} from "../../model/index.ts";
 import type { CommandDeps } from "../define.ts";
 
 export interface MachineFixture {

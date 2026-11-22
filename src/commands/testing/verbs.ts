@@ -1,4 +1,4 @@
-import { type LabState, type LinkChange, MAX_MACHINES, type MachineName, type SessionId } from "../../model/types.ts";
+import { type LabState, type LinkChange, MAX_MACHINES, type MachineName, type SessionId } from "../../model/index.ts";
 import { defineVerb, type ParsedLine, refuse } from "../define.ts";
 import * as slots from "../grammar/slots.ts";
 import { createRegistry } from "../index.ts";
