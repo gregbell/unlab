@@ -3,10 +3,14 @@ import "../machine-details/machine-details.ts";
 import "../machine-row/machine-row.ts";
 import { html, type TemplateResult } from "lit";
 import { repeat } from "lit/directives/repeat.js";
-import { selectRail } from "../../model/index.ts";
+import { LAB_CIDR, PORTS, SWITCH_NAME, selectRail } from "../../model/index.ts";
 import { Select, UnlabElement } from "../base/index.ts";
 
-/** The machine rail: one row per machine in spawn order, then the details of the one with the keyboard. */
+/**
+ * The machine rail: one row per machine in spawn order, then the details of
+ * the one with the keyboard. An empty lab has no dock, so the rail names the
+ * switch at its foot instead.
+ */
 export class UnlabRail extends UnlabElement {
 	readonly #rows = new Select(this, selectRail);
 
@@ -15,7 +19,11 @@ export class UnlabRail extends UnlabElement {
 		return html`<h2 class="header"><span>machines</span><span>${rows.length}</span></h2>
 			${
 				rows.length === 0
-					? html`<p class="empty">Nothing booted yet.</p>`
+					? html`<p class="empty">Nothing booted yet.</p>
+							<div class="switch">
+								<p><span class="name">${SWITCH_NAME}</span><span>0 of ${PORTS.length} ports</span></p>
+								<p>L2 · ${LAB_CIDR}</p>
+							</div>`
 					: html`<ul role="list" class="rows">
 							${repeat(
 								rows,

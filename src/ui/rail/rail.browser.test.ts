@@ -206,3 +206,15 @@ describe("<unlab-rail>", () => {
 		expect(names).toEqual(["node1", "node2", "node3"]);
 	});
 });
+
+describe("the empty rail", () => {
+	it("names switch0 at its foot while there is no dock, and drops it once a machine exists", async () => {
+		const empty = await mount("unlab-rail");
+		const lines = [...empty.element.querySelectorAll(".switch span, .switch p:last-child")].map((n) => n.textContent);
+		expect(lines).toEqual(["switch0", "0 of 8 ports", "L2 · 10.88.0.0/24"]);
+		unmountAll();
+
+		const one = await mount("unlab-rail", { state: lab(spawn(1)) });
+		expect(one.element.querySelector(".switch")).toBeNull();
+	});
+});

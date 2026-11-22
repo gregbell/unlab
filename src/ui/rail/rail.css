@@ -24,5 +24,27 @@
 			padding: 4px var(--gutter);
 			color: var(--text-3);
 		}
+
+		.switch {
+			margin-top: auto;
+			padding: 12px var(--gutter);
+			border-top: 1px solid var(--line);
+			color: var(--text-3);
+		}
+
+		.switch p:first-child {
+			display: flex;
+			justify-content: space-between;
+			gap: 12px;
+		}
+
+		.switch p + p {
+			margin-top: 2px;
+		}
+
+		.switch .name {
+			font-weight: 500;
+			color: var(--text);
+		}
 	}
 }
