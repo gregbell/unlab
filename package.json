@@ -13,8 +13,9 @@
 		"test:watch": "vitest --project unit",
 		"test:integration": "vitest run --project integration",
 		"test:e2e": "playwright test",
-		"check": "npm run typecheck && npm run lint && npm test && npm run build",
-		"distros": "node scripts/fetch-distros.ts"
+		"check": "npm run typecheck && npm run lint && npm run check:imports && npm test && npm run build",
+		"distros": "node scripts/fetch-distros.ts",
+		"check:imports": "node scripts/check-imports.ts"
 	},
 	"keywords": [],
 	"author": "",
