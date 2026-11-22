@@ -22,9 +22,13 @@ export function matches(p: Packet, q: string): boolean {
 	return `${d.proto} ${d.src} ${d.dst} ${d.info} ${p.fromName}`.toLowerCase().includes(q);
 }
 
-export function renderPackets(host: HTMLElement, packets: Packet[], filter: string): void {
+export function renderPackets(host: HTMLElement, packets: Packet[], filter: string, paused: boolean): void {
 	const rows = filter ? packets.filter((p) => matches(p, filter)) : packets;
 	const shown = rows.slice(-200);
+	if (!shown.length) {
+		host.innerHTML = `<div class="capture-empty"><b>${filter ? "No matching packets" : paused ? "Capture paused" : "Listening for packets"}</b><span>${filter ? "Try a different filter." : paused ? "Resume capture to collect frames." : "Ping a peer to see traffic here."}</span></div>`;
+		return;
+	}
 	const atBottom = host.scrollTop + host.clientHeight >= host.scrollHeight - 30;
 
 	host.innerHTML = shown
@@ -36,7 +40,7 @@ export function renderPackets(host: HTMLElement, packets: Packet[], filter: stri
 	if (atBottom) host.scrollTop = host.scrollHeight;
 }
 
-export function renderStats(host: HTMLElement, lab: Lab, paused: boolean): void {
+export function renderStats(host: HTMLElement, lab: Lab): void {
 	let rx = 0;
 	let tx = 0;
 	let flooded = 0;
@@ -47,7 +51,7 @@ export function renderStats(host: HTMLElement, lab: Lab, paused: boolean): void 
 		tx += c.txFrames;
 		flooded += c.flooded;
 	}
-	host.textContent = `${lab.machines.length} machines · ${rx} in · ${tx} delivered · ${flooded} flooded${paused ? " · paused" : ""}`;
+	host.textContent = `${rx} in · ${tx} delivered · ${flooded} flooded`;
 }
 
 export function renderMacTable(host: HTMLElement, lab: Lab): void {
@@ -55,7 +59,7 @@ export function renderMacTable(host: HTMLElement, lab: Lab): void {
 	host.textContent = "";
 	if (!table.length) {
 		const d = document.createElement("div");
-		d.textContent = "nothing learned yet";
+		d.textContent = "No addresses learned yet";
 		host.append(d);
 		return;
 	}

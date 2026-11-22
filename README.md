@@ -157,10 +157,14 @@ test/lab.test.ts     two machines in Node: ARP, ICMP and TCP across the switch
 
 ## The interface
 
-The layout follows [Herdr](https://herdr.dev): machines where its spaces are,
-the selected machine's detail where its agents are, tabs along the top, and
-the terminal taking the rest. **Wire** in the top bar opens the inspector:
-topology, every frame on the segment, and the switch's MAC table.
+The workspace and terminal use Catppuccin Mocha. Select a machine in the
+sidebar or the topology map to open its console. Click a cable to toggle
+the link. **New shell** opens another terminal on the selected machine.
+
+**Inspector** toggles the packet capture beside the terminal. Use **Ping
+peers** in the machine details to generate traffic, then filter the capture
+by protocol or address. Expand **MAC address table** to see which addresses
+the switch has learned.
 
 ## Licence
 

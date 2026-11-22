@@ -4,7 +4,9 @@ import "./style.css";
 
 import { Lab, type DistroManifest } from "./lab/lab.ts";
 import type { Machine, Session } from "./lab/machine.ts";
-import { badgeColor, renderDetail, renderMachines, type SidebarHandlers } from "./ui/sidebar.ts";
+import { workspace } from "./ui/workspace.ts";
+import { icon } from "./ui/icons.ts";
+import { renderDetail, renderFrames, renderMachines, type SidebarHandlers } from "./ui/sidebar.ts";
 import { TerminalPane } from "./ui/terminal.ts";
 import { renderTopology } from "./ui/topology.ts";
 import { MAX_PACKETS, renderMacTable, renderPackets, renderStats, toPacket, type Packet } from "./ui/wire.ts";
@@ -24,7 +26,8 @@ let selectedMachineId: string | undefined;
 let paused = false;
 let filter = "";
 let wireOpen = true;
-let dirty = false;
+let framePending = false;
+let workspaceDirty = false;
 
 function byId<T extends HTMLElement = HTMLElement>(id: string): T {
 	return document.getElementById(id) as T;
@@ -40,65 +43,35 @@ function toast(message: string): void {
 
 /** Collapse repeated redraws into one per frame. */
 function invalidate(): void {
-	if (dirty) return;
-	dirty = true;
+	workspaceDirty = true;
+	scheduleRender();
+}
+
+function scheduleRender(): void {
+	if (framePending || !lab) return;
+	framePending = true;
 	requestAnimationFrame(() => {
-		dirty = false;
-		render();
+		framePending = false;
+		if (workspaceDirty) render();
+		workspaceDirty = false;
+		renderTraffic();
 	});
 }
 
 // ------------------------------------------------------------------ layout
 
 function shell(): void {
-	app.innerHTML = `
-		<header class="topbar">
-			<div class="brand">un<span>lab</span></div>
-			<div class="tabstrip" id="tabstrip"></div>
-			<div class="right">
-				<button id="new-shell" title="New shell on the selected machine">+</button>
-				<button id="toggle-wire" title="Show or hide the network inspector">Wire</button>
-			</div>
-		</header>
-
-		<aside class="side">
-			<div class="sect">Machines <button id="add" title="Add a machine">+</button></div>
-			<div class="addrow"><input type="text" id="new-name" placeholder="name (e.g. web1)" /></div>
-			<div class="opts">
-				<select id="new-distro"></select>
-				<label title="Route non-lab traffic through a public Wisp proxy so apk works">
-					<input type="checkbox" id="new-net" /> internet
-				</label>
-			</div>
-			<div class="machines" id="machines"></div>
-			<div class="sect top">Machine</div>
-			<div class="detail" id="detail"></div>
-		</aside>
-
-		<section class="main">
-			<div class="panes" id="panes"></div>
-			<div class="nothing" id="nothing">
-				<b>No terminal open</b>
-				<div>Pick a machine on the left, or press <code>+</code> for another shell.</div>
-			</div>
-		</section>
-
-		<section class="wire" id="wire">
-			<div class="sect">Topology</div>
-			<div id="topo"></div>
-			<div class="sect">The wire</div>
-			<div class="controls">
-				<input type="text" id="pkt-filter" placeholder="filter: icmp, arp, 10.88.0.12 …" />
-				<button id="pause" title="Stop collecting frames">Pause</button>
-				<button id="clear-pkts">Clear</button>
-			</div>
-			<div class="packets" id="packets"></div>
-			<div class="stats" id="stats"></div>
-		</section>`;
-
-	byId("add").addEventListener("click", addMachine);
-	byId<HTMLInputElement>("new-name").addEventListener("keydown", (e) => {
-		if ((e as KeyboardEvent).key === "Enter") addMachine();
+	app.innerHTML = workspace;
+	const dialog = byId<HTMLDialogElement>("add-dialog");
+	byId("add").addEventListener("click", () => dialog.showModal());
+	byId("cancel-add").addEventListener("click", () => dialog.close());
+	byId("machine-form").addEventListener("submit", (event) => {
+		event.preventDefault();
+		addMachine();
+	});
+	const machinesToggle = byId("toggle-machines");
+	machinesToggle.addEventListener("click", () => {
+		machinesToggle.setAttribute("aria-expanded", String(byId("side").classList.toggle("expanded")));
 	});
 	byId("new-shell").addEventListener("click", () => {
 		const m = selectedMachine();
@@ -107,14 +80,19 @@ function shell(): void {
 	byId("toggle-wire").addEventListener("click", () => {
 		wireOpen = !wireOpen;
 		byId("wire").classList.toggle("hidden", !wireOpen);
-		byId("toggle-wire").classList.toggle("on", wireOpen);
+		byId("toggle-wire").setAttribute("aria-pressed", String(wireOpen));
 		fitActive();
 		invalidate();
 	});
-	byId("toggle-wire").classList.toggle("on", wireOpen);
+	byId("toggle-wire").setAttribute("aria-pressed", String(wireOpen));
 	byId("pause").addEventListener("click", () => {
 		paused = !paused;
-		byId("pause").textContent = paused ? "Resume" : "Pause";
+		const button = byId("pause");
+		button.innerHTML = icon(paused ? "play" : "pause");
+		button.title = paused ? "Resume capture" : "Pause capture";
+		button.setAttribute("aria-label", button.title);
+		byId("capture-state").textContent = paused ? "Paused" : "Live";
+		byId("capture-state").classList.toggle("paused", paused);
 		invalidate();
 	});
 	byId("clear-pkts").addEventListener("click", () => {
@@ -141,6 +119,7 @@ function addMachine(): void {
 			distro: byId<HTMLSelectElement>("new-distro").value,
 			internet: byId<HTMLInputElement>("new-net").checked,
 		});
+		byId<HTMLDialogElement>("add-dialog").close();
 		nameEl.value = "";
 		selectedMachineId = m.id;
 		void openTab(m.console);
@@ -167,7 +146,11 @@ const handlers: SidebarHandlers = {
 	removeMachine: (m) => {
 		for (const t of tabs.filter((t) => t.session.machine.id === m.id)) closeTab(t, false);
 		lab.remove(m.id);
-		if (selectedMachineId === m.id) selectedMachineId = lab.machines[0]?.id;
+		if (selectedMachineId === m.id) {
+			selectedMachineId = lab.machines[0]?.id;
+			activeSessionId = undefined;
+			void openTab(tabs[0]?.session ?? selectedMachine()?.console);
+		}
 		invalidate();
 	},
 	pingOthers: (m) => {
@@ -182,6 +165,8 @@ const handlers: SidebarHandlers = {
 
 async function openTab(session: Session | undefined): Promise<void> {
 	if (!session) return;
+	byId("side").classList.remove("expanded");
+	byId("toggle-machines").setAttribute("aria-expanded", "false");
 	selectedMachineId = session.machine.id;
 	const found = tabs.find((t) => t.session.id === session.id);
 	if (found) {
@@ -237,21 +222,12 @@ function renderTabs(): void {
 		const el = document.createElement("div");
 		el.className = `tab${t.session.id === activeSessionId ? " active" : ""}`;
 
-		const badge = document.createElement("span");
-		badge.className = "badge";
-		badge.style.background = badgeColor(lab, m);
-		badge.textContent = m.name.slice(0, 1);
-
-		const label = document.createElement("span");
-		label.className = "label";
-		const b = document.createElement("b");
-		b.textContent = m.name;
-		const i = document.createElement("i");
-		i.textContent = ` ${t.session.label}`;
-		label.append(b, i);
-
-		const dot = document.createElement("span");
-		dot.className = `dot ${t.session.state === "open" ? m.state : t.session.state}`;
+		const select = document.createElement("button");
+		select.className = "tab-select";
+		select.setAttribute("aria-pressed", String(t.session.id === activeSessionId));
+		select.innerHTML = icon("terminal");
+		select.append(m.name, document.createTextNode(" / " + t.session.label));
+		select.addEventListener("click", () => activate(t.session.id));
 
 		const close = document.createElement("button");
 		close.className = "close";
@@ -262,8 +238,8 @@ function renderTabs(): void {
 			closeTab(t);
 		});
 
-		el.append(badge, label, dot, close);
-		el.addEventListener("click", () => activate(t.session.id));
+		close.setAttribute("aria-label", `Close ${t.session.title}`);
+		el.append(select, close);
 		strip.append(el);
 	}
 	byId("nothing").style.display = tabs.length ? "none" : "grid";
@@ -278,14 +254,25 @@ function fitActive(): void {
 // ------------------------------------------------------------------- render
 
 function render(): void {
+	const ready = lab.machines.filter((m) => m.state === "ready").length;
+	byId("lab-status").textContent = `${ready} of ${lab.machines.length} ${lab.machines.length === 1 ? "machine" : "machines"} ready`;
+	byId("lab-dot").className = `dot ${ready > 0 && ready === lab.machines.length ? "ready" : "booting"}`;
+	byId("machine-count").textContent = String(lab.machines.length);
+	byId("session-count").textContent = `${tabs.length} open ${tabs.length === 1 ? "session" : "sessions"}`;
 	renderTabs();
 	renderMachines(byId("machines"), lab, selectedMachineId, handlers);
 	renderDetail(byId("detail"), lab, selectedMachine(), new Set(tabs.map((t) => t.session.id)), handlers);
 	byId<HTMLButtonElement>("new-shell").disabled = selectedMachine()?.state !== "ready";
-	if (!wireOpen) return;
 	renderTopology(byId("topo"), lab, selectedMachineId, (id) => handlers.selectMachine(id));
-	renderPackets(byId("packets"), packets, filter);
-	renderStats(byId("stats"), lab, paused);
+}
+
+function renderTraffic(): void {
+	const frames = document.getElementById("machine-frames");
+	const machine = selectedMachine();
+	if (frames && machine) renderFrames(frames, machine);
+	if (!wireOpen) return;
+	renderPackets(byId("packets"), packets, filter, paused);
+	renderStats(byId("stats"), lab);
 	renderMacTable(byId("mac"), lab);
 }
 
@@ -305,26 +292,23 @@ async function main(): Promise<void> {
 
 	document.title = `unlab — ${lab.subnet}`;
 	const sel = byId<HTMLSelectElement>("new-distro");
-	sel.innerHTML = manifest.distros
-		.map((d) => `<option value="${d.name}">${d.name} — ${d.image.split("-").slice(0, 2).join(" ")}</option>`)
-		.join("");
+	for (const distro of manifest.distros) {
+		sel.add(new Option(distro.image.split("-").slice(0, 2).join(" "), distro.name));
+	}
 
-	// The MAC table lives under the stats line; it is added here so the panel's
-	// grid rows stay in the markup above.
-	const mac = document.createElement("div");
-	mac.className = "mac";
-	mac.id = "mac";
-	byId("stats").after(mac);
+	byId("subnet").textContent = String(lab.subnet);
+	byId<HTMLButtonElement>("add").disabled = false;
 
 	lab.sw.onTap((e) => {
-		if (paused) return;
-		packets.push(toPacket(e));
-		if (packets.length > MAX_PACKETS) packets.splice(0, packets.length - MAX_PACKETS);
-		invalidate();
+		if (!paused) {
+			packets.push(toPacket(e));
+			if (packets.length > MAX_PACKETS) packets.splice(0, packets.length - MAX_PACKETS);
+		}
+		scheduleRender();
 	});
 
 	new ResizeObserver(() => fitActive()).observe(byId("panes"));
-	window.addEventListener("resize", fitActive);
+	new ResizeObserver(invalidate).observe(byId("topo"));
 
 	// Two machines, so the point of the place is visible at once.
 	const first = lab.add({ name: "node1" });
