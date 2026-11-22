@@ -263,9 +263,6 @@ describe("<unlab-app> dock", () => {
 		await expect.element(show).toHaveAttribute("aria-expanded", "false");
 		await expect.element(show).toHaveAttribute("aria-controls", the(".dock").id);
 		expect(document.querySelector("unlab-app :is(unlab-capture, unlab-switch)")).toBeNull();
-		const links = page.getByText("switch0 · 2 of 3 links up");
-		await expect.element(links).toBeVisible();
-		expect(getComputedStyle(links.element()).color).toBe(tokenColor("down"));
 		expect(box(".dock").height).toBe(34);
 		expect(box("unlab-pane-area").height).toBeGreaterThan(open + 150);
 

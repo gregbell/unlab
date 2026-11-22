@@ -134,14 +134,6 @@
 			color: var(--warn);
 		}
 
-		.dock-strip .links {
-			color: var(--text-3);
-		}
-
-		.dock-strip .links[data-cut="true"] {
-			color: var(--down);
-		}
-
 		.dock-strip .button {
 			min-height: var(--h-xs);
 			padding-inline: 8px;

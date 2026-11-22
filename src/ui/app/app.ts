@@ -13,7 +13,7 @@ import "../spawn-form/spawn-form.ts";
 import "../agent-panel/agent-panel.ts";
 import { ContextProvider } from "@lit/context";
 import { html, LitElement, nothing, type PropertyValues, type TemplateResult } from "lit";
-import { type Dock, SWITCH_NAME, selectAgentIndicator, selectLinks, type UiEvent } from "../../model/index.ts";
+import { type Dock, selectAgentIndicator, type UiEvent } from "../../model/index.ts";
 import { Select, servicesContext } from "../base/index.ts";
 import { DOCK_ID } from "../capture/capture.ts";
 import type { AppServices } from "../services.ts";
@@ -39,7 +39,6 @@ export class UnlabApp extends LitElement {
 	readonly #empty = new Select(this, (state) => state.rail.length === 0);
 	readonly #dock = new Select(this, (state) => state.dock);
 	readonly #paused = new Select(this, (state) => state.capture.paused);
-	readonly #links = new Select(this, selectLinks);
 	#shownDock: Dock | null = null;
 	#refocusDock = false;
 
@@ -138,15 +137,13 @@ export class UnlabApp extends LitElement {
 			<div id=${ANNOUNCER} class="visually-hidden" role="status"></div>`;
 	}
 
-	/** The collapsed dock: whether the capture runs, how many links are up, and the way back. */
+	/** The collapsed dock: whether the capture runs, and the way back. The status line already counts the links. */
 	#dockStrip(): TemplateResult {
 		const paused = this.#paused.value;
-		const links = this.#links.value;
 		return html`<div class="dock-strip">
 			<span class="title">network</span>
 			<span class="status" data-paused=${paused}>${paused ? "paused" : "live"}</span>
 			<span class="spacer"></span>
-			<span class="links" data-cut=${links.cut > 0}>${SWITCH_NAME} · ${links.up} of ${links.total} links up</span>
 			<button
 				type="button"
 				class="button"
