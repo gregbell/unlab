@@ -55,7 +55,8 @@ async function fetchImage(
 ): Promise<ArrayBufferLike> {
 	const res = await fetch(url);
 	if (!res.ok) throw new Error(`${url}: HTTP ${res.status}`);
-	const total = Number(res.headers.get("content-length")) || size;
+	// Not Content-Length: a server that compresses the image (GitHub Pages gzips it) counts the encoded bytes.
+	const total = size;
 
 	const buf: ArrayBufferLike = crossOriginIsolated ? new SharedArrayBuffer(total) : new ArrayBuffer(total);
 	const out = new Uint8Array(buf);

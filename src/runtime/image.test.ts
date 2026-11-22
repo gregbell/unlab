@@ -52,6 +52,16 @@ describe("imageSource", () => {
 		expect(asked).toEqual(["retry/debian.erofs", "retry/debian.erofs"]);
 	});
 
+	test("a compressed response is sized by the manifest, not by its encoded Content-Length", async () => {
+		serve(
+			() =>
+				new Response(Uint8Array.of(1, 2, 3, 4), {
+					headers: { "content-encoding": "gzip", "content-length": "3" },
+				}),
+		);
+		expect(new Uint8Array(await imageSource(MANIFEST, "gzip/")("alpine"))).toEqual(Uint8Array.of(1, 2, 3, 4));
+	});
+
 	test("a short image is an error, not a machine with a truncated disk", async () => {
 		serve(() => new Response(Uint8Array.of(1, 2), { headers: { "content-length": "4" } }));
 		await expect(imageSource(MANIFEST, "short/")("alpine")).rejects.toThrow(
