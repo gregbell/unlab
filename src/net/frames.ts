@@ -66,6 +66,9 @@ export function isGroupMac(f: Uint8Array): boolean {
 	return (f[0] & 1) === 1;
 }
 
+/** Why a switch flooded a frame: a broadcast or multicast address, or a unicast address it has not learned. */
+export type Flood = "group" | "unknown";
+
 function u32(f: Uint8Array, off: number): number {
 	return ((f[off] << 24) | (f[off + 1] << 16) | (f[off + 2] << 8) | f[off + 3]) >>> 0;
 }

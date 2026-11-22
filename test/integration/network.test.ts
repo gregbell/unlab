@@ -4,8 +4,9 @@ import assert from "node:assert/strict";
 import { Worker } from "node:worker_threads";
 import { fetchDistro } from "unkernel/node";
 import { test } from "vitest";
-import { arpAddrs, ethertype, IP_ICMP, IP_TCP, ipAddrs, labMac, Subnet } from "../../src/lab/frames.ts";
-import { LabSwitch } from "../../src/lab/switch.ts";
+import type { PortNo } from "../../src/model/types.ts";
+import { arpAddrs, dstMac, ethertype, IP_ICMP, IP_TCP, ipAddrs, labMac, Subnet } from "../../src/net/index.ts";
+import { LabSwitch } from "../../src/runtime/switch.ts";
 
 const LAB = new Subnet("10.88.0.0/24");
 const WORKER = new URL("./vm-worker.ts", import.meta.url);
@@ -18,6 +19,7 @@ interface Machine {
 
 async function boot(
 	sw: LabSwitch,
+	port: PortNo,
 	name: string,
 	hostNum: number,
 	distro: string,
@@ -41,7 +43,7 @@ async function boot(
 
 	const ready = new Promise<void>((resolve, reject) => {
 		worker.on("message", (m: Record<string, string | number>) => {
-			if (m.type === "frame") sw.receive(name, new Uint8Array(m.frame as unknown as ArrayBuffer));
+			if (m.type === "frame") sw.receive(port, new Uint8Array(m.frame as unknown as ArrayBuffer));
 			else if (m.type === "booted") resolve();
 			else if (m.type === "boot-error" || m.type === "error") reject(new Error(String(m.message)));
 			else if (m.type === "exec-result") {
@@ -56,8 +58,7 @@ async function boot(
 		worker.on("error", reject);
 	});
 
-	sw.addPort(name, {
-		name,
+	sw.attach(port, {
 		deliver: (frame) => {
 			// A right-sized copy: transferring the switch's frame would detach it
 			// for the other ports of the same flood.
@@ -85,7 +86,10 @@ test("two machines share one layer-2 segment", { timeout: 300_000 }, async () =>
 	const sw = new LabSwitch();
 	const seen: string[] = [];
 	const kinds = new Map<string, number>();
+	const DB1_MAC = labMac(12);
+	let unknownToDb1 = 0;
 	sw.onTap((e) => {
+		if (e.from === 1 && e.flood === "unknown" && dstMac(e.frame) === DB1_MAC) unknownToDb1++;
 		const arp = arpAddrs(e.frame);
 		const ip = ipAddrs(e.frame);
 		const k = arp
@@ -106,7 +110,10 @@ test("two machines share one layer-2 segment", { timeout: 300_000 }, async () =>
 			{ ip: LAB.host(11), name: "web1" },
 			{ ip: LAB.host(12), name: "db1" },
 		];
-		const [web1, db1] = await Promise.all([boot(sw, "web1", 11, distro, hosts), boot(sw, "db1", 12, distro, hosts)]);
+		const [web1, db1] = await Promise.all([
+			boot(sw, 1, "web1", 11, distro, hosts),
+			boot(sw, 2, "db1", 12, distro, hosts),
+		]);
 		machines = [web1, db1];
 		console.log(`both machines booted in ${Date.now() - t0} ms`);
 
@@ -140,7 +147,24 @@ test("two machines share one layer-2 segment", { timeout: 300_000 }, async () =>
 		assert.ok(seen.includes("icmp"), "the switch should have seen ICMP");
 		assert.ok(seen.includes("tcp"), "the switch should have seen TCP");
 
-		const c = sw.counters("web1");
+		const db1Entry = () => sw.macTable().find((e) => e.mac === DB1_MAC);
+		sw.setLink(2, false);
+		assert.deepEqual(
+			{ port: db1Entry()?.port, flushed: db1Entry()?.flushed },
+			{ port: 2, flushed: true },
+			"a cut keeps db1's entry, flushed",
+		);
+		const floodsBeforeCut = unknownToDb1;
+		const cutPing = await web1.exec(`ping -c 1 -W 1 ${LAB.host(12)}`, true);
+		assert.notEqual(cutPing.exitCode, 0, "a ping across a cut cable should fail");
+		assert.ok(unknownToDb1 > floodsBeforeCut, "frames for db1 should flood as an unknown destination");
+
+		sw.setLink(2, true);
+		const healed = await web1.exec(`ping -c 2 -W 2 ${LAB.host(12)}`, true);
+		assert.equal(healed.exitCode, 0, "web1 should reach db1 again after reconnecting");
+		assert.equal(db1Entry()?.flushed, false, "db1's address is relearned on port 2");
+
+		const c = sw.counters(1);
 		console.log(`web1 port: rx=${c?.rxFrames} tx=${c?.txFrames} flooded=${c?.flooded}`);
 		console.log(`mac table: ${JSON.stringify(sw.macTable())}`);
 	} finally {
