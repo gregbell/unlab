@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { expect, test } from "vitest";
 import { TERMINAL_COLORS, TERMINAL_STYLE } from "./theme.ts";
 
-const tokens = readFileSync(new URL("../styles/tokens.css", import.meta.url), "utf8");
+const tokens = readFileSync(new URL("../ui/styles/tokens.css", import.meta.url), "utf8");
 const token = (name: string): number => {
 	const value = new RegExp(`--${name}:\\s*#([0-9a-f]{6})`).exec(tokens)?.[1];
 	if (!value) throw new Error(`tokens.css has no --${name}`);
