@@ -46,9 +46,11 @@
 
 		.ports {
 			display: grid;
-			grid-template-columns: repeat(8, minmax(0, 1fr));
+			/* 44px holds a name up to node12; narrower than that, the faceplate scrolls sideways like the capture list. */
+			grid-template-columns: repeat(8, minmax(44px, 1fr));
 			gap: var(--port-gap);
 			max-width: 760px;
+			overflow-x: auto;
 			padding: var(--gutter);
 		}
 

@@ -120,3 +120,22 @@ describe("<unlab-switch>", () => {
 		expect(element.textContent).not.toContain("Click a cable");
 	});
 });
+
+describe("a narrow faceplate", () => {
+	it("keeps every machine name whole and scrolls sideways instead", async () => {
+		const { element } = await mount("unlab-switch", {
+			state: lab(spawn(8), ready()),
+			prepare: (el) => {
+				el.setAttribute("compact", "");
+				el.style.width = "300px";
+			},
+		});
+		for (let n = 1; n <= 8; n++) {
+			const name = part(column(n), ".name");
+			expect(name.scrollWidth, `node${n} is not cut short`).toBeLessThanOrEqual(name.clientWidth);
+		}
+		const ports = part(element, ".ports");
+		expect(ports.scrollWidth).toBeGreaterThan(ports.clientWidth);
+		expect(getComputedStyle(ports).overflowX).toBe("auto");
+	});
+});

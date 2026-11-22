@@ -128,6 +128,38 @@ interface Live {
 	readonly el: HTMLElement;
 	readonly term: WTerm;
 	readonly core: GhosttyCore;
+	readonly follow: TailFollower;
+}
+
+/**
+ * Keeps a terminal on its newest line when its box changes size. wterm checks
+ * whether it was at the bottom only after the box has already shrunk, so a
+ * pane that re-tiles smaller stops following its output. This remembers the
+ * answer from before the layout changed and scrolls back to the bottom.
+ */
+interface TailFollower {
+	disconnect(): void;
+}
+
+function followTail(el: HTMLElement, shown: () => boolean): TailFollower {
+	let pinned = true;
+	const track = () => {
+		pinned = el.scrollHeight - el.scrollTop - el.clientHeight < 5;
+	};
+	const observer = new ResizeObserver(() => {
+		if (!pinned || !shown()) return;
+		requestAnimationFrame(() => {
+			el.scrollTop = el.scrollHeight;
+		});
+	});
+	el.addEventListener("scroll", track, { passive: true });
+	observer.observe(el);
+	return {
+		disconnect() {
+			observer.disconnect();
+			el.removeEventListener("scroll", track);
+		},
+	};
 }
 
 type State = Buffering | Live | { readonly kind: "disposed" };
@@ -334,7 +366,7 @@ function createScreen(session: SessionId, io: ScreenIo, loadCore: () => Promise<
 			} finally {
 				replaying = false;
 			}
-			const live: Live = { kind: "live", el, term, core };
+			const live: Live = { kind: "live", el, term, core, follow: followTail(el, () => state === live && visible) };
 			state = live;
 			el.addEventListener("scroll", invalidate, { passive: true });
 			resized(term.cols, term.rows);
@@ -456,6 +488,7 @@ function createScreen(session: SessionId, io: ScreenIo, loadCore: () => Promise<
 			listeners.clear();
 			if (was.kind !== "live") return;
 			was.el.removeEventListener("scroll", invalidate);
+			was.follow.disconnect();
 			was.term.destroy();
 			was.core.dispose();
 			was.el.remove();
