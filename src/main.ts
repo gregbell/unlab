@@ -7,7 +7,7 @@ import "./ui/app/app.ts";
 import { detectModelContext, startAgent } from "./agent/index.ts";
 import { createCaptureLog } from "./capture/index.ts";
 import { createCommandService, createRegistry, VERBS } from "./commands/index.ts";
-import { createStore, type Effect, type ImageInfo, initialState, type Store } from "./model/index.ts";
+import { clockHz, createStore, type Effect, type ImageInfo, initialState, type Store } from "./model/index.ts";
 import { compileFilter } from "./net/index.ts";
 import { createRuntime, type DistroManifest, type Engine } from "./runtime/index.ts";
 import type { AppServices, TerminalHost } from "./ui/services.ts";
@@ -70,6 +70,8 @@ async function main(): Promise<void> {
 		schedule,
 	);
 	runtime = createRuntime({ store, capture, manifest, announce: (text) => app.announce(text), now });
+	// The model asks for a faster clock while machines boot; at rest it still needs one, or its idea of now never moves.
+	runtime.run({ type: "clock", hz: clockHz(store.state) });
 
 	let filter = store.state.capture.filter;
 	let paused = store.state.capture.paused;
@@ -92,7 +94,7 @@ async function main(): Promise<void> {
 			state: () => store.state,
 			dispatch: (event) => store.dispatchCommand(event),
 			until: (predicate, signal) => store.until(predicate, signal),
-			now: () => store.state.now,
+			now,
 			exec: engine.exec,
 		},
 		VERBS,
