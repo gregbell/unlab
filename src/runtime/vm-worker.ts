@@ -10,11 +10,12 @@
 // vm.spawn(), so a machine can have several independent shells.
 
 import { createKernel, DEFAULT_WISP_SERVERS, type KernelInstance, NetStack, type Pty, wispBackend } from "unkernel";
-import { execAsRoot, setupScript } from "./lab/guest.ts";
-import { MemoryDisk } from "./lab/image.ts";
-import { LabNic } from "./lab/nic.ts";
-import type { FromVm, PtySpec, ToVm, VmConfig } from "./lab/protocol.ts";
-import { Subnet } from "./net/index.ts";
+import { Subnet } from "../net/index.ts";
+import { execAsRoot, setupScript } from "./guest.ts";
+import { MemoryDisk } from "./image.ts";
+import { LabNic } from "./nic.ts";
+import type { FromVm, PtySpec, ToVm, VmConfig } from "./protocol.ts";
+import { createShellTracker } from "./shell-tracker.ts";
 
 function post(m: FromVm, transfer: Transferable[] = []): void {
 	self.postMessage(m, transfer);
@@ -24,19 +25,26 @@ function fail(message: string, fatal: boolean): void {
 	post({ type: "error", message, fatal });
 }
 
+type Queued = Exclude<ToVm, { type: "boot" | "frame" }>;
+
 let vm: KernelInstance | undefined;
 let nic: LabNic | undefined;
 let cfg: VmConfig | undefined;
 /** Shells opened beside the console, by session id. */
 const ptys = new Map<number, Pty>();
 /** Messages that arrive while the kernel is still booting. */
-const queued: ToVm[] = [];
+const queued: Queued[] = [];
 let booting = true;
 
 self.addEventListener("message", (ev: MessageEvent<ToVm>) => {
 	const m = ev.data;
 	if (m.type === "boot") {
 		void boot(m.cfg);
+		return;
+	}
+	if (m.type === "frame") {
+		// Never queued: a NIC whose driver is not up yet drops frames, as a real one does.
+		nic?.deliver(m.frame);
 		return;
 	}
 	if (booting) {
@@ -46,12 +54,9 @@ self.addEventListener("message", (ev: MessageEvent<ToVm>) => {
 	handle(m);
 });
 
-function handle(m: ToVm): void {
+function handle(m: Queued): void {
 	if (!vm) return;
 	switch (m.type) {
-		case "frame":
-			nic?.deliver(m.frame);
-			return;
 		case "input":
 			vm.write(m.data);
 			return;
@@ -194,23 +199,42 @@ async function boot(c: VmConfig): Promise<void> {
 	}
 
 	post({ type: "booted", ms: Math.round(performance.now() - t0) });
+
+	const shell = createShellTracker();
+	let prompted = () => {};
+	const firstPrompt = new Promise<void>((resolve) => {
+		prompted = resolve;
+	});
 	vm.onOutput((bytes) => {
+		if (shell.phase === "unknown") {
+			shell.scan(bytes);
+			if (shell.phase !== "unknown") prompted();
+		}
 		const copy = bytes.slice();
 		post({ type: "console", bytes: copy }, [copy.buffer]);
 	});
 	void vm.exited.then((r) => post({ type: "exited", code: r.code, reason: r.reason ?? "" }));
 
-	// Name, lab address and /etc/hosts; with an uplink, udhcpc also brings up
-	// 10.0.2.15 and the default route.
+	// Name, lab address, /etc/hosts and the marked prompt; with an uplink,
+	// udhcpc also brings up 10.0.2.15 and the default route. A machine that
+	// cannot be set up is not on the lab, so it has not booted.
 	try {
 		const r = await execAsRoot(
 			vm,
 			setupScript({ hostname: c.name, ip: c.ip, prefixBits: c.prefixBits, hosts: c.hosts, dhcp: c.internet }),
 		);
-		if (r.exitCode !== 0) fail(`setup: ${String(r.stderr).trim() || `exit ${r.exitCode}`}`, false);
+		if (r.exitCode !== 0) {
+			fail(`setup: ${String(r.stderr).trim() || `exit ${r.exitCode}`}`, true);
+			return;
+		}
 	} catch (e) {
-		fail(`setup: ${e instanceof Error ? e.message : String(e)}`, false);
+		fail(`setup: ${e instanceof Error ? e.message : String(e)}`, true);
+		return;
 	}
+
+	// Ready is the first prompt that carries setup's marks: from here the page
+	// can tell a busy shell from an idle one, and input reaches a shell that reads it.
+	await firstPrompt;
 
 	booting = false;
 	post({ type: "ready", ms: Math.round(performance.now() - t0) });

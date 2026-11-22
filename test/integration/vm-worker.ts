@@ -1,9 +1,9 @@
 // One machine, in its own thread. Mirrors what the browser worker does.
 import { parentPort, workerData } from "node:worker_threads";
 import { createKernel } from "unkernel/node";
-import { execAsRoot, setupScript } from "../../src/lab/guest.ts";
-import { LabNic } from "../../src/lab/nic.ts";
 import { Subnet } from "../../src/net/index.ts";
+import { execAsRoot, setupScript } from "../../src/runtime/guest.ts";
+import { LabNic } from "../../src/runtime/nic.ts";
 
 const port = parentPort;
 if (!port) throw new Error("not a worker");

@@ -31,6 +31,23 @@ export function loadImage(
 	return p;
 }
 
+/** The part of public/distros/distros.json that names the images. */
+export interface DistroManifest {
+	readonly distros: readonly { readonly name: string; readonly file: string; readonly size: number }[];
+}
+
+/**
+ * Image bytes by manifest name, shared by every machine that asks. A failure
+ * rejects with one sentence, which becomes the machine's failure reason.
+ */
+export function imageSource(manifest: DistroManifest, base = "distros/"): (name: string) => Promise<ArrayBufferLike> {
+	return (name) => {
+		const distro = manifest.distros.find((d) => d.name === name);
+		if (!distro) return Promise.reject(new Error(`No image called ${name}.`));
+		return loadImage(`${base}${distro.file}`, distro.size);
+	};
+}
+
 async function fetchImage(
 	url: string,
 	size: number,
