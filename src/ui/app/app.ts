@@ -1,5 +1,7 @@
 import "../styles/index.css";
 import "./app.css";
+import "../pane-area/pane-area.ts";
+import "../parked-strip/parked-strip.ts";
 import "../rail/rail.ts";
 import "../statusline/statusline.ts";
 import { ContextProvider } from "@lit/context";
@@ -94,8 +96,8 @@ export class UnlabApp extends LitElement {
 				<div class="lab" ?hidden=${view !== "lab"}>
 					<unlab-rail role="complementary" aria-label="Machines"></unlab-rail>
 					<main class="centre">
-						<div class="pane-area"></div>
-						<div class="parked-strip"></div>
+						<unlab-pane-area></unlab-pane-area>
+						<unlab-parked-strip></unlab-parked-strip>
 						<div class="dock"></div>
 					</main>
 				</div>
@@ -114,7 +116,7 @@ export class UnlabApp extends LitElement {
 	/** Esc leaves another view, then closes the agent panel. A terminal keeps its own Esc. */
 	readonly #onKeydown = (event: KeyboardEvent): void => {
 		if (event.key !== "Escape" || event.defaultPrevented) return;
-		if (event.target instanceof Node && this.querySelector(".pane-area")?.contains(event.target)) return;
+		if (event.target instanceof Node && this.querySelector("unlab-pane-area")?.contains(event.target)) return;
 		const { view, agentPanel } = this.app.store.state;
 		if (view !== "lab") this.#ui({ type: "ui/view", view: "lab" });
 		else if (agentPanel) this.#ui({ type: "ui/agent-panel", open: false });

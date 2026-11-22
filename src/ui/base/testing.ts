@@ -23,7 +23,7 @@ import {
 	type Store,
 	update,
 } from "../../model/index.ts";
-import type { AppServices } from "../services.ts";
+import type { AppServices, TerminalService } from "../services.ts";
 import { servicesContext } from "./context.ts";
 
 const TEST_IMAGES = [{ name: "alpine", label: "alpine 3.24" }] as const;
@@ -108,6 +108,8 @@ export interface MountOptions<E extends HTMLElement> {
 	readonly state?: LabState;
 	/** What `services.switch.counters(port)` answers from the start. */
 	readonly counters?: Iterable<readonly [PortNo, Counters]>;
+	/** The terminal screens. Defaults to none: every `host` is null. */
+	readonly terminals?: TerminalService;
 	/** Runs before the element connects: <unlab-app> takes its services here. */
 	readonly prepare?: (element: E, services: AppServices) => void;
 }
@@ -163,7 +165,7 @@ export async function mount<K extends keyof HTMLElementTagNameMap>(
 		},
 		capture: EMPTY_CAPTURE,
 		switch: { counters: (port) => counters.get(port), macTable: () => [], now: () => 0 },
-		terminals: { host: () => null },
+		terminals: options.terminals ?? { host: () => null },
 	};
 
 	const host = document.createElement("div");

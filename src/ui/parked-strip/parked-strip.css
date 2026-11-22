@@ -1,0 +1,47 @@
+/* Restated so the order holds whichever sheet loads first. */
+@layer tokens, base, components;
+
+@layer components {
+	@scope (unlab-parked-strip) {
+		:scope {
+			display: flex;
+			flex: 0 0 auto;
+			flex-wrap: wrap;
+			align-items: center;
+			gap: 0 10px;
+			min-height: var(--h-md);
+			padding: 0 var(--gutter);
+			background: var(--mantle);
+			color: var(--text-3);
+		}
+
+		.chips {
+			display: flex;
+			flex-wrap: wrap;
+			gap: 4px 10px;
+		}
+
+		.chip {
+			min-height: var(--h-xs);
+			padding: 0 8px;
+			border: 1px solid var(--line-strong);
+			border-left: 3px solid var(--machine-hue);
+			border-radius: var(--r-port);
+			background: transparent;
+			color: var(--machine-hue);
+			cursor: pointer;
+		}
+
+		.chip:hover {
+			background: var(--line);
+		}
+
+		.fill {
+			flex-grow: 1;
+		}
+
+		.note {
+			font-size: var(--fs-status);
+		}
+	}
+}

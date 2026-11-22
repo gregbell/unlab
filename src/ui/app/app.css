@@ -3,7 +3,7 @@
 
 @layer components {
 	/* Regions sit edge to edge; the 1px gaps over --line are the dividers. */
-	@scope (unlab-app) to (unlab-rail, unlab-statusline) {
+	@scope (unlab-app) to (unlab-rail, unlab-statusline, unlab-pane-area, unlab-parked-strip) {
 		:scope {
 			display: flex;
 			flex-direction: column;
@@ -133,19 +133,12 @@
 			background: var(--line);
 		}
 
-		.pane-area {
-			flex: 1 1 auto;
-			background: var(--base);
-		}
-
-		.parked-strip,
 		.dock,
 		.agent-panel {
 			background: var(--mantle);
 		}
 
 		/* An empty slot takes no room and draws no divider. */
-		.parked-strip:empty,
 		.dock:empty {
 			display: none;
 		}
