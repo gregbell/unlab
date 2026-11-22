@@ -56,6 +56,14 @@ function plural(n: number, word: string): string {
  * option groups wherever they appear; a bare `--` hands the rest to the
  * passthrough slot. The first token that does not fit is the error.
  */
+function hasControl(text: string): boolean {
+	for (let i = 0; i < text.length; i++) {
+		const code = text.charCodeAt(i);
+		if (code < 0x20 || code === 0x7f) return true;
+	}
+	return false;
+}
+
 export function parse<G extends Grammar>(
 	grammar: G,
 	tokenized: Tokenized,
@@ -150,6 +158,10 @@ export function parse<G extends Grammar>(
 				break;
 			case "passthrough":
 				if (!tokenized.passthrough) return fail(`${verb} wants a ${slot.label} after --.`, dashes);
+				// Typed into a terminal, a control character edits or runs the line where no one can see it.
+				if (hasControl(tokenized.passthrough)) {
+					return fail(`${verb} wants a ${slot.label} of printable characters after --.`, dashes);
+				}
 				values[key] = tokenized.passthrough;
 				tokenOf[key] = tokens.length - 1;
 				break;

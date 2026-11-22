@@ -270,6 +270,15 @@ describe("free text and passthrough", () => {
 		expect(parse("exec all --")).toEqual({ message: "exec wants a command after --. Nothing was changed.", token: 2 });
 	});
 
+	it("refuses control characters after --, which the shell would act on unseen", () => {
+		for (const control of ["\x7f", "\x15", "\t", "\x1b", "\x03", "\x0f"]) {
+			expect(parse(`exec all -- rm -rf /tmp/safe${control}`)).toMatchObject({
+				message: "exec wants a command of printable characters after --. Nothing was changed.",
+			});
+		}
+		expect(args("exec all -- printf '%s\\n' ok")).toMatchObject({ command: "printf '%s\\n' ok" });
+	});
+
 	it("refuses -- on a verb that takes nothing after it", () => {
 		expect(parse("link down node1 -- x")).toEqual({
 			message: "link takes nothing after --. Nothing was changed.",
