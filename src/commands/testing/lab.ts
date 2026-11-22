@@ -1,0 +1,154 @@
+import {
+	type CommandEvent,
+	HUES,
+	type ImageInfo,
+	type LabState,
+	type Lifecycle,
+	type Machine,
+	type MachineName,
+	type Phase,
+	PORTS,
+	type PortNo,
+	type Session,
+	type SessionId,
+} from "../../model/types.ts";
+import type { CommandDeps } from "../define.ts";
+
+export interface MachineFixture {
+	readonly n: number;
+	readonly phase?: Phase;
+	/** Ready machines only. Plugged machines sit on port n. */
+	readonly link?: "up" | "cut" | "none";
+	readonly shells?: number;
+}
+
+export const IMAGES: readonly ImageInfo[] = [
+	{ name: "alpine", label: "alpine 3.24" },
+	{ name: "debian", label: "debian 13" },
+];
+
+function portOf(n: number): PortNo {
+	return PORTS[(n - 1) % PORTS.length];
+}
+
+function life(f: MachineFixture): Lifecycle {
+	const port = portOf(f.n);
+	switch (f.phase ?? "ready") {
+		case "booting":
+			return { phase: "booting", attempt: 1, since: 0, stage: "kernel", plug: { kind: "port", port, link: "up" } };
+		case "ready":
+			return {
+				phase: "ready",
+				attempt: 1,
+				bootMs: 3582,
+				plug: f.link === "none" ? { kind: "none" } : { kind: "port", port, link: f.link ?? "up" },
+			};
+		case "failed":
+			return { phase: "failed", attempt: 1, reason: "No prompt after 120 s." };
+		case "removing":
+			return { phase: "removing", attempt: 1, port };
+	}
+}
+
+/** A hand-built lab: node<n> for each fixture, in the order given, everything else at rest. */
+export function labWith(fixtures: readonly MachineFixture[], images: readonly ImageInfo[] = IMAGES): LabState {
+	const machines: Partial<Record<MachineName, Machine>> = {};
+	const sessions: Partial<Record<SessionId, Session>> = {};
+	const rail: MachineName[] = [];
+	for (const f of fixtures) {
+		const name: MachineName = `node${f.n}`;
+		const ids: SessionId[] = [`${name}:console`];
+		for (let k = 1; k <= (f.shells ?? 0); k++) ids.push(`${name}:sh${k}`);
+		machines[name] = {
+			n: f.n,
+			name,
+			ip: `10.88.0.${10 + f.n}`,
+			mac: `02:00:0a:58:00:${(10 + f.n).toString(16).padStart(2, "0")}`,
+			life: life(f),
+			hue: HUES[(f.n - 1) % HUES.length],
+			spec: { image: "alpine", memMiB: 256, net: "switch0" },
+			sessions: ids,
+			activeSession: ids[0],
+			nextShell: (f.shells ?? 0) + 1,
+		};
+		for (const id of ids) {
+			sessions[id] = {
+				id,
+				machine: name,
+				kind: id.endsWith(":console") ? "console" : "shell",
+				state: "open",
+				shell: "prompt",
+				agentLines: false,
+			};
+		}
+		rail.push(name);
+	}
+	return {
+		now: 0,
+		nextN: Math.max(0, ...fixtures.map((f) => f.n)) + 1,
+		machines,
+		rail,
+		sessions,
+		panes: { order: rail, parked: {}, focusStamp: {}, focusClock: 0, maximised: null, grid: { cols: 2, rows: 2 } },
+		keyboard: { kind: "none" },
+		view: "lab",
+		agentPanel: false,
+		capture: { filter: "", paused: false, selected: null },
+		agent: {
+			policies: {
+				machines_list: "run",
+				machines_spawn: "ask",
+				machines_remove: "ask",
+				shell_exec: "run",
+				shell_read: "run",
+				link_set: "run",
+				capture_read: "run",
+			},
+			paused: false,
+			calls: [],
+			firstCallAt: null,
+			lastCallAt: null,
+		},
+		log: [],
+		nextLogId: 1,
+		images,
+	};
+}
+
+/** Deps over a mutable lab: tests swap the state to simulate the store changing under a command. */
+export function fakeDeps(initial: LabState) {
+	let state = initial;
+	let clock = 1000;
+	const events: CommandEvent[] = [];
+	const waiters = new Set<() => void>();
+	const deps: CommandDeps = {
+		state: () => state,
+		dispatch(event) {
+			events.push(event);
+		},
+		until(predicate, signal) {
+			return new Promise((resolve, reject) => {
+				const check = () => {
+					if (!predicate(state)) return;
+					waiters.delete(check);
+					resolve(state);
+				};
+				signal.addEventListener("abort", () => {
+					waiters.delete(check);
+					reject(signal.reason);
+				});
+				waiters.add(check);
+				check();
+			});
+		},
+		now: () => clock++,
+	};
+	return {
+		deps,
+		events,
+		setState(next: LabState) {
+			state = next;
+			for (const waiter of [...waiters]) waiter();
+		},
+	};
+}
