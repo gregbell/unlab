@@ -30,6 +30,20 @@ export default mergeConfig(
 				{
 					// Real kernels boot in real workers here, so the page needs what the app's build has.
 					extends: true,
+					// Bundled before the first test file loads: a dependency found mid-run makes Vite reload, and the
+					// test iframes that were starting then fail to find their runner.
+					optimizeDeps: {
+						include: [
+							"lit",
+							"lit/directives/live.js",
+							"lit/directives/ref.js",
+							"lit/directives/repeat.js",
+							"@lit/context",
+							"@wterm/dom",
+							"@wterm/ghostty",
+							"axe-core",
+						],
+					},
 					test: {
 						name: "browser",
 						include: [BROWSER_TESTS],

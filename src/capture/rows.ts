@@ -89,6 +89,12 @@ function note(e: FrameEntry): string | null {
 	return parts.length ? parts.join(" · ") : null;
 }
 
+/** The lab raises a link only when a machine first comes up, so that is a plug-in, not a reconnect. */
+function linkVerb(e: LinkEntry): string {
+	if (!e.up) return "cut";
+	return e.cause === "runtime" ? "plugged in" : "reconnected";
+}
+
 const WHO: Readonly<Record<Cause, string>> = { agent: "the agent", bar: "you", button: "you", runtime: "the lab" };
 
 function linkRow(e: LinkEntry): LinkRow {
@@ -99,7 +105,7 @@ function linkRow(e: LinkEntry): LinkRow {
 		port: e.port,
 		up: e.up,
 		text: `port ${e.port} link ${e.up ? "up" : "down"}`,
-		cause: `Cable to ${e.machine} ${e.up ? "reconnected" : "cut"} by ${WHO[e.cause]}.`,
+		cause: `Cable to ${e.machine} ${linkVerb(e)} by ${WHO[e.cause]}.`,
 	};
 }
 

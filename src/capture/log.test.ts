@@ -108,6 +108,12 @@ describe("rows", () => {
 	});
 });
 
+test("a link the lab raises is a machine plugging in at boot, not a reconnect", () => {
+	const { log } = setup();
+	log.appendLink({ port: 1, machine: "node1", up: true, cause: "runtime" });
+	expect(log.tail(1)[0]).toMatchObject({ text: "port 1 link up", cause: "Cable to node1 plugged in by the lab." });
+});
+
 describe("annotations", () => {
 	test("say what the switch did beyond forwarding", () => {
 		const { log, frame } = setup();
