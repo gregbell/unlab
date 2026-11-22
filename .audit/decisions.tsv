@@ -29,3 +29,6 @@ ts	phase	decision	why	evidence	result
 2026-11-22T05:19:36Z	wave2	merged the UI shell, rail, details and status line after viewing its screenshots against Panes.png	rail states, details, top bar and status tones match the artboard by eye	scratchpad/ui-shots/shell-panes.png; merge e866d5b; 794 unit, 87 browser	green
 2026-11-22T05:19:36Z	wave2	kept the worker's accessibility deviation: focused row's second line in --text-2	axe measured --text-3 on --line at 4.45:1, under AA	src/ui/rail	decided
 2026-11-22T05:19:36Z	wave2	resolved the vitest config conflict with the runtime's version	it was a superset: shared chromium helper, vite config merged for workers	vitest.config.ts	green
+2026-11-22T06:38:19Z	start	picked up after the previous session ended mid-run	verbs worker left two commits and a clean tree but no report	rows 2026-11-22T01:15Z to the UI merge	resumed
+2026-11-22T06:38:19Z	wave2	verified the unreported verbs slice by running every gate in its worktree, then merged it	a missing report is not a pass; typecheck, lint, imports and 756 unit tests passed there	merge of worktree-agent-af77bbd	green
+2026-11-22T06:38:19Z	wave2	deduplicated ExecPort into commands and gave the UI fixture a real registry	two hand-synced copies of one contract; stub parsing hid real behaviour from element tests	HEAD; 871 unit, 87 browser	green
