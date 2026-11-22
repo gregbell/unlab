@@ -41,10 +41,6 @@ export function createRuntime(options: RuntimeOptions): Engine {
 			const id = setInterval(fn, ms);
 			return () => clearInterval(id);
 		},
-		after(ms, fn) {
-			const id = setTimeout(fn, ms);
-			return () => clearTimeout(id);
-		},
 		now,
 	});
 }

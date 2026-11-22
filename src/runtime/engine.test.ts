@@ -168,7 +168,6 @@ function setup() {
 	const announced: string[] = [];
 	const imagesAsked: string[] = [];
 	const intervals: { ms: number; fn: () => void; cancelled: boolean }[] = [];
-	const timeouts: { ms: number; fn: () => void; cancelled: boolean }[] = [];
 	const sw = new LabSwitch({ now: () => clock });
 	const capture = createCaptureLog({ now: () => clock, schedule: () => {} });
 	const vms = fakeVms();
@@ -190,13 +189,6 @@ function setup() {
 			intervals.push(interval);
 			return () => {
 				interval.cancelled = true;
-			};
-		},
-		after(ms, fn) {
-			const timeout = { ms, fn, cancelled: false };
-			timeouts.push(timeout);
-			return () => {
-				timeout.cancelled = true;
 			};
 		},
 		now: () => clock,
@@ -238,7 +230,6 @@ function setup() {
 		announced,
 		imagesAsked,
 		intervals,
-		timeouts,
 		sw,
 		capture,
 		vms,
@@ -853,65 +844,6 @@ describe("exec", () => {
 		const next = t.engine.exec.inject("node1:console", "true", "bar", never);
 		vm.sink.consoleBytes(vm.ref, bytes(returns(0)));
 		expect(await next).toMatchObject({ exitCode: 0 });
-	});
-
-	test("waits for the guest to take in a terminal reply before typing, so its line editor cannot swallow the line", async () => {
-		const t = setup();
-		const vm = t.atPrompt(1);
-		const screen = t.screens.get("node1:console");
-		t.at(1000);
-		screen.io.input(`${ESC}[1;5R`);
-		vm.sent.length = 0;
-
-		t.at(1030);
-		const result = t.engine.exec.inject("node1:console", "echo unlab", "bar", never);
-		expect(vm.sent).toEqual([]);
-		expect(screen.made).toEqual([]);
-		expect(t.timeouts.map((x) => x.ms)).toEqual([90]);
-		await expect(t.engine.exec.inject("node1:console", "ls", "bar", never)).rejects.toThrow(
-			"node1:console is running a program.",
-		);
-
-		t.at(1120);
-		t.timeouts[0].fn();
-		expect(vm.sent).toEqual([["write", "console", "echo unlab\r"]]);
-		expect(screen.made).toHaveLength(1);
-		vm.sink.consoleBytes(vm.ref, bytes(returns(0)));
-		expect(await result).toMatchObject({ exitCode: 0, ms: 90 });
-	});
-
-	test("types at once when the last reply is old enough", () => {
-		const t = setup();
-		const vm = t.atPrompt(1);
-		t.at(1000);
-		t.screens.get("node1:console").io.input(`${ESC}[14;5R`);
-		vm.sent.length = 0;
-		t.at(1120);
-		void t.engine.exec.inject("node1:console", "ls", "bar", never);
-		expect(vm.sent).toEqual([["write", "console", "ls\r"]]);
-		expect(t.timeouts).toEqual([]);
-	});
-
-	test("a line aborted while it waits is never typed, and one the shell got busy under is refused", async () => {
-		const t = setup();
-		const vm = t.atPrompt(1);
-		const screen = t.screens.get("node1:console");
-		screen.io.input(`${ESC}[1;5R`);
-		vm.sent.length = 0;
-
-		const abort = new AbortController();
-		const aborted = t.engine.exec.inject("node1:console", "ls", "bar", abort.signal);
-		abort.abort(new Error("Stopped by you."));
-		await expect(aborted).rejects.toThrow("Stopped by you.");
-		expect(t.timeouts[0].cancelled).toBe(true);
-		expect(vm.sent).toEqual([]);
-
-		const late = t.engine.exec.inject("node1:console", "ls", "bar", never);
-		screen.io.input("top\r");
-		t.timeouts[1].fn();
-		await expect(late).rejects.toThrow("node1:console is running a program.");
-		expect(vm.sent).toEqual([["write", "console", "top\r"]]);
-		expect(screen.made).toEqual([]);
 	});
 
 	test("an already aborted signal rejects before anything is typed", async () => {

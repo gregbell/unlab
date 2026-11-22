@@ -17,6 +17,7 @@ import { GhosttyCore } from "@wterm/ghostty";
 // itself it can end up as a build-machine file: path.
 import ghosttyWasmUrl from "@wterm/ghostty/ghostty-vt.wasm?url";
 import type { SessionId } from "../model/index.ts";
+import { createPromptQueryFilter } from "./prompt-query.ts";
 import { createShellTracker, type ShellEvent, type ShellPhase } from "./shell-tracker.ts";
 import { BODY_PADDING, ROW_HEIGHT_PX, TERMINAL_COLORS, TERMINAL_STYLE } from "./theme.ts";
 import { DEFAULT_TTY_SIZE } from "./vm.ts";
@@ -206,6 +207,7 @@ function linesOf(core: TerminalCore, from: number, to: number, lastCols = Number
 
 function createScreen(session: SessionId, io: ScreenIo, loadCore: () => Promise<GhosttyCore>): OwnedScreen {
 	const tracker = createShellTracker();
+	const withoutPromptQuery = createPromptQueryFilter();
 	const marks: Mark[] = [];
 	const listeners = new Set<() => void>();
 	let state: State = { kind: "buffering", pending: [], bytes: 0, mounting: false };
@@ -282,8 +284,9 @@ function createScreen(session: SessionId, io: ScreenIo, loadCore: () => Promise<
 			return size;
 		},
 
-		write(bytes) {
+		write(raw) {
 			if (state.kind === "disposed") return NO_EVENTS;
+			const bytes = withoutPromptQuery(raw);
 			const events = tracker.scan(bytes);
 			if (state.kind === "buffering") {
 				keep(state, bytes);

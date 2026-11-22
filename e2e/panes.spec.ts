@@ -36,12 +36,9 @@ test("a console runs what is typed into it, keeps it through park and maximise, 
 	const shell = node1.getByRole("tabpanel", { name: "sh1" });
 	await expect(shell).toBeVisible();
 	await expect(shell).toHaveAttribute("aria-busy", "false");
-	// A new shell drops keys for a moment after its prompt shows (a runtime gap, not the pane), so type until one line lands.
-	await expect(async () => {
-		await page.keyboard.type("echo sh-$((6*7))");
-		await page.keyboard.press("Enter");
-		await expect(shell).toContainText("sh-42", { timeout: 2_000 });
-	}).toPass({ timeout: 30_000 });
+	await page.keyboard.type("echo sh-$((6*7))");
+	await page.keyboard.press("Enter");
+	await expect(shell).toContainText("sh-42");
 	await expect(console1).not.toContainText("sh-42");
 	expect(errors).toEqual([]);
 });

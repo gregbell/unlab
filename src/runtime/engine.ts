@@ -58,21 +58,9 @@ export interface EngineDeps {
 	readonly announce: (text: string) => void;
 	/** Run fn every ms until the returned function is called. */
 	readonly every: (ms: number, fn: () => void) => () => void;
-	/** Run fn once, ms from now, unless the returned function is called first. */
-	readonly after: (ms: number, fn: () => void) => () => void;
 	/** ms since the lab started: the capture log's clock and the model's. */
 	readonly now: () => number;
 }
-
-/**
- * How long after the terminal last answered a query a line may be typed.
- * busybox's line editor asks for the cursor position at every prompt, and
- * after an escape sequence it reads on for 50 ms: a reply it cannot place
- * (`ESC[1;5R`, a fresh shell's first prompt) takes up to ten characters that
- * arrive in that time with it. Seen with a real kernel: `echo unlab-42`
- * arriving in the same millisecond ran as `-42`.
- */
-export const REPLY_SETTLE_MS = 120;
 
 interface VmEntry {
 	readonly attempt: number;
@@ -99,8 +87,6 @@ interface SessionEntry {
 	state: "closed" | "opening" | "open";
 	/** The one line being typed or awaited. A shell runs one command at a time. */
 	injection: Injection | null;
-	/** When an escape sequence was last sent to the guest: a terminal reply, or an arrow key. */
-	escapeAt: number | null;
 }
 
 const isMachineName = (s: string): s is MachineName => /^node\d+$/.test(s);
@@ -246,12 +232,10 @@ export function createEngine(deps: EngineDeps): Engine {
 			...parsed,
 			state: parsed.tty === "console" ? "open" : "closed",
 			injection: null,
-			escapeAt: null,
 			screen: screens.create(id, {
 				input(data) {
 					const vm = readyVm(s.machine);
 					if (!vm || s.state !== "open") return;
-					if (data.startsWith("\x1b")) s.escapeAt = deps.now();
 					send(s, vm, data);
 				},
 				resize(cols, rows) {
@@ -398,11 +382,9 @@ export function createEngine(deps: EngineDeps): Engine {
 				const startedAt = deps.now();
 				/** Set when the line is typed. */
 				let mark: LineMark | null = null;
-				let cancelWait: (() => void) | null = null;
 
 				const over = () => {
 					signal.removeEventListener("abort", aborted);
-					cancelWait?.();
 					mark?.end();
 					if (s.injection === injection) s.injection = null;
 				};
@@ -423,7 +405,6 @@ export function createEngine(deps: EngineDeps): Engine {
 					injection.fail(signal.reason);
 				}
 				const type = () => {
-					cancelWait = null;
 					s.injection = null;
 					const vm = readyVm(s.machine);
 					const changed = refusal(s, session);
@@ -439,9 +420,7 @@ export function createEngine(deps: EngineDeps): Engine {
 
 				signal.addEventListener("abort", aborted, { once: true });
 				s.injection = injection;
-				const wait = s.escapeAt === null ? 0 : REPLY_SETTLE_MS - (deps.now() - s.escapeAt);
-				if (wait > 0) cancelWait = deps.after(wait, type);
-				else type();
+				type();
 			});
 		},
 	};
