@@ -26,6 +26,18 @@ function running(): ShellTracker {
 	return t;
 }
 
+describe("typeahead", () => {
+	it("a line typed while a command runs keeps the shell running past that command's prompt", () => {
+		const t = running();
+		t.submitted();
+		const events = t.scan(bytes(`${promptAfter(0)}make test\r\n`));
+		expect(events).toEqual([{ kind: "finished", exitCode: 0, at: expect.any(Number) }]);
+		expect(t.phase).toBe("running");
+		t.scan(bytes(promptAfter(2)));
+		expect(t.phase).toBe("prompt");
+	});
+});
+
 describe("createShellTracker", () => {
 	it("is unknown until the shell marks a prompt", () => {
 		const t = createShellTracker();

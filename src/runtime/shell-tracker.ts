@@ -54,6 +54,13 @@ export function createShellTracker(): ShellTracker {
 	let phase: ShellPhase = "unknown";
 	/** While running: the submitted line's Enter has been echoed, so the next prompt is the command's end. */
 	let echoed = false;
+	/**
+	 * Lines submitted while a command ran. The shell runs each as soon as the
+	 * prompt before it appears, so that prompt starts a command, not a wait.
+	 * When a program read the line itself, this overcounts by one, and the
+	 * shell reads as running until its next prompt: the safe side.
+	 */
+	let queued = 0;
 	let state: ScanState = "ground";
 	const body = new Uint8Array(KEPT);
 	let length = 0;
@@ -87,6 +94,11 @@ export function createShellTracker(): ShellTracker {
 		if (phase === "running") {
 			if (!echoed) return;
 			emit({ kind: "finished", exitCode: code, at });
+			if (queued > 0) {
+				queued--;
+				echoed = false;
+				return;
+			}
 		}
 		enter("prompt");
 	};
@@ -161,6 +173,7 @@ export function createShellTracker(): ShellTracker {
 		},
 
 		submitted() {
+			if (phase === "running") queued++;
 			if (phase !== "prompt") return NONE;
 			phase = "running";
 			echoed = false;
