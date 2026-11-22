@@ -1,0 +1,28 @@
+/* Restated so the order holds whichever sheet loads first. */
+@layer tokens, base, components;
+
+@layer components {
+	@scope (unlab-rail) to (unlab-machine-row, unlab-machine-details) {
+		/* 232px; it grows only when a narrow window wraps it onto its own line. */
+		:scope {
+			display: flex;
+			flex: 1 1 232px;
+			flex-direction: column;
+			min-width: 216px;
+			background: var(--mantle);
+		}
+
+		.header {
+			display: flex;
+			justify-content: space-between;
+			padding: 12px var(--gutter) 8px;
+			font: inherit;
+			color: var(--text-3);
+		}
+
+		.empty {
+			padding: 4px var(--gutter);
+			color: var(--text-3);
+		}
+	}
+}
