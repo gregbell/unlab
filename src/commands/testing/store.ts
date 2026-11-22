@@ -46,6 +46,10 @@ export function storeLab(exec: ExecPort = NO_EXEC) {
 		return result;
 	};
 
+	const ready = (...names: readonly MachineName[]) => {
+		for (const machine of names) store.dispatchRuntime({ type: "vm/ready", machine, attempt: 1, bootMs: 3582 });
+	};
+
 	return {
 		store,
 		registry,
@@ -58,9 +62,7 @@ export function storeLab(exec: ExecPort = NO_EXEC) {
 		runtime(...list: readonly RuntimeEvent[]) {
 			for (const event of list) store.dispatchRuntime(event);
 		},
-		ready(...names: readonly MachineName[]) {
-			for (const machine of names) store.dispatchRuntime({ type: "vm/ready", machine, attempt: 1, bootMs: 3582 });
-		},
+		ready,
 		parse: (line: string): ParsedLine | LineError => parseLine(registry, line, store.state),
 		parsed,
 		/** Runs a safe line from the bar, as typed. */
@@ -76,7 +78,7 @@ export function storeLab(exec: ExecPort = NO_EXEC) {
 			if (p.danger) throw new Error("spawn is safe");
 			await p.run({ source: "bar", signal });
 			const names = Array.from({ length: count }, (_, i): MachineName => `node${before + i}`);
-			for (const machine of names) store.dispatchRuntime({ type: "vm/ready", machine, attempt: 1, bootMs: 3582 });
+			ready(...names);
 			events.length = 0;
 			effects.length = 0;
 			return names;

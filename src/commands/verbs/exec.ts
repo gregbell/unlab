@@ -15,12 +15,12 @@ import { andList, count } from "./words.ts";
 
 /** What exec was asked to type into, as read: a machine means its active session when the line runs. */
 export interface ExecTargets {
-	readonly picks: readonly Pick[];
+	readonly picks: readonly Picked[];
 	readonly skipped: readonly Skip[];
 	readonly written: string;
 }
 
-interface Pick {
+interface Picked {
 	readonly machine: MachineName;
 	readonly hue: HueNo;
 	/** Null for the machine's active session. */
@@ -73,7 +73,7 @@ function consoles(): slots.Value<ExecTargets> {
 		label: "machines",
 		noun: "machines or sessions",
 		read(text, ctx) {
-			const picks: Pick[] = [];
+			const picks: Picked[] = [];
 			const skipped: Skip[] = [];
 			const all = machineList(ctx.lab);
 			const add = (m: Machine, session: SessionId | null) => {
