@@ -53,7 +53,7 @@ Import rules (enforced by `scripts/check-imports.ts` in `npm run check`):
 | capture | net, model |
 | commands | net, model |
 | runtime | net, model, capture, commands (types) |
-| agent | model, capture (types), commands |
+| agent | net, model, capture, commands |
 | ui | net, model, commands, capture (types), `services.ts` types. Never runtime or agent internals |
 | main.ts | everything |
 
