@@ -1,12 +1,12 @@
 // The lab: one layer-2 segment, a machine on each port, and the bookkeeping
 // that keeps names and addresses agreeing across every guest.
 
-import { PORTS } from "../model/types.ts";
+import { type HostEntry, PORTS } from "../model/types.ts";
 import { labMac, Subnet } from "../net/index.ts";
+import { loadImage } from "../runtime/image.ts";
+import type { VmConfig } from "../runtime/protocol.ts";
 import { LabSwitch } from "../runtime/switch.ts";
-import { loadImage } from "./image.ts";
 import { Machine } from "./machine.ts";
-import type { HostEntry, VmConfig } from "./protocol.ts";
 
 export interface DistroManifest {
 	unkernel: string;

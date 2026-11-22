@@ -5,9 +5,9 @@
 // and any number of shells, each on its own pty in the guest. A tab is a view
 // of one session, so several tabs can watch the same machine.
 
-import type { PortNo } from "../model/types.ts";
+import type { HostEntry, PortNo } from "../model/types.ts";
+import type { FromVm, ToVm, VmConfig } from "../runtime/protocol.ts";
 import type { LabSwitch } from "../runtime/switch.ts";
-import type { FromVm, HostEntry, ToVm, VmConfig } from "./protocol.ts";
 
 export type MachineState = "booting" | "ready" | "exited" | "error";
 export type SessionKind = "console" | "shell";
@@ -133,7 +133,7 @@ export class Machine {
 		// The new URL(...) must sit inside the new Worker(...) call: that literal
 		// form is what the bundler recognises, and anything else ships the
 		// worker as an unprocessed source file.
-		this.#worker = new Worker(new URL("../vm-worker.ts", import.meta.url), {
+		this.#worker = new Worker(new URL("../runtime/vm-worker.ts", import.meta.url), {
 			type: "module",
 			name: `unlab:${cfg.name}`,
 		});
