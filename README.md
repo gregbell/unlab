@@ -9,6 +9,8 @@ A Linux network lab that runs entirely in a browser tab. Every machine is a real
 
 That reply came out of a second Linux kernel, running in another thread, in the same tab.
 
+Try it at https://gregbell.github.io/unlab/.
+
 ## Running it
 
 ```sh
