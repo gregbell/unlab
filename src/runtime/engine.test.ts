@@ -769,6 +769,34 @@ describe("exec", () => {
 		expect(t.events).toEqual([]);
 	});
 
+	test("refuses while the person has a line half typed, so a command never lands on top of theirs", async () => {
+		const t = setup();
+		const vm = t.atPrompt(1);
+		const screen = t.screens.get("node1:console");
+		screen.io.input(`${ESC}[1;5R`);
+		screen.io.input("rm -rf ");
+		vm.sent.length = 0;
+
+		await expect(t.engine.exec.inject("node1:console", "ls /tmp", "agent", never)).rejects.toThrow(
+			"node1:console has a half-typed line.",
+		);
+		expect(vm.sent).toEqual([]);
+
+		screen.io.input("\x03");
+		vm.sent.length = 0;
+		void t.engine.exec.inject("node1:console", "ls /tmp", "agent", never);
+		expect(vm.sent).toEqual([["write", "console", "ls /tmp\r"]]);
+	});
+
+	test("a terminal reply is not typing", () => {
+		const t = setup();
+		const vm = t.atPrompt(1);
+		t.screens.get("node1:console").io.input(`${ESC}[1;5R`);
+		vm.sent.length = 0;
+		void t.engine.exec.inject("node1:console", "ls", "bar", never);
+		expect(vm.sent).toEqual([["write", "console", "ls\r"]]);
+	});
+
 	test("refuses a session that is not open: unknown, still booting, or a shell whose pty has not opened", async () => {
 		const t = setup();
 		t.boot(1);

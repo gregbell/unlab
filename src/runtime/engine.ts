@@ -87,6 +87,8 @@ interface SessionEntry {
 	state: "closed" | "opening" | "open";
 	/** The one line being typed or awaited. A shell runs one command at a time. */
 	injection: Injection | null;
+	/** The person has typed at this prompt and not yet run or cancelled it. */
+	drafting: boolean;
 }
 
 const isMachineName = (s: string): s is MachineName => /^node\d+$/.test(s);
@@ -97,6 +99,15 @@ function parseSession(id: SessionId): { machine: MachineName; tty: Tty } | null 
 	const tab = id.slice(colon + 1);
 	if (!isMachineName(machine)) return null;
 	return { machine, tty: tab === "console" ? "console" : Number(tab.slice(2)) };
+}
+
+/** What a terminal sends on its own to answer the guest: cursor, status and device reports, focus, colours. */
+function isTerminalReply(data: string): boolean {
+	const esc = "\x1b";
+	if (data.startsWith(`${esc}]`)) return data.endsWith("\x07") || data.endsWith(`${esc}\\`);
+	if (!data.startsWith(`${esc}[`)) return false;
+	const body = data.slice(2);
+	return body === "I" || body === "O" || /^\??[\d;]*[Rcn]$/.test(body);
 }
 
 const sameHosts = (a: readonly HostEntry[], b: readonly HostEntry[]): boolean =>
@@ -131,8 +142,10 @@ export function createEngine(deps: EngineDeps): Engine {
 
 	const shellEvents = (s: SessionEntry, events: readonly ShellEvent[]) => {
 		for (const e of events) {
-			if (e.kind === "phase") dispatch({ type: "session/shell", session: s.id, shell: e.phase });
-			else s.injection?.finish(e.exitCode);
+			if (e.kind === "phase") {
+				if (e.phase === "prompt") s.drafting = false;
+				dispatch({ type: "session/shell", session: s.id, shell: e.phase });
+			} else s.injection?.finish(e.exitCode);
 		}
 	};
 
@@ -157,6 +170,7 @@ export function createEngine(deps: EngineDeps): Engine {
 		// Only a shell at a prompt can be told when its next command ends.
 		if (s.screen.shell === "unknown") return new ExecRefused(`${id} has not shown a prompt yet.`);
 		if (s.screen.shell === "running" || s.injection) return new ExecRefused(`${id} is running a program.`);
+		if (s.drafting) return new ExecRefused(`${id} has a half-typed line.`);
 		return null;
 	};
 
@@ -232,10 +246,12 @@ export function createEngine(deps: EngineDeps): Engine {
 			...parsed,
 			state: parsed.tty === "console" ? "open" : "closed",
 			injection: null,
+			drafting: false,
 			screen: screens.create(id, {
 				input(data) {
 					const vm = readyVm(s.machine);
 					if (!vm || s.state !== "open") return;
+					if (!isTerminalReply(data)) s.drafting = !data.includes("\r") && !data.includes("\x03");
 					send(s, vm, data);
 				},
 				resize(cols, rows) {
