@@ -1,0 +1,321 @@
+import type { CommandEvent, LabState, Phase, Policy, ToolName } from "../model/types.ts";
+import type { Approval } from "./approval.ts";
+import { complete } from "./grammar/complete.ts";
+import { format as formatLine, signature as signatureOf } from "./grammar/format.ts";
+import { type Parsed, parse } from "./grammar/parse.ts";
+import { lineFromInput, toolSchema } from "./grammar/schema.ts";
+import type { ArgsOf, Grammar, ReadContext } from "./grammar/slots.ts";
+import {
+	type Completion,
+	type ConfirmText,
+	isLineError,
+	type JsonSchema,
+	type LineError,
+	lineError,
+	type Preview,
+	type Result,
+	type RunContext,
+	type Tokenized,
+} from "./types.ts";
+
+/** What a command needs from the lab. The store satisfies it; tests pass a fake. */
+export interface CommandDeps {
+	state(): LabState;
+	dispatch(event: CommandEvent): void;
+	/** Resolves with the first state that satisfies the predicate; rejects when the signal aborts. */
+	until(predicate: (state: LabState) => boolean, signal: AbortSignal): Promise<LabState>;
+	now(): number;
+}
+
+/** A plan's "no", in the verb's words. `at` names the argument the carets go under. */
+export class Refusal<K extends string = string> {
+	constructor(
+		readonly message: string,
+		readonly at?: K,
+	) {}
+}
+
+export function refuse<K extends string = never>(message: string, at?: K): Refusal<K> {
+	return new Refusal(message, at);
+}
+
+export interface ApprovedRunContext extends RunContext {
+	readonly approval: Approval;
+}
+
+export interface ToolAnnotations {
+	readonly readOnlyHint?: boolean;
+	readonly consequentialHint?: boolean;
+	readonly untrustedContentHint?: boolean;
+}
+
+export interface ToolSpec {
+	readonly name: ToolName;
+	/** Defaults to the verb's `about`. */
+	readonly description?: string;
+	readonly policy: Policy;
+	readonly annotations?: ToolAnnotations;
+}
+
+/** The WebMCP face of a verb, derived from its grammar. */
+export interface ToolFace {
+	readonly name: ToolName;
+	readonly description: string;
+	readonly policy: Policy;
+	readonly annotations: ToolAnnotations;
+	readonly inputSchema: JsonSchema;
+	/** Tool input as a bar line, to go through `parseLine` like anything typed. */
+	toLine(input: unknown): string | LineError;
+}
+
+interface LineBase {
+	readonly verb: string;
+	/** The line in canonical bar grammar, as it will be logged. */
+	readonly line: string;
+	readonly tokens: Tokenized;
+	readonly args: unknown;
+	readonly assumed: readonly string[];
+	validate(lab: LabState): LineError | null;
+	preview(lab: LabState): Preview | LineError;
+}
+
+export interface SafeLine extends LineBase {
+	readonly danger: false;
+	run(ctx: RunContext): Promise<Result>;
+}
+
+export interface DangerLine extends LineBase {
+	readonly danger: true;
+	confirm(lab: LabState): ConfirmText | LineError;
+	run(ctx: ApprovedRunContext): Promise<Result>;
+}
+
+/** A parsed line with its arguments bound, so the bar and the agent can hold any verb's line. */
+export type ParsedLine = SafeLine | DangerLine;
+
+/** What every command offers without knowing its argument type. */
+export interface CommandFace {
+	readonly name: string;
+	readonly about: string;
+	readonly danger: boolean;
+	/** `['<count>', '<image>', '[--mem MiB]', '[--net switch0 | --no-net]']` */
+	readonly signature: readonly string[];
+	read(tokenized: Tokenized, lab: LabState): ParsedLine | LineError;
+	complete(line: string, caret: number, lab: LabState): Completion;
+	readonly tool: ToolFace | null;
+}
+
+interface CommandOps<Args> extends CommandFace {
+	parse(tokenized: Tokenized, lab: LabState): Parsed<Args> | LineError;
+	validate(args: Args, lab: LabState): LineError | null;
+	preview(parsed: Parsed<Args>, lab: LabState): Preview | LineError;
+	/** The inverse of parse. */
+	format(args: Args): string;
+}
+
+export interface SafeCommand<Args> extends CommandOps<Args> {
+	readonly danger: false;
+	/** Re-plans against the current state, executes, and logs the line with its source and outcome. */
+	run(args: Args, ctx: RunContext): Promise<Result>;
+}
+
+export interface DangerCommand<Args> extends CommandOps<Args> {
+	readonly danger: true;
+	confirm(args: Args, lab: LabState): ConfirmText | LineError;
+	/** As SafeCommand's run, but only with an approval for this exact line. */
+	run(args: Args, ctx: ApprovedRunContext): Promise<Result>;
+}
+
+export type Command<Args, D extends boolean = boolean> = D extends true ? DangerCommand<Args> : SafeCommand<Args>;
+
+interface VerbBase<N extends string, G extends Grammar, P> {
+	readonly name: N;
+	readonly about: string;
+	readonly grammar: G;
+	/** The lifecycle phases the verb's machine arguments accept. Only ready machines take commands unless a verb says otherwise. */
+	readonly phases?: readonly Phase[];
+	/** Pure. The only place the verb decides anything. */
+	plan(args: ArgsOf<G>, lab: LabState): P | Refusal<Extract<keyof G, string>>;
+	/** The preview's `will …` text. */
+	describe(plan: P, lab: LabState): string;
+	/** Dispatches the plan, waits until its effect is visible, and reports. */
+	execute(plan: P, ctx: RunContext, deps: CommandDeps): Promise<Result>;
+	readonly tool?: ToolSpec;
+}
+
+export interface SafeVerbDefinition<N extends string, G extends Grammar, P> extends VerbBase<N, G, P> {
+	readonly danger: false;
+	readonly confirm?: undefined;
+}
+
+export interface DangerVerbDefinition<N extends string, G extends Grammar, P> extends VerbBase<N, G, P> {
+	readonly danger: true;
+	/** The question naming the machine, what is lost, and who else is affected. */
+	confirm(plan: P, lab: LabState): ConfirmText;
+}
+
+export interface VerbSpec<N extends string, Args, D extends boolean> {
+	readonly name: N;
+	readonly danger: D;
+	/** The same command for the same deps, every time. */
+	bind(deps: CommandDeps): Command<Args, D>;
+}
+
+export interface AnyVerb {
+	readonly name: string;
+	bind(deps: CommandDeps): CommandFace;
+}
+
+function checkGrammar(verb: string, grammar: Grammar): void {
+	const slots = Object.values(grammar);
+	const positional = slots.filter((s) => s.kind === "positional" || s.kind === "rest");
+	const rest = positional.findIndex((s) => s.kind === "rest");
+	const flags = slots.flatMap((s) => (s.kind === "options" ? s.variants.map((v) => v.flag) : []));
+	const fail = (problem: string) => {
+		throw new Error(`defineVerb(${verb}): ${problem}`);
+	};
+	if (rest >= 0 && rest !== positional.length - 1) fail("free text must be the last positional argument");
+	if (slots.filter((s) => s.kind === "passthrough").length > 1) fail("only one argument can follow --");
+	if (new Set(flags).size !== flags.length || flags.includes("--")) fail("each option flag must be unique and not --");
+}
+
+export function defineVerb<const N extends string, G extends Grammar, P>(
+	def: SafeVerbDefinition<N, G, P>,
+): VerbSpec<N, ArgsOf<G>, false>;
+export function defineVerb<const N extends string, G extends Grammar, P>(
+	def: DangerVerbDefinition<N, G, P>,
+): VerbSpec<N, ArgsOf<G>, true>;
+export function defineVerb<N extends string, G extends Grammar, P>(
+	def: SafeVerbDefinition<N, G, P> | DangerVerbDefinition<N, G, P>,
+): VerbSpec<N, ArgsOf<G>, boolean> {
+	type Args = ArgsOf<G>;
+	type Planned = { readonly ok: true; readonly plan: P } | { readonly ok: false; readonly error: LineError };
+	checkGrammar(def.name, def.grammar);
+	const phases = def.phases ?? ["ready"];
+	const context = (lab: LabState): ReadContext => ({ verb: def.name, lab, phases });
+	const format = (args: Args) => formatLine(def.name, def.grammar, args);
+
+	const planned = (args: Args, lab: LabState, tokenOf?: Parsed<Args>["tokenOf"]): Planned => {
+		const plan = def.plan(args, lab);
+		if (!(plan instanceof Refusal)) return { ok: true, plan };
+		return { ok: false, error: lineError(plan.message, plan.at === undefined ? undefined : tokenOf?.[plan.at]) };
+	};
+	const validate = (args: Args, lab: LabState, tokenOf?: Parsed<Args>["tokenOf"]) => {
+		const p = planned(args, lab, tokenOf);
+		return p.ok ? null : p.error;
+	};
+	const preview = (parsed: Parsed<Args>, lab: LabState): Preview | LineError => {
+		const p = planned(parsed.args, lab, parsed.tokenOf);
+		if (!p.ok) return p.error;
+		return {
+			will: def.describe(p.plan, lab),
+			assumed: parsed.assumed.length > 0 ? `Left out, so assumed: ${parsed.assumed.join(" ")}` : null,
+			tone: def.danger ? "warn" : "plain",
+		};
+	};
+	const tool = (spec: ToolSpec): ToolFace => ({
+		name: spec.name,
+		description: spec.description ?? def.about,
+		policy: spec.policy,
+		annotations: spec.annotations ?? {},
+		inputSchema: toolSchema(def.grammar),
+		toLine: (input) => lineFromInput(def.name, def.grammar, input),
+	});
+
+	const cache = new WeakMap<CommandDeps, Command<Args, boolean>>();
+	const bind = (deps: CommandDeps): Command<Args, boolean> => {
+		const run = async (args: Args, ctx: RunContext & { readonly approval?: Approval }): Promise<Result> => {
+			const line = format(args);
+			const log = (outcome: "ok" | "failed") =>
+				deps.dispatch({ type: "cmd/logged", line, source: ctx.source, at: deps.now(), outcome });
+			let result: Result;
+			if (def.danger && ctx.approval?.line !== line) {
+				const approved = ctx.approval?.line ?? "nothing";
+				result = { kind: "failed", error: lineError(`That approval was for ${approved}, not ${line}.`) };
+			} else {
+				const p = planned(args, deps.state());
+				if (p.ok) {
+					try {
+						result = await def.execute(p.plan, ctx, deps);
+					} catch (error) {
+						log("failed");
+						throw error;
+					}
+				} else {
+					result = { kind: "failed", error: p.error };
+				}
+			}
+			log(result.kind === "failed" ? "failed" : "ok");
+			return result;
+		};
+
+		const parseArgs = (tokenized: Tokenized, lab: LabState) => parse(def.grammar, tokenized, context(lab));
+		const ops = {
+			name: def.name,
+			about: def.about,
+			signature: signatureOf(def.grammar),
+			tool: def.tool ? tool(def.tool) : null,
+			parse: parseArgs,
+			validate: (args: Args, lab: LabState) => validate(args, lab),
+			preview,
+			format,
+			complete: (line: string, caret: number, lab: LabState) => complete(def.grammar, line, caret, context(lab)),
+		};
+		const lineOf = (tokenized: Tokenized, parsed: Parsed<Args>) => ({
+			verb: def.name,
+			line: format(parsed.args),
+			tokens: tokenized,
+			args: parsed.args,
+			assumed: parsed.assumed,
+			validate: (lab: LabState) => validate(parsed.args, lab, parsed.tokenOf),
+			preview: (lab: LabState) => preview(parsed, lab),
+		});
+
+		if (def.danger) {
+			const confirm = (args: Args, lab: LabState, tokenOf?: Parsed<Args>["tokenOf"]) => {
+				const p = planned(args, lab, tokenOf);
+				return p.ok ? def.confirm(p.plan, lab) : p.error;
+			};
+			const command: DangerCommand<Args> = {
+				...ops,
+				danger: true,
+				confirm: (args, lab) => confirm(args, lab),
+				run,
+				read(tokenized, lab) {
+					const parsed = parseArgs(tokenized, lab);
+					if (isLineError(parsed)) return parsed;
+					return {
+						...lineOf(tokenized, parsed),
+						danger: true,
+						confirm: (now) => confirm(parsed.args, now, parsed.tokenOf),
+						run: (ctx) => run(parsed.args, ctx),
+					};
+				},
+			};
+			return command;
+		}
+		const command: SafeCommand<Args> = {
+			...ops,
+			danger: false,
+			run,
+			read(tokenized, lab) {
+				const parsed = parseArgs(tokenized, lab);
+				if (isLineError(parsed)) return parsed;
+				return { ...lineOf(tokenized, parsed), danger: false, run: (ctx) => run(parsed.args, ctx) };
+			},
+		};
+		return command;
+	};
+
+	return {
+		name: def.name,
+		danger: def.danger,
+		bind(deps) {
+			const known = cache.get(deps);
+			if (known) return known;
+			const command = bind(deps);
+			cache.set(deps, command);
+			return command;
+		},
+	};
+}
