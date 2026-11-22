@@ -1,0 +1,222 @@
+/* Restated so the order holds whichever sheet loads first. */
+@layer tokens, base, components;
+
+@layer components {
+	@scope (unlab-spawn-form) {
+		:scope {
+			display: block;
+			padding: 64px 24px 48px;
+			background: var(--base);
+		}
+
+		.sheet {
+			display: flex;
+			flex-wrap: wrap;
+			align-items: flex-start;
+			gap: 40px 64px;
+			max-width: 1000px;
+			margin: 0 auto;
+		}
+
+		.back {
+			flex: 1 0 100%;
+			margin-bottom: -16px;
+		}
+
+		.choices-column,
+		.result-column {
+			display: flex;
+			flex-direction: column;
+			min-width: 0;
+		}
+
+		.choices-column {
+			flex: 1 1 400px;
+			gap: 32px;
+		}
+
+		/* Level with the first question, below the 36px title and its 32px gap. */
+		.result-column {
+			flex: 1 1 360px;
+			gap: 24px;
+			padding-top: 68px;
+		}
+
+		h1 {
+			font-size: var(--fs-page);
+			line-height: var(--lh-page);
+			font-weight: 500;
+			letter-spacing: -0.4px;
+		}
+
+		h2 {
+			font: inherit;
+		}
+
+		.question {
+			display: flex;
+			flex-direction: column;
+			gap: 10px;
+		}
+
+		.label {
+			color: var(--text-3);
+		}
+
+		.note {
+			color: var(--text-2);
+		}
+
+		.error {
+			color: var(--down);
+		}
+
+		.stepper {
+			display: flex;
+			flex-wrap: wrap;
+			align-items: center;
+			gap: 4px;
+		}
+
+		.step {
+			width: var(--h-lg);
+			height: var(--h-lg);
+			padding: 0;
+			border: 1px solid var(--line-strong);
+			border-radius: var(--r-control);
+			background: transparent;
+			color: var(--text);
+			font-size: 18px;
+			cursor: pointer;
+		}
+
+		.step:hover:not(:disabled) {
+			background: var(--line);
+		}
+
+		.step:disabled {
+			color: var(--text-3);
+			cursor: default;
+		}
+
+		.count {
+			width: 64px;
+			text-align: center;
+			font-size: var(--fs-page);
+			line-height: var(--h-lg);
+			font-weight: 500;
+		}
+
+		.stepper .note {
+			margin-left: 14px;
+		}
+
+		.you-get ul {
+			display: flex;
+			flex-direction: column;
+			margin: 0;
+			padding: 0;
+			border-bottom: 1px solid var(--line);
+			list-style: none;
+		}
+
+		.you-get h2 {
+			padding-bottom: 8px;
+		}
+
+		.you-get li {
+			display: flex;
+			align-items: center;
+			gap: 12px;
+			min-height: 40px;
+			padding: 0 12px 0 10px;
+			border-top: 1px solid var(--line);
+			border-left: 3px solid var(--machine-hue);
+		}
+
+		.you-get .name {
+			flex: 0 0 64px;
+			color: var(--machine-hue);
+			font-size: 13px;
+			font-weight: 500;
+		}
+
+		.you-get .where {
+			flex-grow: 1;
+		}
+
+		.you-get .port {
+			color: var(--text-3);
+		}
+
+		.equivalents {
+			display: flex;
+			flex-direction: column;
+			gap: 6px;
+		}
+
+		.code {
+			padding: 10px 12px;
+			border: 1px solid var(--line);
+			border-radius: var(--r-control);
+			background: var(--crust);
+			font-size: 13px;
+			overflow-wrap: anywhere;
+		}
+
+		.code .prompt {
+			color: var(--ok);
+		}
+
+		.call {
+			color: var(--agent);
+		}
+
+		.preview {
+			display: grid;
+			grid-template-columns: auto 1fr;
+			gap: 0 10px;
+		}
+
+		.will-label,
+		.preview .assumed {
+			color: var(--text-3);
+		}
+
+		.preview .assumed {
+			grid-column: 2;
+		}
+
+		.preview[data-tone="warn"] .will {
+			color: var(--warn);
+		}
+
+		.actions {
+			display: flex;
+			flex-wrap: wrap;
+			align-items: center;
+			gap: 8px 16px;
+		}
+
+		/* An action that reads as a link, as the artboard draws Cancel and the way back. */
+		.link {
+			display: inline-flex;
+			align-items: center;
+			min-height: var(--h-lg);
+			padding: 0;
+			border: 0;
+			background: transparent;
+			color: var(--agent);
+			text-decoration: underline;
+			cursor: pointer;
+		}
+
+		.link:hover {
+			color: var(--link-hover);
+		}
+
+		.back .link {
+			min-height: var(--h-sm);
+		}
+	}
+}

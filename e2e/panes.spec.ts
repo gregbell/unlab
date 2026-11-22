@@ -1,12 +1,12 @@
 import { expect, test } from "@playwright/test";
+import { openWithTwoMachines } from "./lab.ts";
 
 test("a console runs what is typed into it, keeps it through park and maximise, and + opens a shell tab", async ({
 	page,
 }) => {
 	const errors: string[] = [];
 	page.on("pageerror", (e) => errors.push(e.message));
-	await page.goto("/");
-	await expect(page.getByText("2 of 2 machines ready")).toBeVisible({ timeout: 60_000 });
+	await openWithTwoMachines(page);
 
 	const node1 = page.locator('unlab-pane[machine="node1"]');
 	const console1 = node1.locator("#panel-node1-console");
