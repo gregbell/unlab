@@ -57,11 +57,39 @@ function sentence(available: boolean, paused: boolean): string {
  * call goes to the agent layer, which mints the approval. No key answers a
  * call: Enter works only on the focused button.
  */
+/**
+ * How long every approve button stays disabled after the waiting calls
+ * change. An agent can add or withdraw calls at will, which moves the blocks;
+ * without this, a click aimed at one block could land on another that slid
+ * under the pointer.
+ */
+export const ARM_MS = 600;
+
 export class UnlabAgentPanel extends UnlabElement {
 	readonly #agent = new Select(this, (s) => s.agent);
 	readonly #indicator = new Select(this, selectAgentIndicator);
 	readonly #machines = new Select(this, (s) => s.machines);
 	readonly #since = new Select(this, (s) => firstCallText(s.agent.firstCallAt, s.now));
+	#waitingIds = "";
+	#armed = true;
+	#arming: ReturnType<typeof setTimeout> | undefined;
+
+	override disconnectedCallback(): void {
+		super.disconnectedCallback();
+		clearTimeout(this.#arming);
+	}
+
+	#rearm(waiting: readonly { readonly id: number }[]): void {
+		const ids = waiting.map((call) => call.id).join(",");
+		if (ids === this.#waitingIds) return;
+		this.#waitingIds = ids;
+		this.#armed = false;
+		clearTimeout(this.#arming);
+		this.#arming = setTimeout(() => {
+			this.#armed = true;
+			this.requestUpdate();
+		}, ARM_MS);
+	}
 
 	override render(): TemplateResult {
 		const agent = this.#agent.value;
@@ -69,6 +97,7 @@ export class UnlabAgentPanel extends UnlabElement {
 		const machines = this.#machines.value;
 		const log = agent.calls.filter((call) => call.status !== "waiting");
 		const waiting = agent.calls.filter((call) => call.status === "waiting");
+		this.#rearm(waiting);
 		return html`<div class="head">
 				<h2 class="title">webmcp</h2>
 				<span class="state" data-paused=${agent.paused ? "true" : "false"}>${agent.paused ? "tools paused" : this.#indicator.value}</span>
@@ -116,6 +145,7 @@ export class UnlabAgentPanel extends UnlabElement {
 								.detail=${call.preview ?? ""}
 								.actionLabel=${call.actionLabel ?? call.line}
 								keep-label="Deny"
+								.armed=${this.#armed}
 								@unlab-approve=${() => this.app.agent.answer(call.id, true)}
 								@unlab-keep=${() => this.app.agent.answer(call.id, false)}
 							></unlab-confirm>`,

@@ -22,6 +22,7 @@ export class UnlabConfirm extends UnlabElement {
 		keepLabel: { attribute: "keep-label" },
 		note: {},
 		keys: { type: Boolean },
+		armed: { type: Boolean },
 	};
 	declare heading: string;
 	declare detail: string;
@@ -33,6 +34,8 @@ export class UnlabConfirm extends UnlabElement {
 	declare note: string;
 	/** Show the keys beside the buttons, where Enter and Esc answer, as in the command bar. */
 	declare keys: boolean;
+	/** False holds the action button disabled. Keep it, or Deny, always works. */
+	declare armed: boolean;
 
 	readonly #machines = new Select(this, (s) => s.machines);
 	readonly #id = `unlab-confirm-${++ids}`;
@@ -45,6 +48,7 @@ export class UnlabConfirm extends UnlabElement {
 		this.keepLabel = "Keep it";
 		this.note = "";
 		this.keys = false;
+		this.armed = true;
 	}
 
 	override render(): TemplateResult {
@@ -55,7 +59,7 @@ export class UnlabConfirm extends UnlabElement {
 			<p class="heading" id=${this.#id}>${hued(this.heading, machines)}</p>
 			<p class="detail">${hued(this.detail, machines)}</p>
 			<div class="actions">
-				<button type="button" class="button primary md" @click=${() => this.#emit("unlab-approve")}>
+				<button type="button" class="button primary md" ?disabled=${!this.armed} @click=${() => this.#emit("unlab-approve")}>
 					${this.actionLabel}${key("↵")}
 				</button>
 				<button type="button" class="button md" @click=${() => this.#emit("unlab-keep")}>${this.keepLabel}${key("esc")}</button>

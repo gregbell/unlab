@@ -127,6 +127,7 @@ describe("<unlab-agent-panel>", () => {
 
 		const remove = page.getByRole("button", { name: "Remove node3", exact: true });
 		const button = remove.element();
+		await expect.poll(() => button instanceof HTMLButtonElement && !button.disabled, { timeout: 2_000 }).toBe(true);
 		if (button instanceof HTMLElement) button.focus();
 		await userEvent.keyboard("{Enter}");
 		expect(answers).toEqual([{ call: 4, allow: true }]);
@@ -137,6 +138,26 @@ describe("<unlab-agent-panel>", () => {
 		]);
 		const { violations } = await axe.run(element);
 		expect(violations).toEqual([]);
+	});
+
+	it("disarms every approve button for a moment whenever the waiting calls change", async () => {
+		const { store, settle } = await mount("unlab-agent-panel", { state: lab(spawn(3), ready(), ...ACTIVE, WAITING) });
+		const approve = () => {
+			const button = page.getByRole("button", { name: "Remove node3", exact: true }).element();
+			if (!(button instanceof HTMLButtonElement)) throw new Error("no approve button");
+			return button;
+		};
+		expect(approve().disabled, "a block that just appeared is not armed").toBe(true);
+		await expect.poll(() => approve().disabled, { timeout: 2_000 }).toBe(false);
+
+		store.dispatchAgent(
+			called(5, { tool: "machines_spawn", line: "spawn 1 alpine", status: "waiting", actionLabel: "Boot node4" }),
+		);
+		await settle();
+		expect(approve().disabled, "a new call shifts the stack, so every block re-arms").toBe(true);
+		const deny = page.getByRole("button", { name: "Deny", exact: true }).first().element();
+		expect(deny instanceof HTMLButtonElement && deny.disabled).toBe(false);
+		await expect.poll(() => approve().disabled, { timeout: 2_000 }).toBe(false);
 	});
 
 	it("stacks waiting calls oldest first", async () => {
