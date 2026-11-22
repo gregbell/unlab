@@ -345,6 +345,11 @@ export class UnlabCommandBar extends UnlabElement {
 	readonly #onKeydown = (event: KeyboardEvent): void => {
 		const input = keyInput(event);
 		if (input === null) return;
+		// A held Enter repeats. Each Enter must be its own press, or holding it would confirm a removal by itself.
+		if (input.kind === "enter" && event.repeat) {
+			event.preventDefault();
+			return;
+		}
 		if (!this.#bar.open) {
 			if (input.kind !== "enter" && input.kind !== "down" && input.kind !== "up") return;
 			event.preventDefault();

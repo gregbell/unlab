@@ -310,6 +310,18 @@ describe("<unlab-command-bar> CmdConfirm: rm asks first", () => {
 		expect(runs).toEqual([]);
 	});
 
+	it("never takes a held Enter's repeat as the second Enter", async () => {
+		const { store } = await mountBar();
+		await typeLine("rm node3");
+		await userEvent.keyboard("{Enter}");
+		input().dispatchEvent(
+			new KeyboardEvent("keydown", { key: "Enter", repeat: true, bubbles: true, cancelable: true }),
+		);
+		await new Promise((resolve) => requestAnimationFrame(resolve));
+		expect(document.querySelector("unlab-command-bar unlab-confirm")).not.toBeNull();
+		expect(store.state.machines.node3?.life.phase).toBe("ready");
+	});
+
 	it("cancels on Esc and keeps the bar open on the line", async () => {
 		const { store } = await mountBar();
 		await typeLine("rm node3");
