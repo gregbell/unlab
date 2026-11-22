@@ -20,9 +20,11 @@ import {
 
 /** What one line typed into a session came to. */
 export interface ExecOutcome {
-	/** Null when the shell reported no status before it settled. */
+	/** From the shell's OSC 133 D mark. Null when the mark carried no status. */
 	readonly exitCode: number | null;
+	/** The marked rows as the terminal shows them, without the echoed command line. */
 	readonly output: string;
+	/** The last line of output that is not blank. */
 	readonly lastLine: string;
 	readonly ms: number;
 }
@@ -30,9 +32,10 @@ export interface ExecOutcome {
 /** The runtime types into sessions for `exec`. Request and response only: any state it implies comes back as runtime events. */
 export interface ExecPort {
 	/**
-	 * Types `line` into the session as if typed, marked with its source, and
-	 * resolves when the shell finishes it. Rejects with an Error whose message
-	 * is a sentence when the session is busy running a program.
+	 * Types `line` and Enter into the session as if typed there, under a line
+	 * mark. Resolves when the shell reports the command finished. Rejects with
+	 * an Error whose message is a sentence unless the session is open and at a
+	 * prompt, and with the signal's reason when aborted.
 	 */
 	inject(session: SessionId, line: string, source: Source, signal: AbortSignal): Promise<ExecOutcome>;
 }

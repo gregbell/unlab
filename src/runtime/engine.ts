@@ -11,40 +11,23 @@
 // dispatched while it is still running the effects of the previous one.
 
 import type { CaptureLog } from "../capture/index.ts";
-import type { Effect, HostEntry, MachineName, PortNo, RuntimeEvent, SessionId, Source } from "../model/index.ts";
+import type { ExecOutcome, ExecPort } from "../commands/index.ts";
+import type { Effect, HostEntry, MachineName, PortNo, RuntimeEvent, SessionId } from "../model/index.ts";
 import type { LineMark, Screen, Screens } from "./screens.ts";
 import type { ShellEvent } from "./shell-tracker.ts";
 import type { LabSwitch, MacEntry, PortCounters } from "./switch.ts";
 import { DEFAULT_TTY_SIZE, type StartVm, type Tty, type Vm, type VmRef, type VmSink } from "./vm.ts";
+
+export type { ExecOutcome, ExecPort };
 
 /** What the engine needs from the store. */
 export interface RuntimeStore {
 	dispatchRuntime(event: RuntimeEvent): void;
 }
 
-export interface ExecOutcome {
-	/** From the shell's OSC 133 D mark. Null when the mark carried no status. */
-	readonly exitCode: number | null;
-	/** The marked rows as the terminal shows them, without the echoed command line. */
-	readonly output: string;
-	/** The last line of output that is not blank. */
-	readonly lastLine: string;
-	readonly ms: number;
-}
-
 /** A line the engine would not type, as a sentence for the result block. */
 export class ExecRefused extends Error {
 	override readonly name = "ExecRefused";
-}
-
-export interface ExecPort {
-	/**
-	 * Type `line` and Enter into the session, as if typed there, under a line
-	 * mark. Resolves when the shell reports the command finished. Rejects with
-	 * an ExecRefused unless the session is open and at a prompt, and with the
-	 * signal's reason when aborted; either way nothing more is typed.
-	 */
-	inject(session: SessionId, line: string, source: Source, signal: AbortSignal): Promise<ExecOutcome>;
 }
 
 /** Switch facts the model does not hold. Read them on a tick while they are on screen. */

@@ -5,6 +5,7 @@ import "../styles/index.css";
 import { ContextProvider } from "@lit/context";
 import { ReactiveElement } from "lit";
 import type { CaptureView } from "../../capture/index.ts";
+import { completeLine, createRegistry, parseLine, VERBS } from "../../commands/index.ts";
 import {
 	type AgentCall,
 	type AgentEvent,
@@ -136,11 +137,22 @@ export async function mount<K extends keyof HTMLElementTagNameMap>(
 	const runs: Mounted<HTMLElement>["runs"] = [];
 	const confirms: string[] = [];
 	const counters = new Map<PortNo, Counters>(options.counters);
+	const registry = createRegistry(
+		{
+			state: () => store.state,
+			dispatch: () => {},
+			until: (predicate, signal) => store.until(predicate, signal),
+			now: () => store.state.now,
+			exec: { inject: () => Promise.reject(new Error("This fixture has no runtime.")) },
+		},
+		VERBS,
+	);
 	const services: AppServices = {
 		store,
 		commands: {
-			parse: () => ({ message: "This fixture parses nothing." }),
-			complete: (_line, caret) => ({ replace: { start: caret, end: caret }, suggestions: [], slot: null }),
+			registry,
+			parse: (line) => parseLine(registry, line, store.state),
+			complete: (line, caret) => completeLine(registry, line, caret, store.state),
 			run: async (line, source) => {
 				runs.push({ line, source });
 				return { kind: "visible", text: "", data: null };

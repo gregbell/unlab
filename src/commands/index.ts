@@ -106,3 +106,7 @@ export function completeLine(registry: Registry, line: string, caret: number, la
 		? command.complete(line, caret, lab)
 		: { replace: { start: caret, end: caret }, suggestions: [], slot: null };
 }
+
+export type { CableState, ExecData, ExecRun, ListedMachine, RemoveData, SpawnData } from "./verbs/index.ts";
+/** The one verb list. Everything that runs a line builds its registry from it. */
+export { VERBS } from "./verbs/index.ts";
