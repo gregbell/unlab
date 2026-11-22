@@ -1,11 +1,12 @@
 // The lab: one layer-2 segment, a machine on each port, and the bookkeeping
 // that keeps names and addresses agreeing across every guest.
 
-import { labMac, Subnet } from "./frames.ts";
+import { PORTS } from "../model/types.ts";
+import { labMac, Subnet } from "../net/index.ts";
+import { LabSwitch } from "../runtime/switch.ts";
 import { loadImage } from "./image.ts";
 import { Machine } from "./machine.ts";
 import type { HostEntry, VmConfig } from "./protocol.ts";
-import { LabSwitch } from "./switch.ts";
 
 export interface DistroManifest {
 	unkernel: string;
@@ -80,6 +81,8 @@ export class Lab {
 	}
 
 	add(opts: AddOptions = {}): Machine {
+		const port = PORTS.find((p) => !this.machines.some((m) => m.port === p));
+		if (port === undefined) throw new Error(`switch0 has no free port`);
 		const hostNum = opts.hostNum ?? this.#freeHostNum();
 		if (hostNum < 2 || hostNum > 254) throw new Error(`address ${hostNum} is outside ${this.subnet}`);
 		const name = this.#freeName(opts.name?.trim() || `node${this.machines.length + 1}`);
@@ -103,7 +106,7 @@ export class Lab {
 			rows: 30,
 		};
 
-		const m: Machine = new Machine(cfg, image, this.sw, {
+		const m: Machine = new Machine(cfg, image, this.sw, port, {
 			onChange: () => {
 				// A machine that has just finished booting may have missed host
 				// table changes made while it was still coming up.

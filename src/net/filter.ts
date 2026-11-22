@@ -1,0 +1,182 @@
+// The capture filter. Terms separated by spaces must all match; the word `or`
+// separates alternatives. A term is a protocol, a machine name (either end),
+// an IPv4 address, a MAC address, or `port:N`, matched without regard to case.
+//
+// It compiles to predicates over raw bytes and port numbers, because capture
+// tests every frame the switch handles: no decoding and no strings per frame.
+
+import { ETH_ARP, ETH_HDR, ETH_IPV4, ETH_IPV6, IP_ICMP, IP_TCP, IP_UDP } from "./frames.ts";
+import { type NodeName, nodeIp, nodeMac, nodeOfIp, nodeOfMac, parseNodeName } from "./identity.ts";
+
+export interface CaptureFilter {
+	/** As typed. */
+	readonly source: string;
+	/** `to` is the egress port mask: bit p-1 is set when the frame went out of port p. */
+	matchesFrame(frame: Uint8Array, from: number, to: number): boolean;
+	/**
+	 * A link event row is context, so protocol terms never hide it. Port,
+	 * machine, address and MAC terms keep only the rows about that port or
+	 * machine.
+	 */
+	matchesLink(port: number, machine: NodeName): boolean;
+}
+
+export interface FilterError {
+	/** The token as typed, and its character range in the source. */
+	readonly token: string;
+	readonly start: number;
+	readonly end: number;
+	readonly message: string;
+}
+
+export type FilterResult =
+	| { readonly ok: true; readonly filter: CaptureFilter }
+	| { readonly ok: false; readonly error: FilterError };
+
+type FramePredicate = (f: Uint8Array, from: number, to: number) => boolean;
+type LinkPredicate = (port: number, machine: NodeName) => boolean;
+interface Term {
+	readonly frame: FramePredicate;
+	readonly link: LinkPredicate;
+}
+
+const ethertype = (f: Uint8Array): number => (f.length < ETH_HDR ? -1 : (f[12] << 8) | f[13]);
+const isIpv4 = (f: Uint8Array): boolean =>
+	f.length >= ETH_HDR + 20 && ethertype(f) === ETH_IPV4 && f[ETH_HDR] >> 4 === 4;
+const isArp = (f: Uint8Array): boolean => f.length >= ETH_HDR + 28 && ethertype(f) === ETH_ARP;
+const ipProto = (f: Uint8Array): number => (isIpv4(f) ? f[ETH_HDR + 9] : -1);
+const u32 = (f: Uint8Array, o: number): number => ((f[o] << 24) | (f[o + 1] << 16) | (f[o + 2] << 8) | f[o + 3]) >>> 0;
+
+function l4Uses(f: Uint8Array, proto: number, ...ports: number[]): boolean {
+	if (ipProto(f) !== proto) return false;
+	const o = ETH_HDR + (f[ETH_HDR] & 15) * 4;
+	if (f.length < o + 4) return false;
+	const sport = (f[o] << 8) | f[o + 1];
+	const dport = (f[o + 2] << 8) | f[o + 3];
+	return ports.includes(sport) || ports.includes(dport);
+}
+
+function hasIp(f: Uint8Array, ip: number): boolean {
+	if (isIpv4(f)) return u32(f, ETH_HDR + 12) === ip || u32(f, ETH_HDR + 16) === ip;
+	if (isArp(f)) return u32(f, 28) === ip || u32(f, 38) === ip;
+	return false;
+}
+
+function macAt(f: Uint8Array, off: number, mac: Uint8Array): boolean {
+	for (let i = 0; i < 6; i++) if (f[off + i] !== mac[i]) return false;
+	return true;
+}
+const hasMac = (f: Uint8Array, mac: Uint8Array): boolean => f.length >= 12 && (macAt(f, 0, mac) || macAt(f, 6, mac));
+
+const always: LinkPredicate = () => true;
+const ipv4: FramePredicate = isIpv4;
+
+const PROTOCOLS: Readonly<Record<string, FramePredicate>> = {
+	arp: (f) => ethertype(f) === ETH_ARP,
+	ip: ipv4,
+	ipv4,
+	ipv6: (f) => ethertype(f) === ETH_IPV6,
+	icmp: (f) => ipProto(f) === IP_ICMP,
+	tcp: (f) => ipProto(f) === IP_TCP,
+	udp: (f) => ipProto(f) === IP_UDP,
+	dhcp: (f) => l4Uses(f, IP_UDP, 67, 68),
+	dns: (f) => l4Uses(f, IP_UDP, 53) || l4Uses(f, IP_TCP, 53),
+};
+
+const IPV4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;
+const MAC = /^[0-9a-f]{2}([:-][0-9a-f]{2}){5}$/;
+const PORT = /^port:([1-8])$/;
+
+function parseTerm(word: string): Term | null {
+	const protocol = PROTOCOLS[word];
+	if (protocol) return { frame: protocol, link: always };
+
+	const port = PORT.exec(word);
+	if (port) {
+		const p = Number(port[1]);
+		const mask = 1 << (p - 1);
+		return { frame: (_f, from, to) => from === p || (to & mask) !== 0, link: (q) => q === p };
+	}
+
+	const n = parseNodeName(word);
+	if (n !== null) {
+		const mac = nodeMac(n);
+		const ip = nodeIp(n);
+		const name: NodeName = `node${n}`;
+		return { frame: (f) => hasMac(f, mac) || hasIp(f, ip), link: (_p, m) => m === name };
+	}
+
+	const quad = IPV4.exec(word);
+	if (quad) {
+		const octets = quad.slice(1).map(Number);
+		if (octets.some((o) => o > 255)) return null;
+		const ip = octets.reduce((a, o) => a * 256 + o, 0);
+		const name = nodeOfIp(ip);
+		return { frame: (f) => hasIp(f, ip), link: (_p, m) => m === name };
+	}
+
+	if (MAC.test(word)) {
+		const mac = Uint8Array.from(word.split(/[:-]/), (h) => Number.parseInt(h, 16));
+		const name = nodeOfMac(mac, 0);
+		return { frame: (f) => hasMac(f, mac), link: (_p, m) => m === name };
+	}
+
+	return null;
+}
+
+export function compileFilter(source: string): FilterResult {
+	const groups: Term[][] = [[]];
+	let lastOr: { token: string; start: number } | null = null;
+	const orError = (token: string, start: number): FilterResult => ({
+		ok: false,
+		error: { token, start, end: start + token.length, message: "Capture needs a term on each side of or." },
+	});
+
+	for (const m of source.matchAll(/\S+/g)) {
+		const token = m[0];
+		const start = m.index;
+		const word = token.toLowerCase();
+		const group = groups[groups.length - 1];
+		if (word === "or") {
+			if (group.length === 0) return orError(token, start);
+			groups.push([]);
+			lastOr = { token, start };
+			continue;
+		}
+		const term = parseTerm(word);
+		if (!term) {
+			return {
+				ok: false,
+				error: { token, start, end: start + token.length, message: `Capture cannot read ${token}.` },
+			};
+		}
+		group.push(term);
+	}
+	if (lastOr && groups[groups.length - 1].length === 0) return orError(lastOr.token, lastOr.start);
+
+	const alternatives = groups[0].length === 0 ? [] : groups;
+	return { ok: true, filter: filterOf(source, alternatives) };
+}
+
+function filterOf(source: string, groups: readonly (readonly Term[])[]): CaptureFilter {
+	const frames = groups.map((g) => g.map((t) => t.frame));
+	const links = groups.map((g) => g.map((t) => t.link));
+	return {
+		source,
+		matchesFrame(f, from, to) {
+			if (frames.length === 0) return true;
+			outer: for (const group of frames) {
+				for (const test of group) if (!test(f, from, to)) continue outer;
+				return true;
+			}
+			return false;
+		},
+		matchesLink(port, machine) {
+			if (links.length === 0) return true;
+			return links.some((group) => group.every((test) => test(port, machine)));
+		},
+	};
+}
+
+/** The empty filter. */
+export const MATCH_ALL: CaptureFilter = filterOf("", []);

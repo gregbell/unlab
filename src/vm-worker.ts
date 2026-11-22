@@ -10,11 +10,11 @@
 // vm.spawn(), so a machine can have several independent shells.
 
 import { createKernel, DEFAULT_WISP_SERVERS, type KernelInstance, NetStack, type Pty, wispBackend } from "unkernel";
-import { Subnet } from "./lab/frames.ts";
 import { execAsRoot, setupScript } from "./lab/guest.ts";
 import { MemoryDisk } from "./lab/image.ts";
 import { LabNic } from "./lab/nic.ts";
 import type { FromVm, PtySpec, ToVm, VmConfig } from "./lab/protocol.ts";
+import { Subnet } from "./net/index.ts";
 
 function post(m: FromVm, transfer: Transferable[] = []): void {
 	self.postMessage(m, transfer);

@@ -11,7 +11,7 @@
 //     work. It also runs the DHCP server that brings eth0 up.
 
 import type { Kernel, NetDevice } from "unkernel";
-import { classify, parseMac, type Subnet } from "./frames.ts";
+import { classify, parseMac, type Subnet } from "../net/index.ts";
 
 export interface LabNicOptions {
 	/** This machine's MAC; the uplink must be told the same one. */

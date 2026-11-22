@@ -5,8 +5,9 @@
 // and any number of shells, each on its own pty in the guest. A tab is a view
 // of one session, so several tabs can watch the same machine.
 
+import type { PortNo } from "../model/types.ts";
+import type { LabSwitch } from "../runtime/switch.ts";
 import type { FromVm, HostEntry, ToVm, VmConfig } from "./protocol.ts";
-import type { LabSwitch } from "./switch.ts";
 
 export type MachineState = "booting" | "ready" | "exited" | "error";
 export type SessionKind = "console" | "shell";
@@ -81,6 +82,7 @@ export class Session {
 export class Machine {
 	readonly id: string;
 	readonly mac: string;
+	readonly port: PortNo;
 	name: string;
 	ip: string;
 	readonly distro: string;
@@ -107,7 +109,14 @@ export class Machine {
 	#nextSid = 1;
 	#shellCount = 0;
 
-	constructor(cfg: Omit<VmConfig, "image">, image: Promise<ArrayBufferLike>, sw: LabSwitch, events: MachineEvents) {
+	constructor(
+		cfg: Omit<VmConfig, "image">,
+		image: Promise<ArrayBufferLike>,
+		sw: LabSwitch,
+		port: PortNo,
+		events: MachineEvents,
+	) {
+		this.port = port;
 		this.id = cfg.id;
 		this.name = cfg.name;
 		this.ip = cfg.ip;
@@ -135,8 +144,7 @@ export class Machine {
 			this.#events.onChange();
 		});
 
-		sw.addPort(this.id, {
-			name: cfg.name,
+		sw.attach(port, {
 			deliver: (frame) => {
 				// The switch shares one frame with every port of a flood, so the
 				// bytes must be copied before the buffer is transferred away.
@@ -164,7 +172,7 @@ export class Machine {
 	#onMessage(m: FromVm): void {
 		switch (m.type) {
 			case "frame":
-				this.#sw.receive(this.id, m.frame);
+				this.#sw.receive(this.port, m.frame);
 				return;
 			case "console":
 				this.console.emit(m.bytes);
@@ -188,7 +196,7 @@ export class Machine {
 				this.state = "exited";
 				this.status = m.reason || `exit ${m.code}`;
 				for (const s of this.sessions) s.state = "closed";
-				this.#sw.setLink(this.id, false);
+				this.#sw.setLink(this.port, false);
 				this.#events.onChange();
 				return;
 			case "error":
@@ -294,22 +302,22 @@ export class Machine {
 	}
 
 	get link(): boolean {
-		return this.#sw.isUp(this.id);
+		return this.#sw.isUp(this.port);
 	}
 
 	setLink(up: boolean): void {
-		this.#sw.setLink(this.id, up);
+		this.#sw.setLink(this.port, up);
 		this.#events.onChange();
 	}
 
 	counters(): ReturnType<LabSwitch["counters"]> {
-		return this.#sw.counters(this.id);
+		return this.#sw.counters(this.port);
 	}
 
 	/** Power off and drop the thread. */
 	destroy(): void {
 		this.#send({ type: "stop" });
-		this.#sw.removePort(this.id);
+		this.#sw.detach(this.port);
 		// The kernel blocks its thread while idle, so a clean stop may never be
 		// observed: terminate shortly after asking.
 		setTimeout(() => this.#worker.terminate(), 250);
