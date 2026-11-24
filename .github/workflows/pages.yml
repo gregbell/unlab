@@ -27,6 +27,8 @@ jobs:
       - run: npm run distros alpine debian
       # Pages serves the site from /unlab/, not the root.
       - run: npx vite build --base /unlab/
+        env:
+          UNLAB_ORIGIN_TRIAL_TOKENS: ${{ vars.UNLAB_ORIGIN_TRIAL_TOKENS }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
