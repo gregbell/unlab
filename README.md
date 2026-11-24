@@ -36,6 +36,7 @@ a guest console, or use `exec` in the bar to address a guest by name.
 | -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
 | `ls`                                         | List machines, and each network interface's MAC, address, port, and link.                                                              |
 | `spawn 2 alpine --mem 512 --cpus 2 --disk 8` | Add two Alpine machines with 512 MiB of RAM, two CPUs, and an 8 GiB disk each. Use `--no-net` to leave them unplugged.                 |
+| `spawn 1 alpine --name web`                  | Add a machine called `web`. Every command takes the name, and it is the machine's hostname and what the others reach it by.            |
 | `spawn 1 alpine --nics 2 --net switch0,none` | Add a machine with two network interfaces: `eth0` plugged in and `eth1` left unplugged. Without `--net`, each takes its own port.      |
 | `spawn 1 alpine --addr 10.1.0.1/24`          | Add a machine with an address you choose. With `--nics`, give each interface an address or `none`: `--nics 2 --addr 10.1.0.1/24,none`. |
 | `spawn 1 alpine --no-gateway`                | Add a machine on the switch but without the package gateway. DHCP on its `eth0` then goes to the other machines.                       |
