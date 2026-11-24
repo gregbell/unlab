@@ -224,8 +224,9 @@ With an origin trial token, visitors to a deployed lab do not need the Chrome
 flag. Register the site's origin for the
 [WebMCP origin trial](https://developer.chrome.com/origintrials/#/register_trial/4163014905550602241),
 then set the repository variable `UNLAB_ORIGIN_TRIAL_TOKENS` to the token. The
-Pages workflow adds it to the page. Separate several tokens with spaces. A Chrome
-token lasts six weeks, so renew it and run the workflow again.
+Pages workflow adds it to the page. Separate several tokens with spaces. Each
+token has an expiry date. To renew one, update the variable and run the workflow
+again. Chrome's trial ends on 30 March 2027.
 
 ## Licence and acknowledgements
 
