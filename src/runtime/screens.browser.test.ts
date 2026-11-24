@@ -264,7 +264,7 @@ describe("line marks", () => {
 		const mark = run(s, "ls /etc", "hosts\r\npasswd\r\n", 0);
 		await frames(2);
 
-		expect(mark.output()).toBe("hosts\npasswd");
+		expect(mark.output()).toEqual({ text: "hosts\npasswd", truncated: false });
 		const first = paintedRowOf(el, "node1:~$ ls /etc");
 		const last = paintedRowOf(el, "passwd");
 		expect(last - first).toBe(2);
@@ -282,13 +282,13 @@ describe("line marks", () => {
 		s.write(bytes("ping -c2 node2\r\nreply 1\r\n"));
 		await frames(2);
 		expect(s.marks().map((m) => m.toRow - m.fromRow)).toEqual([1]);
-		expect(mark.output()).toBe("reply 1");
+		expect(mark.output()).toEqual({ text: "reply 1", truncated: false });
 
 		s.write(bytes(`reply 2\r\n${prompt(0)}`));
 		s.write(bytes("typed by hand\r\nmore\r\n"));
 		await frames(2);
 
-		expect(mark.output()).toBe("reply 1\nreply 2");
+		expect(mark.output()).toEqual({ text: "reply 1\nreply 2", truncated: false });
 		const [shown] = s.marks();
 		expect(shown.source).toBe("agent");
 		expect(shown.fromRow).toBeCloseTo(paintedRowOf(el, "ping -c2 node2"), 5);
@@ -310,7 +310,7 @@ describe("line marks", () => {
 		expect(after[0].fromRow).toBeCloseTo(paintedRowOf(el, "node1:~$ uname"), 5);
 		expect(after[0].fromRow).toBeLessThan(before[0].fromRow);
 		expect(after[0].toRow - after[0].fromRow).toBe(1);
-		expect(mark.output()).toBe("Linux");
+		expect(mark.output()).toEqual({ text: "Linux", truncated: false });
 	});
 
 	test("a mark scrolled out of view is not drawn, and one out of the scrollback is forgotten", async () => {
@@ -319,26 +319,66 @@ describe("line marks", () => {
 		for (let i = 1; i <= 100; i++) s.write(bytes(`later ${i}\r\n`));
 		await frames(2);
 		expect(s.marks()).toEqual([]);
-		expect(mark.output()).toBe("Sun Nov 22");
+		expect(mark.output()).toEqual({ text: "Sun Nov 22", truncated: false });
 
 		const filler = bytes("x\r\n".repeat(1000));
 		for (let i = 0; i < 6; i++) s.write(filler);
 		await frames(2);
 		expect(s.marks()).toEqual([]);
-		expect(mark.output()).toBe("");
+		expect(mark.output()).toEqual({ text: "", truncated: false });
+	});
+
+	const numbers = (from: number, to: number) => Array.from({ length: to - from + 1 }, (_, i) => `${from + i}`);
+
+	test("output longer than the scrollback keeps its end, says it was cut, and is still marked", async () => {
+		const { s } = await ready();
+		const mark = run(s, "seq 1 20000", `${numbers(1, 20000).join("\r\n")}\r\n`, 0);
+		await frames(2);
+
+		const { text, truncated } = mark.output();
+		expect(truncated).toBe(true);
+		const lines = text.split("\n");
+		expect(lines.length).toBeGreaterThan(4000);
+		expect(lines).toEqual(numbers(20001 - lines.length, 20000));
+		expect(s.marks()).toHaveLength(1);
+
+		s.write(bytes("typed by hand\r\n"));
+		expect(mark.output().text.endsWith("\n20000")).toBe(true);
+	});
+
+	test("a command still printing once its start is gone keeps its mark and reads to its end", async () => {
+		const { s } = await ready();
+		const mark = s.beginMark("agent");
+		s.submitted();
+		s.write(bytes("seq 1 20000\r\n"));
+		for (let from = 1; from <= 20000; from += 4000) {
+			s.write(bytes(`${numbers(from, from + 3999).join("\r\n")}\r\n`));
+			await frames(2);
+			expect(s.marks()).toHaveLength(1);
+		}
+		s.write(bytes(prompt(0)));
+		const { text, truncated } = mark.output();
+		expect(truncated).toBe(true);
+		expect(text.endsWith("19999\n20000")).toBe(true);
+	});
+
+	test("a full-screen program gives back nothing, not what was on the terminal before it", async () => {
+		const { s } = await ready();
+		const mark = run(s, "vi", `${ESC}[?1049hediting${ESC}[?1049l`, 0);
+		expect(mark.output()).toEqual({ text: "", truncated: false });
 	});
 
 	test("output with no trailing newline is still the command's output", async () => {
 		const { s } = await ready();
 		const mark = run(s, "printf hi", "hi", 0);
-		expect(mark.output()).toBe("hi");
+		expect(mark.output()).toEqual({ text: "hi", truncated: false });
 	});
 
 	test("a command that prints nothing marks only its own line", async () => {
 		const { s, el } = await ready();
 		const mark = run(s, "true", "", 0);
 		await frames(2);
-		expect(mark.output()).toBe("");
+		expect(mark.output()).toEqual({ text: "", truncated: false });
 		const [shown] = s.marks();
 		expect(shown.toRow).toBeCloseTo(shown.fromRow, 5);
 		expect(shown.fromRow).toBeCloseTo(paintedRowOf(el, "node1:~$ true"), 5);
@@ -348,7 +388,7 @@ describe("line marks", () => {
 		const { s } = await ready();
 		const long = `echo ${"a".repeat(s.size.cols + 20)}`;
 		const mark = run(s, long, `${"b".repeat(s.size.cols + 5)}\r\nend\r\n`, 0);
-		expect(mark.output()).toBe(`${"b".repeat(s.size.cols + 5)}\nend`);
+		expect(mark.output()).toEqual({ text: `${"b".repeat(s.size.cols + 5)}\nend`, truncated: false });
 	});
 
 	test("ending a mark by hand closes it at the cursor", async () => {
@@ -358,7 +398,7 @@ describe("line marks", () => {
 		mark.end();
 		s.write(bytes("after the mark\r\n"));
 		mark.end();
-		expect(mark.output()).toBe("still here");
+		expect(mark.output()).toEqual({ text: "still here", truncated: false });
 	});
 
 	test("subscribers hear about marks once per frame, however much is written", async () => {
@@ -384,7 +424,7 @@ describe("line marks", () => {
 		const mark = s.beginMark("bar");
 		s.write(bytes(`echo hi\r\nhi\r\n${prompt(0)}`));
 		mark.end();
-		expect(mark.output()).toBe("");
+		expect(mark.output()).toEqual({ text: "", truncated: false });
 		expect(s.marks()).toEqual([]);
 	});
 });

@@ -43,12 +43,26 @@ function resultText(call: AgentCall): string {
 	}
 }
 
-function sentence(available: boolean, paused: boolean): string {
-	if (!available) {
-		return "This browser has no WebMCP, so no agent can call these yet. The verbs and your choices are ready for when it does.";
+/** Browsers block links to their own pages, so a person copies this one. */
+const FLAG = "chrome://flags/#enable-webmcp-testing";
+const GUIDE = "https://github.com/gregbell/unlab#use-the-lab-with-an-ai-agent";
+
+const guideLink = html`<a href=${GUIDE} target="_blank" rel="noopener noreferrer">connect an agent</a>`;
+
+function about({ webmcp, paused, calls }: LabState["agent"]): TemplateResult | string {
+	if (webmcp.kind === "absent") {
+		return html`This tab has no WebMCP, so no agent can call these yet. In Chrome or Edge 150 or later, open
+			<span class="address">${FLAG}</span>, choose Enabled and relaunch. Or let an agent
+			open the lab in its own Chrome: ${guideLink}.`;
+	}
+	if (webmcp.kind === "refused") {
+		return `This browser refused the tools, so an agent may not be able to call them. It said: ${webmcp.message}`;
 	}
 	if (paused) return "Tools are paused, so an agent in this browser sees none of them until you resume.";
-	return "An agent in this browser gets the same verbs as the command bar. You decide which ones run without asking.";
+	const ready =
+		"An agent in this browser gets the same verbs as the command bar. You decide which ones run without asking.";
+	if (calls.length > 0) return ready;
+	return html`${ready} To start, ${guideLink}.`;
 }
 
 /**
@@ -73,6 +87,10 @@ export class UnlabAgentPanel extends UnlabElement {
 	#waitingIds = "";
 	#armed = true;
 	#arming: ReturnType<typeof setTimeout> | undefined;
+	/** What the last press of the setup button came to. */
+	#said = "";
+	/** The person tried a call that is not in the log yet. */
+	#tried = false;
 
 	override disconnectedCallback(): void {
 		super.disconnectedCallback();
@@ -91,9 +109,63 @@ export class UnlabAgentPanel extends UnlabElement {
 		}, ARM_MS);
 	}
 
+	#say(said: string): void {
+		this.#said = said;
+		this.requestUpdate();
+	}
+
+	async #copyFlag(): Promise<void> {
+		this.#say("");
+		try {
+			await navigator.clipboard.writeText(FLAG);
+			this.#say("Copied.");
+		} catch {
+			this.#say("Not copied. Select the address to copy it yourself.");
+		}
+	}
+
+	async #try(tryCall: () => Promise<void>): Promise<void> {
+		this.#tried = true;
+		this.#say("");
+		try {
+			await tryCall();
+		} catch (error) {
+			this.#tried = false;
+			this.#say(`The call did not go through. ${error instanceof Error ? error.message : String(error)}`);
+		}
+	}
+
+	override updated(): void {
+		if (!this.#tried || this.querySelector(".try")) return;
+		this.#tried = false;
+		// The button under the keyboard went when its call was logged.
+		if (document.activeElement === document.body) this.querySelector<HTMLElement>(".calls-head")?.focus();
+	}
+
+	#setup({ webmcp, paused, calls, policies }: LabState["agent"]): TemplateResult | typeof nothing {
+		const said = html`<span class="said" role="status">${this.#said}</span>`;
+		if (webmcp.kind === "absent") {
+			return html`<div class="setup">
+				<button type="button" class="button xs" @click=${() => this.#copyFlag()}>copy address</button>${said}
+			</div>`;
+		}
+		const { tryCall } = this.app.agent;
+		if (webmcp.kind === "refused" || calls.length > 0 || !tryCall) return nothing;
+		return html`<div class="setup">
+			<button
+				type="button"
+				class="button xs try"
+				?disabled=${paused || policies.machines_list === "off"}
+				@click=${() => this.#try(tryCall)}
+			>
+				try a call</button
+			>${said}
+		</div>`;
+	}
+
 	override render(): TemplateResult {
 		const agent = this.#agent.value;
-		const { available, tools } = this.app.agent;
+		const { tools } = this.app.agent;
 		const machines = this.#machines.value;
 		const status = agent.paused ? "tools paused" : this.#indicator.value;
 		const log = agent.calls.filter((call) => call.status !== "waiting");
@@ -113,11 +185,12 @@ export class UnlabAgentPanel extends UnlabElement {
 				</button>
 			</div>
 			<div class="scroll">
-				<p class="about">${sentence(available, agent.paused)}</p>
+				<p class="about">${about(agent)}</p>
+				${this.#setup(agent)}
 				<ul class="tools" aria-label="Tools">
 					${tools.map((tool) => this.#toolRow(tool.name, tool.args, agent))}
 				</ul>
-				<h3 class="calls-head"><span>calls this session</span><span>${callCount(agent.calls)}</span></h3>
+				<h3 class="calls-head" tabindex="-1"><span>calls this session</span><span>${callCount(agent.calls)}</span></h3>
 				${
 					log.length === 0
 						? nothing

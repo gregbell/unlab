@@ -141,7 +141,7 @@ async function withHistory() {
 	const agentExec = h.lab.parsed("exec node1 -- ping -c 2 -W 1 10.88.0.13");
 	if (agentExec.danger) throw new Error("exec is safe");
 	const pending = agentExec.run({ source: "agent", signal: h.lab.signal });
-	h.calls[0].resolve({ exitCode: 0, output: "", lastLine: "", ms: 10 });
+	h.calls[0].resolve({ exitCode: 0, output: "", truncated: false, lastLine: "", ms: 10 });
 	await pending;
 	await h.lab.run("link down node3");
 	return h;
@@ -243,9 +243,9 @@ describe("the artboards, replayed", () => {
 		h.press({ kind: "enter", keepOpen: false });
 		const settled = h.settle();
 		h.lab.advance(1000);
-		h.calls[0].resolve({ exitCode: 1, output: LOSS, lastLine: LOSS, ms: 1000 });
-		h.calls[1].resolve({ exitCode: 1, output: LOSS, lastLine: LOSS, ms: 1000 });
-		h.calls[2].resolve({ exitCode: 0, output: OK, lastLine: OK, ms: 30 });
+		h.calls[0].resolve({ exitCode: 1, output: LOSS, truncated: false, lastLine: LOSS, ms: 1000 });
+		h.calls[1].resolve({ exitCode: 1, output: LOSS, truncated: false, lastLine: LOSS, ms: 1000 });
+		h.calls[2].resolve({ exitCode: 0, output: OK, truncated: false, lastLine: OK, ms: 30 });
 		await settled;
 
 		const view = h.view();
@@ -275,7 +275,7 @@ describe("the artboards, replayed", () => {
 		h.type("exec node1 -- true");
 		h.press({ kind: "enter", keepOpen: false });
 		const settled = h.settle();
-		h.calls[0].resolve({ exitCode: 0, output: "", lastLine: "", ms: 1 });
+		h.calls[0].resolve({ exitCode: 0, output: "", truncated: false, lastLine: "", ms: 1 });
 		await settled;
 		h.press({ kind: "up" });
 		expect(h.bar).toMatchObject({ text: "exec node1 -- true", mode: { kind: "typing" } });
@@ -283,7 +283,7 @@ describe("the artboards, replayed", () => {
 
 		h.press({ kind: "enter", keepOpen: false });
 		const again = h.settle();
-		h.calls[1].resolve({ exitCode: 0, output: "", lastLine: "", ms: 1 });
+		h.calls[1].resolve({ exitCode: 0, output: "", truncated: false, lastLine: "", ms: 1 });
 		await again;
 		h.take();
 		h.press({ kind: "open-console", session: "node1:console" });

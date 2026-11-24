@@ -51,6 +51,25 @@
 			color: var(--text-2);
 		}
 
+		.address {
+			color: var(--text);
+			overflow-wrap: anywhere;
+			user-select: all;
+		}
+
+		.setup {
+			display: flex;
+			flex-wrap: wrap;
+			align-items: center;
+			gap: 4px 8px;
+			padding: 4px var(--gutter);
+		}
+
+		.said {
+			color: var(--text-2);
+			overflow-wrap: anywhere;
+		}
+
 		.tools {
 			display: flex;
 			flex-direction: column;

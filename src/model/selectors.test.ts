@@ -315,6 +315,21 @@ describe("the status line", () => {
 		expect(tone(s, "webmcp")).toBe("quiet");
 	});
 
+	test("a browser without WebMCP, or one that refused the tools, is said before the pause but after a waiting call", () => {
+		let s = run(
+			busy(),
+			{ type: "ui/tools-paused", paused: true },
+			{ type: "agent/webmcp", webmcp: { kind: "absent" } },
+		);
+		expect(texts(s).right[0]).toBe("webmcp: not available");
+		expect(tone(s, "webmcp")).toBe("quiet");
+		s = run(s, { type: "agent/webmcp", webmcp: { kind: "refused", message: "Not allowed." } });
+		expect(texts(s).right[0]).toBe("webmcp: blocked");
+		expect(tone(s, "webmcp")).toBe("warn");
+		s = run(s, { type: "agent/call", call: agentCall(2, 0, { status: "waiting" }) });
+		expect(texts(s).right[0]).toBe("webmcp: 1 call waiting for you");
+	});
+
 	test("a tool switched off is not counted, and an idle agent is called idle", () => {
 		let s = run(busy(), { type: "ui/policy", tool: "shell_exec", policy: "off" });
 		expect(texts(s).right[0]).toBe("webmcp: 6 tools, agent active");

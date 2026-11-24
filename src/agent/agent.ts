@@ -4,11 +4,14 @@
 
 import type { CaptureView } from "../capture/index.ts";
 import type { Registry } from "../commands/index.ts";
-import type { AgentCall, LabState, Store, ToolName } from "../model/index.ts";
-import { type AgentTool, type Answer, type SessionScreens, ToolError, toolTable } from "./tools.ts";
+import type { AgentCall, LabState, Store, ToolName, WebMcp } from "../model/index.ts";
+import { type AgentTool, type Answer, type SessionScreens, toolTable } from "./tools.ts";
 import type { ModelContextLike, WebMcpTool } from "./webmcp.ts";
 
 export const DENIED = "Denied by the user.";
+
+/** Takes no input and changes nothing. */
+const TRIED: ToolName = "machines_list";
 
 export interface AgentDeps {
 	readonly store: Pick<Store, "state" | "subscribe" | "dispatchAgent">;
@@ -26,13 +29,25 @@ export interface ToolRow {
 }
 
 export interface Agent {
-	/** Whether this browser has WebMCP. */
-	readonly available: boolean;
 	readonly tools: readonly ToolRow[];
 	/** The person's answer to a waiting call. Anything else is ignored. */
 	answer(call: number, allow: boolean): void;
+	/**
+	 * Calls machines_list through the browser, as an agent would. Rejects when
+	 * the browser does not get the call to the tool. Null in a browser where a
+	 * page cannot call tools.
+	 */
+	readonly tryCall: (() => Promise<void>) | null;
 	/** Unregisters every tool. Waiting calls stay waiting. */
 	dispose(): void;
+}
+
+/**
+ * What the agent reads when a call fails or is refused. A value and not a
+ * rejection, because the browser replaces a rejection's message with its own.
+ */
+interface Failure {
+	readonly error: string;
 }
 
 function sentence(error: unknown): string {
@@ -43,6 +58,8 @@ export function startAgent(deps: AgentDeps): Agent {
 	const { store, modelContext } = deps;
 	const table = toolTable(deps.registry, deps);
 	const registered = new Map<ToolName, AbortController>();
+	/** What the browser said about each tool it would not take. */
+	const refusals = new Map<ToolName, string>();
 	const waiting = new Map<number, (allow: boolean) => void>();
 
 	const nextId = (state: LabState) => state.agent.calls.reduce((max, call) => Math.max(max, call.id), 0) + 1;
@@ -69,18 +86,18 @@ export function startAgent(deps: AgentDeps): Agent {
 		const id = nextId(lab);
 		const fields = { id, tool: tool.name, preview: null, actionLabel: null, result: null, at: lab.now };
 		const prepared = tool.prepare(input, lab);
-		const refused = (error: string) => {
+		const refused = (error: string): Failure => {
 			store.dispatchAgent({
 				type: "agent/call",
 				call: { ...fields, line: prepared.line, status: "failed", result: error },
 			});
-			return new ToolError(error);
+			return { error };
 		};
 		const { policies, paused } = lab.agent;
-		if (!prepared.ok) throw refused(prepared.error);
+		if (!prepared.ok) return refused(prepared.error);
 		// The browser can still deliver a call to a tool unregistered a moment ago.
-		if (paused) throw refused("Tools are paused in the agent panel.");
-		if (policies[tool.name] === "off") throw refused(`${tool.name} is off in the agent panel.`);
+		if (paused) return refused("Tools are paused in the agent panel.");
+		if (policies[tool.name] === "off") return refused(`${tool.name} is off in the agent panel.`);
 
 		if (policies[tool.name] === "ask") {
 			const { preview, actionLabel } = prepared;
@@ -97,7 +114,7 @@ export function startAgent(deps: AgentDeps): Agent {
 			}
 			if (!allow) {
 				settle(id, "denied", DENIED);
-				return DENIED;
+				return { error: DENIED } satisfies Failure;
 			}
 			settle(id, "running", null);
 		} else {
@@ -113,7 +130,7 @@ export function startAgent(deps: AgentDeps): Agent {
 				throw signal.reason;
 			}
 			settle(id, "failed", sentence(error));
-			throw error instanceof ToolError ? error : new ToolError(sentence(error));
+			return { error: sentence(error) } satisfies Failure;
 		}
 		settle(id, "done", answer.summary);
 		return answer.reply;
@@ -124,6 +141,7 @@ export function startAgent(deps: AgentDeps): Agent {
 			tool.name,
 			{
 				name: tool.name,
+				title: tool.title,
 				description: tool.description,
 				inputSchema: tool.inputSchema,
 				annotations: tool.annotations,
@@ -132,9 +150,43 @@ export function startAgent(deps: AgentDeps): Agent {
 		]),
 	);
 
+	function report(): void {
+		const { policies } = store.state.agent;
+		const refusal = [...refusals].find(([name]) => policies[name] !== "off");
+		const webmcp: WebMcp = refusal ? { kind: "refused", message: refusal[1] } : { kind: "registered" };
+		store.dispatchAgent({ type: "agent/webmcp", webmcp });
+	}
+
+	/**
+	 * A browser that refuses a tool says so in the store and the console; the
+	 * lab carries on. The tool stays counted as registered so a refusal is not
+	 * retried on every store change, only when the tool is next wanted.
+	 */
+	function register(context: ModelContextLike, tool: WebMcpTool, name: ToolName, signal: AbortSignal): void {
+		const took = () => {
+			if (signal.aborted) return;
+			refusals.delete(name);
+			report();
+		};
+		const refused = (error: unknown) => {
+			if (signal.aborted) return;
+			console.error(`WebMCP did not register ${name}`, error);
+			refusals.set(name, sentence(error));
+			report();
+		};
+		try {
+			const pending = context.registerTool(tool, { signal });
+			if (pending instanceof Promise) pending.then(took, refused);
+			else took();
+		} catch (error) {
+			refused(error);
+		}
+	}
+
 	/** Registered is exactly the tools whose policy is not off, or none while paused. Idempotent. */
 	function reconcile(): void {
 		if (!modelContext) return;
+		report();
 		const { policies, paused } = store.state.agent;
 		for (const [name, tool] of webTools) {
 			const wanted = !paused && policies[name] !== "off";
@@ -142,7 +194,7 @@ export function startAgent(deps: AgentDeps): Agent {
 			if (wanted && !controller) {
 				const next = new AbortController();
 				registered.set(name, next);
-				register(modelContext, tool, next.signal);
+				register(modelContext, tool, name, next.signal);
 			} else if (!wanted && controller) {
 				controller.abort();
 				registered.delete(name);
@@ -150,36 +202,32 @@ export function startAgent(deps: AgentDeps): Agent {
 		}
 	}
 
+	function tryCall(): Agent["tryCall"] {
+		const { getTools, executeTool } = modelContext ?? {};
+		if (!getTools || !executeTool) return null;
+		return async () => {
+			const listed = await getTools();
+			const tool: unknown = Array.isArray(listed) ? listed.find((t) => t?.name === TRIED) : undefined;
+			if (tool === undefined) throw new Error(`The browser does not list ${TRIED}.`);
+			await executeTool(tool, {});
+		};
+	}
+
 	const unsubscribe = store.subscribe(reconcile);
 	reconcile();
 
 	return {
-		available: modelContext !== null,
 		tools: table.map((tool) => ({ name: tool.name, args: Object.keys(tool.inputSchema.properties ?? {}) })),
 		answer(id, allow) {
 			const resume = waiting.get(id);
 			waiting.delete(id);
 			resume?.(allow);
 		},
+		tryCall: tryCall(),
 		dispose() {
 			unsubscribe();
 			for (const controller of registered.values()) controller.abort();
 			registered.clear();
 		},
 	};
-}
-
-/**
- * A browser that refuses a tool says so in the console; the lab carries on.
- * The tool stays counted as registered so a refusal is not retried on every
- * store change.
- */
-function register(modelContext: ModelContextLike, tool: WebMcpTool, signal: AbortSignal): void {
-	const failed = (error: unknown) => console.error(`WebMCP did not register ${tool.name}`, error);
-	try {
-		const pending = modelContext.registerTool(tool, { signal });
-		if (pending instanceof Promise) pending.catch(failed);
-	} catch (error) {
-		failed(error);
-	}
 }

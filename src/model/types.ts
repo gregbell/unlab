@@ -152,7 +152,15 @@ export interface AgentCall {
 	readonly at: number;
 }
 
+/** What the browser makes of the tools. Nothing can call in unless it took them. */
+export type WebMcp =
+	| { readonly kind: "absent" }
+	| { readonly kind: "registered" }
+	/** The browser has WebMCP and turned a tool down, in its own words. */
+	| { readonly kind: "refused"; readonly message: string };
+
 export interface AgentState {
+	readonly webmcp: WebMcp;
 	readonly policies: Readonly<Record<ToolName, Policy>>;
 	readonly paused: boolean;
 	readonly calls: readonly AgentCall[];
@@ -281,6 +289,7 @@ export type UiEvent =
 
 /** Dispatched only by agent/. */
 export type AgentEvent =
+	| { readonly type: "agent/webmcp"; readonly webmcp: WebMcp }
 	| { readonly type: "agent/call"; readonly call: AgentCall }
 	| {
 			readonly type: "agent/settled";

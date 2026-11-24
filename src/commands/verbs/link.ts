@@ -80,6 +80,7 @@ export const link = defineVerb({
 	},
 	tool: {
 		name: "link_set",
+		title: "Plug in or cut cables",
 		description:
 			"Plug in (up) or cut (down) the switch cable of machines. Returns the port and link state per machine. A machine already as asked is left alone.",
 		policy: "run",

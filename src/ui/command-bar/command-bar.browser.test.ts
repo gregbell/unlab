@@ -48,9 +48,9 @@ const withHistory = (): LabState =>
 
 /** A shell's answers to the CmdFanout line, as the runtime's exec port reports them. */
 const RECORDED: Record<string, ExecOutcome> = {
-	"node1:console": { exitCode: 1, output: LOSS, lastLine: LOSS, ms: 1000 },
-	"node2:console": { exitCode: 1, output: LOSS, lastLine: LOSS, ms: 1000 },
-	"node3:console": { exitCode: 0, output: OK, lastLine: OK, ms: 400 },
+	"node1:console": { exitCode: 1, output: LOSS, truncated: false, lastLine: LOSS, ms: 1000 },
+	"node2:console": { exitCode: 1, output: LOSS, truncated: false, lastLine: LOSS, ms: 1000 },
+	"node3:console": { exitCode: 0, output: OK, truncated: false, lastLine: OK, ms: 400 },
 };
 
 /** Safe lines run on the real verbs, with the recorded exec answers and a clock one second on, and are still recorded. */

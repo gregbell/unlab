@@ -1,4 +1,4 @@
-import { defineConfig } from "vite";
+import { defineConfig, type Plugin } from "vite";
 
 /**
  * Cross-origin isolation. A single-CPU machine does not need it, but it is
@@ -10,7 +10,25 @@ const COI_HEADERS = {
 	"Cross-Origin-Embedder-Policy": "require-corp",
 };
 
+/**
+ * Origin trial tokens, one per browser and origin, so WebMCP works on the
+ * deployed site without the flag. None in the environment, none in the page.
+ */
+function originTrials(): Plugin {
+	const tokens = (process.env.UNLAB_ORIGIN_TRIAL_TOKENS ?? "").split(/[\s,]+/).filter(Boolean);
+	return {
+		name: "unlab-origin-trials",
+		transformIndexHtml: () =>
+			tokens.map((content) => ({
+				tag: "meta",
+				attrs: { "http-equiv": "origin-trial", content },
+				injectTo: "head",
+			})),
+	};
+}
+
 export default defineConfig({
+	plugins: [originTrials()],
 	// Each machine runs in its own ES module worker.
 	worker: { format: "es" },
 	// unkernel locates its kernel with new URL("unkernel.wasm", import.meta.url).

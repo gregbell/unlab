@@ -254,7 +254,7 @@ export function selectAgentIndicator(state: LabState): AgentIndicator {
 export interface StatusSegment {
 	readonly key: "machines" | "sessions" | "links" | "webmcp";
 	readonly text: string;
-	/** `quiet` when all is well, `down` for a failed machine or a cut cable, `warn` while a call waits. */
+	/** `quiet` when all is well, `down` for a failed machine or a cut cable, `warn` while a call waits or the browser blocks the tools. */
 	readonly tone: "quiet" | "down" | "warn";
 }
 
@@ -276,6 +276,8 @@ function machinesSegment(machines: readonly Machine[]): StatusSegment {
 function webmcpSegment(agent: LabState["agent"], indicator: AgentIndicator): StatusSegment {
 	const waiting = agent.calls.filter((call) => call.status === "waiting").length;
 	if (waiting > 0) return { key: "webmcp", text: `webmcp: ${plural(waiting, "call")} waiting for you`, tone: "warn" };
+	if (agent.webmcp.kind === "absent") return { key: "webmcp", text: "webmcp: not available", tone: "quiet" };
+	if (agent.webmcp.kind === "refused") return { key: "webmcp", text: "webmcp: blocked", tone: "warn" };
 	if (agent.paused) return { key: "webmcp", text: "webmcp: paused", tone: "quiet" };
 	const tools = plural(Object.values(agent.policies).filter((policy) => policy !== "off").length, "tool");
 	const text = indicator === "no agent calls yet" ? `webmcp: ${tools} registered` : `webmcp: ${tools}, ${indicator}`;

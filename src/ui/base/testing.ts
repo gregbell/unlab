@@ -24,6 +24,7 @@ import {
 	type Source,
 	type Store,
 	update,
+	type WebMcp,
 } from "../../model/index.ts";
 import type { AgentService, AppServices, SwitchReadout, TerminalService } from "../services.ts";
 import { servicesContext } from "./context.ts";
@@ -33,9 +34,9 @@ const TEST_IMAGES = [{ name: "alpine", label: "alpine 3.24" }] as const;
 /** One step in building a lab: an event, or events made from the state so far. */
 export type Step = LabEvent | ((state: LabState) => readonly LabEvent[]);
 
-/** A lab built the way the app builds one: every step goes through `update`. */
+/** A lab built the way the app builds one, in a browser that took the tools: every step goes through `update`. */
 export function lab(...steps: readonly Step[]): LabState {
-	return steps.reduce<LabState>(
+	return [webmcp({ kind: "registered" }), ...steps].reduce<LabState>(
 		(state, step) => {
 			const events = typeof step === "function" ? step(state) : [step];
 			return events.reduce((next, event) => update(next, event).state, state);
@@ -80,6 +81,7 @@ export const remove = (...machines: readonly MachineName[]): LabEvent => ({
 	cause: "bar",
 });
 export const park = (machine: MachineName): LabEvent => ({ type: "ui/park", machine });
+export const webmcp = (webmcp: WebMcp): AgentEvent => ({ type: "agent/webmcp", webmcp });
 export const tick = (now: number): LabEvent => ({ type: "tick", now });
 export const agentCall = (id: number, status: AgentCall["status"] = "done"): AgentEvent => ({
 	type: "agent/call",
@@ -120,8 +122,8 @@ export interface MountOptions<E extends HTMLElement> {
 	readonly switch?: Pick<SwitchReadout, "macTable" | "now">;
 	/** The terminal screens. Defaults to none: every `host` is null. */
 	readonly terminals?: TerminalService;
-	/** Whether the browser has WebMCP. Defaults to true. */
-	readonly webmcp?: boolean;
+	/** What `services.agent.tryCall` is. Defaults to null, as where a page cannot call tools. */
+	readonly tryCall?: AgentService["tryCall"];
 	/** Runs before the element connects: <unlab-app> takes its services here. */
 	readonly prepare?: (element: E, services: AppServices) => void;
 }
@@ -180,11 +182,11 @@ export async function mount<K extends keyof HTMLElementTagNameMap>(
 		switch: { macTable: () => [], now: () => 0, ...options.switch, counters: (port) => counters.get(port) },
 		terminals: options.terminals ?? { host: () => null },
 		agent: {
-			available: options.webmcp ?? true,
 			tools: toolRows(registry),
 			answer: (call, allow) => {
 				answers.push({ call, allow });
 			},
+			tryCall: options.tryCall ?? null,
 		},
 	};
 

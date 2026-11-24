@@ -36,7 +36,7 @@ export const link = defineVerb({
 		deps.dispatch({ type: "cmd/link", changes: plan.changes, cause: ctx.source });
 		return { kind: "visible", text: "", data: plan.changes };
 	},
-	tool: { name: "link_set", policy: "run" },
+	tool: { name: "link_set", title: "Plug in or cut cables", policy: "run" },
 });
 
 export const spawn = defineVerb({
@@ -77,7 +77,7 @@ export const spawn = defineVerb({
 		});
 		return { kind: "visible", text: `booting ${plan.names.join(", ")}`, data: { names: plan.names } };
 	},
-	tool: { name: "machines_spawn", policy: "ask" },
+	tool: { name: "machines_spawn", title: "Boot machines", policy: "ask" },
 });
 
 export const rm = defineVerb({
@@ -102,7 +102,7 @@ export const rm = defineVerb({
 		await deps.until((s) => plan.machines.every((m) => !s.machines[m]), ctx.signal);
 		return { kind: "visible", text: `removed ${plan.machines.join(", ")}`, data: { removed: plan.machines } };
 	},
-	tool: { name: "machines_remove", policy: "ask", annotations: { consequentialHint: true } },
+	tool: { name: "machines_remove", title: "Remove machines", policy: "ask", annotations: { consequentialHint: true } },
 });
 
 export const exec = defineVerb({
@@ -115,7 +115,12 @@ export const exec = defineVerb({
 	async execute(plan) {
 		return { kind: "report", header: `ran in ${plan.machines.length} consoles`, blocks: [], data: null };
 	},
-	tool: { name: "shell_exec", policy: "run", annotations: { untrustedContentHint: true } },
+	tool: {
+		name: "shell_exec",
+		title: "Run a shell command",
+		policy: "run",
+		annotations: { untrustedContentHint: true },
+	},
 });
 
 export const focus = defineVerb({
@@ -174,7 +179,7 @@ export const ls = defineVerb({
 	async execute(plan) {
 		return { kind: "report", header: `${plan.machines.length} machines`, blocks: [], data: plan.machines };
 	},
-	tool: { name: "machines_list", policy: "run", annotations: { readOnlyHint: true } },
+	tool: { name: "machines_list", title: "List machines", policy: "run", annotations: { readOnlyHint: true } },
 });
 
 export const TOY_VERBS = [spawn, rm, ls, exec, link, capture, focus, boot] as const;

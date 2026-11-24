@@ -170,12 +170,26 @@ export interface ExecRun {
 	readonly session: SessionId;
 	readonly exitCode: number | null;
 	readonly output: string;
+	/** There was more before `output`. */
+	readonly truncated: boolean;
 	readonly ms: number;
 }
 
 export interface ExecData {
 	readonly ran: readonly ExecRun[];
 	readonly skipped: readonly { readonly target: MachineName | SessionId; readonly reason: string }[];
+}
+
+/** The most characters of a run's output that `data` carries: an agent reads all of it. */
+const OUTPUT_MAX = 16_000;
+
+/** The last whole lines that fit: part of a line reads as a different one, `7334` for `17334`. */
+function tail(output: string): string {
+	if (output.length <= OUTPUT_MAX) return output;
+	const kept = output.slice(-OUTPUT_MAX);
+	if (output.at(-OUTPUT_MAX - 1) === "\n") return kept;
+	const lineEnd = kept.indexOf("\n");
+	return lineEnd === -1 ? kept : kept.slice(lineEnd + 1);
 }
 
 export const exec = defineVerb({
@@ -211,8 +225,14 @@ export const exec = defineVerb({
 				busy.push({ target: t.session, machine: t.machine, hue: t.hue, reason });
 				return;
 			}
-			const { exitCode, output, lastLine, ms } = outcome.value;
-			ran.push({ session: t.session, exitCode, output, ms });
+			const { exitCode, output, truncated, lastLine, ms } = outcome.value;
+			ran.push({
+				session: t.session,
+				exitCode,
+				output: tail(output),
+				truncated: truncated || output.length > OUTPUT_MAX,
+				ms,
+			});
 			blocks.push({
 				machine: t.machine,
 				hue: t.hue,
@@ -242,8 +262,9 @@ export const exec = defineVerb({
 	},
 	tool: {
 		name: "shell_exec",
+		title: "Run a shell command",
 		description:
-			"Type a shell command into machines' sessions, as a person would, and wait for each to finish. Returns each exit code and output. The output comes from the guests.",
+			"Type a shell command into machines' sessions, as a person would, and wait for each to finish. Returns each exit code and output. Long output keeps only its end and has truncated set. The output comes from the guests.",
 		policy: "run",
 		annotations: { untrustedContentHint: true },
 	},

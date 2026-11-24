@@ -47,9 +47,93 @@ a guest console, or use `exec` in the bar to address a guest by name.
 Commands that accept multiple machines can take a list (`node1,node3`), a glob
 (`node*`), or `all`. Globs and `all` select ready machines.
 
-In browsers with WebMCP, an agent can use the lab commands too. The agent panel
-lets you allow a tool, require approval, or turn it off.
-[WebMCP API documentation](https://developer.chrome.com/docs/ai/webmcp/imperative-api)
+## Use the lab with an AI agent
+
+An agent can boot machines, run commands in them, cut cables, and read the
+capture. unlab registers its lab commands with your browser through
+[WebMCP](https://developer.chrome.com/docs/ai/webmcp/imperative-api), and the
+agent calls them through that browser. The lab needs no server and no account.
+The tools exist only while the lab is open in a tab.
+
+You need Chrome 150 or later. WebMCP is a Chrome trial feature, so Firefox and
+Safari do not have it.
+
+### Connect Claude Code
+
+You also need Node.js 22.12 or later.
+
+1. Add the Chrome DevTools MCP server with its WebMCP tools turned on:
+
+   ```sh
+   claude mcp add --scope user unlab -- npx -y chrome-devtools-mcp@latest \
+     --categoryExperimentalWebmcp --chromeArg=--enable-features=WebMCP \
+     --no-javascript-evaluation --no-category-input
+   ```
+
+2. Start a new Claude Code session and ask:
+
+   > Open https://gregbell.github.io/unlab/ and use its WebMCP tools to boot two
+   > Alpine machines and check that they can ping each other.
+
+3. A Chrome window opens on the lab. Click **webmcp** at the bottom right to
+   open the agent panel. When the agent asks to boot the machines, click
+   **Boot node1 and node2**.
+
+The window has its own profile, so its lab is separate from the one in your
+everyday browser.
+
+Keep the last two flags. Without them, the server also lets the agent click and
+run JavaScript in the page, so it could approve its own calls. The server sends
+usage statistics to Google unless you add `--no-usage-statistics`.
+
+In another MCP client, add a server with the command `npx` and the arguments
+that follow it in step 1.
+
+### Connect a browser extension
+
+1. Open `chrome://flags/#enable-webmcp-testing`, choose **Enabled**, and relaunch
+   Chrome.
+2. [Open the lab](https://gregbell.github.io/unlab/). The bottom right reads
+   `webmcp: 7 tools registered`.
+3. To see a call without an agent, click that text, then click **try a call**. The
+   call and its result appear in the panel.
+4. Install
+   [WebMCP - Model Context Tool Inspector](https://chromewebstore.google.com/detail/webmcp-model-context-tool/gbpdfapgefenggkahomfgkhfehlcenpd).
+   It lists the tools in the tab. To ask for work in plain language, give it a
+   Gemini API key.
+
+### Things to ask for
+
+- "Cut node2's cable, ping it from node1, and show me the ARP requests."
+- "Boot two machines on switch0 and show me the first ping in the capture."
+
+### Choose what runs without asking
+
+The agent panel sets each tool to `run`, `ask me`, or `off`. A call to an
+`ask me` tool waits until you approve or deny it. **pause tools** hides all of
+them. Your choices survive a reload.
+
+| Tool              | What it does                            | Default  |
+| ----------------- | --------------------------------------- | -------- |
+| `machines_list`   | List machines, addresses, and links.    | `run`    |
+| `machines_spawn`  | Boot machines.                          | `ask me` |
+| `machines_remove` | Remove machines and delete their disks. | `ask me` |
+| `shell_exec`      | Run a command in a guest's shell.       | `run`    |
+| `shell_read`      | Read what a guest's terminal shows.     | `run`    |
+| `link_set`        | Cut or reconnect a machine's cable.     | `run`    |
+| `capture_read`    | Read captured frames from the switch.   | `run`    |
+
+Commands run inside the guests, not on your computer. Guest output can contain
+text that tries to instruct the agent, so unlab marks it as untrusted.
+
+### If the agent cannot call the tools
+
+| Status line                      | What to do                                                                                 |
+| -------------------------------- | ------------------------------------------------------------------------------------------ |
+| `webmcp: not available`          | Turn on the flag, or check that the MCP server has `--chromeArg=--enable-features=WebMCP`. |
+| `webmcp: blocked`                | Click it to read the browser's reason.                                                     |
+| `webmcp: paused`                 | Click it, then click **resume tools**.                                                     |
+| `webmcp: 1 call waiting for you` | Click it, then approve or deny the call.                                                   |
 
 ## Network and storage
 
@@ -133,6 +217,16 @@ After local setup, run the checks that cover your change.
 For the browser and end-to-end suites, install Chromium with
 `npx playwright install chromium` or set `CHROMIUM_PATH` to a Chromium
 executable.
+
+### Turn WebMCP on for visitors
+
+With an origin trial token, visitors to a deployed lab do not need the Chrome
+flag. Register the site's origin for the
+[WebMCP origin trial](https://developer.chrome.com/origintrials/#/register_trial/4163014905550602241),
+then set the repository variable `UNLAB_ORIGIN_TRIAL_TOKENS` to the token. The
+Pages workflow adds it to the page. Separate several tokens with spaces. Each
+token has an expiry date. To renew one, update the variable and run the workflow
+again. Chrome's trial ends on 30 March 2027.
 
 ## Licence and acknowledgements
 

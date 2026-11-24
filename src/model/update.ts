@@ -48,6 +48,7 @@ import {
 	type SessionId,
 	type Step,
 	type ToolName,
+	type WebMcp,
 } from "./types.ts";
 
 /** From the handoff's tools table. Every tool runs at once except spawn and remove, which ask first. */
@@ -79,7 +80,14 @@ export function initialState(
 		agentPanel: false,
 		dock: "open",
 		capture: { filter: "", paused: false, selected: null },
-		agent: { policies: DEFAULT_POLICIES, paused: false, calls: [], firstCallAt: null, lastCallAt: null },
+		agent: {
+			webmcp: { kind: "absent" },
+			policies: DEFAULT_POLICIES,
+			paused: false,
+			calls: [],
+			firstCallAt: null,
+			lastCallAt: null,
+		},
 		log: [],
 		nextLogId: 1,
 		images,
@@ -179,6 +187,8 @@ function reduce(state: LabState, event: LabEvent): Step {
 		case "ui/tools-paused":
 			return step(agent(state, { paused: event.paused }));
 
+		case "agent/webmcp":
+			return sameWebMcp(state.agent.webmcp, event.webmcp) ? step(state) : step(agent(state, { webmcp: event.webmcp }));
 		case "agent/call":
 			return agentCalled(state, event.call);
 		case "agent/settled":
@@ -264,6 +274,10 @@ function capture(state: LabState, fields: Partial<CaptureUi>): LabState {
 
 function agent(state: LabState, fields: Partial<AgentState>): LabState {
 	return patch(state, { agent: patch(state.agent, fields) });
+}
+
+function sameWebMcp(a: WebMcp, b: WebMcp): boolean {
+	return a.kind === "refused" && b.kind === "refused" ? a.message === b.message : a.kind === b.kind;
 }
 
 function logged(state: LabState, entry: Omit<LogEntry, "id">): LabState {

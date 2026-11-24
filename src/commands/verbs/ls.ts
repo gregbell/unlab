@@ -87,6 +87,7 @@ export const ls = defineVerb({
 	},
 	tool: {
 		name: "machines_list",
+		title: "List machines",
 		description: "List every machine in the lab with its state, address, switch port, link and sessions.",
 		policy: "run",
 		annotations: { readOnlyHint: true },

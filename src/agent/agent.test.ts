@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { arpReply, arpRequest, ping } from "../../test/support/frames.ts";
 import { createCaptureLog } from "../capture/index.ts";
 import { createRegistry, isLineError, parseLine, VERBS } from "../commands/index.ts";
@@ -11,7 +11,7 @@ import {
 	selectRecent,
 	type ToolName,
 } from "../model/index.ts";
-import { detectModelContext, startAgent, type WebMcpTool } from "./index.ts";
+import { detectModelContext, type ModelContextLike, startAgent, type WebMcpTool } from "./index.ts";
 
 /** The real store and every verb; the runtime stand-in answers vm/stop so removals finish. */
 function storeLab() {
@@ -49,7 +49,7 @@ function storeLab() {
 	};
 }
 
-/** A browser's modelContext that keeps what is registered, as the e2e page fake does. */
+/** A browser's modelContext that keeps what is registered. */
 function fakeModelContext() {
 	const tools = new Map<string, WebMcpTool>();
 	return {
@@ -72,6 +72,14 @@ const ALL_TOOLS: readonly ToolName[] = [
 	"link_set",
 	"capture_read",
 ];
+
+/** An agent over an empty lab, in a browser whose modelContext the test brings. */
+function start(modelContext: ModelContextLike | null) {
+	const { store, registry } = storeLab();
+	const capture = createCaptureLog({ schedule: (fn) => fn(), now: () => 0 });
+	const agent = startAgent({ store, registry, screens: { get: () => undefined }, capture, modelContext });
+	return { agent, store };
+}
 
 async function setup(machines = 2, screens: Partial<Record<SessionId, string>> = {}) {
 	const lab = storeLab();
@@ -131,6 +139,9 @@ function pending(promise: Promise<unknown>) {
 	return () => state;
 }
 
+/** A reply the agent reads as a failure, saying at least this. */
+const refusal = (sentence: string) => ({ error: expect.stringContaining(sentence) });
+
 describe("registration", () => {
 	it("registers every tool in the handoff's table with its annotations", async () => {
 		const { context } = await setup();
@@ -140,6 +151,27 @@ describe("registration", () => {
 		expect(context.tools.get("shell_exec")?.annotations).toEqual({ untrustedContentHint: true });
 		expect(context.tools.get("shell_read")?.annotations).toEqual({ readOnlyHint: true, untrustedContentHint: true });
 		expect(context.tools.get("capture_read")?.annotations).toEqual({ readOnlyHint: true, untrustedContentHint: true });
+	});
+
+	it("titles every tool, and keeps what it says about itself within the lengths Chrome recommends", async () => {
+		const { context } = await setup();
+		expect([...context.tools.values()].map((tool) => tool.title).sort()).toEqual([
+			"Boot machines",
+			"List machines",
+			"Plug in or cut cables",
+			"Read a terminal",
+			"Read captured frames",
+			"Remove machines",
+			"Run a shell command",
+		]);
+		const long = [...context.tools.values()].flatMap(({ name, description, inputSchema }) => [
+			...(name.length > 30 ? [name] : []),
+			...(description.length > 500 ? [`${name} description`] : []),
+			...Object.entries(inputSchema.properties ?? {}).flatMap(([field, schema]) =>
+				field.length > 30 || (schema.description ?? "").length > 150 ? [`${name} ${field}`] : [],
+			),
+		]);
+		expect(long).toEqual([]);
 	});
 
 	it("lists the tools in the handoff's order with their arguments", async () => {
@@ -172,23 +204,72 @@ describe("registration", () => {
 		const { context, policy, lastCall } = await setup();
 		const list = context.tools.get("machines_list");
 		policy("machines_list", "off");
-		await expect(list?.execute({}, {})).rejects.toThrow("machines_list is off in the agent panel.");
+		await expect(list?.execute({}, {})).resolves.toEqual(refusal("machines_list is off in the agent panel."));
 		expect(lastCall()).toMatchObject({ status: "failed", tool: "machines_list" });
 	});
 
-	it("does nothing without WebMCP, and says so", async () => {
-		const lab = storeLab();
-		const capture = createCaptureLog({ schedule: (fn) => fn(), now: () => 0 });
-		const agent = startAgent({
-			store: lab.store,
-			registry: lab.registry,
-			screens: { get: () => undefined },
-			capture,
-			modelContext: null,
-		});
-		lab.store.dispatchUi({ type: "ui/tools-paused", paused: true });
-		expect(agent.available).toBe(false);
+	it("says in the store what the browser made of the tools", async () => {
+		const { store } = await setup();
+		expect(store.state.agent.webmcp).toEqual({ kind: "registered" });
+	});
+
+	it("does nothing without WebMCP, and says so", () => {
+		const { agent, store } = start(null);
+		store.dispatchUi({ type: "ui/tools-paused", paused: true });
+		expect(store.state.agent.webmcp).toEqual({ kind: "absent" });
 		expect(agent.tools).toHaveLength(ALL_TOOLS.length);
+	});
+
+	it.each([
+		[
+			"throws",
+			() => {
+				throw new Error("Tools are not allowed in this frame.");
+			},
+		],
+		["rejects", () => Promise.reject(new Error("Tools are not allowed in this frame."))],
+	])(
+		"says the browser refused the tools when registerTool %s, and does not try again on every change",
+		async (_, refuse) => {
+			const registerTool = vi.fn(refuse);
+			const { store } = start({ registerTool });
+			const refused = { kind: "refused", message: "Tools are not allowed in this frame." };
+			await expect.poll(() => store.state.agent.webmcp).toEqual(refused);
+			store.dispatchUi({ type: "ui/tools-paused", paused: true });
+			await turn();
+			expect(store.state.agent.webmcp).toEqual(refused);
+			expect(registerTool).toHaveBeenCalledTimes(ALL_TOOLS.length);
+		},
+	);
+
+	it("takes the refusal back once the browser accepts the tools, or the refused tool is off", async () => {
+		const context = fakeModelContext();
+		let refuse = true;
+		const { store } = start({
+			registerTool(tool, options) {
+				if (refuse && tool.name === "link_set") throw new Error("No link_set here.");
+				context.registerTool(tool, options);
+			},
+		});
+		expect(store.state.agent.webmcp).toEqual({ kind: "refused", message: "No link_set here." });
+		store.dispatchUi({ type: "ui/policy", tool: "link_set", policy: "off" });
+		expect(store.state.agent.webmcp).toEqual({ kind: "registered" });
+		store.dispatchUi({ type: "ui/policy", tool: "link_set", policy: "ask" });
+		expect(store.state.agent.webmcp).toEqual({ kind: "refused", message: "No link_set here." });
+		refuse = false;
+		store.dispatchUi({ type: "ui/tools-paused", paused: true });
+		store.dispatchUi({ type: "ui/tools-paused", paused: false });
+		expect(store.state.agent.webmcp).toEqual({ kind: "registered" });
+	});
+
+	it("does not take its own unregistering for a refusal", async () => {
+		const { store } = start({
+			registerTool: (_tool, { signal }) =>
+				new Promise((_resolve, reject) => signal.addEventListener("abort", () => reject(signal.reason))),
+		});
+		store.dispatchUi({ type: "ui/tools-paused", paused: true });
+		await turn();
+		expect(store.state.agent.webmcp).toEqual({ kind: "registered" });
 	});
 
 	it("stops registering once disposed", async () => {
@@ -204,6 +285,7 @@ describe("detectModelContext", () => {
 	const ctx = { registerTool: () => undefined };
 	const probe: WebMcpTool = {
 		name: "probe",
+		title: "Probe",
 		description: "",
 		inputSchema: {},
 		annotations: {},
@@ -218,6 +300,20 @@ describe("detectModelContext", () => {
 	it("falls back to navigator.modelContext from earlier drafts", () => {
 		const other = { registerTool: () => "navigator" };
 		expect(detectModelContext({}, { modelContext: other })?.registerTool(probe, options)).toBe("navigator");
+	});
+	it("finds the calling half where the browser has it", async () => {
+		const full = {
+			...ctx,
+			tools: ["a"],
+			getTools() {
+				return this.tools;
+			},
+			executeTool: () => "ran",
+		};
+		const found = detectModelContext({ modelContext: full }, {});
+		expect(found?.getTools?.()).toEqual(["a"]);
+		expect(found?.executeTool?.("a", {})).toBe("ran");
+		expect(detectModelContext({ modelContext: ctx }, {})?.getTools).toBeUndefined();
 	});
 	it("is null when neither has a registerTool", () => {
 		expect(detectModelContext({}, {})).toBeNull();
@@ -256,27 +352,62 @@ describe("a tool set to run", () => {
 	});
 });
 
+describe("trying a call", () => {
+	function callable() {
+		const context = fakeModelContext();
+		return {
+			...context,
+			getTools: async () => [...context.tools.values()].map(({ name }) => ({ name })),
+			executeTool: async (tool: unknown, input: object) => {
+				const name = Reflect.get(Object(tool), "name");
+				return JSON.stringify(await context.tools.get(name)?.execute(input, {}));
+			},
+		};
+	}
+
+	it("goes through the browser, so it is logged as an agent's call", async () => {
+		const { agent, store } = start(callable());
+		await agent.tryCall?.();
+		expect(store.state.agent.calls).toMatchObject([{ tool: "machines_list", line: "ls", status: "done" }]);
+	});
+
+	it("says so when the browser does not list the tool", async () => {
+		const { agent, store } = start(callable());
+		store.dispatchUi({ type: "ui/policy", tool: "machines_list", policy: "off" });
+		await expect(agent.tryCall?.()).rejects.toThrow("The browser does not list machines_list.");
+	});
+
+	it("is not offered where a page cannot call tools", () => {
+		expect(start(fakeModelContext()).agent.tryCall).toBeNull();
+		expect(start(null).agent.tryCall).toBeNull();
+	});
+});
+
 describe("bad input", () => {
 	it("returns the verb's own sentence, as the bar says it", async () => {
 		const { call, barError, lastCall, store } = await setup();
 		const expected = barError("rm node9");
-		await expect(call("machines_remove", { names: "node9" })).rejects.toThrow(expected);
+		await expect(call("machines_remove", { names: "node9" })).resolves.toEqual(refusal(expected));
 		expect(lastCall()).toMatchObject({ line: "rm node9", status: "failed", result: expected });
 		expect(store.state.machines.node1).toBeDefined();
 	});
 
 	it("checks fields itself rather than trusting the browser's schema check", async () => {
 		const { call, waiting } = await setup();
-		await expect(call("machines_remove", { names: "node2", force: true })).rejects.toThrow("no field called force");
-		await expect(call("machines_spawn", { count: "lots", image: "alpine" })).rejects.toThrow("Nothing was changed.");
-		await expect(call("shell_exec", { targets: "node1", command: "a\nb" })).rejects.toThrow("one line");
-		await expect(call("machines_list", "ls")).rejects.toThrow("object of fields");
+		await expect(call("machines_remove", { names: "node2", force: true })).resolves.toEqual(
+			refusal("no field called force"),
+		);
+		await expect(call("machines_spawn", { count: "lots", image: "alpine" })).resolves.toEqual(
+			refusal("Nothing was changed."),
+		);
+		await expect(call("shell_exec", { targets: "node1", command: "a\nb" })).resolves.toEqual(refusal("one line"));
+		await expect(call("machines_list", "ls")).resolves.toEqual(refusal("object of fields"));
 		expect(waiting()).toEqual([]);
 	});
 
 	it("refuses an argument that would sneak in an option", async () => {
 		const { call, store } = await setup();
-		await expect(call("machines_remove", { names: "--all" })).rejects.toThrow();
+		await expect(call("machines_remove", { names: "--all" })).resolves.toEqual({ error: expect.any(String) });
 		expect(store.state.rail).toEqual(["node1", "node2"]);
 	});
 });
@@ -303,13 +434,13 @@ describe("a tool set to ask", () => {
 		expect(store.state.log.at(-1)).toMatchObject({ line: "rm node2", source: "agent", outcome: "ok" });
 	});
 
-	it("resolves Denied by the user. after Deny and changes nothing", async () => {
+	it("answers that the user denied it after Deny and changes nothing", async () => {
 		const { call, waiting, agent, store } = await setup();
 		const removing = call("machines_remove", { names: "node2" });
 		await turn();
 		const id = waiting()[0]?.id ?? -1;
 		agent.answer(id, false);
-		await expect(removing).resolves.toBe("Denied by the user.");
+		await expect(removing).resolves.toEqual({ error: "Denied by the user." });
 		expect(store.state.machines.node2).toBeDefined();
 		expect(store.state.agent.calls.find((c) => c.id === id)).toMatchObject({
 			status: "denied",
@@ -353,7 +484,7 @@ describe("a tool set to ask", () => {
 		await turn();
 		expect(waiting().map((c) => c.line)).toEqual(["rm node3", "rm node2"]);
 		agent.answer(waiting()[1]?.id ?? -1, false);
-		await expect(second).resolves.toBe("Denied by the user.");
+		await expect(second).resolves.toEqual({ error: "Denied by the user." });
 		expect(waiting().map((c) => c.line)).toEqual(["rm node3"]);
 		agent.answer(waiting()[0]?.id ?? -1, true);
 		await first;
@@ -379,7 +510,7 @@ describe("a tool set to ask", () => {
 		lab.store.dispatchCommand({ type: "cmd/remove", machines: [gone], cause: "bar" });
 		expect(lab.store.state.machines[gone]).toBeUndefined();
 		agent.answer(id, true);
-		await expect(removing).rejects.toThrow("node2 is already gone.");
+		await expect(removing).resolves.toEqual(refusal("node2 is already gone."));
 		expect(lastCall()).toMatchObject({ id, status: "failed" });
 	});
 });
@@ -400,11 +531,15 @@ describe("shell_read", () => {
 
 	it("says which machines exist when it is asked for one that does not", async () => {
 		const { call } = await setup();
-		await expect(call("shell_read", { machine: "node9" })).rejects.toThrow(
-			"No machine called node9. You have node1, node2.",
+		await expect(call("shell_read", { machine: "node9" })).resolves.toEqual(
+			refusal("No machine called node9. You have node1, node2."),
 		);
-		await expect(call("shell_read", { machine: "node1", lines: 0 })).rejects.toThrow("whole number from 1 to 500");
-		await expect(call("shell_read", { machine: "node1:sh4" })).rejects.toThrow("node1 has no session called sh4");
+		await expect(call("shell_read", { machine: "node1", lines: 0 })).resolves.toEqual(
+			refusal("whole number from 1 to 500"),
+		);
+		await expect(call("shell_read", { machine: "node1:sh4" })).resolves.toEqual(
+			refusal("node1 has no session called sh4"),
+		);
 	});
 
 	it("does not log a line, because nothing ran", async () => {
@@ -431,6 +566,6 @@ describe("capture_read", () => {
 
 	it("refuses a filter Wire would refuse", async () => {
 		const { call } = await setup();
-		await expect(call("capture_read", { filter: "arp or" })).rejects.toThrow("A term is a protocol");
+		await expect(call("capture_read", { filter: "arp or" })).resolves.toEqual(refusal("A term is a protocol"));
 	});
 });

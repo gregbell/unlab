@@ -24,6 +24,8 @@ export interface ExecOutcome {
 	readonly exitCode: number | null;
 	/** The marked rows as the terminal shows them, without the echoed command line. */
 	readonly output: string;
+	/** The terminal no longer held the start, so `output` is the end of what was printed. */
+	readonly truncated: boolean;
 	/** The last line of output that is not blank. */
 	readonly lastLine: string;
 	readonly ms: number;
@@ -74,6 +76,8 @@ export interface ToolAnnotations {
 
 export interface ToolSpec {
 	readonly name: ToolName;
+	/** For people, where the browser lists the tool. */
+	readonly title: string;
 	/** Defaults to the verb's `about`. */
 	readonly description?: string;
 	readonly policy: Policy;
@@ -83,6 +87,7 @@ export interface ToolSpec {
 /** The WebMCP face of a verb, derived from its grammar. */
 export interface ToolFace {
 	readonly name: ToolName;
+	readonly title: string;
 	readonly description: string;
 	readonly policy: Policy;
 	readonly annotations: ToolAnnotations;
@@ -238,6 +243,7 @@ export function defineVerb<N extends string, G extends Grammar, P>(
 	};
 	const tool = (spec: ToolSpec): ToolFace => ({
 		name: spec.name,
+		title: spec.title,
 		description: spec.description ?? def.about,
 		policy: spec.policy,
 		annotations: spec.annotations ?? {},

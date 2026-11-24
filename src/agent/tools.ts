@@ -27,11 +27,6 @@ import {
 } from "../model/index.ts";
 import { compileFilter } from "../net/index.ts";
 
-/** A call the tool refused, in a sentence the agent reads as the tool's error. */
-export class ToolError extends Error {
-	override readonly name = "ToolError";
-}
-
 /** What a finished call gives back: a short line for the panel and the value the agent reads. */
 export interface Answer {
 	readonly summary: string;
@@ -52,11 +47,13 @@ export type Prepared =
 			readonly preview: string;
 			/** The approval button, named for the action: `Remove node3`. */
 			readonly actionLabel: string;
+			/** Rejects with an Error whose message is a sentence for the agent. */
 			run(signal: AbortSignal): Promise<Answer>;
 	  };
 
 export interface AgentTool {
 	readonly name: ToolName;
+	readonly title: string;
 	readonly description: string;
 	readonly inputSchema: JsonSchema;
 	readonly annotations: ToolAnnotations;
@@ -123,6 +120,7 @@ function confirmation(line: ParsedLine, lab: LabState): { preview: string; actio
 function verbTool(registry: Registry, tool: ToolFace): AgentTool {
 	return {
 		name: tool.name,
+		title: tool.title,
 		description: tool.description,
 		inputSchema: tool.inputSchema,
 		annotations: tool.annotations,
@@ -144,7 +142,7 @@ function verbTool(registry: Registry, tool: ToolFace): AgentTool {
 					const result = line.danger
 						? await line.run({ source: "agent", signal, approval: grantApproval(line.line) })
 						: await line.run({ source: "agent", signal });
-					if (result.kind === "failed") throw new ToolError(result.error.message);
+					if (result.kind === "failed") throw new Error(result.error.message);
 					const summary = summarise(result);
 					const said = result.kind === "report" ? result.header : summary;
 					return { summary, reply: { result: said, data: result.data } };
@@ -198,6 +196,7 @@ function shellRead(screens: SessionScreens): AgentTool {
 	const target = slots.target();
 	return {
 		name,
+		title: "Read a terminal",
 		description:
 			"Read the last lines a machine's session shows, as its terminal draws them. The text comes from the guest.",
 		inputSchema: {
@@ -249,6 +248,7 @@ function captureRead(capture: Pick<CaptureView, "frames">): AgentTool {
 	const name = "capture_read";
 	return {
 		name,
+		title: "Read captured frames",
 		description:
 			"Read the newest captured frames on switch0 as decoded rows, oldest first. A filter takes the Wire view's terms: a protocol, a machine, an address, a MAC or port:N. Frames come from the guests.",
 		inputSchema: {
