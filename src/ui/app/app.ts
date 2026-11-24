@@ -11,7 +11,7 @@ import "../wire/wire.ts";
 import "../spawn-form/spawn-form.ts";
 import { ContextProvider } from "@lit/context";
 import { html, LitElement, nothing, type PropertyValues, type TemplateResult } from "lit";
-import { type Dock, type UiEvent } from "../../model/index.ts";
+import { type Dock, selectTiling, type UiEvent } from "../../model/index.ts";
 import { AGENT_PANEL_ID } from "../agent-panel/agent-panel.ts";
 import { plusIcon, Select, servicesContext } from "../base/index.ts";
 import { DOCK_ID } from "../capture/capture.ts";
@@ -35,6 +35,7 @@ export class UnlabApp extends LitElement {
 	readonly #agentPanel = new Select(this, (state) => state.agentPanel);
 	readonly #empty = new Select(this, (state) => state.rail.length === 0);
 	readonly #dock = new Select(this, (state) => state.dock);
+	readonly #tiling = new Select(this, selectTiling);
 	readonly #paused = new Select(this, (state) => state.capture.paused);
 	#shownDock: Dock | null = null;
 	#refocusDock = false;
@@ -87,6 +88,7 @@ export class UnlabApp extends LitElement {
 		const agentPanel = this.#agentPanel.value;
 		const empty = this.#empty.value;
 		const creating = view === "spawn" || (empty && view === "lab");
+		const { columns, dockDivider } = this.#tiling.value;
 		return html`<header class="top-bar">
 				<button type="button" class="wordmark" aria-label="unLAB, back to the lab" @click=${() => this.#ui({ type: "ui/view", view: "lab" })}>
 					un<span>LAB</span>
@@ -103,7 +105,8 @@ export class UnlabApp extends LitElement {
 					<main class="centre">
 						<unlab-pane-area ?hidden=${empty}></unlab-pane-area>
 						<unlab-parked-strip></unlab-parked-strip>
-						<div id=${DOCK_ID} class="dock" ?hidden=${empty}>
+						<div id=${DOCK_ID} class="dock" ?hidden=${empty}
+							style=${dockDivider ? `--dock-columns: ${columns}; --dock-divider: ${dockDivider}` : nothing}>
 							${
 								this.#dock.value === "open"
 									? html`<unlab-capture mode="dock"></unlab-capture><unlab-switch compact></unlab-switch>`

@@ -10,6 +10,8 @@ export interface Tile {
 export interface Tiling {
 	/** `grid-template-columns`. */
 	readonly columns: string;
+	/** Grid line above the switch panel, at the last machine of the bottom row. */
+	readonly dockDivider?: number;
 	/** `grid-template-rows`. */
 	readonly rows: string;
 	readonly tiles: readonly Tile[];
@@ -33,9 +35,9 @@ export function tile(visible: readonly MachineName[], grid: Panes["grid"]): Tili
 function mainAndStack(visible: readonly MachineName[], cols: number): Tiling {
 	const [main, upper, lower] = visible;
 	return {
-		// 3:2 lines the divider up with the dock's. Two columns means the area is
-		// under 1200px, where 2/5 of it would be narrower than a pane may be.
+		// Under 1200px an even split gives the stack more room.
 		columns: tracks(cols === 3 ? [3, 2] : [1, 1]),
+		dockDivider: 2,
 		rows: even(2),
 		tiles: [
 			{ machine: main, area: "1 / 1 / 3 / 2" },
@@ -57,7 +59,12 @@ function balancedRows(visible: readonly MachineName[], cols: number): Tiling {
 		const start = (i % perRow) * span;
 		return { machine, area: `${row + 1} / ${start + 1} / ${row + 2} / ${start + span + 1}` };
 	});
-	return { columns: even(trackCount), rows: even(rowCount), tiles };
+	return {
+		columns: even(trackCount),
+		dockDivider: lastRow > 1 ? trackCount - trackCount / lastRow + 1 : undefined,
+		rows: even(rowCount),
+		tiles,
+	};
 }
 
 const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b));

@@ -5,19 +5,15 @@
 	@scope (unlab-pane-area) to (unlab-pane) {
 		/*
 		 * Sized by the slack around it, never by what the terminals hold, so the
-		 * size it reports is the room there is. The panes are 1px apart over --line.
+		 * size it reports is the room there is.
 		 */
 		:scope {
 			display: grid;
 			flex: 1 1 auto;
-			gap: 6px;
+			gap: var(--panel-gap);
 			min-width: 0;
 			min-height: 200px;
 			contain: size;
-			background: transparent;
-		}
-
-		:scope:has(> unlab-pane:not([hidden])) {
 			background: transparent;
 		}
 	}

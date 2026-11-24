@@ -16,12 +16,17 @@ export class UnlabPaneArea extends UnlabElement {
 	readonly #machines = new Select(this, (s) => s.rail);
 	readonly #tiling = new Select(this, selectTiling);
 	#observer: ResizeObserver | null = null;
+	#resizeFrame = 0;
 	#reported: { readonly width: number; readonly height: number } | null = null;
 
 	override connectedCallback(): void {
 		super.connectedCallback();
 		this.#observer = new ResizeObserver(([entry]) => {
-			if (entry) this.#resized(entry.contentRect);
+			// Retiling also changes the dock width split and can resize this area again.
+			if (entry) {
+				cancelAnimationFrame(this.#resizeFrame);
+				this.#resizeFrame = requestAnimationFrame(() => this.#resized(entry.contentRect));
+			}
 		});
 		this.#observer.observe(this);
 	}
@@ -29,6 +34,7 @@ export class UnlabPaneArea extends UnlabElement {
 	override disconnectedCallback(): void {
 		super.disconnectedCallback();
 		this.#observer?.disconnect();
+		cancelAnimationFrame(this.#resizeFrame);
 		this.#observer = null;
 	}
 

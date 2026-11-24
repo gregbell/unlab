@@ -115,6 +115,21 @@ describe("<unlab-app> regions", () => {
 		expect(box("unlab-rail").width).toBeGreaterThanOrEqual(216);
 	});
 
+	it.each([
+		[1440, 3],
+		[1680, 3],
+		[1680, 5],
+		[1680, 6],
+	])("aligns the dock with the bottom row at %ipx with %i machines", async (width, count) => {
+		await page.viewport(width, 900);
+		await mountApp(lab(spawn(count), ready()));
+		const last = box(`unlab-pane[machine=node${count}]`);
+		const faceplate = box("unlab-switch[compact]");
+		expect(faceplate.left).toBeCloseTo(last.left, 1);
+		expect(faceplate.right).toBe(last.right);
+		expect(faceplate.left - box("unlab-capture").right).toBe(8);
+	});
+
 	it("pads the rail header and machine details 14px left and right", async () => {
 		await mountApp();
 		for (const selector of ["unlab-rail .header", "unlab-machine-details"]) {
@@ -242,7 +257,8 @@ describe("<unlab-app> views", () => {
 
 describe("<unlab-app> dock", () => {
 	it("hides to one strip that gives the panes its height, and shows again, the focus staying on the toggle", async () => {
-		const { settle } = await mountApp(lab(spawn(3), ready(), link("down", "node3")));
+		const { store, settle } = await mountApp(lab(spawn(3), ready(), link("down", "node3")));
+		await expect.poll(() => store.state.panes.grid.cols).toBe(2);
 		const open = box("unlab-pane-area").height;
 		const hide = page.getByRole("button", { name: "hide" });
 		await expect.element(hide).toHaveAttribute("aria-expanded", "true");

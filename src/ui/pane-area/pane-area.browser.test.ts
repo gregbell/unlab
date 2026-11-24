@@ -127,8 +127,8 @@ describe("<unlab-pane-area> tiling", () => {
 	it("puts the three-pane split on the same 3:2 line as the dock", async () => {
 		await mountArea(lab(spawn(3), ready()));
 		const main = paneOf("node1").getBoundingClientRect();
-		const area = document.querySelector("unlab-pane-area")?.getBoundingClientRect();
-		expect(main.width / ((area?.width ?? 0) - 6)).toBeCloseTo(0.6, 3);
+		const stack = paneOf("node2").getBoundingClientRect();
+		expect(main.width / (main.width + stack.width)).toBeCloseTo(0.6, 3);
 	});
 
 	it.each([
