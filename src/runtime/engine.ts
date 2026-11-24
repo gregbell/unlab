@@ -421,8 +421,9 @@ export function createEngine(deps: EngineDeps): Engine {
 						const typed = mark;
 						if (!typed) return;
 						over();
-						const output = typed.output();
-						resolve({ exitCode, output, lastLine: lastLineOf(output), ms: Math.round(deps.now() - startedAt) });
+						const { text: output, truncated } = typed.output();
+						const ms = Math.round(deps.now() - startedAt);
+						resolve({ exitCode, output, truncated, lastLine: lastLineOf(output), ms });
 					},
 					fail(reason) {
 						over();

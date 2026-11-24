@@ -44,6 +44,8 @@ interface FakeScreen extends Screen {
 	text(): string;
 	/** What the next mark's rows will read as. */
 	printed: string;
+	/** Whether the next mark's start has left the scrollback. */
+	cut: boolean;
 	resizeTo(cols: number, rows: number): void;
 }
 
@@ -62,6 +64,7 @@ function fakeScreens() {
 				written,
 				made,
 				printed: "",
+				cut: false,
 				text: () => written.map((b) => new TextDecoder().decode(b)).join(""),
 				get shell() {
 					return tracker.phase;
@@ -91,7 +94,7 @@ function fakeScreens() {
 						end() {
 							mark.ended++;
 						},
-						output: () => screen.printed,
+						output: () => ({ text: screen.printed, truncated: screen.cut }),
 					};
 					made.push(mark);
 					return mark;
@@ -751,11 +754,23 @@ describe("exec", () => {
 		expect(await result).toEqual({
 			exitCode: 0,
 			output: screen.printed,
+			truncated: false,
 			lastLine: "1 packets transmitted, 1 received",
 			ms: 1020,
 		});
 		expect(screen.made[0].ended).toBeGreaterThan(0);
 		expect(t.take()).toEqual([{ type: "session/shell", session: "node1:console", shell: "prompt" }]);
+	});
+
+	test("says when the start of what it printed is gone", async () => {
+		const t = setup();
+		const vm = t.atPrompt(1);
+		const screen = t.screens.get("node1:console");
+		const result = t.engine.exec.inject("node1:console", "seq 1 20000", "agent", never);
+		screen.printed = "19999\n20000";
+		screen.cut = true;
+		vm.sink.consoleBytes(vm.ref, bytes(returns(0)));
+		expect(await result).toMatchObject({ output: "19999\n20000", truncated: true, lastLine: "20000" });
 	});
 
 	test("a failing command resolves with its exit code", async () => {

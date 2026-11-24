@@ -24,6 +24,13 @@ import { DEFAULT_TTY_SIZE } from "./vm.ts";
 
 export type MarkSource = "bar" | "agent";
 
+/** What a command printed, as far as the terminal still holds it. */
+export interface Printed {
+	readonly text: string;
+	/** The output's start has left the scrollback, so `text` is its end. */
+	readonly truncated: boolean;
+}
+
 /** A gutter rule over the rows of one injected command: its line and its output. */
 export interface LineMark {
 	readonly source: MarkSource;
@@ -35,10 +42,10 @@ export interface LineMark {
 	end(): void;
 	/**
 	 * What the command printed: the marked rows as text, without the echoed
-	 * command line. Empty once the rows have left the scrollback, and for a
+	 * command line. Empty once the rows have all left the scrollback, and for a
 	 * mark begun before the screen was mounted.
 	 */
-	output(): string;
+	output(): Printed;
 }
 
 /**
@@ -86,7 +93,7 @@ export interface Screen {
 	setFocused(focused: boolean): void;
 	/** Start a mark at the cursor. */
 	beginMark(source: MarkSource): LineMark;
-	/** The marks on screen now. Marks whose rows have left the scrollback are forgotten. */
+	/** The marks on screen now. Marks whose rows have all left the scrollback are forgotten. */
 	marks(): readonly VisibleMark[];
 	/** Hear, at most once per animation frame, that `marks()` may have changed. */
 	subscribe(listener: () => void): () => void;
@@ -111,10 +118,13 @@ const MAX_MARKS = 24;
 
 const NO_EVENTS: readonly ShellEvent[] = Object.freeze([]);
 const NO_MARKS: readonly VisibleMark[] = Object.freeze([]);
+const NOTHING: Printed = Object.freeze({ text: "", truncated: false });
 
 interface Mark {
 	readonly source: MarkSource;
 	readonly from: TrackedTerminalPosition;
+	/** `from`'s row counted from the terminal's first ever, not the oldest it still holds. */
+	readonly line: number;
 	/** Where the command's output ended. Null while the command runs. */
 	to: TrackedTerminalPosition | null;
 }
@@ -174,6 +184,11 @@ interface OwnedScreen extends Screen {
 function cursorPosition(core: TerminalCore): TerminalPosition {
 	const cursor = core.getCursor();
 	return { row: core.getScrollbackCount() + cursor.row, col: cursor.col };
+}
+
+/** How many rows the terminal has ever dropped from the oldest end. */
+function discarded(core: TerminalCore): number {
+	return core.getScrollbackDiscardedCount?.() ?? 0;
 }
 
 /** One retained row as text. Row zero is the oldest the core still holds. */
@@ -242,11 +257,18 @@ function createScreen(session: SessionId, io: ScreenIo, loadCore: () => Promise<
 		if (i >= 0) marks.splice(i, 1);
 	};
 
-	/** Both ends of a mark, or null once either has left the scrollback. An open mark ends at the cursor. */
+	/**
+	 * Both ends of a mark, or null once its end has left the scrollback. An
+	 * open mark ends at the cursor. With only the start gone, every row up to
+	 * the end is the command's. A start can also be lost to a reset or a
+	 * full-screen program, and then nothing says which rows those are.
+	 */
 	const ends = (mark: Mark, core: TerminalCore) => {
 		const from = mark.from.resolve();
 		const end = mark.to ? mark.to.resolve() : cursorPosition(core);
-		return from && end ? { from, end } : null;
+		if (!end) return null;
+		if (from) return { from, end, truncated: false };
+		return discarded(core) > mark.line ? { from: { row: 0, col: 0 }, end, truncated: true } : null;
 	};
 
 	const close = (mark: Mark, core: GhosttyCore) => {
@@ -275,7 +297,7 @@ function createScreen(session: SessionId, io: ScreenIo, loadCore: () => Promise<
 		}
 	};
 
-	const unanchored = (source: MarkSource): LineMark => ({ source, end() {}, output: () => "" });
+	const unanchored = (source: MarkSource): LineMark => ({ source, end() {}, output: () => NOTHING });
 
 	return {
 		session,
@@ -408,9 +430,10 @@ function createScreen(session: SessionId, io: ScreenIo, loadCore: () => Promise<
 			const { core } = state;
 			for (const mark of [...marks]) if (!ends(mark, core)) drop(mark);
 			while (marks.length >= MAX_MARKS) drop(marks[0]);
-			const from = core.trackPosition(cursorPosition(core));
+			const cursor = cursorPosition(core);
+			const from = core.trackPosition(cursor);
 			if (!from) return unanchored(source);
-			const mark: Mark = { source, from, to: null };
+			const mark: Mark = { source, from, line: discarded(core) + cursor.row, to: null };
 			marks.push(mark);
 			invalidate();
 			return {
@@ -419,15 +442,16 @@ function createScreen(session: SessionId, io: ScreenIo, loadCore: () => Promise<
 					if (state.kind === "live" && marks.includes(mark)) close(mark, state.core);
 				},
 				output() {
-					if (state.kind !== "live" || !marks.includes(mark)) return "";
+					if (state.kind !== "live" || !marks.includes(mark)) return NOTHING;
 					const span = ends(mark, state.core);
-					if (!span) return "";
+					if (!span) return NOTHING;
 					// An end at column 0 is the start of the row after the output's last.
 					const lines =
 						span.end.col === 0
 							? linesOf(state.core, span.from.row, span.end.row)
 							: linesOf(state.core, span.from.row, span.end.row + 1, span.end.col);
-					return lines.slice(1).join("\n");
+					const { truncated } = span;
+					return { text: lines.slice(truncated ? 0 : 1).join("\n"), truncated };
 				},
 			};
 		},

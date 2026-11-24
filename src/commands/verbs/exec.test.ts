@@ -29,9 +29,9 @@ describe("exec", () => {
 			["node3:console", PING, "bar"],
 		]);
 		lab.advance(1000);
-		calls[2].resolve({ exitCode: 0, output: `PING\n${OK}`, lastLine: OK, ms: 40 });
-		calls[0].resolve({ exitCode: 1, output: LOSS, lastLine: LOSS, ms: 1000 });
-		calls[1].resolve({ exitCode: 1, output: LOSS, lastLine: LOSS, ms: 1000 });
+		calls[2].resolve({ exitCode: 0, output: `PING\n${OK}`, truncated: false, lastLine: OK, ms: 40 });
+		calls[0].resolve({ exitCode: 1, output: LOSS, truncated: false, lastLine: LOSS, ms: 1000 });
+		calls[1].resolve({ exitCode: 1, output: LOSS, truncated: false, lastLine: LOSS, ms: 1000 });
 
 		const result = report(await pending);
 		expect(result.header).toBe("ran in 3 consoles in 1.0 s · 2 failed");
@@ -71,13 +71,29 @@ describe("exec", () => {
 		const { lab, calls } = await threeReady();
 		const pending = lab.run("exec node1,node2 -- uname");
 		calls[0].reject(new Error("node1:console is busy running top."));
-		calls[1].resolve({ exitCode: null, output: "Linux", lastLine: "Linux", ms: 5 });
+		calls[1].resolve({ exitCode: null, output: "Linux", truncated: false, lastLine: "Linux", ms: 5 });
 		const result = report(await pending);
 		expect(result.header).toBe("ran in 1 console in 0.0 s");
 		expect(result.blocks.map((b) => [b.machine, b.status])).toEqual([
 			["node2", { kind: "unknown" }],
 			["node1", { kind: "skipped", reason: "node1:console is busy running top." }],
 		]);
+	});
+
+	it("keeps the end of a long output and flags it, as it does one the terminal already cut", async () => {
+		const { lab, calls } = await threeReady();
+		const pending = lab.run("exec all -- seq 1 20000");
+		const long = `${"x".repeat(16_000)}\nlast`;
+		calls[0].resolve({ exitCode: 0, output: long, truncated: false, lastLine: "last", ms: 1 });
+		calls[1].resolve({ exitCode: 0, output: "last", truncated: true, lastLine: "last", ms: 1 });
+		calls[2].resolve({ exitCode: 0, output: "y".repeat(16_000), truncated: false, lastLine: "y", ms: 1 });
+		expect(report(await pending).data).toMatchObject({
+			ran: [
+				{ output: `${"x".repeat(15_995)}\nlast`, truncated: true },
+				{ output: "last", truncated: true },
+				{ output: "y".repeat(16_000), truncated: false },
+			],
+		});
 	});
 
 	it("types into a named session, or a machine's active one", async () => {
