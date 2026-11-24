@@ -252,7 +252,7 @@ export function selectAgentIndicator(state: LabState): AgentIndicator {
 }
 
 export interface StatusSegment {
-	readonly key: "machines" | "sessions" | "links" | "webmcp" | "engine";
+	readonly key: "machines" | "sessions" | "links" | "webmcp";
 	readonly text: string;
 	/** `quiet` when all is well, `down` for a failed machine or a cut cable, `warn` while a call waits. */
 	readonly tone: "quiet" | "down" | "warn";
@@ -298,7 +298,7 @@ export const selectStatus: (state: LabState) => StatusLine = memo(
 		}
 		return {
 			left,
-			right: [webmcpSegment(agent, indicator), { key: "engine", text: "unkernel / WebAssembly", tone: "quiet" }],
+			right: [webmcpSegment(agent, indicator)],
 		};
 	},
 );

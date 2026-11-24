@@ -17,66 +17,69 @@
 		:scope {
 			display: flex;
 			flex-direction: column;
-			gap: 6px;
+			gap: var(--panel-gap);
 			min-height: 100vh;
-			padding: clamp(4px, 0.7vw, 12px);
+			padding: var(--panel-gap) clamp(var(--panel-gap), 2vw, 17px);
 			background:
 				linear-gradient(rgb(13 15 35 / 22%), rgb(18 17 36 / 35%)),
 				url("../assets/big-moon.webp") center / cover fixed;
 		}
 
 		.top-bar {
+			position: relative;
+			z-index: 11;
 			display: flex;
-			flex-wrap: wrap;
 			align-items: center;
-			gap: 0 16px;
-			min-height: 40px;
-			padding: 0 var(--gutter);
-			background: var(--glass-panel);
-			border: 1px solid var(--glass-edge);
-			border-radius: 8px;
+			gap: var(--panel-gap);
+			min-height: 36px;
 		}
 
-		.wordmark {
-			min-height: var(--h-sm);
-			padding: 0;
+		.wordmark,
+		.add-machines {
+			display: inline-flex;
+			flex: none;
+			align-items: center;
+			justify-content: center;
+			height: 36px;
+			padding: 0 var(--gutter);
 			border: 0;
+			border-radius: 0;
 			background: transparent;
-			color: var(--text);
-			font-size: 14px;
-			font-weight: 600;
-			letter-spacing: -0.2px;
 			cursor: pointer;
 		}
 
-		.lab-name {
-			color: var(--text-3);
+		.wordmark {
+			padding-inline-start: calc(var(--gutter) / 2);
+			margin-inline-end: calc(var(--gutter) / 2);
+			font: 400 17px / 20px var(--font);
+			letter-spacing: -0.65px;
+			color: var(--text-2);
+		}
+
+		.wordmark span {
+			font-weight: 600;
+			letter-spacing: -0.35px;
+			color: var(--text);
+		}
+
+		.add-machines {
+			margin-inline-start: auto;
+			font-weight: 500;
+			color: var(--text-2);
+		}
+
+		.add-machines svg {
+			color: var(--agent);
+		}
+
+		.wordmark:hover,
+		.add-machines:hover {
+			background: var(--glass-panel);
+			color: var(--text);
 		}
 
 		.spacer {
 			flex-grow: 1;
-		}
-
-		.agent-indicator {
-			display: inline-flex;
-			align-items: center;
-			gap: 7px;
-			min-height: var(--h-sm);
-			padding: 0;
-			border: 0;
-			background: transparent;
-			color: var(--text-3);
-			cursor: pointer;
-		}
-
-		.agent-indicator[data-state="agent active"] {
-			color: var(--agent);
-		}
-
-		.agent-indicator .square {
-			width: 6px;
-			height: 6px;
-			background: var(--agent);
 		}
 
 		.body {
@@ -84,7 +87,7 @@
 			flex: 1 1 auto;
 			flex-wrap: wrap;
 			align-items: stretch;
-			gap: 6px;
+			gap: var(--panel-gap);
 			background: transparent;
 		}
 

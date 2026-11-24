@@ -7,26 +7,31 @@ import { agentCall, fail, lab, link, mount, ready, spawn, tokenColor, unmountAll
 beforeEach(() => page.viewport(1440, 900));
 afterEach(unmountAll);
 
-function segment(key: StatusSegment["key"]): HTMLElement {
+function segment(key: StatusSegment["key"] | "engine"): HTMLElement {
 	const found = document.querySelector<HTMLElement>(`unlab-statusline [data-key="${key}"]`);
 	if (!found) throw new Error(`no ${key} segment`);
 	return found;
 }
 
-const colour = (key: StatusSegment["key"]): string => getComputedStyle(segment(key)).color;
+const colour = (key: StatusSegment["key"] | "engine"): string => getComputedStyle(segment(key)).color;
 
 describe("<unlab-statusline>", () => {
 	it("is a 26px line of 11px segments, quiet while all is well", async () => {
 		const { element } = await mount("unlab-statusline", { state: lab(spawn(3), ready()) });
 		expect(element.getBoundingClientRect().height).toBe(26);
 		expect(getComputedStyle(element).fontSize).toBe("11px");
-		expect(getComputedStyle(element).backgroundColor).toBe(tokenColor("crust"));
-		expect(getComputedStyle(element).paddingInline).toBe("14px");
+		expect(getComputedStyle(element).backgroundColor).toBe("rgba(0, 0, 0, 0)");
 		for (const key of ["machines", "links", "webmcp", "engine"] as const)
-			expect(colour(key)).toBe(tokenColor("text-3"));
+			expect(colour(key)).toBe(tokenColor("text-2"));
 		expect(segment("machines").textContent).toBe("3 of 3 machines ready");
 		expect(segment("links").textContent).toBe("switch0: 3 of 3 links up");
-		expect(segment("engine").textContent).toBe("unkernel / WebAssembly");
+		expect(segment("engine").textContent).toBe("Built with unkernel.dev");
+		await expect
+			.element(page.getByRole("link", { name: "GitHub", exact: true }))
+			.toHaveAttribute("href", "https://github.com/gregbell/unlab");
+		const credit = page.getByRole("link", { name: "unkernel.dev", exact: true });
+		await expect.element(credit).toHaveAttribute("href", "https://unkernel.dev/");
+		await expect.element(credit).toHaveAttribute("target", "_blank");
 	});
 
 	it("puts machines, sessions and links on the left, WebMCP and the engine on the right", async () => {
@@ -35,7 +40,8 @@ describe("<unlab-statusline>", () => {
 		for (const key of ["machines", "sessions", "links"] as const) {
 			expect(segment(key).getBoundingClientRect().right).toBeLessThan(right);
 		}
-		expect(segment("engine").getBoundingClientRect().right).toBe(element.getBoundingClientRect().right - 14);
+		expect(segment("machines").getBoundingClientRect().left).toBe(element.getBoundingClientRect().left);
+		expect(segment("engine").getBoundingClientRect().right).toBe(element.getBoundingClientRect().right);
 	});
 
 	it("turns the machines segment red while a machine has failed", async () => {

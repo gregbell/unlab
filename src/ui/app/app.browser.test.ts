@@ -76,20 +76,24 @@ const box = (selector: string): DOMRect => the(selector).getBoundingClientRect()
 const style = (selector: string): CSSStyleDeclaration => getComputedStyle(the(selector));
 
 describe("<unlab-app> regions", () => {
-	it("stacks a framed top bar, the body and a 26px status line over the full viewport", async () => {
+	it("stacks a floating header, the body and a 26px status line over the full viewport", async () => {
 		await mountApp();
 		const top = box(".top-bar");
 		const status = box("unlab-statusline");
 		const body = box(".body");
-		expect(top.top).toBeCloseTo(10.08, 1);
-		expect(top.height).toBe(42);
-		expect(top.width).toBeCloseTo(1440 - 2 * top.top, 1);
+		expect(top.top).toBe(8);
+		expect(top.left).toBeCloseTo(17, 1);
+		expect(top.height).toBe(36);
+		expect(top.width).toBeCloseTo(1440 - 2 * top.left, 1);
 		expect(status.height).toBe(26);
-		expect(status.bottom).toBeCloseTo(900 - top.top, 1);
-		expect(status.width).toBe(top.width);
-		expect(body.top).toBe(top.bottom + 6);
-		expect(status.top).toBe(body.bottom + 6);
-		expect(style(".top-bar").backgroundColor).toBe(tokenColor("glass-panel"));
+		expect(status.bottom).toBe(900 - 8);
+		expect(box(".wordmark").left).toBe(box("unlab-rail").left);
+		expect(box(".add-machines").right).toBe(box("main.centre").right);
+		expect(status.left).toBe(top.left);
+		expect(status.width).toBe(body.width);
+		expect(body.top).toBe(top.bottom + 8);
+		expect(status.top).toBe(body.bottom + 8);
+		expect(style(".top-bar").backgroundColor).toBe("rgba(0, 0, 0, 0)");
 	});
 
 	it("splits the body into a 232px rail and the centre, with a wallpaper gutter", async () => {
@@ -97,8 +101,8 @@ describe("<unlab-app> regions", () => {
 		const rail = box("unlab-rail");
 		const centre = box("main.centre");
 		expect(Math.abs(rail.width - 232)).toBeLessThan(1);
-		expect(centre.left).toBeCloseTo(rail.right + 6, 5);
-		expect(centre.right).toBe(box(".top-bar").right);
+		expect(centre.left).toBeCloseTo(rail.right + 8, 5);
+		expect(centre.right).toBe(box(".body").right);
 		expect(style(".body").backgroundColor).toBe("rgba(0, 0, 0, 0)");
 		expect(style("unlab-rail").backgroundColor).toBe(tokenColor("glass-panel"));
 		expect(style("unlab-pane").backgroundColor).toBe(tokenColor("glass-terminal"));
@@ -111,9 +115,9 @@ describe("<unlab-app> regions", () => {
 		expect(box("unlab-rail").width).toBeGreaterThanOrEqual(216);
 	});
 
-	it("pads every region 14px left and right", async () => {
+	it("pads the rail header and machine details 14px left and right", async () => {
 		await mountApp();
-		for (const selector of [".top-bar", "unlab-statusline", "unlab-rail .header", "unlab-machine-details"]) {
+		for (const selector of ["unlab-rail .header", "unlab-machine-details"]) {
 			expect(style(selector).paddingLeft, selector).toBe("14px");
 			expect(style(selector).paddingRight, selector).toBe("14px");
 		}
@@ -141,20 +145,23 @@ describe("<unlab-app> regions", () => {
 });
 
 describe("<unlab-app> top bar", () => {
-	it("sets the wordmark at 14px and 600 and the lab name in --text-3", async () => {
+	it("shows the two-tone unLAB wordmark beside the palette", async () => {
 		await mountApp();
 		const wordmark = style(".wordmark");
-		expect([wordmark.fontSize, wordmark.fontWeight, wordmark.letterSpacing]).toEqual(["14px", "600", "-0.2px"]);
-		expect(the(".lab-name").textContent).toBe("local lab");
-		expect(style(".lab-name").color).toBe(tokenColor("text-3"));
+		expect([wordmark.height, wordmark.borderWidth, wordmark.fontSize]).toEqual(["36px", "0px", "17px"]);
+		expect(wordmark.backgroundColor).toBe("rgba(0, 0, 0, 0)");
+		expect(wordmark.color).toBe(tokenColor("text-2"));
+		expect(style(".wordmark span").color).toBe(tokenColor("text"));
+		expect(the(".wordmark").textContent?.trim()).toBe("unLAB");
+		expect(box("unlab-command-bar").left).toBeGreaterThan(box(".wordmark").right);
 	});
 
-	it("rests the command field at 28px, as wide as 520px, with an example line and its shortcut", async () => {
+	it("rests the command field at 36px, as wide as 520px, with its label and shortcut", async () => {
 		await mountApp();
 		const field = box("unlab-command-bar");
-		expect([field.height, field.width]).toEqual([28, 520]);
+		expect([field.height, field.width]).toEqual([36, 520]);
 		const input = page.getByRole("combobox", { name: "Command" });
-		await expect.element(input).toHaveAttribute("placeholder", "spawn 2 alpine --net switch0");
+		await expect.element(input).toHaveAttribute("placeholder", "Command bar");
 		await expect.element(input).toHaveAttribute("aria-keyshortcuts", "Control+/");
 		expect(the("unlab-command-bar kbd").textContent).toBe("Ctrl+/");
 	});
@@ -168,33 +175,14 @@ describe("<unlab-app> top bar", () => {
 		expect(field.top + field.height / 2).toBeCloseTo(box(".top-bar").top + box(".top-bar").height / 2, 1);
 	});
 
-	it("makes Add machine the 28px primary button", async () => {
+	it("places the borderless Add machines action at the far right", async () => {
 		await mountApp();
-		const add = page.getByRole("banner").getByRole("button", { name: "Add machines" });
-		const added = getComputedStyle(add.element());
-		expect(add.element().getBoundingClientRect().height).toBe(28);
-		expect([added.backgroundColor, added.color, added.fontWeight]).toEqual([
-			tokenColor("text"),
-			tokenColor("crust"),
-			"600",
-		]);
-	});
-
-	it("says no agent calls yet, then agent active beside a 6px blue square", async () => {
-		const { store, settle } = await mountApp();
-		const indicator = the(".agent-indicator");
-		expect(indicator.textContent?.trim()).toBe("no agent calls yet");
-		expect(getComputedStyle(indicator).color).toBe(tokenColor("text-3"));
-		expect(indicator.querySelector(".square")).toBeNull();
-
-		store.dispatchAgent(agentCall(1));
-		await settle();
-		expect(indicator.textContent?.trim()).toBe("agent active");
-		expect(getComputedStyle(indicator).color).toBe(tokenColor("agent"));
-		const square = indicator.querySelector(".square");
-		expect(square?.getBoundingClientRect().width).toBe(6);
-		expect(square?.getBoundingClientRect().height).toBe(6);
-		expect(square && getComputedStyle(square).backgroundColor).toBe(tokenColor("agent"));
+		const add = page.getByRole("banner").getByRole("button", { name: "Add machines", exact: true });
+		await expect.element(add).toBeVisible();
+		const added = style(".add-machines");
+		expect(box(".add-machines").right).toBe(box(".top-bar").right);
+		expect(added.borderWidth).toBe("0px");
+		expect(added.backgroundColor).toBe("rgba(0, 0, 0, 0)");
 	});
 });
 
@@ -202,7 +190,7 @@ describe("<unlab-app> views", () => {
 	it("opens Add machines over the whole body, keeping the lab mounted", async () => {
 		const { settle } = await mountApp();
 		const rail = the("unlab-rail");
-		await page.getByRole("banner").getByRole("button", { name: "Add machines" }).click();
+		await page.getByRole("banner").getByRole("button", { name: "Add machines", exact: true }).click();
 		await settle();
 		expect(the(".lab").hidden).toBe(true);
 		expect(the(".spawn-view").hidden).toBe(false);
@@ -216,7 +204,7 @@ describe("<unlab-app> views", () => {
 		await settle();
 		expect(the(".lab").hidden).toBe(true);
 		expect(the(".wire-view").hidden).toBe(false);
-		await page.getByRole("button", { name: "unlab, back to the lab" }).click();
+		await page.getByRole("button", { name: "unLAB, back to the lab" }).click();
 		await settle();
 		expect(store.state.view).toBe("lab");
 		expect(the(".lab").hidden).toBe(false);
@@ -231,9 +219,9 @@ describe("<unlab-app> views", () => {
 		expect(store.state.view).toBe("lab");
 	});
 
-	it("opens and closes the agent panel from the indicator, and closes it on Esc", async () => {
+	it("opens and closes the agent panel from the footer, and closes it on Esc", async () => {
 		const { store, settle } = await mountApp();
-		const indicator = page.getByRole("button", { name: "no agent calls yet" });
+		const indicator = page.getByRole("contentinfo").getByRole("button", { name: /^webmcp:/ });
 		await expect.element(indicator).toHaveAttribute("aria-expanded", "false");
 		expect(the("#unlab-agent-panel").hidden).toBe(true);
 

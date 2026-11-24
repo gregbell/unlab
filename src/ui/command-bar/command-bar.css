@@ -9,18 +9,23 @@
 			position: relative;
 			display: block;
 			flex: 1 1 320px;
+			min-width: 0;
 			max-width: 520px;
-			height: var(--h-sm);
-			margin: 6px 0;
+			height: 36px;
+			margin: 0;
 		}
 
 		.panel {
 			display: flex;
 			flex-direction: column;
 			height: 100%;
-			border: 1px solid var(--line);
-			border-radius: var(--r-control);
-			background: var(--mantle);
+			border-bottom: 1px solid var(--line);
+			background: var(--glass-panel);
+		}
+
+		.panel:hover,
+		.panel:focus-within {
+			background: var(--base);
 		}
 
 		.panel:focus-within {
@@ -38,9 +43,25 @@
 			height: auto;
 			max-height: calc(100vh - 12px);
 			overflow-y: auto;
-			border-color: var(--line-strong);
-			border-radius: var(--r-panel);
+			border: 1px solid var(--line-strong);
+			background: var(--mantle);
 			outline: 0;
+		}
+
+		@media (max-width: 840px) {
+			:scope {
+				position: static;
+			}
+			:scope[open] .panel {
+				width: 100%;
+				max-width: 100%;
+			}
+		}
+
+		@media (max-width: 480px) {
+			:scope:not([open]) .hint {
+				display: none;
+			}
 		}
 
 		.input-row {
@@ -48,7 +69,7 @@
 			flex: 0 0 auto;
 			align-items: center;
 			gap: 8px;
-			min-height: calc(var(--h-sm) - 2px);
+			min-height: 35px;
 			padding: 0 10px;
 		}
 

@@ -31,7 +31,7 @@ const text = (element: Element | null) => element?.textContent?.replace(/\s+/g, 
 describe("<unlab-agent-panel>", () => {
 	it("before any call: every tool with its arguments and policy, and no log", async () => {
 		const { element } = await mount("unlab-agent-panel", { state: lab(spawn(3), ready()) });
-		expect(text(element.querySelector(".head"))).toBe("webmcp no agent calls yet pause tools");
+		expect(text(element.querySelector(".head"))).toBe("webmcp pause tools");
 		expect(text(element.querySelector(".about"))).toBe(
 			"An agent in this browser gets the same verbs as the command bar. You decide which ones run without asking.",
 		);

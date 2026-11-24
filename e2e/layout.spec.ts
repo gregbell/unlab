@@ -21,8 +21,8 @@ test("a console keeps its newest line in view when the agent panel re-tiles the 
 	await expectInside(tail, pane);
 
 	await page
-		.getByRole("button", { name: /no agent calls yet|agent/ })
-		.first()
+		.getByRole("contentinfo")
+		.getByRole("button", { name: /^webmcp:/ })
 		.click();
 	await expect(page.locator("unlab-agent-panel")).toBeVisible();
 	await page.waitForTimeout(500);

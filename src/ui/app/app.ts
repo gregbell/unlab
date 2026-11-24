@@ -9,16 +9,15 @@ import "../capture/capture.ts";
 import "../switch/switch.ts";
 import "../wire/wire.ts";
 import "../spawn-form/spawn-form.ts";
-import "../agent-panel/agent-panel.ts";
 import { ContextProvider } from "@lit/context";
 import { html, LitElement, nothing, type PropertyValues, type TemplateResult } from "lit";
-import { type Dock, selectAgentIndicator, type UiEvent } from "../../model/index.ts";
-import { Select, servicesContext } from "../base/index.ts";
+import { type Dock, type UiEvent } from "../../model/index.ts";
+import { AGENT_PANEL_ID } from "../agent-panel/agent-panel.ts";
+import { plusIcon, Select, servicesContext } from "../base/index.ts";
 import { DOCK_ID } from "../capture/capture.ts";
 import type { AppServices } from "../services.ts";
 
 const ANNOUNCER = "unlab-announcer";
-const AGENT_PANEL = "unlab-agent-panel";
 
 /**
  * The shell: top bar, body and status line, with the services every element
@@ -34,7 +33,6 @@ export class UnlabApp extends LitElement {
 	readonly #provider = new ContextProvider(this, { context: servicesContext });
 	readonly #view = new Select(this, (state) => state.view);
 	readonly #agentPanel = new Select(this, (state) => state.agentPanel);
-	readonly #indicator = new Select(this, selectAgentIndicator);
 	readonly #empty = new Select(this, (state) => state.rail.length === 0);
 	readonly #dock = new Select(this, (state) => state.dock);
 	readonly #paused = new Select(this, (state) => state.capture.paused);
@@ -86,29 +84,16 @@ export class UnlabApp extends LitElement {
 
 	override render(): TemplateResult {
 		const view = this.#view.value;
-		const indicator = this.#indicator.value;
 		const agentPanel = this.#agentPanel.value;
 		const empty = this.#empty.value;
 		const creating = view === "spawn" || (empty && view === "lab");
 		return html`<header class="top-bar">
-				<button type="button" class="wordmark" aria-label="unlab, back to the lab" @click=${() => this.#ui({ type: "ui/view", view: "lab" })}>
-					unlab
+				<button type="button" class="wordmark" aria-label="unLAB, back to the lab" @click=${() => this.#ui({ type: "ui/view", view: "lab" })}>
+					un<span>LAB</span>
 				</button>
-				<span class="lab-name">local lab</span>
 				<unlab-command-bar></unlab-command-bar>
-				<span class="spacer"></span>
-				<button
-					type="button"
-					class="agent-indicator"
-					data-state=${indicator}
-					aria-expanded=${agentPanel ? "true" : "false"}
-					aria-controls=${AGENT_PANEL}
-					@click=${() => this.#ui({ type: "ui/agent-panel", open: !agentPanel })}
-				>
-					${indicator === "agent active" ? html`<span class="square" aria-hidden="true"></span>` : nothing}${indicator}
-				</button>
-				<button ?hidden=${creating} type="button" class="button primary" @click=${() => this.#ui({ type: "ui/view", view: "spawn" })}>
-					Add machines
+				<button ?hidden=${creating} type="button" class="button add-machines" aria-label="Add machines" @click=${() => this.#ui({ type: "ui/view", view: "spawn" })}>
+					${plusIcon} Machines
 				</button>
 			</header>
 			<div class="body">
@@ -128,7 +113,7 @@ export class UnlabApp extends LitElement {
 					</main>
 				</div>
 				<main class="wire-view" ?hidden=${view !== "wire"}>${view === "wire" ? html`<unlab-wire></unlab-wire>` : nothing}</main>
-				<div id=${AGENT_PANEL} class="agent-panel" role="complementary" aria-label="Agent" ?hidden=${!agentPanel}>
+				<div id=${AGENT_PANEL_ID} class="agent-panel" role="complementary" aria-label="Agent" ?hidden=${!agentPanel}>
 					${agentPanel ? html`<unlab-agent-panel></unlab-agent-panel>` : nothing}
 				</div>
 			</div>

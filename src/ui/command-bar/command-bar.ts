@@ -19,7 +19,7 @@ import {
 
 const MAC = /Mac|iPhone|iPad/.test(navigator.platform);
 const SHORTCUT = MAC ? { label: "⌘K", aria: "Meta+K" } : { label: "Ctrl+/", aria: "Control+/" };
-const EXAMPLE = "spawn 2 alpine --net switch0";
+const PLACEHOLDER = "Command bar";
 const INPUT = "command-bar-input";
 const LISTBOX = "command-bar-suggestions";
 const optionId = (row: number): string => `command-bar-option-${row}`;
@@ -156,7 +156,7 @@ export class UnlabCommandBar extends UnlabElement {
 					aria-activedescendant=${chosen === null ? nothing : optionId(chosen)}
 					autocomplete="off"
 					spellcheck="false"
-					placeholder=${bar.open ? "type a verb, or pick one below" : (this.#lastLine.value ?? EXAMPLE)}
+					placeholder=${bar.open ? "type a verb, or pick one below" : (this.#lastLine.value ?? PLACEHOLDER)}
 					.value=${live(bar.open ? bar.text : "")}
 					@input=${this.#onInput}
 					@keydown=${this.#onKeydown}

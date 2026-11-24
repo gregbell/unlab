@@ -264,7 +264,7 @@ describe("the status line", () => {
 	test("words its segments as the handoff does", () => {
 		expect(texts(busy())).toEqual({
 			left: ["3 of 4 machines ready, 1 booting", "5 open sessions", "switch0: 2 of 3 links up"],
-			right: ["webmcp: 7 tools, agent active", "unkernel / WebAssembly"],
+			right: ["webmcp: 7 tools, agent active"],
 		});
 	});
 
@@ -272,7 +272,6 @@ describe("the status line", () => {
 		const s = run(labWith(3), { type: "agent/call", call: agentCall(1, 0) });
 		expect(texts(s).left).toEqual(["3 of 3 machines ready", "3 open sessions", "switch0: 3 of 3 links up"]);
 		expect([...selectStatus(s).left, ...selectStatus(s).right].map((segment) => segment.tone)).toEqual([
-			"quiet",
 			"quiet",
 			"quiet",
 			"quiet",
@@ -326,7 +325,7 @@ describe("the status line", () => {
 	test("an empty lab", () => {
 		expect(texts(emptyLab())).toEqual({
 			left: ["0 machines", "0 open sessions"],
-			right: ["webmcp: 7 tools registered", "unkernel / WebAssembly"],
+			right: ["webmcp: 7 tools registered"],
 		});
 	});
 
@@ -342,7 +341,7 @@ describe("the status line", () => {
 		}
 		expect(texts(s)).toEqual({
 			left: ["1 of 1 machine ready", "1 open session", "switch0: 1 of 1 link up"],
-			right: ["webmcp: 1 tool registered", "unkernel / WebAssembly"],
+			right: ["webmcp: 1 tool registered"],
 		});
 	});
 

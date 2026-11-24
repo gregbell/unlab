@@ -53,6 +53,7 @@
 	--lh-page: 36px;
 
 	/* sizes */
+	--panel-gap: 8px;
 	--gutter: 14px;
 	--h-xs: 24px;
 	--h-sm: 28px;

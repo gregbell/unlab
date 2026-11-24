@@ -129,10 +129,10 @@ async function axeViolations(): Promise<string[]> {
 }
 
 describe("<unlab-command-bar> at rest", () => {
-	it("is the 28px field with an example line in an empty lab and the shortcut hint", async () => {
+	it("is the 36px palette in an empty lab and the shortcut hint", async () => {
 		await mountBar(lab());
-		expect(box(".panel").height).toBe(28);
-		expect(input().placeholder).toBe("spawn 2 alpine --net switch0");
+		expect(box(".panel").height).toBe(36);
+		expect(input().placeholder).toBe("Command bar");
 		expect(input().getAttribute("role")).toBe("combobox");
 		expect(input().getAttribute("aria-expanded")).toBe("false");
 		expect(text(".hint")).toBe("Ctrl+/");
@@ -154,7 +154,7 @@ describe("<unlab-command-bar> CmdOpen: just opened", () => {
 		expect([panel.left, panel.top, panel.width]).toEqual([field.left, field.top, 720]);
 		expect(style(".panel").backgroundColor).toBe(tokenColor("mantle"));
 		expect(style(".panel").borderTopColor).toBe(tokenColor("line-strong"));
-		expect(style(".panel").borderTopLeftRadius).toBe("6px");
+		expect(style(".panel").borderTopLeftRadius).toBe("0px");
 		expect(box(".input-row").height).toBe(44);
 		expect(style(".prompt").color).toBe(tokenColor("ok"));
 		expect(style("input").fontSize).toBe("14px");
@@ -375,9 +375,7 @@ describe("<unlab-command-bar> CmdConfirm: rm asks first", () => {
 				app.services = services;
 			},
 		});
-		const remove = document.createElement("button");
-		remove.textContent = "remove";
-		element.querySelector(".lab-name")?.after(remove);
+		const remove = page.getByRole("button", { name: "remove", exact: true }).element();
 		remove.focus();
 		element.dispatchEvent(new CustomEvent("unlab-open-bar", { detail: "rm node2" }));
 		await expect

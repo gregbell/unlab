@@ -95,12 +95,13 @@ export class UnlabAgentPanel extends UnlabElement {
 		const agent = this.#agent.value;
 		const { available, tools } = this.app.agent;
 		const machines = this.#machines.value;
+		const status = agent.paused ? "tools paused" : this.#indicator.value;
 		const log = agent.calls.filter((call) => call.status !== "waiting");
 		const waiting = agent.calls.filter((call) => call.status === "waiting");
 		this.#rearm(waiting);
 		return html`<div class="head">
 				<h2 class="title">webmcp</h2>
-				<span class="state" data-paused=${agent.paused ? "true" : "false"}>${agent.paused ? "tools paused" : this.#indicator.value}</span>
+				${status === "no agent calls yet" ? nothing : html`<span class="state" data-paused=${String(agent.paused)}>${status}</span>`}
 				${this.#since.value ? html`<span class="since">${this.#since.value}</span>` : nothing}
 				<span class="spacer"></span>
 				<button
@@ -176,6 +177,8 @@ export class UnlabAgentPanel extends UnlabElement {
 		if (policy) this.app.store.dispatchUi({ type: "ui/policy", tool, policy });
 	}
 }
+
+export const AGENT_PANEL_ID = "unlab-agent-panel";
 
 customElements.define("unlab-agent-panel", UnlabAgentPanel);
 

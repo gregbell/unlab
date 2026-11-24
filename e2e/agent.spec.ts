@@ -87,7 +87,10 @@ test("an agent lists, asks to remove node2, and node2 goes once the person click
 		untrustedContentHint: true,
 	});
 
-	await page.getByRole("button", { name: "no agent calls yet" }).click();
+	await page
+		.getByRole("contentinfo")
+		.getByRole("button", { name: /^webmcp:/ })
+		.click();
 	const panel = page.locator("unlab-agent-panel");
 	await expect(panel.getByRole("heading", { name: "webmcp" })).toBeVisible();
 
@@ -95,7 +98,7 @@ test("an agent lists, asks to remove node2, and node2 goes once the person click
 	expect(listed).toMatchObject({ result: "2 machines · 2 ready" });
 	await expect(panel.locator(".call").first()).toContainText("ls");
 	await expect(panel.locator(".call").first()).toContainText("→ 2 machines · 2 ready");
-	await expect(page.getByRole("button", { name: "agent active" })).toBeVisible();
+	await expect(page.getByRole("contentinfo").getByRole("button", { name: /agent active/ })).toBeVisible();
 
 	const echoed = await call(page, "shell_exec", { targets: "node1", command: "echo hello" });
 	expect(echoed).toMatchObject({ data: { ran: [{ exitCode: 0 }] } });
@@ -133,7 +136,10 @@ test("deny, abort, off and pause, each as the handoff says", async ({ page }) =>
 	page.on("pageerror", (e) => errors.push(e.message));
 	await fakeWebMcp(page);
 	await openWithTwoMachines(page);
-	await page.getByRole("button", { name: "no agent calls yet" }).click();
+	await page
+		.getByRole("contentinfo")
+		.getByRole("button", { name: /^webmcp:/ })
+		.click();
 	const panel = page.locator("unlab-agent-panel");
 	const block = panel.locator("unlab-confirm");
 
