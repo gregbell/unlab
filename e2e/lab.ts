@@ -25,17 +25,18 @@ interface Ran {
 	readonly output: string;
 }
 
-/** A line an agent runs in the machine's console. */
-export async function shell(page: Page, node: number, script: string): Promise<Ran> {
-	const reply = (await call(page, "shell_exec", { targets: `node${node}`, command: script })) as {
+/** A line an agent runs in the machine's console. A number is the machine that goes by it. */
+export async function shell(page: Page, machine: number | string, script: string): Promise<Ran> {
+	const targets = typeof machine === "number" ? `node${machine}` : machine;
+	const reply = (await call(page, "shell_exec", { targets, command: script })) as {
 		data: { ran: Ran[] };
 	};
 	return reply.data.ran[0];
 }
 
 /** One that must succeed, as root. */
-export async function root(page: Page, node: number, script: string): Promise<string> {
-	const ran = await shell(page, node, `sudo sh -c '${script}'`);
+export async function root(page: Page, machine: number | string, script: string): Promise<string> {
+	const ran = await shell(page, machine, `sudo sh -c '${script}'`);
 	expect(ran, script).toMatchObject({ exitCode: 0 });
 	return ran.output;
 }
