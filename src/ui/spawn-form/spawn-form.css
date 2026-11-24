@@ -6,7 +6,7 @@
 		:scope {
 			display: block;
 			padding: 64px 24px 48px;
-			background: var(--base);
+			background: transparent;
 		}
 
 		.sheet {

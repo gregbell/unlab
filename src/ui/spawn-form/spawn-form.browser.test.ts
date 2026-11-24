@@ -54,7 +54,9 @@ describe("<unlab-spawn-form> choices", () => {
 		expect(text(".count")).toBe("3");
 		expect(text(".stepper .note")).toBe("768 MiB of memory in total");
 		expect(shownLine()).toBe("spawn 3 alpine");
-		expect(text(".code.call")).toBe('machines_spawn({"count": 3, "image": "alpine", "mem": 256, "net": "switch0"})');
+		expect(text(".code.call")).toBe(
+			'machines_spawn({"count": 3, "image": "alpine", "mem": 256, "cpus": 1, "disk": "4", "net": "switch0"})',
+		);
 		expect(rows()).toEqual([
 			["node1", "10.88.0.11/24", "port 1"],
 			["node2", "10.88.0.12/24", "port 2"],
@@ -89,6 +91,7 @@ describe("<unlab-spawn-form> choices", () => {
 		expect(groups.map((g) => g.getAttribute("aria-labelledby"))).toEqual([
 			"spawn-image",
 			"spawn-memory",
+			"spawn-disk",
 			"spawn-network",
 		]);
 		for (const group of groups) {

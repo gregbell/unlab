@@ -135,7 +135,7 @@ describe("mounting", () => {
 });
 
 describe("theme", () => {
-	test("the handoff's ground, text size and row height, with no shadow or rounding", async () => {
+	test("a transparent ground, the terminal text size and row height, with no shadow or rounding", async () => {
 		const s = screen();
 		const el = host();
 		s.write(bytes("text\r\n"));
@@ -145,7 +145,7 @@ describe("theme", () => {
 		const terminal = el.firstElementChild;
 		if (!(terminal instanceof HTMLElement)) throw new Error("no terminal in the host");
 		const style = getComputedStyle(terminal);
-		expect(style.backgroundColor).toBe("rgb(30, 30, 46)");
+		expect(style.backgroundColor).toBe("rgba(0, 0, 0, 0)");
 		expect(style.color).toBe("rgb(205, 214, 244)");
 		expect(style.fontSize).toBe("12.5px");
 		expect(style.padding).toBe("10px 14px 12px");

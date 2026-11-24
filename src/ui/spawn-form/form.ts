@@ -4,6 +4,7 @@
 
 import { type CommandService, isLineError, type LineError, type Preview, spawn } from "../../commands/index.ts";
 import {
+	type DiskSize,
 	type HueNo,
 	isPlanError,
 	LAB_PREFIX_BITS,
@@ -18,7 +19,7 @@ import {
 } from "../../model/index.ts";
 
 /** The memory choices, in MiB. */
-export const MEMORY = [128, 256, 512, 1024] as const;
+export const MEMORY = [64, 128, 256, 512, 1024, 2048, 4096] as const;
 export type Memory = (typeof MEMORY)[number];
 
 /** Exactly the `spawn` verb's arguments, so a choice is a line by `format`. */
@@ -26,6 +27,8 @@ export interface SpawnChoice {
 	readonly count: number;
 	readonly image: string;
 	readonly mem: Memory;
+	readonly disk: DiskSize;
+	readonly cpus: number;
 	readonly net: MachineSpec["net"];
 }
 
@@ -57,7 +60,14 @@ export interface FormView {
 }
 
 export function defaultChoice(lab: LabState): SpawnChoice {
-	const choice: SpawnChoice = { count: 3, image: lab.images[0]?.name ?? "alpine", mem: 256, net: SWITCH_NAME };
+	const choice: SpawnChoice = {
+		count: 3,
+		image: lab.images[0]?.name ?? "alpine",
+		mem: 256,
+		cpus: 1,
+		disk: "4",
+		net: SWITCH_NAME,
+	};
 	return { ...choice, count: Math.max(1, Math.min(choice.count, mostOf(choice, lab))) };
 }
 

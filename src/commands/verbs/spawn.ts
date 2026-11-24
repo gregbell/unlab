@@ -1,4 +1,4 @@
-import { isPlanError, MAX_MACHINES, type MachineName, planSpawn } from "../../model/index.ts";
+import { DISK_SIZES, isPlanError, MAX_MACHINES, type MachineName, planSpawn } from "../../model/index.ts";
 import { defineVerb, refuse } from "../define.ts";
 import * as slots from "../grammar/slots.ts";
 import { andList, imageLabel, planErrorSentence, ports } from "./words.ts";
@@ -15,13 +15,18 @@ export const spawn = defineVerb({
 			slots.count({ label: "MiB", noun: "a size in MiB", suggest: () => [128, 256, 512, 1024] }),
 			256,
 		),
+		cpus: slots.option("--cpus", slots.count({ label: "CPUs", suggest: () => [1, 2, 4, 8, 16] }), 1),
+		disk: slots.option("--disk", slots.choice(DISK_SIZES), "4"),
 		net: slots.exclusive<"switch0" | "none">("switch0", [
 			slots.valued("--net", slots.choice(["switch0"])),
 			slots.flag("--no-net", "none"),
 		]),
 	},
 	plan(a, lab) {
-		const plan = planSpawn(lab, a.count, { image: a.image, memMiB: a.mem, net: a.net });
+		if (a.cpus > 16) return refuse("Choose 1 to 16 CPUs per machine.", "cpus");
+		if (a.cpus > 1 && globalThis.crossOriginIsolated === false)
+			return refuse("Multiple CPUs need a cross-origin isolated page.", "cpus");
+		const plan = planSpawn(lab, a.count, { image: a.image, memMiB: a.mem, diskGiB: a.disk, cpus: a.cpus, net: a.net });
 		return isPlanError(plan)
 			? refuse(planErrorSentence(plan), plan.kind === "unknown-image" ? "image" : "count")
 			: plan;
@@ -34,6 +39,8 @@ export const spawn = defineVerb({
 			`boot ${andList(machines.map((m) => m.identity.name))}`,
 			imageLabel(lab, spec.image),
 			`${spec.memMiB} MiB${many ? " each" : ""}`,
+			`${spec.cpus ?? 1} CPU${(spec.cpus ?? 1) === 1 ? "" : "s"}`,
+			`${spec.diskGiB ?? "4"} GiB disk`,
 			spec.net === "none" ? "unplugged" : `plugged into switch0 on ${ports(plugged)}`,
 		].join(" · ");
 	},

@@ -2,6 +2,7 @@
 // renderer are reachable only through an Engine; vm.ts, switch.ts and the
 // worker protocol are not exported.
 
+export { deleteMachineDisk } from "./disk-name.ts";
 export type { Engine, EngineDeps, ExecOutcome, ExecPort, RuntimeReads, RuntimeStore } from "./engine.ts";
 export { createEngine, ExecRefused } from "./engine.ts";
 export type { DistroManifest } from "./image.ts";

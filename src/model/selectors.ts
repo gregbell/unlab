@@ -91,7 +91,7 @@ export const selectRail: (state: LabState) => readonly RailRow[] = memo(
 );
 
 export interface DetailRow {
-	readonly label: "state" | "image" | "memory" | "address" | "mac" | "uplink" | "link" | "shells";
+	readonly label: "state" | "image" | "CPUs" | "disk" | "memory" | "address" | "mac" | "uplink" | "link" | "shells";
 	readonly value: string;
 }
 
@@ -149,6 +149,8 @@ export const selectDetails: (state: LabState) => MachineDetails | null = memo(
 			rows: [
 				{ label: "state", value: stateValue(machine, now) },
 				{ label: "image", value: image ? image.label : machine.spec.image },
+				{ label: "CPUs", value: String(machine.spec.cpus ?? 1) },
+				{ label: "disk", value: `${machine.spec.diskGiB ?? 4} GiB` },
 				{ label: "memory", value: `${machine.spec.memMiB} MiB` },
 				{ label: "address", value: `${machine.ip}/${LAB_PREFIX_BITS}` },
 				{ label: "mac", value: machine.mac },

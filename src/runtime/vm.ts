@@ -148,6 +148,8 @@ export function startVm(boot: VmBoot, sink: VmSink, deps: VmDeps): Vm {
 		labCidr: LAB_CIDR,
 		distro: spec.image,
 		memoryMiB: spec.memMiB,
+		cpus: spec.cpus ?? 1,
+		diskGiB: Number(spec.diskGiB ?? 4),
 		hosts: boot.config.hosts,
 		internet: false,
 		cols: boot.cols,

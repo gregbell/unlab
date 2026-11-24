@@ -11,6 +11,7 @@
 
 import { createKernel, DEFAULT_WISP_SERVERS, type KernelInstance, NetStack, type Pty, wispBackend } from "unkernel";
 import { Subnet } from "../net/index.ts";
+import { diskName } from "./disk-name.ts";
 import { execAsRoot, hostsScript, setupScript } from "./guest.ts";
 import { MemoryDisk } from "./image.ts";
 import { LabNic } from "./nic.ts";
@@ -171,12 +172,20 @@ async function boot(c: VmConfig): Promise<void> {
 		post({ type: "stage", stage: "download" });
 		vm = await createKernel({
 			distro: new MemoryDisk(c.image),
+			disks: [{ kind: "data", template: "bundled", name: diskName(c.id), size: (c.diskGiB ?? 4) * 2 ** 30 }],
+			onDiskError: (_, error) => fail(`Saving ${c.name} failed: ${error}`, true),
 			net: nic,
 			memoryMiB: c.memoryMiB,
+			memoryFallbackMiB: [],
+			cpus: c.cpus,
 			consoleSize: { cols: c.cols, rows: c.rows },
 			onProgress: (p) => post({ type: "stage", stage: p.stage }),
 			log: (line) => post({ type: "stage", stage: "log", detail: line }),
 		});
+		if (vm.stats().cpus !== (c.cpus ?? 1))
+			throw new Error(`Requested ${c.cpus} CPUs but the browser started ${vm.stats().cpus}.`);
+		if (!vm.kernel.block.disks.some((d) => d.persistent))
+			throw new Error("Persistent disk unavailable. Check browser storage and boot again.");
 	} catch (e) {
 		fail(e instanceof Error ? e.message : String(e), true);
 		return;
@@ -186,6 +195,7 @@ async function boot(c: VmConfig): Promise<void> {
 
 	const shell = createShellTracker();
 	let prompted = () => {};
+	shell.expectToken(c.promptToken);
 	const firstPrompt = new Promise<void>((resolve) => {
 		prompted = resolve;
 	});

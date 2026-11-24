@@ -167,6 +167,8 @@ function samePlan(a: SpawnPlan, b: SpawnPlan): boolean {
 	return (
 		a.spec.image === b.spec.image &&
 		a.spec.memMiB === b.spec.memMiB &&
+		a.spec.cpus === b.spec.cpus &&
+		a.spec.diskGiB === b.spec.diskGiB &&
 		a.spec.net === b.spec.net &&
 		a.machines.length === b.machines.length &&
 		a.machines.every((one, i) => {
@@ -225,17 +227,37 @@ export function spawn(state: LabState, plan: SpawnPlan, at: number): Step {
 	const fresh = planSpawn(state, plan.machines.length, plan.spec);
 	if (isPlanError(fresh) || fresh.machines.length === 0 || !samePlan(fresh, plan)) return step(state);
 
+	const nodes = fresh.machines.map(({ identity, hue, port }) => ({
+		identity,
+		hue,
+		spec: fresh.spec,
+		plug: port === null ? UNPLUGGED : ({ kind: "port", port, link: "up" } as const),
+	}));
+	return bootMachines(state, nodes, state.nextN + nodes.length, at);
+}
+
+export interface BootNode {
+	failure?: string;
+	identity: ReturnType<typeof identity>;
+	hue: HueNo;
+	spec: MachineSpec;
+	plug: Plug;
+}
+
+export function bootMachines(state: LabState, nodes: readonly BootNode[], nextN: number, at: number): Step {
 	const machines = { ...state.machines };
 	const sessions = { ...state.sessions };
 	const added: Machine[] = [];
-	for (const { identity: id, hue, port } of fresh.machines) {
+	for (const { identity: id, hue, spec, plug, failure } of nodes) {
 		const tab: SessionId = `${id.name}:console`;
-		const plug: Plug = port === null ? UNPLUGGED : { kind: "port", port, link: "up" };
 		const machine: Machine = {
 			...id,
-			life: { phase: "booting", attempt: 1, since: at, stage: "", plug },
+			life:
+				failure === undefined
+					? { phase: "booting", attempt: 1, since: at, stage: "", plug }
+					: { phase: "failed", attempt: 1, reason: failure },
 			hue,
-			spec: fresh.spec,
+			spec,
 			sessions: [tab],
 			activeSession: tab,
 			nextShell: 1,
@@ -247,14 +269,14 @@ export function spawn(state: LabState, plan: SpawnPlan, at: number): Step {
 	const next: LabState = {
 		...state,
 		now: later(state.now, at),
-		nextN: state.nextN + added.length,
+		nextN,
 		machines,
 		sessions,
 		rail: [...state.rail, ...added.map((machine) => machine.name)],
 	};
 	const effects = added.flatMap((machine): Effect[] => [
 		{ type: "screen/create", session: machine.activeSession },
-		...bootEffects(machine, 1, next),
+		...(machine.life.phase === "booting" ? bootEffects(machine, 1, next) : []),
 	]);
 	return step(next, effects);
 }

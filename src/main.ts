@@ -7,9 +7,18 @@ import "./ui/app/app.ts";
 import { detectModelContext, startAgent } from "./agent/index.ts";
 import { createCaptureLog } from "./capture/index.ts";
 import { createCommandService, createRegistry, VERBS } from "./commands/index.ts";
-import { clockHz, createStore, type Effect, type ImageInfo, initialState, type Store } from "./model/index.ts";
+import {
+	clockHz,
+	createStore,
+	type Effect,
+	type ImageInfo,
+	initialState,
+	restoreWorkspace,
+	type Store,
+	saveWorkspace,
+} from "./model/index.ts";
 import { compileFilter } from "./net/index.ts";
-import { createRuntime, type DistroManifest, type Engine } from "./runtime/index.ts";
+import { createRuntime, type DistroManifest, deleteMachineDisk, type Engine } from "./runtime/index.ts";
 import type { AppServices, TerminalHost } from "./ui/services.ts";
 
 interface Manifest extends DistroManifest {
@@ -64,12 +73,45 @@ async function main(): Promise<void> {
 	const app = document.createElement("unlab-app");
 	const capture = createCaptureLog({ schedule, now });
 	let runtime: Engine | undefined;
-	const store: Store = createStore(
+	const key = "unlab.workspace.v1";
+	const restored = restoreWorkspace(
 		initialState(images, { width: window.innerWidth - 232, height: window.innerHeight - 300 }),
-		(effect: Effect) => runtime?.run(effect),
+		localStorage.getItem(key),
+	);
+	const store: Store = createStore(
+		restored.state,
+		(effect: Effect) => {
+			if (effect.type === "vm/boot") save();
+			if (effect.type === "vm/stop" && store.state.machines[effect.machine]?.life.phase === "removing") {
+				save();
+			}
+			runtime?.run(effect);
+		},
 		schedule,
 	);
-	runtime = createRuntime({ store, capture, manifest, announce: (text) => app.announce(text), now });
+	let saved = localStorage.getItem(key);
+	const save = () => {
+		const next = saveWorkspace(store.state);
+		if (next !== saved) {
+			localStorage.setItem(key, next);
+			saved = next;
+		}
+	};
+	store.subscribe(save);
+	runtime = createRuntime({
+		store: {
+			dispatchRuntime(event) {
+				if (event.type === "vm/stopped" && store.state.machines[event.machine]?.life.phase === "removing")
+					deleteMachineDisk(event.machine);
+				store.dispatchRuntime(event);
+			},
+		},
+		capture,
+		manifest,
+		announce: (text) => app.announce(text),
+		now,
+	});
+	for (const effect of restored.effects) runtime.run(effect);
 	// The model asks for a faster clock while machines boot; at rest it still needs one, or its idea of now never moves.
 	runtime.run({ type: "clock", hz: clockHz(store.state) });
 
@@ -137,12 +179,39 @@ async function main(): Promise<void> {
 	app.services = services;
 	document.body.append(app);
 	window.addEventListener("pagehide", () => {
+		save();
 		agent.dispose();
 		engine.dispose();
 	});
 }
 
-void main().catch((error: unknown) => {
+async function openWorkspace(): Promise<void> {
+	// Reload once under the scoped worker on static hosts without COOP/COEP.
+	if (
+		import.meta.env.PROD &&
+		!crossOriginIsolated &&
+		"serviceWorker" in navigator &&
+		!navigator.serviceWorker.controller
+	) {
+		try {
+			await navigator.serviceWorker.register("./isolation.js");
+			await navigator.serviceWorker.ready;
+			location.reload();
+			return;
+		} catch (error) {
+			console.warn("Cross-origin isolation unavailable.", error);
+		}
+	}
+	await navigator.locks.request("unlab.workspace.v1", { ifAvailable: true }, async (lock) => {
+		if (!lock) throw new Error("This lab is open in another tab. Close that tab and reload to open it here.");
+		await main();
+		await new Promise<void>((resolve) => window.addEventListener("pagehide", () => resolve(), { once: true }));
+	});
+}
+window.addEventListener("pageshow", (event) => {
+	if (event.persisted) location.reload();
+});
+void openWorkspace().catch((error: unknown) => {
 	const message = error instanceof Error ? error.message : String(error);
 	document.body.textContent = message;
 	console.error(error);

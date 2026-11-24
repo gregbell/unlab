@@ -1,6 +1,7 @@
 import "./spawn-form.css";
 import { html, nothing, type TemplateResult } from "lit";
 import { isLineError } from "../../commands/index.ts";
+import { DISK_SIZES } from "../../model/index.ts";
 import { Select, UnlabElement } from "../base/index.ts";
 import { defaultChoice, formView, MEMORY, type Memory, type SpawnChoice } from "./form.ts";
 
@@ -61,6 +62,21 @@ export class UnlabSpawnForm extends UnlabElement {
 					<div class="label" id="spawn-memory">memory each</div>
 					<div class="choices" role="group" aria-labelledby="spawn-memory">
 						${MEMORY.map((mib) => option(memoryLabel(mib), choice.mem === mib, { mem: mib }))}
+					</div>
+				</div>
+				<div class="question">
+					<label class="label" for="spawn-cpus">CPUs each</label>
+					<select class="field" id="spawn-cpus" @change=${(event: Event) => {
+						if (event.target instanceof HTMLSelectElement) pick({ cpus: Number(event.target.value) })();
+					}}>
+						${[1, 2, 4, 8, 16].map((n) => html`<option .value=${String(n)} ?selected=${choice.cpus === n} ?disabled=${n > 1 && !crossOriginIsolated}>${n}</option>`)}
+					</select>
+					${crossOriginIsolated ? nothing : html`<p class="note">Multiple CPUs require cross-origin isolation.</p>`}
+				</div>
+				<div class="question">
+					<div class="label" id="spawn-disk">persistent disk each</div>
+					<div class="choices" role="group" aria-labelledby="spawn-disk">
+						${DISK_SIZES.map((disk) => option(`${disk} GiB`, choice.disk === disk, { disk }))}
 					</div>
 				</div>
 				<div class="question">

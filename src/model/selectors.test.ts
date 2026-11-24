@@ -132,6 +132,8 @@ describe("machine details", () => {
 			rows: [
 				{ label: "state", value: "ready · 3582 ms" },
 				{ label: "image", value: "alpine 3.24" },
+				{ label: "CPUs", value: "1" },
+				{ label: "disk", value: "4 GiB" },
 				{ label: "memory", value: "256 MiB" },
 				{ label: "address", value: "10.88.0.12/24" },
 				{ label: "mac", value: "52:54:00:88:00:0c" },

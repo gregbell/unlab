@@ -29,17 +29,17 @@ Everything the lab can do is a command, and every surface runs the same commands
 - **The command bar**: ⌘K on macOS, Ctrl+/ elsewhere. It completes as you type, says what a line will do before it runs, and asks before it removes anything.
 - **An agent** in the same browser, through [WebMCP](https://developer.chrome.com/docs/ai/webmcp/imperative-api). The agent panel sets which tools run at once, which ask you first, and which are off.
 
-| Command                                 | Does                                                                     |
-| --------------------------------------- | ------------------------------------------------------------------------ |
-| `spawn 2 alpine [--mem 512] [--no-net]` | Boots machines, plugged into switch0 unless told otherwise               |
-| `rm node3`                              | Removes a machine and its disk, after you confirm                        |
-| `ls`                                    | Lists machines, addresses and link states                                |
-| `exec all -- ping -c 1 10.88.0.12`      | Types the command into each machine's console and reports each exit code |
-| `sh node2`                              | Opens another shell on a machine                                         |
-| `link down node2`                       | Cuts a cable; `link up` reconnects it                                    |
-| `capture arp or node2`                  | Filters the capture and opens the Wire view                              |
-| `focus node2 [--main \| --max]`         | Moves the keyboard, and optionally promotes or maximises the pane        |
-| `boot node4`                            | Boots a failed machine again                                             |
+| Command                                                       | Does                                                                     |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `spawn 2 alpine [--mem 512] [--cpus 2] [--disk 8] [--no-net]` | Boots machines, plugged into switch0 unless told otherwise               |
+| `rm node3`                                                    | Removes a machine and its disk, after you confirm                        |
+| `ls`                                                          | Lists machines, addresses and link states                                |
+| `exec all -- ping -c 1 10.88.0.12`                            | Types the command into each machine's console and reports each exit code |
+| `sh node2`                                                    | Opens another shell on a machine                                         |
+| `link down node2`                                             | Cuts a cable; `link up` reconnects it                                    |
+| `capture arp or node2`                                        | Filters the capture and opens the Wire view                              |
+| `focus node2 [--main \| --max]`                               | Moves the keyboard, and optionally promotes or maximises the pane        |
+| `boot node4`                                                  | Boots a failed machine again                                             |
 
 Targets can be one machine, a list (`node1,node3`), a glob (`node*`) or `all`. Globs and `all` take ready machines only.
 
@@ -86,15 +86,17 @@ The browser and e2e suites need Chromium. Playwright's own download is used when
 
 Nothing here is rebuilt or repacked. The kernel is `unkernel.wasm` from the pinned `unkernel` npm package. The root images are the `.erofs` assets from the GitHub release matching that package version; `npm run distros` reads the release's `distros.json`, downloads each image and checks its size and SHA-256 before writing it. `public/distros/distros.json` records what was mirrored, down to the upstream build id.
 
+The Add machines form sizes each guest independently of its peers. The defaults are one CPU, 256 MiB of RAM and a sparse 4 GiB disk. The disk consumes browser storage as the guest writes to it. For example, `spawn 2 alpine --mem 512 --cpus 2 --disk 8` boots a pair with two CPUs, 512 MiB of RAM and an 8 GiB disk apiece.
+
 ## Limits
 
 - **Eight machines.** One per switch port and one per machine hue.
 - **IPv4 only.** The switch discards IPv6.
 - **One NIC per machine.** Routers between separate segments need address aliases rather than a second interface.
 - **The lab has no internet uplink.** Machines reach each other, not the outside world.
-- **Nothing is persisted.** Every machine starts from the read-only image with a fresh overlay, and reloading the page discards the lab.
+- **Machines and disks are saved in this browser.** Reloading cold-boots each node with its own IndexedDB-backed ext4 disk and restores its switch port and cable state. Shell processes and capture history start fresh. Removing a machine deletes its disk. One tab at a time owns the lab.
 - **WebMCP is an origin trial.** In a browser without it the agent panel still shows the tools and policies, and says no agent can call them yet.
 
 ## Licence
 
-unkernel is MIT AND GPL-2.0-only; the kernel and root images are its own. The code here is MIT.
+unkernel is MIT AND GPL-2.0-only; the kernel and root images are its own. The code here is MIT. The desktop background is adapted from the Big Moon wallpaper in [NOS](https://github.com/gregbell/nos).

@@ -36,3 +36,4 @@ export { createStore, type ReadStore, type Schedule, type Store } from "./store.
 export { type Tile, type Tiling, tile } from "./tiling.ts";
 export * from "./types.ts";
 export { clockHz, DEFAULT_POLICIES, initialState, update } from "./update.ts";
+export { restoreWorkspace, saveWorkspace } from "./workspace.ts";

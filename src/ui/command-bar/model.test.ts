@@ -188,7 +188,14 @@ describe("the artboards, replayed", () => {
 		expect(view.hint).toBe("tab → alpine");
 		expect(view.signature).toEqual({
 			verb: "spawn",
-			parts: ["<count>", "<image>", "[--mem MiB]", "[--net switch0 | --no-net]"],
+			parts: [
+				"<count>",
+				"<image>",
+				"[--mem MiB]",
+				"[--cpus CPUs]",
+				"[--disk 4 | 8 | 16 | 32 | 64]",
+				"[--net switch0 | --no-net]",
+			],
 			current: 1,
 		});
 		expect(view.rows).toEqual([
@@ -198,8 +205,8 @@ describe("the artboards, replayed", () => {
 		expect(view.block).toEqual({
 			kind: "preview",
 			preview: {
-				will: "boot node4 and node5 · alpine 3.24 · 256 MiB each · plugged into switch0 on ports 4 and 5",
-				assumed: "Left out, so assumed: --mem 256 --net switch0",
+				will: "boot node4 and node5 · alpine 3.24 · 256 MiB each · 1 CPU · 4 GiB disk · plugged into switch0 on ports 4 and 5",
+				assumed: "Left out, so assumed: --mem 256 --cpus 1 --disk 4 --net switch0",
 				tone: "plain",
 			},
 		});

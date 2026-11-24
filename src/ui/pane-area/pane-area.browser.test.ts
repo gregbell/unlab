@@ -65,7 +65,7 @@ function layout(): { readonly machine: string; readonly box: readonly number[] }
 	});
 }
 
-/** Fractions within a pixel of the 1px gaps between panes. */
+/** Ideal fractions can differ by the width of a gutter between tiles. */
 function expectLayout(expected: readonly (readonly number[])[], size: Size): void {
 	const actual = layout();
 	expect(actual).toHaveLength(expected.length);
@@ -74,7 +74,7 @@ function expectLayout(expected: readonly (readonly number[])[], size: Size): voi
 		const px = [size.width, size.height, size.width, size.height];
 		box.forEach((value, k) => {
 			expect(Math.abs(value - (want[k] ?? Number.NaN)) * (px[k] ?? 0), `pane ${i + 1} edge ${k}`).toBeLessThanOrEqual(
-				1,
+				6,
 			);
 		});
 	});
@@ -128,7 +128,7 @@ describe("<unlab-pane-area> tiling", () => {
 		await mountArea(lab(spawn(3), ready()));
 		const main = paneOf("node1").getBoundingClientRect();
 		const area = document.querySelector("unlab-pane-area")?.getBoundingClientRect();
-		expect(main.width / ((area?.width ?? 0) - 1)).toBeCloseTo(0.6, 3);
+		expect(main.width / ((area?.width ?? 0) - 6)).toBeCloseTo(0.6, 3);
 	});
 
 	it.each([

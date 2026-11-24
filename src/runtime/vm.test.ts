@@ -113,6 +113,8 @@ describe("boot", () => {
 					image,
 					distro: "alpine",
 					memoryMiB: 256,
+					cpus: 1,
+					diskGiB: 4,
 					hosts: NODE3.hosts,
 					internet: false,
 					cols: 100,

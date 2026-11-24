@@ -76,29 +76,33 @@ const box = (selector: string): DOMRect => the(selector).getBoundingClientRect()
 const style = (selector: string): CSSStyleDeclaration => getComputedStyle(the(selector));
 
 describe("<unlab-app> regions", () => {
-	it("stacks a 40px top bar, the body and a 26px status line over the full viewport", async () => {
+	it("stacks a framed top bar, the body and a 26px status line over the full viewport", async () => {
 		await mountApp();
 		const top = box(".top-bar");
 		const status = box("unlab-statusline");
 		const body = box(".body");
-		expect([top.top, top.height, top.width]).toEqual([0, 40, 1440]);
-		expect([status.height, status.bottom, status.width]).toEqual([26, 900, 1440]);
-		expect(body.top).toBe(top.bottom + 1);
-		expect(status.top).toBe(body.bottom + 1);
-		expect(style(".top-bar").backgroundColor).toBe(tokenColor("crust"));
+		expect(top.top).toBeCloseTo(10.08, 1);
+		expect(top.height).toBe(42);
+		expect(top.width).toBeCloseTo(1440 - 2 * top.top, 1);
+		expect(status.height).toBe(26);
+		expect(status.bottom).toBeCloseTo(900 - top.top, 1);
+		expect(status.width).toBe(top.width);
+		expect(body.top).toBe(top.bottom + 6);
+		expect(status.top).toBe(body.bottom + 6);
+		expect(style(".top-bar").backgroundColor).toBe(tokenColor("glass-panel"));
 	});
 
-	it("splits the body into a 232px rail and the centre, 1px apart over --line", async () => {
+	it("splits the body into a 232px rail and the centre, with a wallpaper gutter", async () => {
 		await mountApp();
 		const rail = box("unlab-rail");
 		const centre = box("main.centre");
 		expect(Math.abs(rail.width - 232)).toBeLessThan(1);
-		expect(centre.left).toBeCloseTo(rail.right + 1, 5);
-		expect(centre.right).toBe(1440);
-		expect(style(".body").backgroundColor).toBe(tokenColor("line"));
-		expect(style("unlab-rail").backgroundColor).toBe(tokenColor("mantle"));
-		expect(style("unlab-pane").backgroundColor).toBe(tokenColor("base"));
-		expect(style("unlab-pane-area").backgroundColor).toBe(tokenColor("line"));
+		expect(centre.left).toBeCloseTo(rail.right + 6, 5);
+		expect(centre.right).toBe(box(".top-bar").right);
+		expect(style(".body").backgroundColor).toBe("rgba(0, 0, 0, 0)");
+		expect(style("unlab-rail").backgroundColor).toBe(tokenColor("glass-panel"));
+		expect(style("unlab-pane").backgroundColor).toBe(tokenColor("glass-terminal"));
+		expect(style("unlab-pane-area").backgroundColor).toBe("rgba(0, 0, 0, 0)");
 	});
 
 	it("keeps the rail at 216px or more on a narrow window", async () => {
@@ -141,7 +145,7 @@ describe("<unlab-app> top bar", () => {
 		await mountApp();
 		const wordmark = style(".wordmark");
 		expect([wordmark.fontSize, wordmark.fontWeight, wordmark.letterSpacing]).toEqual(["14px", "600", "-0.2px"]);
-		expect(the(".lab-name").textContent).toBe("scratch");
+		expect(the(".lab-name").textContent).toBe("local lab");
 		expect(style(".lab-name").color).toBe(tokenColor("text-3"));
 	});
 
@@ -161,7 +165,7 @@ describe("<unlab-app> top bar", () => {
 		const field = box("unlab-command-bar");
 		expect(field.width).toBeGreaterThanOrEqual(320);
 		expect(field.width).toBeLessThanOrEqual(520);
-		expect(field.top).toBe(6);
+		expect(field.top + field.height / 2).toBeCloseTo(box(".top-bar").top + box(".top-bar").height / 2, 1);
 	});
 
 	it("makes Add machine the 28px primary button", async () => {

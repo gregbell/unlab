@@ -9,7 +9,7 @@
 			flex: 1 1 232px;
 			flex-direction: column;
 			min-width: 216px;
-			background: var(--mantle);
+			background: var(--glass-panel);
 		}
 
 		.header {

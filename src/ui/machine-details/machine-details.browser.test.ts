@@ -55,6 +55,8 @@ describe("<unlab-machine-details>", () => {
 		expect(facts()).toEqual([
 			["state", "ready · 3582 ms"],
 			["image", "alpine 3.24"],
+			["CPUs", "1"],
+			["disk", "4 GiB"],
 			["memory", "256 MiB"],
 			["address", "10.88.0.12/24"],
 			["mac", "52:54:00:88:00:0c"],

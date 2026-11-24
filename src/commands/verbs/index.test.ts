@@ -7,7 +7,11 @@ describe("VERBS", () => {
 	it("is the verbs group, in the bar's order, each with its signature and what it does", () => {
 		const { registry } = storeLab();
 		expect(registry.commands.map((c) => [c.name, c.signature.join(" "), c.about])).toEqual([
-			["spawn", "<count> <image> [--mem MiB] [--net switch0 | --no-net]", "boot machines"],
+			[
+				"spawn",
+				"<count> <image> [--mem MiB] [--cpus CPUs] [--disk 4 | 8 | 16 | 32 | 64] [--net switch0 | --no-net]",
+				"boot machines",
+			],
 			["rm", "<machines>", "remove machines and their disks"],
 			["ls", "", "list machines, addresses and links"],
 			["exec", "<machines> -- <command>", "run a shell command in each console"],

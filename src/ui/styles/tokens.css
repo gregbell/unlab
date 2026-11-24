@@ -7,6 +7,10 @@
 	--base: #1e1e2e;
 	--pane-focus: #262637;
 
+	--glass-panel: rgb(22 22 39 / 88%);
+	--glass-terminal: rgb(25 25 45 / 77%);
+	--glass-edge: rgb(191 169 236 / 38%);
+
 	/* lines */
 	--line: #313244;
 	--line-strong: #45475a;

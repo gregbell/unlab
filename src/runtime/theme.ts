@@ -68,6 +68,7 @@ export const ROW_HEIGHT_PX = 20;
  * order the page loads its CSS in. The font follows the --font token.
  */
 export const TERMINAL_STYLE: Readonly<Record<string, string>> = {
+	background: "var(--term-app-bg, transparent)",
 	"--term-selection-bg": T.selectionBackground,
 	"--term-font-family": "var(--font, ui-monospace, Menlo, monospace)",
 	"--term-font-size": "12.5px",

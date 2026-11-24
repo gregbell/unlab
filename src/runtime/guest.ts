@@ -56,7 +56,7 @@ const PROMPT_FILE = "/etc/profile.d/kw-unlab.sh";
 function promptLine(token: string): string {
 	if (!/^[0-9a-f]+$/.test(token)) throw new Error("the prompt token must be hex");
 	const tag = `;unlab=${token}`;
-	return String.raw`PS1='\[\033]133;D;$?${tag}\007\033]133;A${tag}\007\]'"$PS1"'\[\033]133;B${tag}\007\]'`;
+	return String.raw`PS1='\[\033]133;D;$?$(sync)${tag}\007\033]133;A${tag}\007\]'"$PS1"'\[\033]133;B${tag}\007\]'`;
 }
 
 /**

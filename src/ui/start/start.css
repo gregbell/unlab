@@ -6,15 +6,20 @@
 		:scope {
 			display: block;
 			flex: 1 1 auto;
-			padding: 88px 24px 48px;
-			background: var(--base);
+			padding: clamp(20px, 7vh, 80px) clamp(8px, 2vw, 24px);
+			background: transparent;
 		}
 
 		.sheet {
 			display: flex;
 			flex-direction: column;
 			gap: 40px;
-			max-width: 720px;
+			width: min(100%, 800px);
+			padding: clamp(18px, 3vw, 44px);
+			border: 1px solid var(--glass-edge);
+			border-radius: 12px;
+			background: var(--glass-panel);
+			box-shadow: 0 16px 64px rgb(8 8 24 / 24%);
 			margin: 0 auto;
 		}
 

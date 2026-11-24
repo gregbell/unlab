@@ -17,6 +17,8 @@ export interface VmConfig {
 	/** Which image that is, for display. */
 	distro: string;
 	memoryMiB: number;
+	diskGiB?: number;
+	cpus?: number;
 	hosts: readonly HostEntry[];
 	/** Give this machine a NAT uplink to the internet (needed by `apk add`). */
 	internet: boolean;

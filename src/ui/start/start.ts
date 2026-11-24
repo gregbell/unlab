@@ -42,7 +42,7 @@ export class UnlabStart extends UnlabElement {
 		return html`<div class="sheet">
 			<div class="intro">
 				<h1>Boot some Linux.</h1>
-				<p class="lede">Real kernels, running in this tab, cabled to a switch you control. Type a command or pick a starting point.</p>
+				<p class="lede">Boot Linux machines on a shared switch. Your machines, cables, and disks are saved in this browser.</p>
 			</div>
 			<form class="run" @submit=${this.#submit}>
 				<div class="field-box">

@@ -40,7 +40,12 @@ export interface ImageInfo {
 	readonly label: string;
 }
 
+export const DISK_SIZES = ["4", "8", "16", "32", "64"] as const;
+export type DiskSize = (typeof DISK_SIZES)[number];
+
 export interface MachineSpec {
+	readonly diskGiB?: DiskSize;
+	readonly cpus?: number;
 	readonly image: string;
 	readonly memMiB: number;
 	/** What was asked for at spawn; boot again honours it. */

@@ -94,7 +94,7 @@ export class UnlabApp extends LitElement {
 				<button type="button" class="wordmark" aria-label="unlab, back to the lab" @click=${() => this.#ui({ type: "ui/view", view: "lab" })}>
 					unlab
 				</button>
-				<span class="lab-name">scratch</span>
+				<span class="lab-name">local lab</span>
 				<unlab-command-bar></unlab-command-bar>
 				<span class="spacer"></span>
 				<button

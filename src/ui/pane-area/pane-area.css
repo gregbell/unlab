@@ -10,15 +10,15 @@
 		:scope {
 			display: grid;
 			flex: 1 1 auto;
-			gap: 1px;
+			gap: 6px;
 			min-width: 0;
 			min-height: 200px;
 			contain: size;
-			background: var(--base);
+			background: transparent;
 		}
 
 		:scope:has(> unlab-pane:not([hidden])) {
-			background: var(--line);
+			background: transparent;
 		}
 	}
 }

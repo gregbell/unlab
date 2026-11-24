@@ -2,7 +2,7 @@
 @layer tokens, base, components;
 
 @layer components {
-	/* Regions sit edge to edge; the 1px gaps over --line are the dividers. */
+	/* Let the desktop show through the gutters and the terminal panes. */
 	@scope (unlab-app) to (
 		unlab-rail,
 		unlab-statusline,
@@ -17,9 +17,12 @@
 		:scope {
 			display: flex;
 			flex-direction: column;
-			gap: 1px;
+			gap: 6px;
 			min-height: 100vh;
-			background: var(--line);
+			padding: clamp(4px, 0.7vw, 12px);
+			background:
+				linear-gradient(rgb(13 15 35 / 22%), rgb(18 17 36 / 35%)),
+				url("../assets/big-moon.webp") center / cover fixed;
 		}
 
 		.top-bar {
@@ -29,7 +32,9 @@
 			gap: 0 16px;
 			min-height: 40px;
 			padding: 0 var(--gutter);
-			background: var(--crust);
+			background: var(--glass-panel);
+			border: 1px solid var(--glass-edge);
+			border-radius: 8px;
 		}
 
 		.wordmark {
@@ -79,8 +84,8 @@
 			flex: 1 1 auto;
 			flex-wrap: wrap;
 			align-items: stretch;
-			gap: 1px;
-			background: var(--line);
+			gap: 6px;
+			background: transparent;
 		}
 
 		/* The rail and the centre are the body's own flex items; the wrapper only hides them together. */
@@ -94,9 +99,9 @@
 			display: flex;
 			flex: 999 1 560px;
 			flex-direction: column;
-			gap: 1px;
+			gap: 6px;
 			min-width: 0;
-			background: var(--line);
+			background: transparent;
 		}
 
 		.agent-panel {
@@ -107,7 +112,7 @@
 		.dock {
 			display: grid;
 			grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
-			gap: 1px;
+			gap: 6px;
 		}
 
 		/* Collapsed, the dock is one row the height of the capture's toolbar, across both columns. */
@@ -145,7 +150,7 @@
 
 		.wire-view,
 		.spawn-view {
-			background: var(--base);
+			background: var(--glass-panel);
 		}
 
 		.spawn-view {
