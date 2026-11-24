@@ -91,16 +91,17 @@ that follow it in step 1.
 
 ### Connect a browser extension
 
-1. Open `chrome://flags/#enable-webmcp-testing`, choose **Enabled**, and relaunch
-   Chrome.
-2. [Open the lab](https://gregbell.github.io/unlab/). The bottom right reads
-   `webmcp: 7 tools registered`.
-3. To see a call without an agent, click that text, then click **try a call**. The
+1. [Open the lab](https://gregbell.github.io/unlab/) in Chrome. The bottom right
+   reads `webmcp: 7 tools registered`.
+2. To see a call without an agent, click that text, then click **try a call**. The
    call and its result appear in the panel.
-4. Install
+3. Install
    [WebMCP - Model Context Tool Inspector](https://chromewebstore.google.com/detail/webmcp-model-context-tool/gbpdfapgefenggkahomfgkhfehlcenpd).
    It lists the tools in the tab. To ask for work in plain language, give it a
    Gemini API key.
+
+The live lab turns WebMCP on in Chrome by itself. For your own copy, open
+`chrome://flags/#enable-webmcp-testing`, choose **Enabled**, and relaunch Chrome.
 
 ### Things to ask for
 
@@ -128,12 +129,12 @@ text that tries to instruct the agent, so unlab marks it as untrusted.
 
 ### If the agent cannot call the tools
 
-| Status line                      | What to do                                                                                 |
-| -------------------------------- | ------------------------------------------------------------------------------------------ |
-| `webmcp: not available`          | Turn on the flag, or check that the MCP server has `--chromeArg=--enable-features=WebMCP`. |
-| `webmcp: blocked`                | Click it to read the browser's reason.                                                     |
-| `webmcp: paused`                 | Click it, then click **resume tools**.                                                     |
-| `webmcp: 1 call waiting for you` | Click it, then approve or deny the call.                                                   |
+| Status line                      | What to do                                                                                       |
+| -------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `webmcp: not available`          | Turn on the flag above, or check that the MCP server has `--chromeArg=--enable-features=WebMCP`. |
+| `webmcp: blocked`                | Click it to read the browser's reason.                                                           |
+| `webmcp: paused`                 | Click it, then click **resume tools**.                                                           |
+| `webmcp: 1 call waiting for you` | Click it, then approve or deny the call.                                                         |
 
 ## Network and storage
 
