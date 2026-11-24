@@ -1,22 +1,22 @@
 {
-  "unkernel": "0.2.0-261123-8f039c5",
-  "release": "https://github.com/pithings/unkernel/releases/download/v0.2.0-261123-8f039c5/",
-  "abi": 3,
-  "base": "base-67d2aabad8b73f64",
+  "unkernel": "0.2.0-261124-c08e977",
+  "release": "https://github.com/pithings/unkernel/releases/download/v0.2.0-261124-c08e977/",
+  "abi": 4,
+  "base": "base-4bd86cee9865eecd",
   "distros": [
     {
       "name": "alpine",
       "file": "alpine.erofs",
       "size": 4046848,
-      "sha256": "72a89c2638ec4cb69767b2071d9a3492134cb00c00168c5c32a932859524ae7f",
-      "image": "alpine-3.24.4-098ea0dd717370ac"
+      "sha256": "bb9bed60c5d5418dc35b23ed69112882df7a7c5ae878490fc45a82fc5c28ffab",
+      "image": "alpine-3.24.4-7ab2d6761e667913"
     },
     {
       "name": "debian",
       "file": "debian.erofs",
-      "size": 72749056,
-      "sha256": "08e8344aae97cfa8b31226da553fe409e39592790d8ac5ddb9928f4530251587",
-      "image": "debian-13.7-88f3040591485cc9"
+      "size": 72843264,
+      "sha256": "93988579bcdb3af804b7a0b7d48bb2dc8a49556522667681aae09b51c9fca2eb",
+      "image": "debian-13.7-abeed3a39d8a188d"
     }
   ]
 }
