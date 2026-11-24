@@ -21,6 +21,17 @@
 			color: var(--warn);
 		}
 
+		.heading,
+		.detail,
+		.actions .button {
+			overflow-wrap: anywhere;
+		}
+
+		.actions .button {
+			max-width: 100%;
+			white-space: normal;
+		}
+
 		.heading {
 			font-size: var(--fs-input);
 			line-height: var(--lh-input);

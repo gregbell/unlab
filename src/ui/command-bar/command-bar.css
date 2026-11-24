@@ -210,7 +210,12 @@
 		}
 
 		.row .value {
-			flex: 0 0 96px;
+			flex: none;
+			min-width: 96px;
+			max-width: 50%;
+			overflow: hidden;
+			text-overflow: ellipsis;
+			white-space: nowrap;
 		}
 
 		.row .value[data-hue] {
@@ -236,6 +241,14 @@
 			gap: 0 10px;
 			padding: 10px var(--gutter);
 			border-top: 1px solid var(--line);
+		}
+
+		.will,
+		.running > *,
+		.sentence,
+		.expansion,
+		.name {
+			overflow-wrap: anywhere;
 		}
 
 		.label {
@@ -329,6 +342,10 @@
 		.status[data-ok="false"],
 		.status[data-state="failed"] {
 			color: var(--down);
+		}
+
+		.machine-result :is(.status, .open-console) {
+			flex: none;
 		}
 
 		.open-console {

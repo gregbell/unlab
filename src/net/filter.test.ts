@@ -1,7 +1,6 @@
 import fc from "fast-check";
 import { describe, expect, test } from "vitest";
 import {
-	ADDRESSES,
 	arpRequest,
 	BROADCAST,
 	eth,
@@ -9,22 +8,23 @@ import {
 	ipv4Packet,
 	ipv6,
 	mac,
+	NAMES,
 	ping,
 	routedPing,
 	tcpSegment,
 	udpSegment,
 } from "../../test/support/frames.ts";
 import { compileFilter, MATCH_ALL } from "./filter.ts";
-import type { AddressBook, NicNo, NodeName } from "./identity.ts";
+import { type MachineName, type NameBook, type NicNo, NO_NAMES } from "./identity.ts";
 
 /** The filter over frames captured while the lab's addresses were `names`. */
-function compile(source: string, names: AddressBook = ADDRESSES) {
-	const r = compileFilter(source);
+function compile(source: string, names: NameBook = NAMES) {
+	const r = compileFilter(source, names);
 	if (!r.ok) throw new Error(`expected ${source} to compile: ${r.error.message}`);
 	const { filter } = r;
 	return {
 		matchesFrame: (f: Uint8Array, from: number, to: number) => filter.matchesFrame(f, from, to, names),
-		matchesLink: (port: number, machine: NodeName, nic: NicNo) => filter.matchesLink(port, machine, nic, names),
+		matchesLink: (port: number, machine: MachineName, nic: NicNo) => filter.matchesLink(port, machine, nic, names),
 	};
 }
 
@@ -43,7 +43,7 @@ describe("filter terms", () => {
 			expect(f.matchesFrame(ping(1, 2), 1, bit(2))).toBe(true);
 			expect(f.matchesLink(3, "node3", 0)).toBe(true);
 		}
-		expect(MATCH_ALL.matchesFrame(arpRequest(1, 2), 1, 0, ADDRESSES)).toBe(true);
+		expect(MATCH_ALL.matchesFrame(arpRequest(1, 2), 1, 0, NAMES)).toBe(true);
 	});
 
 	test("protocols", () => {
@@ -89,15 +89,18 @@ describe("filter terms", () => {
 
 	test("a machine name matches by the addresses the lab set when the frame was captured, on any NIC", () => {
 		const [left, right, elsewhere] = [0x0a010001, 0x0a020001, 0x0a030001];
-		const book: AddressBook = new Map([
-			[left, { node: "node2", nic: 0 }],
-			[right, { node: "node2", nic: 2 }],
-		]);
+		const book: NameBook = {
+			...NO_NAMES,
+			addresses: new Map([
+				[left, { n: 2, nic: 0 }],
+				[right, { n: 2, nic: 2 }],
+			]),
+		};
 		const from = (src: number) => eth(BROADCAST, EXTERNAL_MAC, 0x0800, ipv4Packet(src, GATEWAY, 1, []));
-		const named = (names: AddressBook) =>
+		const named = (names: NameBook) =>
 			[left, right, elsewhere, ip(2)].map((a) => compile("node2", names).matchesFrame(from(a), 1, 0));
 		expect(named(book)).toEqual([true, true, false, false]);
-		expect(named(ADDRESSES)).toEqual([false, false, false, true]);
+		expect(named(NAMES)).toEqual([false, false, false, true]);
 		expect(compile("node2", book).matchesFrame(arpRequest(1, 3, right), 1, 0)).toBe(true);
 	});
 
@@ -142,7 +145,7 @@ describe("filter terms", () => {
 	});
 
 	test.each(["node2:", "node2:eth4", "node2:eth01", "node2:sh1", "node0:eth1", ":eth1"])("%s is no NIC", (term) => {
-		expect(compileFilter(term)).toMatchObject({ ok: false, error: { message: `Capture cannot read ${term}.` } });
+		expect(compileFilter(term, NAMES)).toMatchObject({ ok: false, error: { message: `Capture cannot read ${term}.` } });
 	});
 
 	test("matching ignores case", () => {
@@ -191,7 +194,7 @@ describe("link rows", () => {
 		expect(links("node3:eth1")).toEqual([false, true]);
 		expect(links("52:54:00:88:01:0d")).toEqual([false, true]);
 		expect(links("10.88.0.13")).toEqual([true, false]);
-		const chosen: AddressBook = new Map([[0x0a010001, { node: "node3", nic: 1 }]]);
+		const chosen: NameBook = { ...NO_NAMES, addresses: new Map([[0x0a010001, { n: 3, nic: 1 }]]) };
 		expect(([0, 1] as const).map((nic) => compile("10.1.0.1", chosen).matchesLink(3, "node3", nic))).toEqual([
 			false,
 			true,
@@ -199,9 +202,56 @@ describe("link rows", () => {
 	});
 });
 
+describe("a chosen name", () => {
+	const called = (...names: [number, string][]): NameBook => ({
+		addresses: NAMES.addresses,
+		names: new Map(names.map(([n, name]) => [n, name as MachineName])),
+	});
+	const before = called([2, "web"], [3, "fe"]);
+
+	test("matches its machine by MAC, by address, by NIC and on its link rows", () => {
+		const f = compile("web", before);
+		expect(f.matchesFrame(ping(1, 2), 1, bit(2))).toBe(true);
+		expect(f.matchesFrame(ping(2, 1), 2, bit(1))).toBe(true);
+		expect(f.matchesFrame(arpRequest(1, 2), 1, 0)).toBe(true);
+		expect(f.matchesFrame(ping(1, 3), 1, bit(3))).toBe(false);
+		expect(f.matchesLink(2, "web" as MachineName, 0)).toBe(true);
+		expect(f.matchesLink(3, "fe" as MachineName, 0)).toBe(false);
+		const eth1 = compile("WEB:eth1", before);
+		expect(eth1.matchesFrame(eth(mac(1), mac(2, 1), 0x0800, []), 2, 0)).toBe(true);
+		expect(eth1.matchesFrame(ping(2, 1), 2, bit(1))).toBe(false);
+		expect(compile("52:54:00:88:00:0c", before).matchesLink(2, "web" as MachineName, 0)).toBe(true);
+		expect(compile("10.88.0.12", before).matchesLink(2, "web" as MachineName, 0)).toBe(true);
+	});
+
+	test("is whoever had it when the frame was captured", () => {
+		const after = called([5, "web"]);
+		const old = compile("web", before);
+		const now = compile("web", after);
+		expect([2, 5].map((n) => old.matchesFrame(ping(1, n), 1, 0))).toEqual([true, false]);
+		expect([2, 5].map((n) => now.matchesFrame(ping(1, n), 1, 0))).toEqual([false, true]);
+		expect(compile("node2", after).matchesFrame(ping(1, 2), 1, 0)).toBe(true);
+		expect(compile("node2", before).matchesFrame(ping(1, 2), 1, 0)).toBe(false);
+	});
+
+	test("does not hide a MAC that starts with it", () => {
+		expect(
+			compile("fe:54:00:88:00:0c", before).matchesFrame(
+				eth(mac(1), Uint8Array.of(0xfe, 0x54, 0, 0x88, 0, 12), 0x0800, []),
+				1,
+				0,
+			),
+		).toBe(true);
+	});
+
+	test.each(["wbe", "web:eth9", "web:sh1"])("%s names no machine or NIC", (term) => {
+		expect(compileFilter(term, before)).toMatchObject({ ok: false });
+	});
+});
+
 describe("filter errors", () => {
 	const error = (source: string) => {
-		const r = compileFilter(source);
+		const r = compileFilter(source, NAMES);
 		if (r.ok) throw new Error(`expected ${source} to fail`);
 		return r.error;
 	};

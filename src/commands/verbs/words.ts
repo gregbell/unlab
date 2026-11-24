@@ -34,6 +34,8 @@ export function planErrorSentence(error: PlanError, ports = "Remove a machine wi
 				: `The lab has room for ${count(error.free, "more machine")}, not ${error.wanted}.`;
 		case "unknown-image":
 			return `No image called ${error.image}.`;
+		case "name-taken":
+			return `A machine is already called ${error.name}, so give another name with --name.`;
 		case "address-taken":
 			return `${ip4str(error.address.ip)} is already ${error.by.machine}'s, so give another address with --addr.`;
 		case "address-overlap":

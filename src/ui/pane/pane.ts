@@ -81,7 +81,7 @@ export class UnlabPane extends UnlabElement {
 		const states = this.#sessions.value;
 		const legend = this.#agentPanel.value && sessions.some((id) => states[id]?.agentLines);
 		return html`<div class="header" @mousedown=${this.#keepFocus} @click=${this.#onClick} @dblclick=${this.#onDoubleClick}>
-				<span class="name">${name}</span>
+				<span class="name" title=${name}>${name}</span>
 				<div class="tabs" role="tablist" aria-label="Sessions on ${name}" @keydown=${this.#onTabKey}>
 					${repeat(
 						sessions,

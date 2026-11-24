@@ -139,7 +139,7 @@ export function startVm(boot: VmBoot, sink: VmSink, deps: VmDeps): Vm {
 	const post = (m: ToVm, transfer: Transferable[] = []) => worker.postMessage(m, transfer);
 
 	const cfg: Omit<VmConfig, "image"> = {
-		id: identity.name,
+		n: identity.n,
 		name: identity.name,
 		macs: NICS.slice(0, spec.nics.length).map((nic) => nicMac(identity.n, nic)),
 		addresses: spec.nics.map((nic) => nic.address),

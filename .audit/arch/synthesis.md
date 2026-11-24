@@ -62,7 +62,7 @@ Cross-directory imports go through each directory's `index.ts`.
 ## Core contracts
 
 - **State, events, effects, plans:** `src/model/types.ts`, adapted from `candidates/candidate-3/sketch/model.ts`. `update(state, event) → { state, effects }` is the only state change. Each producer gets its own narrowed dispatch (`dispatchRuntime`, `dispatchCommand`, `dispatchUi`, `dispatchAgent`). Time enters only through `tick` and stamped events.
-- **Identity is arithmetic.** `node<n>` ↔ `labMac(10+n)`, one MAC for each NIC. Names are ids and never reused. Addresses are a machine's NICs', chosen or `10.88.0.(10+n)`, and are not identity: a capture entry keeps whose they were when it was captured.
+- **Identity is arithmetic.** Machine n ↔ `labMac(10+n)`, one MAC for each NIC, and n is never reused. Disks key on n. A name is what state and people key by: `node<n>`, or one that was chosen, and it is free once its machine is gone. Addresses are a machine's NICs', chosen or `10.88.0.(10+n)`. Names and addresses are not identity: a capture entry keeps whose they were when it was captured.
 - **Lifecycle** is the discriminated union in `types.ts`; failed holds no port; removing holds its port until gone; every runtime event carries `attempt`.
 - **Allocation is derived, never stored:** taken ports, free hues.
 - **Commands** per candidate 3 `sketch/commands.ts`: grammar slots → derived signature, parse, complete, format, fix, tool schema. `plan` is pure; `describe` gives the preview; `run` re-plans, executes, logs. Danger verbs need an `Approval`. Agent tools build a bar line and use the same parser.

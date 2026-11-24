@@ -35,7 +35,13 @@
 		}
 
 		.name {
+			flex: 0 1 auto;
+			min-width: 4ch;
+			max-width: 24ch;
 			margin-right: 8px;
+			overflow: hidden;
+			text-overflow: ellipsis;
+			white-space: nowrap;
 			font-weight: 500;
 			color: var(--machine-hue);
 		}
@@ -156,6 +162,7 @@
 		}
 
 		.headline {
+			overflow-wrap: anywhere;
 			color: var(--down);
 		}
 
@@ -171,6 +178,7 @@
 		}
 
 		.removing {
+			overflow-wrap: anywhere;
 			flex: 1 1 auto;
 			display: flex;
 			align-items: flex-end;

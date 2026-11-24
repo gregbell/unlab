@@ -14,3 +14,7 @@ ts	phase	decision	why	evidence	result
 2026-11-24T22:54:23Z	nics	merged PR 8 after fixing a test race	on a cold cache two machines raced inside unkernel's image download; tests now boot the mirrored images	PR 8; Actions run 45500944974	merged, CI green
 2026-11-24T22:54:23Z	addresses	a worker built chosen addresses; I read the boot lease, guest setup, capture naming and spawn plan	stories 4.1 to 4.3	e86251c	worker reports all gates exit 0; CI pending
 2026-11-24T22:54:23Z	addresses	a machine without the gateway gets a throwaway boot lease	the image's DHCP client held boot for 3.5 s and sent discovers onto the switch	src/runtime/boot-lease.ts	boot 0.5 s in Node
+2026-11-24T23:29:23Z	addresses	merged PR 9	CI green on the first run: 25 integration, 257 browser, 27 e2e	PR 9; Actions run 45505250771	merged
+2026-11-24T23:29:23Z	names	the chosen name replaces node<n> as the machine's key; n stays the numeric identity for MAC and disk	one name per machine everywhere a person or agent reads	src/model/identity.ts	settles the 4.4 decision
+2026-11-24T23:29:23Z	names	my brief was wrong that the prompt shows the hostname; it shows it only for a chosen name	defaults must not change, and both images ship a prompt without it	src/runtime/guest.ts namedPrompt	kept
+2026-11-24T23:29:23Z	names	a waiting rm approval can remove a newer machine with the same name	reusing a name is new, and approving deletes a disk	names worker report	open, carried to the disks slice

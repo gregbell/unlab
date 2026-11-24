@@ -5,6 +5,7 @@ import type { LabState, MachineName } from "../../model/index.ts";
 import {
 	fail,
 	focus,
+	LONG_NAME,
 	lab,
 	link,
 	mount,
@@ -12,6 +13,7 @@ import {
 	remove,
 	type Step,
 	spawn,
+	spawnNamed,
 	tick,
 	tokenColor,
 	unmountAll,
@@ -266,5 +268,24 @@ describe("<unlab-pane> sessions", () => {
 		await settle();
 		expect(store.state.machines.node1?.activeSession).toBe("node1:sh2");
 		expect(document.activeElement).toBe(terminals.host("node1:sh2").input);
+	});
+});
+
+describe("a machine with a long name", () => {
+	it("is cut short in the header, which keeps its tabs, word and buttons", async () => {
+		await mountPanes(lab(spawnNamed(LONG_NAME), spawn(5), ready(), { type: "cmd/shell", machine: LONG_NAME }));
+		const header = part(LONG_NAME, ".header");
+		const name = part(LONG_NAME, ".name");
+		expect(name.title).toBe(LONG_NAME);
+		expect(name.scrollWidth).toBeGreaterThan(name.clientWidth);
+		expect(getComputedStyle(name).textOverflow).toBe("ellipsis");
+		expect(header.getBoundingClientRect().height).toBe(32);
+		expect(header.scrollWidth).toBe(header.clientWidth);
+		expect(part(LONG_NAME, ".tab").getBoundingClientRect().left).toBeGreaterThanOrEqual(
+			name.getBoundingClientRect().right,
+		);
+		for (const button of paneOf(LONG_NAME).querySelectorAll(".icon")) {
+			expect(button.getBoundingClientRect().right).toBeLessThanOrEqual(header.getBoundingClientRect().right);
+		}
 	});
 });

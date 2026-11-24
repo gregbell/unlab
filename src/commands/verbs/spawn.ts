@@ -39,10 +39,11 @@ function requestedAddress(addresses: readonly (Address | null)[] | null, nic: nu
 }
 
 /** The argument a plan error is about. */
-const ABOUT: Readonly<Record<PlanError["kind"], "count" | "image" | "addr">> = {
+const ABOUT: Readonly<Record<PlanError["kind"], "count" | "image" | "addr" | "name">> = {
 	"no-ports": "count",
 	"no-room": "count",
 	"unknown-image": "image",
+	"name-taken": "name",
 	"address-taken": "addr",
 	"address-overlap": "addr",
 	"address-gateway": "addr",
@@ -71,6 +72,7 @@ export const spawn = defineVerb({
 		),
 		cpus: slots.option("--cpus", slots.count({ label: "CPUs", suggest: () => [1, 2, 4, 8, 16] }), DEFAULT_CPUS),
 		disk: slots.option("--disk", slots.choice(DISK_SIZES), "4"),
+		name: slots.option("--name", slots.newName(), null),
 		nics: slots.option(
 			"--nics",
 			slots.count({ label: "NICs", noun: "a number of NICs", suggest: () => NICS.map((nic) => nic + 1) }),
@@ -108,8 +110,11 @@ export const spawn = defineVerb({
 		if (a.count > 1 && a.addr?.some((address) => address !== null)) {
 			return refuse("--addr gives one machine its addresses, so spawn 1 at a time with it.", "addr");
 		}
+		if (a.count > 1 && a.name !== null)
+			return refuse("--name names one machine, so spawn 1 at a time with it.", "name");
 		const plan = planSpawn(lab, a.count, {
 			image: a.image,
+			...(a.name === null ? {} : { name: a.name }),
 			memMiB: a.mem,
 			diskGiB: a.disk,
 			cpus: a.cpus,

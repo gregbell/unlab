@@ -1,4 +1,4 @@
-import { parseMachineName, parseSessionId } from "./identity.ts";
+import { parseSessionId } from "./identity.ts";
 import {
 	bootAgain,
 	expireBoots,
@@ -73,6 +73,7 @@ export function initialState(
 		nextN: 1,
 		machines: {},
 		rail: [],
+		departed: {},
 		sessions: {},
 		panes: emptyPanes(gridFor(area.width, area.height)),
 		keyboard: NOWHERE,
@@ -244,8 +245,8 @@ function takeKeyboard(state: LabState, name: MachineName, panes: Panes): Step {
  */
 function focus(state: LabState, target: MachineName | SessionId, mode: "plain" | "main" | "max"): Step {
 	const address = parseSessionId(target);
-	const name = address ? address.machine : parseMachineName(target);
-	if (!name || !state.machines[name] || (address && !state.sessions[address.session])) return step(state);
+	const name = machineList(state).find((machine) => machine.name === (address?.machine ?? target))?.name;
+	if (!name || (address && !state.sessions[address.session])) return step(state);
 	const tabbed = address ? selectTab(state, address.session).state : state;
 	const promoted = mode === "main" ? promotePane(tabbed.panes, name) : tabbed.panes;
 	// Focus before maximising, so the layout that maximise restores has this pane in it.

@@ -2,19 +2,29 @@
 // screen: decoding runs per visible row, never per frame.
 
 import type { Cause, MachineName, PortNo } from "../model/index.ts";
-import { arpAddrs, decode, ipAddrs, isGroupMac, type NicName, nicName, nicOfMac, nodeNicLabel } from "../net/index.ts";
+import {
+	arpAddrs,
+	decode,
+	ipAddrs,
+	isGroupMac,
+	type NicName,
+	nameOf,
+	nicLabel,
+	nicName,
+	nicOfMac,
+} from "../net/index.ts";
 import type { CaptureCounters, CaptureEntry, FrameEntry, LinkEntry } from "./log.ts";
 
 /** Whether a machine has more than one NIC, so that its name alone does not say which. */
 export type HasSeveralNics = (machine: MachineName) => boolean;
 
 /**
- * A machine name (painted in its hue while the machine exists), broadcast, or
- * an address the lab cannot name. `nic` is there when the name alone does not
- * say which NIC it was.
+ * A machine by the name it had (painted in its hue while machine `n` exists),
+ * broadcast, or an address the lab cannot name. `nic` is there when the name
+ * alone does not say which NIC it was.
  */
 export type RouteEnd =
-	| { readonly kind: "machine"; readonly name: MachineName; readonly nic?: NicName }
+	| { readonly kind: "machine"; readonly n: number; readonly name: MachineName; readonly nic?: NicName }
 	| { readonly kind: "everyone" }
 	| { readonly kind: "raw"; readonly text: string };
 
@@ -71,12 +81,13 @@ function frameRow(e: FrameEntry, several: HasSeveralNics): FrameRow {
 function routeEnd(e: FrameEntry, end: "src" | "dst", raw: string, several: HasSeveralNics): RouteEnd {
 	const at = nicOfMac(e.bytes, end === "src" ? 6 : 0);
 	if (at) {
-		const shown = at.nic > 0 || several(at.node);
-		return { kind: "machine", name: at.node, ...(shown ? { nic: nicName(at.nic) } : {}) };
+		const name = nameOf(e.names, at.n);
+		const shown = at.nic > 0 || several(name);
+		return { kind: "machine", n: at.n, name, ...(shown ? { nic: nicName(at.nic) } : {}) };
 	}
 	const ip = addressOf(e.bytes, end);
-	const name = ip === null ? undefined : e.names.get(ip)?.node;
-	return name ? { kind: "machine", name } : { kind: "raw", text: raw };
+	const n = ip === null ? undefined : e.names.addresses.get(ip)?.n;
+	return n === undefined ? { kind: "raw", text: raw } : { kind: "machine", n, name: nameOf(e.names, n) };
 }
 
 function addressOf(f: Uint8Array, end: "src" | "dst"): number | null {
@@ -112,7 +123,7 @@ function linkVerb(e: LinkEntry): string {
 const WHO: Readonly<Record<Cause, string>> = { agent: "the agent", bar: "you", button: "you", runtime: "the lab" };
 
 function linkRow(e: LinkEntry, several: HasSeveralNics): LinkRow {
-	const cable = nodeNicLabel({ node: e.machine, nic: e.nic }, several(e.machine));
+	const cable = nicLabel(e.machine, e.nic, several(e.machine));
 	return {
 		kind: "link",
 		seq: e.seq,

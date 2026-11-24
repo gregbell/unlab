@@ -4,14 +4,23 @@
 // `capture/clear` effect clears it.
 
 import { type CaptureLog, createCaptureLog } from "../../src/capture/index.ts";
-import type { Cause, Effect, MachineName, PortNo, ReadStore } from "../../src/model/index.ts";
-import { compileFilter, type Flood, type NicNo } from "../../src/net/index.ts";
-import { ADDRESSES } from "./frames.ts";
+import {
+	type Cause,
+	type Effect,
+	type MachineName,
+	type PortNo,
+	type ReadStore,
+	selectNames,
+} from "../../src/model/index.ts";
+import { compileFilter, type Flood, type NameBook, type NicNo } from "../../src/net/index.ts";
+import { NAMES } from "./frames.ts";
 
 export interface TestCapture {
 	readonly log: CaptureLog;
 	/** Sets the log's clock, ms since the lab started. */
 	at(ms: number): void;
+	/** Who is who from now on: node1 to node8 until it is set. */
+	names(names: NameBook): void;
 	frame(bytes: Uint8Array, from: PortNo, to?: readonly PortNo[], flood?: Flood | null): void;
 	link(port: PortNo, machine: MachineName, up: boolean, cause?: Cause, nic?: NicNo): void;
 	/** Pass as `mount`'s `onEffect`. */
@@ -22,11 +31,15 @@ export interface TestCapture {
 
 export function testCapture(limit?: number): TestCapture {
 	let now = 0;
-	const log = createCaptureLog({ limit, schedule: (fn) => fn(), now: () => now, addresses: () => ADDRESSES });
+	let names: NameBook = NAMES;
+	const log = createCaptureLog({ limit, schedule: (fn) => fn(), now: () => now, names: () => names });
 	return {
 		log,
 		at(ms) {
 			now = ms;
+		},
+		names(next) {
+			names = next;
 		},
 		frame(bytes, from, to = [], flood = null) {
 			const mask = to.reduce((m, p) => m | (1 << (p - 1)), 0);
@@ -44,7 +57,7 @@ export function testCapture(limit?: number): TestCapture {
 				const next = store.state.capture;
 				if (next.filter !== filter) {
 					filter = next.filter;
-					const compiled = compileFilter(filter);
+					const compiled = compileFilter(filter, selectNames(store.state));
 					if (compiled.ok) log.setFilter(compiled.filter);
 				}
 				if (next.paused !== paused) {

@@ -1,7 +1,17 @@
 import { describe, expect, test, vi } from "vitest";
 import { arpRequest, mac, ping, routedPing } from "../../test/support/frames.ts";
 import { createCaptureLog } from "../capture/index.ts";
-import type { BootConfig, Effect, HostEntry, MachineName, RuntimeEvent, SessionId } from "../model/index.ts";
+import {
+	type BootConfig,
+	type Effect,
+	type HostEntry,
+	identity,
+	type MachineName,
+	parseMachineName,
+	type RuntimeEvent,
+	type SessionId,
+} from "../model/index.ts";
+
 import { defaultAddress } from "../net/index.ts";
 import { createEngine, ExecRefused } from "./engine.ts";
 import type { LineMark, MarkSource, Screen, ScreenIo, Screens } from "./screens.ts";
@@ -23,11 +33,7 @@ const hostsOf = (...ns: number[]): HostEntry[] => ns.map((n) => ({ ip: `10.88.0.
 
 function config(n: number, hosts: readonly HostEntry[] = hostsOf(n), image = "alpine"): BootConfig {
 	return {
-		identity: {
-			n,
-			name: `node${n}`,
-			mac: `52:54:00:88:00:${(10 + n).toString(16).padStart(2, "0")}`,
-		},
+		identity: identity(n),
 		spec: { image, memMiB: 256, gateway: true, nics: [{ net: "switch0", address: defaultAddress(n) }] },
 		hosts,
 	};
@@ -180,6 +186,7 @@ function setup() {
 	let clock = 0;
 	const events: RuntimeEvent[] = [];
 	const announced: string[] = [];
+	const deleted: number[] = [];
 	const imagesAsked: string[] = [];
 	const intervals: { ms: number; fn: () => void; cancelled: boolean }[] = [];
 	const sw = new LabSwitch({ now: () => clock });
@@ -197,6 +204,7 @@ function setup() {
 			imagesAsked.push(name);
 			return Promise.resolve(new ArrayBuffer(4));
 		},
+		deleteDisk: (n) => deleted.push(n),
 		announce: (text) => announced.push(text),
 		every(ms, fn) {
 			const interval = { ms, fn, cancelled: false };
@@ -243,6 +251,7 @@ function setup() {
 		atPrompt,
 		events,
 		announced,
+		deleted,
 		imagesAsked,
 		intervals,
 		sw,
@@ -255,6 +264,54 @@ function setup() {
 		take: () => events.splice(0),
 	};
 }
+
+describe("a name used again", () => {
+	const web = parseMachineName("web") as MachineName;
+	const bootWeb = (t: ReturnType<typeof setup>, n: number, attempt: number) => {
+		t.run(
+			{ type: "screen/create", session: `${web}:console` },
+			{ type: "port/attach", port: 1, machine: web, nic: 0 },
+			{ type: "vm/boot", machine: web, attempt, config: { ...config(n), identity: identity(n, web) } },
+		);
+		return t.vms.of(web, attempt);
+	};
+
+	test("nothing the removed machine says late is taken for the new one's", async () => {
+		const t = setup();
+		const old = bootWeb(t, 1, 1);
+		old.sink.ready(old.ref, 10);
+		t.run({ type: "screen/create", session: `${web}:sh1` }, { type: "pty/open", session: `${web}:sh1` });
+		t.run({ type: "vm/stop", machine: web, attempt: 1 });
+		old.finishStop();
+		await settle();
+		t.run(
+			{ type: "port/detach", port: 1 },
+			{ type: "screen/dispose", session: `${web}:console` },
+			{ type: "screen/dispose", session: `${web}:sh1` },
+			{ type: "disk/delete", n: 1 },
+		);
+		expect(t.deleted).toEqual([1]);
+
+		const next = bootWeb(t, 2, 2);
+		t.run({ type: "screen/create", session: `${web}:sh1` }, { type: "pty/open", session: `${web}:sh1` });
+		t.take();
+		old.sink.stage(old.ref, "late");
+		old.sink.ready(old.ref, 99);
+		old.sink.consoleBytes(old.ref, bytes("late"));
+		old.sink.ptyOpened(old.ref, 1);
+		old.sink.ptyBytes(old.ref, 1, bytes("late"));
+		old.sink.ptyExited(old.ref, 1);
+		old.sink.frame(old.ref, 0, new Uint8Array(60));
+		old.sink.failed(old.ref, "late");
+		expect(t.take()).toEqual([]);
+		expect(t.screens.get(`${web}:console`).text()).toBe("");
+		expect(t.capture.counters.in).toBe(0);
+		expect(t.deleted).toEqual([1]);
+
+		next.sink.ready(next.ref, 20);
+		expect(t.take()).toEqual([{ type: "vm/ready", machine: "web", attempt: 2, bootMs: 20 }]);
+	});
+});
 
 describe("vm/boot", () => {
 	test("starts one vm for the attempt, with the image the spec names and the console's size", () => {

@@ -56,7 +56,7 @@ export class UnlabSwitch extends UnlabElement {
 		const action = line === null ? null : port.actionLabel;
 		// The button lies over the whole column with the face beside it, not inside it: its name is
 		// the action, and a face inside would make the name disagree with its own visible text.
-		return html`<div class="port" data-port=${port.port} data-state=${port.state} data-hue=${port.machine.hue}>
+		return html`<div class="port" data-port=${port.port} data-state=${port.state} data-hue=${port.machine.hue} title=${port.machine.label}>
 			<span class="face" aria-hidden=${action === null ? nothing : "true"}>${parts}</span>
 			${
 				line === null || action === null

@@ -105,7 +105,7 @@ describe("boot", () => {
 			{
 				type: "boot",
 				cfg: {
-					id: "node3",
+					n: 3,
 					name: "node3",
 					macs: ["52:54:00:88:00:0d"],
 					addresses: [{ ip: 0x0a58000d, prefix: 24 }],

@@ -1,3 +1,4 @@
+import { selectNames } from "../../model/index.ts";
 import { compileFilter } from "../../net/index.ts";
 import { defineVerb, refuse } from "../define.ts";
 import * as slots from "../grammar/slots.ts";
@@ -7,8 +8,8 @@ export const capture = defineVerb({
 	about: "filter the packet capture",
 	danger: false,
 	grammar: { filter: slots.text("filter") },
-	plan(a) {
-		const compiled = compileFilter(a.filter);
+	plan(a, lab) {
+		const compiled = compileFilter(a.filter, selectNames(lab));
 		if (compiled.ok) return { filter: a.filter };
 		const said = compiled.error.message.replace(/^Capture /, "capture ");
 		return refuse(

@@ -1,4 +1,5 @@
 import {
+	ALL_MACHINES,
 	type HueNo,
 	type LabState,
 	type Machine,
@@ -98,7 +99,7 @@ function consoles(): slots.Value<ExecTargets> {
 					const address = parseSessionId(read);
 					const m = address && all.find((one) => one.name === address.machine);
 					if (address && m) add(m, address.session);
-				} else if (part === "all") {
+				} else if (part === ALL_MACHINES) {
 					all.forEach(pick);
 				} else if (part.includes("*")) {
 					const matched = all.filter((m) => globMatch(part, m.name));

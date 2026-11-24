@@ -49,7 +49,8 @@ export class UnlabPaneArea extends UnlabElement {
 		const areas = new Map(this.#tiling.value.tiles.map((tile) => [tile.machine, tile.area]));
 		return html`${repeat(
 			this.#machines.value,
-			(machine) => machine,
+			// Not by its name, which the next machine can have before this has rendered without it.
+			(machine) => this.app.store.state.machines[machine]?.n,
 			(machine) => {
 				const area = areas.get(machine);
 				return html`<unlab-pane machine=${machine} style=${area ? `grid-area: ${area}` : ""} ?hidden=${!area}></unlab-pane>`;

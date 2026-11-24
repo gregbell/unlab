@@ -5,8 +5,8 @@ import { live } from "lit/directives/live.js";
 import { createRef, type Ref, ref } from "lit/directives/ref.js";
 import { repeat } from "lit/directives/repeat.js";
 import type { CaptureRow, FrameRow, LinkRow, RouteEnd } from "../../capture/index.ts";
-import type { UiEvent } from "../../model/index.ts";
-import { compileFilter, toPcap } from "../../net/index.ts";
+import { selectNames, type UiEvent } from "../../model/index.ts";
+import { compileFilter, EVERYONE, toPcap } from "../../net/index.ts";
 import { Select, UnlabElement } from "../base/index.ts";
 import { FollowCapture } from "./follow.ts";
 
@@ -22,6 +22,17 @@ const ROW = 26;
 const OVERSCAN = 8;
 /** How far a keyboard move looks for the next frame row past event rows. */
 const SEEK = 64;
+
+function endText(end: RouteEnd): string {
+	switch (end.kind) {
+		case "everyone":
+			return EVERYONE;
+		case "raw":
+			return end.text;
+		case "machine":
+			return end.nic ? `${end.name}:${end.nic}` : end.name;
+	}
+}
 
 /**
  * The capture: a toolbar, the rows and the counters. `dock` shows the last
@@ -39,6 +50,7 @@ export class UnlabCapture extends UnlabElement {
 
 	readonly #ui = new Select(this, (s) => s.capture);
 	readonly #machines = new Select(this, (s) => s.machines);
+	readonly #names = new Select(this, selectNames);
 	readonly #scroller: Ref<HTMLElement> = createRef();
 	#resize: ResizeObserver | null = null;
 	#viewport = 0;
@@ -61,7 +73,7 @@ export class UnlabCapture extends UnlabElement {
 	override render(): TemplateResult {
 		const full = this.mode === "full";
 		const { filter, paused } = this.#ui.value;
-		const compiled = compileFilter(filter);
+		const compiled = compileFilter(filter, this.#names.value);
 		const capture = this.app.capture;
 		const id = `capture-${this.mode}`;
 		const counters = capture.counters;
@@ -202,7 +214,9 @@ export class UnlabCapture extends UnlabElement {
 		>
 			<span class="time">${row.time}</span>
 			<span class="proto">${row.proto}</span>
-			<span class="route">${this.#end(row.from)} → ${this.#end(row.to)}</span>
+			<span class="route" title=${`${endText(row.from)} → ${endText(row.to)}`}
+				>${this.#end(row.from)} <span>→</span> ${this.#end(row.to)}</span
+			>
 			${full ? html`<span class="len">${row.len}</span>` : nothing}
 			<span class="info">${row.info}${row.note ? html`<span class="note"> · ${row.note}</span>` : nothing}</span>
 		</div>`;
@@ -225,18 +239,19 @@ export class UnlabCapture extends UnlabElement {
 			data-up=${row.up}
 		>
 			<span class="time">${row.time}</span>
-			<span class="text">${row.text}. ${row.cause}</span>
+			<span class="text" title=${row.cause}>${row.text}. ${row.cause}</span>
 		</div>`;
 	}
 
-	#end(end: RouteEnd): TemplateResult | string {
-		if (end.kind === "everyone") return html`<span class="everyone">everyone</span>`;
-		if (end.kind === "raw") return end.text;
-		return html`<span class="machine" data-hue=${this.#hue(end) ?? nothing}>${end.nic ? `${end.name}:${end.nic}` : end.name}</span>`;
+	#end(end: RouteEnd): TemplateResult {
+		const named = end.kind === "machine";
+		return html`<span class=${named ? "machine" : end.kind} data-hue=${this.#hue(end) ?? nothing}>${endText(end)}</span>`;
 	}
 
 	#hue(end: RouteEnd): number | null {
-		return end.kind === "machine" ? (this.#machines.value[end.name]?.hue ?? null) : null;
+		const machine = end.kind === "machine" ? this.#machines.value[end.name] : undefined;
+		// The name can be another machine's by now.
+		return machine && end.kind === "machine" && machine.n === end.n ? machine.hue : null;
 	}
 
 	#dispatch(event: UiEvent): void {

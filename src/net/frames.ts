@@ -49,6 +49,8 @@ export function macStr(b: Uint8Array, off = 0): string {
 export const dstMac = (f: Uint8Array): string => macStr(f, 0);
 export const srcMac = (f: Uint8Array): string => macStr(f, 6);
 export const BROADCAST_MAC = "ff:ff:ff:ff:ff:ff";
+/** Who a frame to a group is for, where a machine's name would be. */
+export const EVERYONE = "everyone";
 
 export function ethertype(f: Uint8Array): number {
 	return f.length < ETH_HDR ? -1 : (f[12] << 8) | f[13];

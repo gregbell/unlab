@@ -4,6 +4,7 @@ import { page } from "vitest/browser";
 import {
 	fail,
 	focus,
+	LONG_NAME,
 	lab,
 	link,
 	mount,
@@ -12,6 +13,7 @@ import {
 	remove,
 	type Step,
 	spawn,
+	spawnNamed,
 	tick,
 	tokenColor,
 	unmountAll,
@@ -216,5 +218,27 @@ describe("the empty rail", () => {
 
 		const one = await mount("unlab-rail", { state: lab(spawn(1)) });
 		expect(one.element.querySelector(".switch")).toBeNull();
+	});
+});
+
+describe("a machine with a long name", () => {
+	it("is cut short in its row, with the whole name at hand, and the details show all of it", async () => {
+		const { element } = await mount("unlab-rail", {
+			state: lab(spawnNamed(LONG_NAME), ready()),
+			prepare: (el) => {
+				el.style.width = "232px";
+			},
+		});
+		const row = rowButton(LONG_NAME);
+		const name = part(row, ".name");
+		expect(name.title).toBe(LONG_NAME);
+		expect(getComputedStyle(name).textOverflow).toBe("ellipsis");
+		expect(name.scrollWidth).toBeGreaterThan(name.clientWidth);
+		expect(name.getBoundingClientRect().right).toBeLessThanOrEqual(part(row, ".word").getBoundingClientRect().left);
+		expect(row.getBoundingClientRect().height).toBe(46);
+		expect(element.scrollWidth).toBe(element.clientWidth);
+		const heading = document.querySelector("unlab-machine-details .name");
+		expect(heading?.textContent).toBe(LONG_NAME);
+		expect(heading?.scrollWidth).toBeLessThanOrEqual(heading?.clientWidth ?? 0);
 	});
 });

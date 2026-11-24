@@ -42,7 +42,7 @@ export class UnlabMachineRow extends UnlabElement {
 			@click=${() => this.runLine(`focus ${row.name}`)}
 		>
 			<span class="lines">
-				<span class="name">${row.name}</span>
+				<span class="name" title=${row.name}>${row.name}</span>
 				<span class="line2">${row.line2}</span>
 			</span>
 			<span class="word" data-tone=${toneOf(row.word)}>${row.word}</span>

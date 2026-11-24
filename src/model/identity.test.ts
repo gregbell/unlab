@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { addressStr, defaultAddress, LAB_SUBNET, MAX_NODE, NICS, nicOfMac, subnetStr } from "../net/index.ts";
-import { identity, nameForMac, nicMac, parseMachineName, parseSessionId, sessionLabel } from "./identity.ts";
+import { identity, nicMac, parseMachineName, parseSessionId, sessionLabel } from "./identity.ts";
 
 function macBytes(mac: string): Uint8Array {
 	return Uint8Array.from(mac.split(":").map((part) => Number.parseInt(part, 16)));
@@ -25,11 +25,13 @@ describe("identity", () => {
 	});
 });
 
-describe("naming a frame's machine", () => {
-	test("every node's MAC names it again", () => {
+/** Which machine's MAC is at `off`. */
+const machineAt = (f: Uint8Array, off: number): number | null => nicOfMac(f, off)?.n ?? null;
+
+describe("a frame's machine", () => {
+	test("every machine's MAC gives its number again", () => {
 		for (let n = 1; n <= MAX_NODE; n++) {
-			const id = identity(n);
-			expect(nameForMac(macBytes(id.mac), 0)).toBe(id.name);
+			expect(machineAt(macBytes(identity(n).mac), 0)).toBe(n);
 		}
 	});
 
@@ -37,8 +39,8 @@ describe("naming a frame's machine", () => {
 		const frame = new Uint8Array(14);
 		frame.set(macBytes("ff:ff:ff:ff:ff:ff"), 0);
 		frame.set(macBytes("52:54:00:88:00:0c"), 6);
-		expect(nameForMac(frame, 6)).toBe("node2");
-		expect(nameForMac(frame, 0)).toBeNull();
+		expect(machineAt(frame, 6)).toBe(2);
+		expect(machineAt(frame, 0)).toBeNull();
 	});
 
 	test.each([
@@ -46,28 +48,42 @@ describe("naming a frame's machine", () => {
 		["the host below node1", "52:54:00:88:00:0a"],
 		["the broadcast host", "52:54:00:88:00:ff"],
 		["a NIC no machine has", "52:54:00:88:04:0c"],
-	])("a MAC from %s names nothing", (_why, mac) => {
-		expect(nameForMac(macBytes(mac), 0)).toBeNull();
+	])("a MAC from %s is no machine's", (_why, mac) => {
+		expect(machineAt(macBytes(mac), 0)).toBeNull();
 	});
 
-	test("a buffer too short to hold a MAC names nothing", () => {
-		expect(nameForMac(macBytes("52:54:00:88:00:0c"), 1)).toBeNull();
-		expect(nameForMac(new Uint8Array(0), 0)).toBeNull();
-		expect(nameForMac(macBytes("52:54:00:88:00:0c"), -1)).toBeNull();
+	test("a buffer too short to hold a MAC is no machine's", () => {
+		expect(machineAt(macBytes("52:54:00:88:00:0c"), 1)).toBeNull();
+		expect(machineAt(new Uint8Array(0), 0)).toBeNull();
+		expect(machineAt(macBytes("52:54:00:88:00:0c"), -1)).toBeNull();
 	});
 });
 
 describe("parseMachineName", () => {
-	test.each(["node1", "node12", "node244"])("%s is a machine name", (text) => {
-		expect(parseMachineName(text)).toBe(text);
-	});
-
-	test.each(["node0", "node01", "Node1", "node", "node1 ", " node1", "node1:console", "all", "node-1", "node1.5", ""])(
-		"%j is not a machine name",
+	test.each(["node1", "node12", "node244", "web", "web-1", "node-1", "a", "w".repeat(63)])(
+		"%s is a machine name",
 		(text) => {
-			expect(parseMachineName(text)).toBeNull();
+			expect(parseMachineName(text)).toBe(text);
 		},
 	);
+
+	test.each([
+		"node0",
+		"node01",
+		"Node1",
+		"node1 ",
+		" node1",
+		"node1:console",
+		"node1.5",
+		"1web",
+		"-web",
+		"web-",
+		"web_1",
+		"",
+		"w".repeat(64),
+	])("%j is not a machine name", (text) => {
+		expect(parseMachineName(text)).toBeNull();
+	});
 
 	test.each(["node245", "node999", "node99999999999999999999"])(
 		"%s has no MAC, so it is not a machine name",
@@ -79,9 +95,16 @@ describe("parseMachineName", () => {
 
 describe("parseSessionId", () => {
 	test("a session is addressed as machine:tab", () => {
-		expect(parseSessionId("node2:console")).toEqual({ session: "node2:console", machine: "node2", label: "console" });
-		expect(parseSessionId("node2:sh1")).toEqual({ session: "node2:sh1", machine: "node2", label: "sh1" });
-		expect(parseSessionId("node12:sh30")).toEqual({ session: "node12:sh30", machine: "node12", label: "sh30" });
+		for (const [machine, label, shell] of [
+			["node2", "console", null],
+			["node2", "sh1", 1],
+			["node12", "sh30", 30],
+			["web-1", "console", null],
+			["web-1", "sh2", 2],
+		] as const) {
+			const session = `${machine}:${label}`;
+			expect(parseSessionId(session)).toEqual({ session, machine, label, shell });
+		}
 	});
 
 	test.each([
@@ -92,6 +115,8 @@ describe("parseSessionId", () => {
 		"node2:sh01",
 		"node2:shell",
 		"node02:sh1",
+		"web_1:sh1",
+		"Web:console",
 		":sh1",
 		"node2:sh1:x",
 		"",
@@ -106,7 +131,7 @@ describe("parseSessionId", () => {
 });
 
 describe("NICs", () => {
-	test("NIC k of node n has MAC 52:54:00:88:0k:(10+n), and the MAC names both again", () => {
+	test("NIC k of node n has MAC 52:54:00:88:0k:(10+n), and the MAC gives both again", () => {
 		expect(NICS.map((nic) => nicMac(2, nic))).toEqual([
 			"52:54:00:88:00:0c",
 			"52:54:00:88:01:0c",
@@ -114,11 +139,11 @@ describe("NICs", () => {
 			"52:54:00:88:03:0c",
 		]);
 		for (let n = 1; n <= MAX_NODE; n++) {
-			for (const nic of NICS) expect(nicOfMac(macBytes(nicMac(n, nic)), 0)).toEqual({ node: `node${n}`, nic });
+			for (const nic of NICS) expect(nicOfMac(macBytes(nicMac(n, nic)), 0)).toEqual({ n, nic });
 		}
 	});
 
-	test("every NIC's MAC names its machine", () => {
-		expect(nameForMac(macBytes("52:54:00:88:03:0c"), 0)).toBe("node2");
+	test("every NIC's MAC is its machine's", () => {
+		expect(machineAt(macBytes("52:54:00:88:03:0c"), 0)).toBe(2);
 	});
 });

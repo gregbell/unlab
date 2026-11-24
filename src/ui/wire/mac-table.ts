@@ -1,7 +1,7 @@
 import "./mac-table.css";
 import { html, nothing, type TemplateResult } from "lit";
-import { severalNics } from "../../model/index.ts";
-import { nicOfMac, nodeNicLabel, parseMac } from "../../net/index.ts";
+import { selectNames, severalNics } from "../../model/index.ts";
+import { nameOf, nicLabel, nicOfMac, parseMac } from "../../net/index.ts";
 import { Select, UnlabElement } from "../base/index.ts";
 import { FollowCapture } from "../capture/follow.ts";
 
@@ -13,6 +13,7 @@ import { FollowCapture } from "../capture/follow.ts";
  */
 export class UnlabMacTable extends UnlabElement {
 	readonly #machines = new Select(this, (s) => s.machines);
+	readonly #names = new Select(this, selectNames);
 
 	constructor() {
 		super();
@@ -38,12 +39,13 @@ export class UnlabMacTable extends UnlabElement {
 						${entries.map((e) => {
 							const at = nicOfMac(parseMac(e.mac), 0);
 							const machines = this.#machines.value;
-							const hue = at ? machines[at.node]?.hue : undefined;
-							const name = at && nodeNicLabel(at, severalNics({ machines }, at.node));
+							const name = at && nameOf(this.#names.value, at.n);
+							const hue = name === null ? undefined : machines[name]?.hue;
+							const label = !at || name === null ? "" : nicLabel(name, at.nic, severalNics({ machines }, name));
 							return html`<tr data-flushed=${e.flushed}>
 								<td class="mac">${e.mac}</td>
 								<td>${e.port}</td>
-								<td class="machine" data-hue=${e.flushed ? nothing : (hue ?? nothing)}>${name ?? ""}</td>
+								<td class="machine" title=${label || nothing} data-hue=${e.flushed ? nothing : (hue ?? nothing)}>${label}</td>
 								<td class="seen">
 									${e.flushed ? "flushed, link down" : `${Math.max(0, Math.floor((now - e.seen) / 1000))} s ago`}
 								</td>

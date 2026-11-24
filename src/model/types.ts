@@ -1,14 +1,12 @@
 // The lab as plain data. Nothing here touches the DOM, a worker, a timer or a
 // clock: time arrives only as `tick` events and `at` stamps.
 
-import type { Address, NicName, NicNo } from "../net/index.ts";
+import type { Address, MachineName, NicName, NicNo } from "../net/index.ts";
 
-export type { Address, NicName, NicNo };
+export type { Address, MachineName, NicName, NicNo };
 
 // ───────────────────────────── identity ─────────────────────────────
 
-/** Names are ids. `n` only goes up, so `node4` means one machine for the lab's lifetime. */
-export type MachineName = `node${number}`;
 /** What the user types and what everything else keys by. Never reused on a machine. */
 export type SessionId = `${MachineName}:console` | `${MachineName}:sh${number}`;
 export type PortNo = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
@@ -18,10 +16,13 @@ export const PORTS: readonly PortNo[] = [1, 2, 3, 4, 5, 6, 7, 8];
 export const HUES: readonly HueNo[] = [1, 2, 3, 4, 5, 6, 7, 8];
 export const MAX_MACHINES = 8;
 export const SWITCH_NAME = "switch0";
+/** What a command takes for every machine. */
+export const ALL_MACHINES = "all";
 
-/** node<n> has a MAC for each NIC, all arithmetic, so any frame names its machine forever. */
+/** `n` only goes up and is one machine's for the lab's lifetime. Its MACs, its first address and its disk follow from it. */
 export interface Identity {
 	readonly n: number;
+	/** What the user types and what everything else keys by. Free again once the machine is gone. */
 	readonly name: MachineName;
 	/** eth0's. */
 	readonly mac: string;
@@ -87,14 +88,17 @@ export interface NicRequest {
 /** What a spawn asks of every machine it boots. */
 export interface SpawnRequest extends Hardware {
 	readonly nics: readonly NicRequest[];
+	/** For one machine. Left out, each is `node<n>`. */
+	readonly name?: MachineName;
 }
 
 /**
  * The lifecycle is the type. A failed machine has no plugs, so it cannot hold
  * a port. A removing machine keeps its ports (links already down) until it is
  * gone, so nobody can take them mid-teardown. `plugs` and `ports` have one for
- * each NIC, eth0 first. `attempt` stamps every runtime
- * event, so a late message from a replaced worker is ignored.
+ * each NIC, eth0 first. `attempt` stamps every runtime event and goes up with
+ * each boot under one name, so a late message from a replaced worker, or from
+ * the last machine of that name, is ignored.
  */
 export type Lifecycle =
 	| {
@@ -219,6 +223,11 @@ export type View = "lab" | "wire" | "spawn";
 /** The network dock under the panes: the capture and the switch, or one strip that sums them up. */
 export type Dock = "open" | "collapsed";
 
+export interface Departed {
+	readonly n: number;
+	readonly attempt: number;
+}
+
 export interface LabState {
 	/** ms since the lab started; advanced by `tick` and stamped events. */
 	readonly now: number;
@@ -227,6 +236,8 @@ export interface LabState {
 	readonly machines: Readonly<Partial<Record<MachineName, Machine>>>;
 	/** Rail order is spawn order. ⌘K then a digit indexes this. */
 	readonly rail: readonly MachineName[];
+	/** The last machine of each name that is gone. Frames still name it, and the name's next machine boots on from its attempt. */
+	readonly departed: Readonly<Partial<Record<MachineName, Departed>>>;
 	readonly sessions: Readonly<Partial<Record<SessionId, Session>>>;
 	readonly panes: Panes;
 	readonly keyboard: Keyboard;
@@ -265,6 +276,7 @@ export type PlanError =
 	| { readonly kind: "no-ports"; readonly free: number; readonly wanted: number }
 	| { readonly kind: "no-room"; readonly free: number; readonly wanted: number }
 	| { readonly kind: "unknown-image"; readonly image: string }
+	| { readonly kind: "name-taken"; readonly name: MachineName }
 	| { readonly kind: "address-taken"; readonly address: Address; readonly by: NicRef }
 	/** Two of one machine's NICs would be in overlapping subnets. */
 	| { readonly kind: "address-overlap"; readonly nics: readonly [NicNo, NicNo] }
@@ -359,6 +371,8 @@ export type Effect =
 	| { readonly type: "vm/boot"; readonly machine: MachineName; readonly attempt: number; readonly config: BootConfig }
 	/** Stop, terminate after 250 ms, then report vm/stopped. Idempotent. */
 	| { readonly type: "vm/stop"; readonly machine: MachineName; readonly attempt: number }
+	/** The machine is gone, and nothing can ask for its disk again. */
+	| { readonly type: "disk/delete"; readonly n: number }
 	| { readonly type: "port/attach"; readonly port: PortNo; readonly machine: MachineName; readonly nic: NicNo }
 	| { readonly type: "port/detach"; readonly port: PortNo }
 	/** Changes the switch link and writes the capture event row, in that order. */

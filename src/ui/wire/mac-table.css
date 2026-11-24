@@ -67,6 +67,12 @@
 			width: 78px;
 		}
 
+		.machine {
+			max-width: 24ch;
+			overflow: hidden;
+			text-overflow: ellipsis;
+		}
+
 		.machine[data-hue] {
 			color: var(--machine-hue);
 		}

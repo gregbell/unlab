@@ -1,14 +1,19 @@
 import {
 	type Address,
+	ALL_MACHINES,
 	addressText,
+	isNameFault,
 	type LabState,
+	MAX_NAME,
 	type Machine,
 	type MachineName,
 	machineLink,
+	type NameFault,
 	type NicRef,
 	type NicSpec,
 	nicsOf,
 	type Phase,
+	parseChosenName,
 	plugsOf,
 	type SessionId,
 } from "../../model/index.ts";
@@ -253,6 +258,44 @@ export function machine(): Value<MachineName> {
 	};
 }
 
+function nameFault(text: string, fault: NameFault): string {
+	switch (fault.kind) {
+		case "unreadable": {
+			const lower = text.toLowerCase();
+			const reads = !isNameFault(parseChosenName(lower));
+			return reads
+				? `--name wants lowercase letters, so use ${lower}.`
+				: `--name wants lowercase letters, digits and hyphens, starting with a letter and not ending with a hyphen, such as web-1, not ${text}.`;
+		}
+		case "too-long":
+			return `--name wants at most ${MAX_NAME} characters, and that is ${fault.length}.`;
+		case "lab":
+			return `The lab gives out ${text} itself, so use another name, such as web-1.`;
+		case "word":
+			return `${text} already means something in the lab, so use another name, such as ${text}-1.`;
+	}
+}
+
+/** A name for a machine that is not there yet. Null is what no option says: `node<n>`. */
+export function newName(): Value<MachineName | null> {
+	return {
+		kind: "positional",
+		label: "name",
+		noun: "a name",
+		read(text) {
+			const name = parseChosenName(text);
+			return isNameFault(name) ? new Miss(nameFault(text, name), undefined, false) : name;
+		},
+		suggest: () => [],
+		format: String,
+		schema: {
+			type: "string",
+			description:
+				"A name for the machine, which is also its hostname: lowercase letters, digits and hyphens, such as web-1. Left out, node and a number.",
+		},
+	};
+}
+
 /** A machine (its active session) or one session: `node2`, `node2:sh1`. */
 export function target(): Value<MachineName | SessionId> {
 	return {
@@ -293,7 +336,7 @@ export function target(): Value<MachineName | SessionId> {
 /** The machines one part of a comma list names: `node2`, `node*` or `all`. */
 function matchMachines(lab: LabState, part: string, span: Miss["part"]): readonly Machine[] | Miss {
 	const all = machinesOf(lab);
-	if (part === "all") return all;
+	if (part === ALL_MACHINES) return all;
 	if (part.includes("*")) {
 		const matched = all.filter((m) => globMatch(part, m.name));
 		return matched.length > 0 ? matched : new Miss(`No machine matches ${part}. ${youHave(lab)}`, span);
@@ -354,7 +397,7 @@ export function machines(): Value<Selection> {
 				.filter((m) => allowed(m, ctx) && !listed.includes(m.name))
 				.map((m) => machineSuggestion(m, head + m.name));
 			return head === ""
-				? [...names, { insert: "all", label: "all", detail: "every machine that can take it" }]
+				? [...names, { insert: ALL_MACHINES, label: ALL_MACHINES, detail: "every machine that can take it" }]
 				: names;
 		},
 		format: (s) => s.written,
@@ -434,7 +477,7 @@ export function cables(): Value<CableSelection> {
 					];
 				});
 			return head === ""
-				? [...names, { insert: "all", label: "all", detail: "every machine that can take it" }]
+				? [...names, { insert: ALL_MACHINES, label: ALL_MACHINES, detail: "every machine that can take it" }]
 				: names;
 		},
 		format: (s) => s.written,

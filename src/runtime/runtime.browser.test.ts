@@ -122,8 +122,8 @@ describe.skipIf(!haveImage)("real kernels", () => {
 				expect.objectContaining({
 					kind: "frame",
 					proto: "ICMP",
-					from: { kind: "machine", name: "node1" },
-					to: { kind: "machine", name: "node2" },
+					from: { kind: "machine", n: 1, name: "node1" },
+					to: { kind: "machine", n: 2, name: "node2" },
 				}),
 			]),
 		);

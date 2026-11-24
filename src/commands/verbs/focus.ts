@@ -1,4 +1,4 @@
-import { type LabState, type MachineName, parseMachineName, parseSessionId } from "../../model/index.ts";
+import { type LabState, type MachineName, machineList, parseSessionId } from "../../model/index.ts";
 import { defineVerb, refuse } from "../define.ts";
 import * as slots from "../grammar/slots.ts";
 
@@ -22,8 +22,7 @@ export const focus = defineVerb({
 	},
 	plan(a, lab) {
 		const address = parseSessionId(a.target);
-		const machine = address ? address.machine : parseMachineName(a.target);
-		const m = machine === null ? undefined : lab.machines[machine];
+		const m = machineList(lab).find((machine) => machine.name === (address?.machine ?? a.target));
 		if (!m || m.life.phase === "removing") return refuse(`${a.target} is no longer there to focus.`, "target");
 		return { target: a.target, machine: m.name, session: address?.session ?? null, mode: a.mode };
 	},

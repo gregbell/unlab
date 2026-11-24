@@ -29,6 +29,8 @@ export function execAsRoot(
 
 export interface SetupOptions {
 	hostname: string;
+	/** Show the hostname in the prompt, as a name someone chose is. */
+	namedPrompt: boolean;
 	/** The address the lab set on each NIC, eth0 first, or null for one that comes up with none. */
 	addresses: readonly (Address | null)[];
 	/** The machines that have an address, written into /etc/hosts so names work with no DNS. */
@@ -48,19 +50,20 @@ const PROMPT_FILE = "/etc/profile.d/kw-unlab.sh";
 
 /**
  * The prompt every shell in the guest prints: the last command's exit status
- * (OSC 133 D), a prompt-start mark (A), the image's own prompt, then an
- * input-start mark (B), each carrying this boot's token. shell-tracker.ts reads
- * these to learn exit codes and whether a session is busy, and ignores marks
- * without the token. busybox ash and bash both expand it.
+ * (OSC 133 D), a prompt-start mark (A), the image's own prompt after the name
+ * someone gave the machine, then an input-start mark (B), each carrying this
+ * boot's token. shell-tracker.ts reads these to learn exit codes and whether a
+ * session is busy, and ignores marks without the token. busybox ash and bash both expand it.
  *
  * `redraw=0` keeps the terminal from erasing the prompt on a resize for the
  * shell to print again. It takes everything since the prompt for the prompt,
  * so it would erase a running command and its output too.
  */
-function promptLine(token: string): string {
+function promptLine(token: string, named: boolean): string {
 	if (!/^[0-9a-f]+$/.test(token)) throw new Error("the prompt token must be hex");
 	const tag = `;unlab=${token}`;
-	return String.raw`PS1='\[\033]133;D;$?$(sync)${tag}\007\033]133;A;redraw=0${tag}\007\]'"$PS1"'\[\033]133;B${tag}\007\]'`;
+	const name = named ? String.raw`\h ` : "";
+	return String.raw`PS1='\[\033]133;D;$?$(sync)${tag}\007\033]133;A;redraw=0${tag}\007\]${name}'"$PS1"'\[\033]133;B${tag}\007\]'`;
 }
 
 /**
@@ -70,9 +73,9 @@ function promptLine(token: string): string {
  * over the old line. Only a changed profile does that, so a second run leaves
  * the shell someone is using alone.
  */
-const promptScript = (token: string) =>
+const promptScript = (token: string, named: boolean) =>
 	[
-		`want=${sh(promptLine(token))}`,
+		`want=${sh(promptLine(token, named))}`,
 		`if [ "$(cat ${PROMPT_FILE} 2>/dev/null)" != "$want" ]; then`,
 		`  mkdir -p /etc/profile.d`,
 		`  printf '%s\\n' "$want" > ${PROMPT_FILE}`,
@@ -118,7 +121,7 @@ export function setupScript(o: SetupOptions): string {
 				]),
 		...o.addresses.flatMap((address, nic) => (address ? [`ip addr replace ${addressStr(address)} dev eth${nic}`] : [])),
 		// Last, so the first marked prompt appears on a machine that is already configured.
-		promptScript(o.promptToken),
+		promptScript(o.promptToken, o.namedPrompt),
 	].join("\n");
 }
 

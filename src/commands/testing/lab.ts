@@ -97,6 +97,7 @@ export function labWith(fixtures: readonly MachineFixture[], images: readonly Im
 		nextN: Math.max(0, ...fixtures.map((f) => f.n)) + 1,
 		machines,
 		rail,
+		departed: {},
 		sessions,
 		panes: { order: rail, parked: {}, focusStamp: {}, focusClock: 0, maximised: null, grid: { cols: 2, rows: 2 } },
 		keyboard: { kind: "none" },

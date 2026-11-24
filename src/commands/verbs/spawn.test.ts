@@ -194,6 +194,125 @@ describe("spawn", () => {
 		]);
 	});
 
+	it("calls one machine what --name says, in the preview, the lab and the log", async () => {
+		const lab = storeLab();
+		await lab.lab(1);
+		expect(lab.parsed("spawn 1 debian --name web-1").preview(lab.store.state)).toMatchObject({
+			will: "boot web-1 · debian 13 · 256 MiB · 2 CPUs · 4 GiB disk · plugged into switch0 on port 2",
+		});
+		expect(await lab.run("spawn 1 debian --name web-1")).toMatchObject({
+			text: "booting web-1",
+			data: { names: ["web-1"] },
+		});
+		expect(lab.store.state.rail).toEqual(["node1", "web-1"]);
+		expect(lab.events.at(-1)).toMatchObject({ line: "spawn 1 debian --name web-1" });
+		expect(lab.effects.find((e) => e.type === "vm/boot")).toMatchObject({
+			config: { identity: { n: 2, name: "web-1", mac: "52:54:00:88:00:0c" } },
+		});
+		await lab.lab(1);
+		expect(lab.store.state.rail).toEqual(["node1", "web-1", "node3"]);
+	});
+
+	it.each([
+		["Web", "--name wants lowercase letters, so use web."],
+		[
+			"web_1",
+			"--name wants lowercase letters, digits and hyphens, starting with a letter and not ending with a hyphen, such as web-1, not web_1.",
+		],
+		["1web", "such as web-1, not 1web."],
+		["web-", "such as web-1, not web-."],
+		["web.lab", "such as web-1, not web.lab."],
+		["wéb", "such as web-1, not wéb."],
+		["NODE3", "such as web-1, not NODE3."],
+		["w".repeat(64), "--name wants at most 63 characters, and that is 64."],
+		["node2", "The lab gives out node2 itself, so use another name, such as web-1."],
+		["node007", "The lab gives out node007 itself, so use another name, such as web-1."],
+		...[
+			"all",
+			"switch0",
+			"everyone",
+			"localhost",
+			"unkernel",
+			"console",
+			"sh1",
+			"eth0",
+			"or",
+			"port",
+			"arp",
+			"ip",
+			"ipv4",
+			"ipv6",
+			"icmp",
+			"tcp",
+			"udp",
+			"dhcp",
+			"dns",
+			"constructor",
+		].map((word) => [word, `${word} already means something in the lab, so use another name, such as ${word}-1.`]),
+	])("refuses the name %s, saying what would work", (name, sentence) => {
+		const lab = storeLab();
+		const refused = lab.parse(`spawn 1 alpine --name ${name}`);
+		expect(refused).toMatchObject({ token: 4 });
+		expect("message" in refused && refused.message).toContain(`${sentence} Nothing was changed.`);
+	});
+
+	it.each(["w", "web", "web-1", "node", "node-1", "node1a", "sh", "sh0", "eth4", "fe", "w".repeat(63)])(
+		"takes the name %s",
+		(name) => {
+			const lab = storeLab();
+			expect(lab.parsed(`spawn 1 alpine --name ${name}`).validate(lab.store.state)).toBeNull();
+		},
+	);
+
+	it("refuses a name in use until its machine is gone, and one name for several machines", async () => {
+		const lab = storeLab();
+		const refusal = () => lab.parsed("spawn 1 alpine --name web").validate(lab.store.state);
+		await lab.run("spawn 1 alpine --name web");
+		expect(refusal()).toEqual({
+			message: "A machine is already called web, so give another name with --name. Nothing was changed.",
+			token: 3,
+		});
+		lab.runtime({ type: "vm/failed", machine: lab.store.state.rail[0], attempt: 1, reason: "" });
+		expect(refusal()).not.toBeNull();
+		lab.store.dispatchCommand({ type: "cmd/remove", machines: lab.store.state.rail, cause: "bar" });
+		expect(refusal()).toBeNull();
+		expect(lab.parsed("spawn 2 alpine --name web").validate(lab.store.state)).toEqual({
+			message: "--name names one machine, so spawn 1 at a time with it. Nothing was changed.",
+			token: 3,
+		});
+	});
+
+	it("is a machine every command takes, by that name", async () => {
+		const lab = storeLab();
+		await lab.run("spawn 1 alpine --name web --nics 2");
+		const [web] = lab.store.state.rail;
+		lab.ready(web);
+		await lab.run("sh web");
+		lab.runtime({ type: "session/shell", session: `${web}:console`, shell: "prompt" });
+		for (const line of [
+			"rm web",
+			"rm we*",
+			"exec web -- ls",
+			"exec web:console -- ls",
+			"sh web",
+			"link down web",
+			"link down web:eth1",
+			"capture web",
+			"capture web:eth1 or arp",
+			"focus web",
+			"focus web:sh1 --max",
+		]) {
+			expect(lab.parsed(line).validate(lab.store.state), line).toBeNull();
+		}
+		lab.runtime({ type: "vm/failed", machine: web, attempt: 1, reason: "" });
+		expect(lab.parsed("boot web").validate(lab.store.state)).toBeNull();
+		expect(lab.parsed("capture wbe").validate(lab.store.state)).toMatchObject({ token: 1 });
+		const complete = (line: string) =>
+			completeLine(lab.registry, line, line.length, lab.store.state).suggestions.map((s) => s.insert);
+		expect(complete("rm w")).toEqual(["web"]);
+		expect(complete("focus web:")).toEqual(["web:console"]);
+	});
+
 	it("completes each network of a --net list", () => {
 		const lab = storeLab();
 		const line = "spawn 1 alpine --nics 2 --net switch0,";
@@ -217,6 +336,7 @@ describe("spawn", () => {
 			"--mem",
 			"--cpus",
 			"--disk",
+			"--name",
 			"--nics",
 			"--addr",
 			"--no-gateway",
@@ -248,6 +368,7 @@ describe("spawn", () => {
 		expect(tool?.toLine({ count: 1, image: "alpine", addr: "10.1.0.1/24", gateway: "off" })).toBe(
 			"spawn 1 alpine --addr 10.1.0.1/24 --no-gateway",
 		);
+		expect(tool?.toLine({ count: 1, image: "alpine", name: "web" })).toBe("spawn 1 alpine --name web");
 		expect(tool?.toLine({ count: 2, image: "alpine", mem: 512, net: "none" })).toBe(
 			"spawn 2 alpine --mem 512 --no-net",
 		);
