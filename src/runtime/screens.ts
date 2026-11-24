@@ -82,6 +82,10 @@ export interface Screen {
 	write(bytes: Uint8Array): readonly ShellEvent[];
 	/** A line was sent to the session's shell. */
 	submitted(): readonly ShellEvent[];
+	/** The shell owes a typed-ahead line. See shell-tracker.ts. */
+	readonly expectsTypedAhead: boolean;
+	/** The session stayed quiet while it did, so the shell is at its prompt. */
+	settle(): readonly ShellEvent[];
 	/**
 	 * Render into `host` from now on. Once per screen. Resolves when everything
 	 * written so far is on the terminal. Mounting never takes keyboard focus.
@@ -359,6 +363,10 @@ function createScreen(session: SessionId, io: ScreenIo, loadCore: () => Promise<
 		},
 
 		submitted: () => tracker.submitted(),
+		get expectsTypedAhead() {
+			return tracker.expectsTypedAhead;
+		},
+		settle: () => tracker.settle(),
 
 		async mount(host) {
 			if (state.kind === "disposed") return;

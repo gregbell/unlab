@@ -42,3 +42,37 @@ test("a console runs what is typed into it, keeps it through park and maximise, 
 	await expect(console1).not.toContainText("sh-42");
 	expect(errors).toEqual([]);
 });
+
+test("a console whose program read Enter takes commands again, and a line typed ahead still holds it", async ({
+	page,
+}) => {
+	await openWithTwoMachines(page);
+	const node1 = page.locator('unlab-pane[machine="node1"]');
+	const console1 = node1.locator("#panel-node1-console");
+	const exec = async (command: string) => {
+		await page.keyboard.press("Control+/");
+		await expect(page.getByRole("combobox", { name: "Command" })).toBeFocused();
+		await page.keyboard.type(`exec node1 -- ${command}`);
+		await page.keyboard.press("Enter");
+	};
+
+	await console1.click();
+	for (const line of ["cat", "read by cat", ""]) {
+		await page.keyboard.type(line);
+		await page.keyboard.press("Enter");
+	}
+	await page.keyboard.press("Control+d");
+	await page.waitForTimeout(3000);
+	await exec("echo back-$((40+2))");
+	await expect(console1).toContainText("back-42");
+
+	await console1.click();
+	for (const line of ["sleep 1", "sleep 6; echo ahead-$((6*7))"]) {
+		await page.keyboard.type(line);
+		await page.keyboard.press("Enter");
+	}
+	await page.waitForTimeout(4000);
+	await exec("echo early-$((1+1))");
+	await expect(console1).toContainText("ahead-42");
+	await expect(console1).not.toContainText("early-2");
+});

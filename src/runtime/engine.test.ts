@@ -85,6 +85,10 @@ function fakeScreens() {
 					return tracker.scan(b);
 				},
 				submitted: () => tracker.submitted(),
+				get expectsTypedAhead() {
+					return tracker.expectsTypedAhead;
+				},
+				settle: () => tracker.settle(),
 				mount: async () => {},
 				setVisible() {},
 				setFocused() {},
@@ -922,6 +926,94 @@ describe("exec", () => {
 		const next = t.engine.exec.inject("node1:console", "true", "bar", never);
 		vm.sink.consoleBytes(vm.ref, bytes(returns(0)));
 		expect(await next).toMatchObject({ exitCode: 0 });
+	});
+
+	describe("after an Enter that a program read instead of the shell", () => {
+		/** `cat` was run and Enter pressed while it ran. Its prompt is back and the shell waits. */
+		function swallowed() {
+			const t = setup();
+			const vm = t.atPrompt(1);
+			const screen = t.screens.get("node1:console");
+			t.run({ type: "clock", hz: 1 });
+			const clock = t.intervals.at(-1);
+			const tickAt = (ms: number) => {
+				t.at(ms);
+				clock?.fn();
+			};
+			screen.io.input("cat\r");
+			screen.io.input("\r");
+			vm.sink.consoleBytes(vm.ref, bytes(`cat\r\n\r\n${prompt(0)}`));
+			t.take();
+			return { ...t, vm, screen, tickAt };
+		}
+
+		test("the session takes commands again once it has been quiet for a second", async () => {
+			const t = swallowed();
+			t.tickAt(1000);
+			await expect(t.engine.exec.inject("node1:console", "ls", "agent", never)).rejects.toThrow(
+				"is running a program.",
+			);
+			t.tickAt(2000);
+			expect(t.take()).toContainEqual({ type: "session/shell", session: "node1:console", shell: "prompt" });
+
+			const result = t.engine.exec.inject("node1:console", "false", "agent", never);
+			t.vm.sink.consoleBytes(t.vm.ref, bytes(`false${returns(1)}`));
+			expect(await result).toMatchObject({ exitCode: 1 });
+		});
+
+		test("output or typing starts the second over", () => {
+			const t = swallowed();
+			t.tickAt(1000);
+			t.vm.sink.consoleBytes(t.vm.ref, bytes("m"));
+			t.tickAt(2000);
+			t.screen.io.input("a");
+			t.tickAt(3000);
+			t.tickAt(3900);
+			expect(t.events.filter((e) => e.type === "session/shell")).toEqual([]);
+			t.tickAt(4000);
+			expect(t.events).toContainEqual({ type: "session/shell", session: "node1:console", shell: "prompt" });
+		});
+
+		test("a line half typed meanwhile is still the person's", async () => {
+			const t = swallowed();
+			t.screen.io.input("rm -rf ");
+			t.tickAt(1000);
+			t.tickAt(2000);
+			await expect(t.engine.exec.inject("node1:console", "ls", "agent", never)).rejects.toThrow(
+				"has a half-typed line.",
+			);
+		});
+
+		test("keys the program took are not a half-typed line", async () => {
+			const t = setup();
+			const vm = t.atPrompt(1);
+			const screen = t.screens.get("node1:console");
+			t.run({ type: "clock", hz: 1 });
+			for (const key of ["less f\r", "\r", "q"]) screen.io.input(key);
+			vm.sink.consoleBytes(vm.ref, bytes(`less f\r\n${prompt(0)}`));
+			for (const ms of [1000, 2000]) {
+				t.at(ms);
+				t.intervals.at(-1)?.fn();
+			}
+			vm.sent.length = 0;
+			void t.engine.exec.inject("node1:console", "ls", "agent", never);
+			expect(vm.sent).toEqual([["write", "console", "ls\r"]]);
+		});
+	});
+
+	test("a line typed ahead that the shell is running is never settled, however quiet", async () => {
+		const t = setup();
+		const vm = t.atPrompt(1);
+		const screen = t.screens.get("node1:console");
+		t.run({ type: "clock", hz: 1 });
+		screen.io.input("make\r");
+		screen.io.input("sleep 100\r");
+		vm.sink.consoleBytes(vm.ref, bytes(`make\r\n${prompt(0)}sleep 100\r\n`));
+		for (const ms of [1000, 2000, 60_000]) {
+			t.at(ms);
+			t.intervals.at(-1)?.fn();
+		}
+		await expect(t.engine.exec.inject("node1:console", "ls", "agent", never)).rejects.toThrow("is running a program.");
 	});
 
 	test("an already aborted signal rejects before anything is typed", async () => {
