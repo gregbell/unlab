@@ -34,3 +34,13 @@
 | 4.2 | an address that collides with the gateway's own range is refused in a sentence | test/integration/addresses.test.ts: reaches the gateway only on the subnets the lab refuses |
 | 4.3 | capture rows name the machine that sent and received each frame when it uses a chosen address | e2e/addresses.spec.ts: the capture names the machine at each end in any subnet, and a reused address does not rename old rows |
 | 4.3 | capture <machine> matches that machine's frames on every NIC and address it has | e2e/addresses.spec.ts: the capture names the machine at each end in any subnet, and a reused address does not rename old rows |
+| 4.4 | a spawn option sets a machine's name | e2e/names.spec.ts: a chosen name is the guest's, and the rail, the panes, ls, the prompt and the switch show it |
+| 4.4 | a name already in use, or one that is not a valid hostname, is refused | e2e/names.spec.ts: a name in use or that is not a hostname is refused in a sentence, and nothing boots |
+| 4.4 | every command that takes a machine accepts that name | e2e/names.spec.ts: every command that takes a machine takes its name |
+| 4.4 | the guest's hostname and prompt show it | test/integration/names.test.ts: a name on alpine, a name on debian: is the hostname and in the prompt, where node and a number is the hostname alone |
+| 4.4 | the rail, the panes, ls and the prompt show it | e2e/names.spec.ts: a chosen name is the guest's, and the rail, the panes, ls, the prompt and the switch show it |
+| 4.4 | capture rows show it | e2e/names.spec.ts: every command that takes a machine takes its name |
+| 4.4 | capture rows show it, and a later machine of the name does not take over old rows | e2e/names.spec.ts: a name is free once its machine is gone, and the next machine of that name is another machine |
+| 4.4 | a name as long as a hostname can be fits where it is shown | e2e/names.spec.ts: a name as long as a hostname can be fits everywhere it is shown |
+| 4.4 | other machines resolve the name when the machine has an address | test/integration/names.test.ts: a name on alpine, a name on debian: is reached by it from a machine of either image, and reaches itself |
+| 4.4 | other machines resolve the name when the machine has an address | e2e/names.spec.ts: a chosen name is the guest's, and the rail, the panes, ls, the prompt and the switch show it |
