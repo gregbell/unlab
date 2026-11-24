@@ -1,7 +1,7 @@
 import { createKernel, fetchDistro, fetchRoutes } from "unkernel/node";
 import { expect, test } from "vitest";
 import { execAsRoot } from "../../src/runtime/guest.ts";
-import { alpinePackageSetup } from "../../src/runtime/package-prototype.ts";
+import { alpinePackageSetup } from "../../src/runtime/package-repositories.ts";
 
 test("apk requests both main and community indexes for the guest's release", async () => {
 	const indexes: string[] = [];
@@ -25,6 +25,12 @@ test("apk requests both main and community indexes for the guest's release", asy
 		expect(indexes.sort()).toEqual(
 			["community", "main"].map((repo) => `/alpine/v${version}/${repo}/${arch}/APKINDEX.tar.gz`),
 		);
+		// A guest can edit its repositories using an editor that saves by rename.
+		const main = `http://dl-cdn.alpinelinux.org/alpine/v${version}/main`;
+		const edit = await execAsRoot(vm, 'echo "$1" > /etc/apk/new && mv /etc/apk/new /etc/apk/repositories', [main]);
+		expect(edit.exitCode, String(edit.stderr)).toBe(0);
+		expect((await execAsRoot(vm, alpinePackageSetup)).exitCode).toBe(0);
+		expect((await vm.exec("cat", ["/etc/apk/repositories"])).stdout).toBe(`${main}\n`);
 	} finally {
 		vm.stop();
 	}

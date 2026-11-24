@@ -123,8 +123,7 @@ export class Subnet {
 
 /**
  * Where a frame the guest sent belongs: the lab segment (bridged to the
- * other machines at layer 2) or the uplink (a NetStack that NATs to the
- * internet). Anything that names a lab address goes to the lab; DHCP and
+ * other machines at layer 2) or the package gateway. DHCP and
  * everything else goes to the uplink, which owns 10.0.2.0/24.
  */
 export function classify(f: Uint8Array, lab: Subnet): "lab" | "uplink" | "drop" {

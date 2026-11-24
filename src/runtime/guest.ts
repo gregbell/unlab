@@ -32,7 +32,7 @@ export interface SetupOptions {
 	prefixBits: number;
 	/** The other machines, written into /etc/hosts so names work with no DNS. */
 	hosts: readonly HostEntry[];
-	/** Ask udhcpc for the uplink address (10.0.2.15) so the internet works. */
+	/** The image runs DHCP at boot when the package gateway is attached. */
 	dhcp: boolean;
 	/** Carried in every prompt mark, so marks printed by programs are not believed. Hex only. */
 	promptToken: string;
@@ -84,7 +84,7 @@ const promptScript = (token: string) =>
  * Bring the machine onto the lab segment: its name, its lab address on eth0,
  * /etc/hosts for every machine in the lab, and the marked prompt. With an
  * uplink, udhcpc also claims 10.0.2.15 and installs the default route, which
- * is what carries `apk add` and anything else bound for the internet.
+ * carries package repository traffic.
  *
  * Idempotent: a second run with the same options changes nothing, and a run
  * with a new host table changes only /etc/hosts.
@@ -100,9 +100,9 @@ export function setupScript(o: SetupOptions): string {
 		// works without sudo. Harmless: it only widens who may send echoes.
 		`sysctl -w net.ipv4.ping_group_range='0 2147483647' >/dev/null 2>&1 || true`,
 		`ip link set eth0 up`,
-		// Before the lab address, never after: udhcpc's script flushes eth0 when
-		// it installs the lease, which would take the lab address with it.
-		o.dhcp ? `udhcpc -i eth0 -n -q -t 4 -T 1 >/dev/null 2>&1 || true` : `:`,
+		// The image's DHCP script flushes eth0 before installing its lease.
+		// Wait for it before adding the lab address (Debian runs DHCP in the background).
+		o.dhcp ? `/usr/lib/kw/net wait` : `:`,
 		`ip addr replace ${o.ip}/${o.prefixBits} dev eth0`,
 		// Last, so the first marked prompt appears on a machine that is already configured.
 		promptScript(o.promptToken),

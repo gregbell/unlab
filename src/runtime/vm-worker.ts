@@ -3,19 +3,19 @@
 // The kernel gets a LabNic as its network device, which splits what the guest
 // sends: lab traffic goes to the page's switch over postMessage and reaches
 // the other machines at layer 2, while anything else goes to a NetStack that
-// NATs to the internet over Wisp.
+// handles DHCP, DNS and the supported package repositories.
 //
 // Terminals come in two kinds. The kernel console (one per machine) carries
 // the boot log and a shell. Beyond that each tab opens its own pty through
 // vm.spawn(), so a machine can have several independent shells.
 
-import { createKernel, DEFAULT_WISP_SERVERS, type KernelInstance, NetStack, type Pty, wispBackend } from "unkernel";
+import { createKernel, type KernelInstance, NetStack, type Pty } from "unkernel";
 import { Subnet } from "../net/index.ts";
 import { diskName } from "./disk-name.ts";
 import { execAsRoot, hostsScript, setupScript } from "./guest.ts";
 import { MemoryDisk } from "./image.ts";
 import { LabNic } from "./nic.ts";
-import { alpinePackageSetup, packageBackend } from "./package-prototype.ts";
+import { alpinePackageSetup, packageBackend } from "./package-repositories.ts";
 import type { FromVm, PtySpec, ToVm, VmConfig } from "./protocol.ts";
 import { createShellTracker } from "./shell-tracker.ts";
 
@@ -31,7 +31,6 @@ type Queued = Exclude<ToVm, { type: "boot" | "frame" }>;
 
 let vm: KernelInstance | undefined;
 let nic: LabNic | undefined;
-let cfg: VmConfig | undefined;
 /** Shells opened beside the console, by session id. */
 const ptys = new Map<number, Pty>();
 /** Messages that arrive while the kernel is still booting. */
@@ -100,8 +99,7 @@ function handle(m: Queued): void {
 }
 
 async function reconfigure(m: Extract<ToVm, { type: "reconfigure" }>): Promise<void> {
-	if (!vm || !cfg) return;
-	cfg = { ...cfg, name: m.name, ip: m.ip, prefixBits: m.prefixBits, hosts: m.hosts, internet: m.internet };
+	if (!vm) return;
 	const r = await execAsRoot(vm, hostsScript({ hostname: m.name, ip: m.ip, hosts: m.hosts }));
 	if (r.exitCode !== 0) fail(`reconfigure: ${String(r.stderr).trim()}`, false);
 }
@@ -154,21 +152,12 @@ async function openPty(spec: PtySpec): Promise<void> {
 }
 
 async function boot(c: VmConfig): Promise<void> {
-	cfg = c;
 	const t0 = performance.now();
 	const lab = new Subnet(c.labCidr);
 
 	// The uplink is a NetStack of its own, told the same MAC as the NIC so its
 	// DHCP lease and ARP replies are addressed to this machine.
-	let uplink: NetStack | undefined;
-	if (c.packageRepositories) {
-		uplink = new NetStack({ mac: c.mac, backend: packageBackend() });
-	} else if (c.internet) {
-		uplink = new NetStack({
-			mac: c.mac,
-			backend: wispBackend(c.wispServers?.length ? c.wispServers : [...DEFAULT_WISP_SERVERS]),
-		});
-	}
+	const uplink = c.packageRepositories ? new NetStack({ mac: c.mac, backend: packageBackend() }) : undefined;
 
 	nic = new LabNic({
 		mac: c.mac,

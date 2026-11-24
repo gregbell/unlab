@@ -54,14 +54,33 @@ lets you allow a tool, require approval, or turn it off.
 ## Network and storage
 
 - The switch has eight ports and supports up to eight machines. Each guest has
-  one network interface. The lab carries IPv4 traffic between guests and has no
-  internet uplink.
+  one network interface. The switch carries IPv4 traffic between guests. A
+  separate gateway on that interface provides access to package repositories.
 - Each guest defaults to 256 MiB of RAM, a sparse 4 GiB disk, and two CPUs, or
   one CPU if the browser lacks multicore support. The disk uses browser storage
   as the guest writes to it.
 - Reloading the page boots each machine from its own IndexedDB-backed ext4 disk.
   Switch ports and cable connections survive a reload. Shell processes and
   packet captures start fresh. One tab at a time owns the lab.
+
+## Install packages
+
+Run these commands in the guest console:
+
+| Guest  | Example                                     |
+| ------ | ------------------------------------------- |
+| Alpine | `sudo apk update && sudo apk add vim`       |
+| Debian | `sudo apt update && sudo apt install -y jq` |
+
+The browser downloads indexes and packages over HTTPS from the configured
+[Alpine mirror](https://repo.c48.uk/alpine/) or
+[Debian mirror](https://github.com/pithings/unkernel/blob/8f039c5/web/src/config.ts#L166-L173).
+Alpine includes both `main` and `community`. The package managers verify the
+distribution signatures, and installed packages persist on the guest disk.
+
+The gateway accepts only package repository requests. It requires no Wisp
+relay. Switch cable controls affect traffic between guests independently.
+Use `spawn 1 alpine --no-net` to boot without repository access.
 
 ## Run locally
 
@@ -81,32 +100,6 @@ and SHA-256 against the unkernel release that matches the pinned npm package.
 The kernel comes directly from that package's `unkernel.wasm`. The
 [image manifest](public/distros/distros.json) records the upstream build IDs and
 checksums.
-
-### Try the package-install prototype
-
-After the local setup above, run `npm run prototype:packages` and open
-[the prototype lab](http://localhost:5180/). In the command bar, run
-`spawn 1 alpine` and `spawn 1 debian`. Try these commands in their consoles:
-
-| Guest  | Install and run                                            |
-| ------ | ---------------------------------------------------------- |
-| Alpine | `sudo apk update && sudo apk add jq && jq -n '6*7'`        |
-| Debian | `sudo apt update && sudo apt install -y jq && jq -n '6*7'` |
-
-Both should print `42`. The browser fetches repository indexes and packages
-over HTTPS from [an Alpine mirror](https://repo.c48.uk/alpine/) and
-[Unkernel's Debian mirror](https://github.com/pithings/unkernel/blob/8f039c5/web/src/config.ts#L166-L173).
-The guest package managers verify the distribution signatures as usual.
-Unlab only handles requests for those repository paths. This uses no Wisp
-relay and needs no hosted Unlab service.
-
-Alpine boots with both `main` and `community` enabled. To try a community
-package, run `sudo apk add vim`, then `vim --version`.
-
-Package access is selected at boot. `spawn 1 alpine --no-net` skips it.
-The switch's cable controls affect traffic between lab machines independently.
-Installs require the selected mirror to be reachable and to allow browser
-requests from the lab's origin.
 
 ## How it works
 

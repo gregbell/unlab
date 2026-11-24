@@ -151,8 +151,7 @@ export function startVm(boot: VmBoot, sink: VmSink, deps: VmDeps): Vm {
 		cpus: spec.cpus ?? 1,
 		diskGiB: Number(spec.diskGiB ?? 4),
 		hosts: boot.config.hosts,
-		internet: false,
-		...(import.meta.env?.MODE === "packages" && spec.net === "switch0" ? { packageRepositories: true } : {}),
+		packageRepositories: spec.net === "switch0",
 		cols: boot.cols,
 		rows: boot.rows,
 		promptToken: boot.promptToken,
@@ -184,9 +183,7 @@ export function startVm(boot: VmBoot, sink: VmSink, deps: VmDeps): Vm {
 				type: "reconfigure",
 				name: identity.name,
 				ip: identity.ip,
-				prefixBits: LAB_PREFIX_BITS,
 				hosts,
-				internet: false,
 			});
 		},
 		deliver(frame) {

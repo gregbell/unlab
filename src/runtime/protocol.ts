@@ -20,11 +20,8 @@ export interface VmConfig {
 	diskGiB?: number;
 	cpus?: number;
 	hosts: readonly HostEntry[];
-	/** Give this machine a NAT uplink to the internet (needed by `apk add`). */
-	internet: boolean;
-	/** Enable the prototype's package repository routes on this boot. */
-	packageRepositories?: true;
-	wispServers?: string[];
+	/** Attach the gateway for signed distro repositories. */
+	packageRepositories: boolean;
 	cols: number;
 	rows: number;
 	/** Carried in the guest prompt's OSC 133 marks; see shell-tracker.ts. */
@@ -47,9 +44,7 @@ export type ToVm =
 			type: "reconfigure";
 			name: string;
 			ip: string;
-			prefixBits: number;
 			hosts: readonly HostEntry[];
-			internet: boolean;
 	  }
 	| { type: "pty-open"; spec: PtySpec }
 	| { type: "pty-data"; sid: number; data: string }

@@ -7,8 +7,7 @@
 //     machines, so ARP, ICMP, UDP and TCP between them are the guests' own
 //     stacks talking to each other, nothing emulated in between;
 //   * everything else                 -> the uplink, a NetStack that owns
-//     10.0.2.0/24 and NATs to the internet, which is what makes `apk add`
-//     work. It also runs the DHCP server that brings eth0 up.
+//     10.0.2.0/24 and serves DHCP, DNS and the package repositories.
 
 import type { Kernel, NetDevice } from "unkernel";
 import { classify, parseMac, type Subnet } from "../net/index.ts";
@@ -19,7 +18,7 @@ export interface LabNicOptions {
 	lab: Subnet;
 	/** Put a frame on the lab segment. Must not retain the array. */
 	toSwitch: (frame: Uint8Array) => void;
-	/** A NetStack for internet access, or undefined for an isolated lab. */
+	/** The package gateway, when enabled at boot. */
 	uplink?: NetDevice;
 }
 

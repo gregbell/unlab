@@ -116,7 +116,7 @@ describe("boot", () => {
 					cpus: 1,
 					diskGiB: 4,
 					hosts: NODE3.hosts,
-					internet: false,
+					packageRepositories: true,
 					cols: 100,
 					rows: 30,
 					promptToken: "00112233aabbccdd",
@@ -245,9 +245,7 @@ describe("what the page sends", () => {
 				type: "reconfigure",
 				name: "node3",
 				ip: "10.88.0.13",
-				prefixBits: 24,
 				hosts: [{ ip: "10.88.0.14", name: "node4" }],
-				internet: false,
 			},
 		]);
 	});
