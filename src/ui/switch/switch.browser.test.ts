@@ -1,7 +1,18 @@
 import "./switch.ts";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { page } from "vitest/browser";
-import { lab, link, mount, ready, remove, spawn, tokenColor, unmountAll } from "../base/testing.ts";
+import {
+	LONG_NAME,
+	lab,
+	link,
+	mount,
+	ready,
+	remove,
+	spawn,
+	spawnNamed,
+	tokenColor,
+	unmountAll,
+} from "../base/testing.ts";
 
 beforeEach(() => page.viewport(1440, 900));
 afterEach(unmountAll);
@@ -159,5 +170,23 @@ describe("a narrow faceplate", () => {
 		const ports = part(element, ".ports");
 		expect(ports.scrollWidth).toBeGreaterThan(ports.clientWidth);
 		expect(getComputedStyle(ports).overflowX).toBe("auto");
+	});
+});
+
+describe("a machine with a long name", () => {
+	it("is cut short over its port, with the whole name at hand, and the columns stay equal", async () => {
+		await mount("unlab-switch", {
+			state: lab(spawnNamed(LONG_NAME), spawn(1), ready()),
+			prepare: (el) => {
+				el.setAttribute("compact", "");
+				el.style.width = "420px";
+			},
+		});
+		const name = part(column(1), ".name");
+		expect(name.textContent).toBe(LONG_NAME);
+		expect(column(1).title).toBe(LONG_NAME);
+		expect(name.scrollWidth).toBeGreaterThan(name.clientWidth);
+		const widths = [1, 2, 3, 4, 5, 6, 7, 8].map((n) => Math.round(column(n).getBoundingClientRect().width));
+		expect(new Set(widths)).toEqual(new Set([44]));
 	});
 });

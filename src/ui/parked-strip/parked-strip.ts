@@ -29,6 +29,7 @@ export class UnlabParkedStrip extends UnlabElement {
 						<button
 							type="button"
 							class="chip"
+							title=${name}
 							data-hue=${machines[name]?.hue ?? nothing}
 							aria-describedby=${NOTE}
 							@click=${() => this.app.store.dispatchUi({ type: "ui/unpark", machine: name })}

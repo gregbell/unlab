@@ -30,7 +30,7 @@ export function rowContent(row: BarRow, lab: LabState): TemplateResult {
 				<span class="note">${row.about}</span>`;
 		case "value": {
 			const { label, detail, hue } = row.suggestion;
-			return html`<span class="value" data-hue=${hue ?? nothing}>${label}</span>
+			return html`<span class="value" title=${label} data-hue=${hue ?? nothing}>${label}</span>
 				${detail === undefined ? nothing : html`<span class="note">${detail}</span>`}`;
 		}
 		case "fix":

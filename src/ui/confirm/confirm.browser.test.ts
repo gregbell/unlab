@@ -2,7 +2,7 @@ import "./confirm.ts";
 import axe from "axe-core";
 import { afterEach, describe, expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import { lab, mount, ready, spawn, tokenColor, unmountAll } from "../base/testing.ts";
+import { lab, mount, named, ready, spawn, spawnNamed, tokenColor, unmountAll } from "../base/testing.ts";
 
 afterEach(unmountAll);
 
@@ -36,6 +36,20 @@ describe("<unlab-confirm>", () => {
 		expect(machine && getComputedStyle(machine).color).toBe(tokenColor("hue-3"));
 		expect(element.querySelector(".detail")?.textContent).toBe(DETAIL);
 		expect(page.getByRole("group", { name: QUESTION }).element()).toBeTruthy();
+	});
+
+	it("gives each machine its own hue when one name starts with another", async () => {
+		const { element } = await mount("unlab-confirm", {
+			state: lab(spawnNamed(named("web")), spawnNamed(named("web-1")), ready()),
+			prepare: (el) => {
+				el.heading = "Remove web-1, web and web-2?";
+			},
+		});
+		const painted = [...element.querySelectorAll<HTMLElement>(".heading .machine")];
+		expect(painted.map((span) => [span.textContent, span.dataset.hue])).toEqual([
+			["web-1", "2"],
+			["web", "1"],
+		]);
 	});
 
 	it("names the primary button for the action and fires approve or keep", async () => {

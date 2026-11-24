@@ -3,7 +3,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { testCapture } from "../../../test/support/capture.ts";
 import { arpReply, arpRequest, mac, ping, routedPing } from "../../../test/support/frames.ts";
-import { lab, mount, ready, spawn, tokenColor, unmountAll } from "../base/testing.ts";
+import { selectNames } from "../../model/index.ts";
+import {
+	LONG_NAME,
+	lab,
+	mount,
+	named,
+	ready,
+	remove,
+	spawn,
+	spawnNamed,
+	tokenColor,
+	unmountAll,
+} from "../base/testing.ts";
 import type { CaptureMode } from "./capture.ts";
 
 beforeEach(() => page.viewport(1440, 900));
@@ -272,5 +284,61 @@ describe("<unlab-capture mode=full>", () => {
 		expect([...bytes.subarray(0, 4)]).toEqual([0xd4, 0xc3, 0xb2, 0xa1]);
 		const frameBytes = ping(1, 2, 1).length;
 		expect(bytes.length).toBe(24 + 12 * (16 + frameBytes));
+	});
+});
+
+describe("a machine with a long name", () => {
+	it.each(["dock", "full"] as const)("is cut short in a %s row, which still shows both ends", async (mode) => {
+		const capture = testCapture();
+		const state = lab(spawnNamed(LONG_NAME), spawnNamed(named("b".repeat(40))), ready());
+		capture.names(selectNames(state));
+		capture.frame(ping(1, 2), 1, [2]);
+		capture.frame(ping(1, 4), 1, [4]);
+		capture.frame(ping(3, 4), 3, [4]);
+		const { element } = await mount("unlab-capture", {
+			state,
+			capture: capture.log,
+			prepare: (el) => el.setAttribute("mode", mode),
+		});
+		const [long, between, short] = rows(element);
+		const route = part(long, ".route");
+		expect(route.title).toBe(`${LONG_NAME} → ${"b".repeat(40)}`);
+		for (const end of route.querySelectorAll<HTMLElement>(".machine")) {
+			expect(end.scrollWidth).toBeGreaterThan(end.clientWidth);
+			expect(end.clientWidth).toBeGreaterThan(40);
+			expect(end.getBoundingClientRect().right).toBeLessThanOrEqual(route.getBoundingClientRect().right);
+		}
+		const mixed = part(between, ".route").querySelectorAll<HTMLElement>(".machine");
+		expect([...mixed].map((end) => end.scrollWidth > end.clientWidth)).toEqual([true, false]);
+		expect(part(long, ".info").getBoundingClientRect().left).toBe(part(short, ".info").getBoundingClientRect().left);
+		expect(text(part(short, ".route"))).toBe("node3 → node4");
+		const [from, to] = part(short, ".route").querySelectorAll(".machine");
+		expect(to.getBoundingClientRect().left - from.getBoundingClientRect().right).toBeLessThan(30);
+	});
+
+	it("is not painted in the hue of the next machine of its name", async () => {
+		const web = named("web");
+		const capture = testCapture();
+		const first = lab(spawnNamed(web), ready());
+		const next = lab(
+			spawnNamed(web),
+			ready(),
+			remove(web),
+			{ type: "vm/stopped", machine: web, attempt: 1 },
+			spawnNamed(web),
+		);
+		capture.names(selectNames(first));
+		capture.frame(ping(1, 8), 1, []);
+		capture.names(selectNames(next));
+		capture.frame(ping(2, 8), 1, []);
+		const { element } = await mount("unlab-capture", {
+			state: next,
+			capture: capture.log,
+			prepare: (el) => el.setAttribute("mode", "dock"),
+		});
+		expect(rows(element).map((row) => [text(part(row, ".route")), row.dataset.hue])).toEqual([
+			["web → node8", undefined],
+			["web → node8", "1"],
+		]);
 	});
 });

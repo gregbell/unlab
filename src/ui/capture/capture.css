@@ -171,6 +171,20 @@
 			cursor: pointer;
 		}
 
+		/* The ends share the room there is, and one that needs less than half leaves the rest to the other. */
+		.route {
+			display: grid;
+			grid-template-columns: minmax(0, max-content) auto minmax(0, max-content);
+			justify-content: start;
+			gap: 1ch;
+		}
+
+		.route > * {
+			overflow: hidden;
+			text-overflow: ellipsis;
+			white-space: nowrap;
+		}
+
 		.time,
 		.len,
 		.everyone {
@@ -216,6 +230,7 @@
 		}
 
 		.row.event .time {
+			flex: none;
 			color: inherit;
 		}
 
