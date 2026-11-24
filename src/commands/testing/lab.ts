@@ -18,6 +18,8 @@ import type { CommandDeps, ExecPort } from "../define.ts";
 
 export interface MachineFixture {
 	readonly n: number;
+	/** Left out, node<n>. */
+	readonly name?: MachineName;
 	readonly phase?: Phase;
 	/** Ready machines only. Plugged machines sit on port n. */
 	readonly link?: "up" | "cut" | "none";
@@ -55,13 +57,13 @@ function life(f: MachineFixture): Lifecycle {
 	}
 }
 
-/** A hand-built lab: node<n> for each fixture, in the order given, everything else at rest. */
+/** A hand-built lab: one machine for each fixture, in the order given, everything else at rest. */
 export function labWith(fixtures: readonly MachineFixture[], images: readonly ImageInfo[] = IMAGES): LabState {
 	const machines: Partial<Record<MachineName, Machine>> = {};
 	const sessions: Partial<Record<SessionId, Session>> = {};
 	const rail: MachineName[] = [];
 	for (const f of fixtures) {
-		const name: MachineName = `node${f.n}`;
+		const name: MachineName = f.name ?? `node${f.n}`;
 		const ids: SessionId[] = [`${name}:console`];
 		for (let k = 1; k <= (f.shells ?? 0); k++) ids.push(`${name}:sh${k}`);
 		machines[name] = {

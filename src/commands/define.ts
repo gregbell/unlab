@@ -8,6 +8,7 @@ import type { ArgsOf, Grammar, ReadContext } from "./grammar/slots.ts";
 import {
 	type Completion,
 	type ConfirmText,
+	changedSinceAsked,
 	isLineError,
 	type JsonSchema,
 	type LineError,
@@ -150,7 +151,7 @@ export interface SafeCommand<Args> extends CommandOps<Args> {
 export interface DangerCommand<Args> extends CommandOps<Args> {
 	readonly danger: true;
 	confirm(args: Args, lab: LabState): ConfirmText | LineError;
-	/** As SafeCommand's run, but only with an approval for this exact line. */
+	/** As SafeCommand's run, but only with an approval for this exact line, and only while it would ask the same. */
 	run(args: Args, ctx: ApprovedRunContext): Promise<Result>;
 }
 
@@ -232,6 +233,16 @@ export function defineVerb<N extends string, G extends Grammar, P>(
 		const p = planned(args, lab, tokenOf);
 		return p.ok ? null : p.error;
 	};
+	const approved = (args: Args, line: string, approval: Approval | undefined, lab: LabState): Planned => {
+		if (!def.danger) return planned(args, lab);
+		if (approval?.line !== line) {
+			const error = lineError(`That approval was for ${approval?.line ?? "nothing"}, not ${line}.`);
+			return { ok: false, error };
+		}
+		const p = planned(args, lab);
+		const changed = p.ok ? changedSinceAsked(approval.asked, def.confirm(p.plan, lab)) : null;
+		return changed ? { ok: false, error: changed } : p;
+	};
 	const preview = (parsed: Parsed<Args>, lab: LabState): Preview | LineError => {
 		const p = planned(parsed.args, lab, parsed.tokenOf);
 		if (!p.ok) return p.error;
@@ -258,21 +269,16 @@ export function defineVerb<N extends string, G extends Grammar, P>(
 			const log = (outcome: "ok" | "failed") =>
 				deps.dispatch({ type: "cmd/logged", line, source: ctx.source, at: deps.now(), outcome });
 			let result: Result;
-			if (def.danger && ctx.approval?.line !== line) {
-				const approved = ctx.approval?.line ?? "nothing";
-				result = { kind: "failed", error: lineError(`That approval was for ${approved}, not ${line}.`) };
-			} else {
-				const p = planned(args, deps.state());
-				if (p.ok) {
-					try {
-						result = await def.execute(p.plan, ctx, deps);
-					} catch (error) {
-						log("failed");
-						throw error;
-					}
-				} else {
-					result = { kind: "failed", error: p.error };
+			const p = approved(args, line, ctx.approval, deps.state());
+			if (p.ok) {
+				try {
+					result = await def.execute(p.plan, ctx, deps);
+				} catch (error) {
+					log("failed");
+					throw error;
 				}
+			} else {
+				result = { kind: "failed", error: p.error };
 			}
 			log(result.kind === "failed" ? "failed" : "ok");
 			return result;

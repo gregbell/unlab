@@ -6,7 +6,9 @@ import { type Approval, grantApproval } from "../../commands/approval.ts";
 import {
 	type Completion,
 	type ConfirmText,
+	changedSinceAsked,
 	completeLine,
+	type DangerLine,
 	isLineError,
 	type LineError,
 	NOTHING_CHANGED,
@@ -28,10 +30,12 @@ export type BarMode =
 	| { readonly kind: "typing" }
 	/** Shown on Enter, about the text as it is. Any edit leaves it. */
 	| { readonly kind: "error"; readonly error: LineError }
-	/** A dangerous line waiting for a second Enter. `line` is canonical, as the approval names it. */
-	| { readonly kind: "confirm"; readonly line: string }
+	/** A dangerous line waiting for a second Enter. `line` is canonical, as the approval names it, and `asked` is what the approval is for. */
+	| { readonly kind: "confirm"; readonly line: string; readonly asked: ConfirmText }
 	| { readonly kind: "running"; readonly run: number; readonly line: string; readonly keepOpen: boolean }
 	| { readonly kind: "result"; readonly line: string; readonly report: Report };
+
+type Confirming = Extract<BarMode, { readonly kind: "confirm" }>;
 
 export interface OpenBar {
 	readonly open: true;
@@ -152,7 +156,9 @@ type Next =
 	| { readonly kind: "submit"; readonly line: string; readonly danger: string | null }
 	| { readonly kind: "show-error"; readonly error: LineError }
 	| { readonly kind: "take-fix"; readonly line: string }
-	| { readonly kind: "approve"; readonly line: string; readonly word: string }
+	| { readonly kind: "approve"; readonly mode: Confirming; readonly word: string }
+	/** What was asked no longer holds. */
+	| { readonly kind: "ask-again"; readonly line: string }
 	| { readonly kind: "run-again"; readonly line: string }
 	| { readonly kind: "nothing"; readonly hint: string };
 
@@ -181,6 +187,13 @@ function actionWord(parsed: ParsedLine, lab: LabState): string {
 	if (!parsed.danger) return "run";
 	const confirm = parsed.confirm(lab);
 	return isLineError(confirm) ? "run" : confirm.actionLabel.split(" ")[0].toLowerCase();
+}
+
+/** Why a yes would not be to what was asked, or null when it would. */
+function noLongerAsked(mode: Confirming, parsed: ParsedLine, lab: LabState): LineError | null {
+	if (!parsed.danger) return null;
+	const confirm = parsed.confirm(lab);
+	return isLineError(confirm) ? confirm : changedSinceAsked(mode.asked, confirm);
 }
 
 function emptyRows(lab: LabState, registry: Registry): BarRow[] {
@@ -234,8 +247,10 @@ function read(bar: OpenBar, lab: LabState, registry: Registry): Reading {
 		}
 		case "confirm": {
 			const checked = check(registry, mode.line, lab);
-			const word = checked.ok ? actionWord(checked.line, lab) : "run";
-			const next: Next = { kind: "approve", line: mode.line, word };
+			const next: Next =
+				checked.ok && noLongerAsked(mode, checked.line, lab) === null
+					? { kind: "approve", mode, word: actionWord(checked.line, lab) }
+					: { kind: "ask-again", line: mode.line };
 			return { rows: [], chosen: null, completion: null, checked, next };
 		}
 		case "running":
@@ -306,6 +321,8 @@ function hintOf(next: Next, rows: readonly BarRow[]): string {
 			return "tab → fix it";
 		case "approve":
 			return `↵ again to ${next.word}`;
+		case "ask-again":
+			return "↵ ask again";
 		case "run-again":
 			return "↵ run again";
 		case "nothing":
@@ -320,7 +337,7 @@ function footerOf(mode: BarMode, next: Next): readonly string[] {
 		case "error":
 			return next.kind === "take-fix" ? ["tab take the fix", "↵ take it and run", "esc close"] : ["esc close"];
 		case "confirm":
-			return [`↵ ${next.kind === "approve" ? next.word : "run"}`, "esc keep it"];
+			return [`↵ ${next.kind === "approve" ? next.word : "ask again"}`, "esc keep it"];
 		case "running":
 			return ["esc close"];
 		case "result":
@@ -354,9 +371,8 @@ function blockOf(bar: OpenBar, reading: Reading, lab: LabState, registry: Regist
 		case "confirm": {
 			const checked = reading.checked ?? check(registry, mode.line, lab);
 			if (!checked.ok) return errorBlock(mode.line, checked.error);
-			if (!checked.line.danger) return previewBlock(checked, lab);
-			const confirm = checked.line.confirm(lab);
-			return isLineError(confirm) ? errorBlock(mode.line, confirm) : { kind: "confirm", confirm };
+			const over = noLongerAsked(mode, checked.line, lab);
+			return over ? errorBlock(mode.line, over) : { kind: "confirm", confirm: mode.asked };
 		}
 		case "running":
 			return { kind: "running", line: mode.line };
@@ -437,23 +453,34 @@ function run(
 	return done(next, { type: "run", run: id, line, source, approval });
 }
 
+function askFirst(bar: OpenBar, line: DangerLine, lab: LabState): BarStep {
+	const asked = line.confirm(lab);
+	const mode: BarMode = isLineError(asked)
+		? { kind: "error", error: asked }
+		: { kind: "confirm", line: line.line, asked };
+	return done({ ...bar, mode });
+}
+
 /** Enter on a line: run it, or confirm it when it is dangerous, or show why it cannot run. */
 function submit(bar: OpenBar, line: string, keepOpen: boolean, lab: LabState, registry: Registry): BarStep {
 	const checked = check(registry, line, lab);
 	const at = { ...bar, text: line, caret: line.length };
 	if (!checked.ok) return done({ ...at, mode: { kind: "error", error: checked.error } });
-	if (checked.line.danger) return done({ ...at, mode: { kind: "confirm", line: checked.line.line } });
-	return run(at, line, { keepOpen });
+	return checked.line.danger ? askFirst(at, checked.line, lab) : run(at, line, { keepOpen });
 }
 
-/** The second Enter, or the action button. Re-checked against the lab as it is now. */
-function approve(bar: OpenBar, line: string, keepOpen: boolean, lab: LabState, registry: Registry): BarStep {
+/** The second Enter, or the action button. The run checks that the lab would still ask what was asked. */
+function approve(
+	bar: OpenBar,
+	{ line, asked }: Confirming,
+	keepOpen: boolean,
+	lab: LabState,
+	registry: Registry,
+): BarStep {
 	const checked = check(registry, line, lab);
 	const at = { ...bar, text: line, caret: line.length };
 	if (!checked.ok) return done({ ...at, mode: { kind: "error", error: checked.error } });
-	const confirm = checked.line.danger ? checked.line.confirm(lab) : null;
-	if (confirm !== null && isLineError(confirm)) return done({ ...at, mode: { kind: "error", error: confirm } });
-	return run(bar, checked.line.line, { keepOpen, approval: grantApproval(checked.line.line) });
+	return run(bar, line, { keepOpen, approval: grantApproval(line, asked) });
 }
 
 function accept(bar: OpenBar, reading: Reading, row: number): BarStep {
@@ -496,7 +523,8 @@ function enter(bar: OpenBar, keepOpen: boolean, lab: LabState, registry: Registr
 		case "take-fix":
 			return submit(typing(bar, next.line), next.line, keepOpen, lab, registry);
 		case "approve":
-			return approve(bar, next.line, keepOpen, lab, registry);
+			return approve(bar, next.mode, keepOpen, lab, registry);
+		case "ask-again":
 		case "run-again":
 			return submit(bar, next.line, keepOpen, lab, registry);
 		case "nothing":
@@ -597,7 +625,7 @@ export function barStep(bar: BarState, input: BarInput, lab: LabState, registry:
 			return accept({ ...bar, chosen: input.row }, reading, input.row);
 		}
 		case "approve":
-			return bar.mode.kind === "confirm" ? approve(bar, bar.mode.line, false, lab, registry) : done(bar);
+			return bar.mode.kind === "confirm" ? approve(bar, bar.mode, false, lab, registry) : done(bar);
 		case "keep":
 			return bar.mode.kind === "confirm" ? done({ ...bar, mode: TYPING }) : done(bar);
 		case "open-console":
@@ -611,5 +639,5 @@ export function barStep(bar: BarState, input: BarInput, lab: LabState, registry:
 function submitConfirming(bar: OpenBar, lab: LabState, registry: Registry): BarStep {
 	const checked = check(registry, bar.text, lab);
 	if (!checked.ok) return done({ ...bar, mode: { kind: "error", error: checked.error } });
-	return done(checked.line.danger ? { ...bar, mode: { kind: "confirm", line: checked.line.line } } : bar);
+	return checked.line.danger ? askFirst(bar, checked.line, lab) : done(bar);
 }

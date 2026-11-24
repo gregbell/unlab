@@ -68,6 +68,7 @@ export const rm = defineVerb({
 			question: `Remove ${andList(names)}?`,
 			detail: [lost, ...affected].join(" "),
 			actionLabel: `Remove ${andList(names)}`,
+			machines: plan.machines.map(({ n, name }) => ({ n, name })),
 		};
 	},
 	async execute(plan, ctx, deps) {

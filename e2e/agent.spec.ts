@@ -1,6 +1,6 @@
 import { expect, type Page, test } from "@playwright/test";
 import { chromiumExecutable } from "../test/support/chromium.ts";
-import { openWithTwoMachines } from "./lab.ts";
+import { openWithTwoMachines, root, typed } from "./lab.ts";
 import { call, finish, registered, start } from "./webmcp.ts";
 
 /** When set, the test also saves the panel with a call waiting there, for comparing with the Agent artboard. */
@@ -115,6 +115,45 @@ test("deny, abort, off and pause, each as the handoff says", async ({ page }) =>
 	await panel.getByRole("button", { name: "resume tools" }).click();
 	await expect.poll(() => registered(page)).toHaveLength(6);
 	expect(errors).toEqual([]);
+});
+
+test("a yes removes only what it was asked about: not a machine that took the name, nor one that gained a shell", async ({
+	page,
+}) => {
+	const changed = { error: "What this does to web has changed since it was asked. Nothing was changed." };
+	await page.goto("/");
+	await expect(page.getByRole("heading", { name: "Your Linux lab in a tab." })).toBeVisible();
+	const ready = expect(page.getByText("1 of 1 machine ready"));
+	await typed(page, "spawn 1 alpine --name web");
+	await ready.toBeVisible({ timeout: 60_000 });
+	const approve = page.locator("unlab-agent-panel").getByRole("button", { name: "Remove web", exact: true });
+
+	await start(page, "first", "machines_remove", { names: "web" });
+	await expect(approve).toBeVisible();
+	await typed(page, "rm web");
+	await expect(page.locator("unlab-command-bar unlab-confirm")).toContainText("Remove web?");
+	await page.keyboard.press("Enter");
+	await expect(page.locator("unlab-pane[machine=web]")).toHaveCount(0);
+	await typed(page, "spawn 1 alpine --name web");
+	await ready.toBeVisible({ timeout: 60_000 });
+	await root(page, "web", "echo kept > /root/kept");
+	await approve.click();
+	expect(await finish(page, "first")).toEqual(changed);
+	await expect(page.locator("unlab-agent-panel .call", { hasText: "rm web" })).toContainText(changed.error);
+	expect(await root(page, "web", "cat /root/kept")).toBe("kept");
+
+	await start(page, "second", "machines_remove", { names: "web" });
+	await expect(approve).toBeVisible();
+	await typed(page, "sh web");
+	await expect(page.getByRole("tab", { name: /sh1/ })).toBeVisible();
+	await approve.click();
+	expect(await finish(page, "second")).toEqual(changed);
+	expect(await root(page, "web", "cat /root/kept")).toBe("kept");
+
+	await start(page, "third", "machines_remove", { names: "web" });
+	await expect(page.locator("unlab-agent-panel unlab-confirm")).toContainText("Its console and 1 shell close");
+	await approve.click();
+	expect(await finish(page, "third")).toMatchObject({ data: { removed: ["web"] } });
 });
 
 test("output longer than the terminal keeps comes back as its end, flagged", async ({ page }) => {
