@@ -94,6 +94,8 @@ export function setupScript(o: SetupOptions): string {
 		`set -e`,
 		`hostname ${sh(o.hostname)}`,
 		hostsScript(o),
+		// Debian ships ping in the kernel's base filesystem. Make it available to ordinary shell commands.
+		`if ! command -v ping >/dev/null && [ -x /run/kw-lower/bin/ping ] && [ ! -e /usr/bin/ping ] && [ ! -L /usr/bin/ping ]; then ln -s /run/kw-lower/bin/ping /usr/bin/ping; fi`,
 		// Let the unprivileged console shell use ICMP sockets, so `ping node2`
 		// works without sudo. Harmless: it only widens who may send echoes.
 		`sysctl -w net.ipv4.ping_group_range='0 2147483647' >/dev/null 2>&1 || true`,
