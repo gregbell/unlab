@@ -5,14 +5,14 @@
 
 import { type CaptureLog, createCaptureLog } from "../../src/capture/index.ts";
 import type { Cause, Effect, MachineName, PortNo, ReadStore } from "../../src/model/index.ts";
-import { compileFilter, type Flood } from "../../src/net/index.ts";
+import { compileFilter, type Flood, type NicNo } from "../../src/net/index.ts";
 
 export interface TestCapture {
 	readonly log: CaptureLog;
 	/** Sets the log's clock, ms since the lab started. */
 	at(ms: number): void;
 	frame(bytes: Uint8Array, from: PortNo, to?: readonly PortNo[], flood?: Flood | null): void;
-	link(port: PortNo, machine: MachineName, up: boolean, cause?: Cause): void;
+	link(port: PortNo, machine: MachineName, up: boolean, cause?: Cause, nic?: NicNo): void;
 	/** Pass as `mount`'s `onEffect`. */
 	readonly onEffect: (effect: Effect) => void;
 	/** Applies the store's filter and pause to the log from now on, as main.ts does. */
@@ -31,8 +31,8 @@ export function testCapture(limit?: number): TestCapture {
 			const mask = to.reduce((m, p) => m | (1 << (p - 1)), 0);
 			log.appendFrame({ from, to: mask, flood, frame: bytes });
 		},
-		link(port, machine, up, cause = "button") {
-			log.appendLink({ port, machine, up, cause });
+		link(port, machine, up, cause = "button", nic = 0) {
+			log.appendLink({ port, machine, nic, up, cause });
 		},
 		onEffect(effect) {
 			if (effect.type === "capture/clear") log.clear();

@@ -18,7 +18,7 @@ describe("capture", () => {
 		const lab = storeLab();
 		expect(lab.parsed("capture icmp bogus").validate(lab.store.state)).toEqual({
 			message:
-				"capture cannot read bogus. A term is a protocol, a machine, an address, a MAC or port:N. Nothing was changed.",
+				"capture cannot read bogus. A term is a protocol, a machine, a NIC (node2:eth1), an address, a MAC or port:N. Nothing was changed.",
 			token: 1,
 		});
 	});

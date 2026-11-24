@@ -1,24 +1,29 @@
 import "./machine-details.css";
 import { html, nothing, type PropertyValues, type TemplateResult } from "lit";
 import {
+	type Cable,
 	type DetailRow,
 	type LinkWord,
 	type MachineDetails,
 	type MachineName,
-	type PortNo,
 	selectDetails,
 	selectRail,
 } from "../../model/index.ts";
 import { Select, UnlabElement } from "../base/index.ts";
 
-/** The cable action: what it reads and which way it turns the link. */
-const CABLE: Readonly<Record<LinkWord, { readonly label: string; readonly to: "up" | "down" }>> = {
-	up: { label: "cut cable", to: "down" },
-	cut: { label: "reconnect", to: "up" },
-	unplugged: { label: "plug in", to: "up" },
+/** The cable action: what it reads, for the machine's only cable and for one of several, and which way it turns the link. */
+const CABLE: Readonly<
+	Record<LinkWord, { readonly only: string; readonly one: (nic: string) => string; readonly to: "up" | "down" }>
+> = {
+	up: { only: "cut cable", one: (nic) => `cut ${nic}`, to: "down" },
+	cut: { only: "reconnect", one: (nic) => `reconnect ${nic}`, to: "up" },
+	unplugged: { only: "plug in", one: (nic) => `plug in ${nic}`, to: "up" },
 };
 
-type Fact = { readonly label: DetailRow["label"] | "frames"; readonly value: string; readonly tone?: "ok" | "down" };
+/** What the action shows for a machine with no cable to act on yet. */
+const NO_CABLE: Cable = { label: "", nic: null, link: "up" };
+
+type Fact = Omit<DetailRow, "label"> & { readonly label: DetailRow["label"] | "frames" };
 
 /**
  * The machine with the keyboard: its name, its facts and four actions. Each
@@ -50,8 +55,8 @@ export class UnlabMachineDetails extends UnlabElement {
 	override render(): TemplateResult | typeof nothing {
 		const details = this.#details.value;
 		if (!details) return nothing;
-		const { name, accepts, link } = details;
-		const cable = CABLE[link ?? "up"];
+		const { name, accepts } = details;
+		const cables = details.cables.length > 0 ? details.cables : [NO_CABLE];
 		const peers = this.#rail.value.filter((row) => row.phase === "ready" && row.name !== name).map((row) => row.name);
 		return html`<h3 class="name" data-hue=${details.hue}>${name}</h3>
 			<dl class="facts">
@@ -75,14 +80,17 @@ export class UnlabMachineDetails extends UnlabElement {
 				>
 					${peers.length === 1 ? `Ping ${peers[0]}` : "Ping peers"}
 				</button>
-				<button
-					type="button"
-					class="button"
-					?disabled=${!accepts.commands || link === null}
-					@click=${() => this.runLine(`link ${cable.to} ${name}`)}
-				>
-					${cable.label}
-				</button>
+				${cables.map((cable) => {
+					const action = CABLE[cable.link];
+					return html`<button
+						type="button"
+						class="button"
+						?disabled=${!accepts.commands || details.cables.length === 0}
+						@click=${() => this.runLine(`link ${action.to} ${cable.label}`)}
+					>
+						${cable.nic === null ? action.only : action.one(cable.nic)}
+					</button>`;
+				})}
 				<button
 					type="button"
 					class="button danger"
@@ -95,17 +103,18 @@ export class UnlabMachineDetails extends UnlabElement {
 	}
 
 	#facts(details: MachineDetails): readonly Fact[] {
-		const frames = this.#frames(details.port);
-		return details.rows.flatMap((row): Fact[] => {
-			const fact = { ...row, tone: toneOf(row, details) };
-			return row.label === "shells" && frames !== null ? [{ label: "frames", value: frames }, fact] : [fact];
-		});
+		const frames = this.#frames(details);
+		return details.rows.flatMap((row): Fact[] =>
+			row.label === "shells" && frames !== null ? [{ label: "frames", value: frames }, row] : [row],
+		);
 	}
 
-	/** From the machine's side: `in` is what the switch sent down its cable. */
-	#frames(port: PortNo | null): string | null {
-		const counters = port === null ? undefined : this.app.switch.counters(port);
-		return counters ? `${counters.txFrames} in · ${counters.rxFrames} out` : null;
+	/** From the machine's side: `in` is what the switch sent down its cables. */
+	#frames({ ports }: MachineDetails): string | null {
+		const counters = ports.flatMap((port) => this.app.switch.counters(port) ?? []);
+		if (counters.length === 0) return null;
+		const sum = (of: "txFrames" | "rxFrames") => counters.reduce((n, port) => n + port[of], 0);
+		return `${sum("txFrames")} in · ${sum("rxFrames")} out`;
 	}
 
 	#pingLine(name: MachineName, peers: readonly MachineName[]): string {
@@ -113,13 +122,6 @@ export class UnlabMachineDetails extends UnlabElement {
 		const pings = peers.flatMap((peer) => machines[peer]?.ip ?? []).map((ip) => `ping -c 3 ${ip}`);
 		return `exec ${name} -- ${pings.join("; ")}`;
 	}
-}
-
-function toneOf(row: DetailRow, details: MachineDetails): Fact["tone"] {
-	if (row.label === "state" && details.phase === "failed") return "down";
-	if (row.label !== "link") return undefined;
-	if (details.link === "up") return "ok";
-	return details.link === "cut" ? "down" : undefined;
 }
 
 customElements.define("unlab-machine-details", UnlabMachineDetails);

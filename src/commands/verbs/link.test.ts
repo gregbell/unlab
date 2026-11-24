@@ -23,7 +23,93 @@ describe("link", () => {
 		expect(await lab.run("link up node3")).toEqual({
 			kind: "visible",
 			text: "node3 up",
-			data: [{ machine: "node3", port: 3, link: "up" }],
+			data: [{ machine: "node3", nic: "eth0", port: 3, link: "up" }],
+		});
+	});
+
+	it("changes one NIC's cable, and leaves the machine's others alone", async () => {
+		const lab = storeLab();
+		await lab.lab(1);
+		await lab.run("spawn 1 alpine --nics 3 --net switch0,switch0,none");
+		lab.ready("node2");
+		const will = (line: string) => lab.parsed(line).preview(lab.store.state);
+		expect(will("link down node2:eth1")).toMatchObject({ will: "cut the cable to node2:eth1 on port 3" });
+		expect(await lab.run("link down node2:eth1")).toEqual({
+			kind: "visible",
+			text: "node2:eth1 cut",
+			data: [{ machine: "node2", nic: "eth1", port: 3, link: "cut" }],
+		});
+		expect(lab.store.state.machines.node2?.life).toMatchObject({
+			plugs: [{ link: "up" }, { link: "cut" }, { kind: "none" }],
+		});
+		expect(will("link down node2")).toMatchObject({
+			will: "cut the cable to node2:eth0 on port 2 · node2:eth1 and node2:eth2 are already cut",
+		});
+		expect(will("link up node2")).toMatchObject({
+			will: "reconnect node2:eth1 on port 3 · plug node2:eth2 into port 4 · node2:eth0 is already up",
+		});
+		expect(will("link up node1,node2:eth2")).toMatchObject({
+			will: "plug node2:eth2 into port 4 · node1 is already up",
+		});
+	});
+
+	it("cuts every cable of a machine named alone", async () => {
+		const lab = storeLab();
+		await lab.run("spawn 1 alpine --nics 2");
+		lab.ready("node1");
+		expect(await lab.run("link down node1")).toMatchObject({ text: "node1:eth0 cut, node1:eth1 cut" });
+	});
+
+	it("takes eth0 of a machine with one NIC, and says which NICs a machine has when it lacks the one named", async () => {
+		const lab = storeLab();
+		await lab.lab(2);
+		await lab.run("spawn 1 alpine --nics 2");
+		lab.ready("node3");
+		expect(lab.parsed("link down node1:eth0").preview(lab.store.state)).toMatchObject({
+			will: "cut the cable to node1 on port 1",
+		});
+		expect(lab.parse("link down node1:eth1")).toEqual({
+			message: "node1 has no NIC called eth1. It has eth0. Nothing was changed.",
+			token: 2,
+		});
+		expect(lab.parse("link down node3:eth7")).toMatchObject({
+			message: "node3 has no NIC called eth7. It has eth0 and eth1. Nothing was changed.",
+		});
+		expect(lab.parse("link down all:wlan0")).toMatchObject({
+			message: "No NIC is called wlan0. A machine has eth0, eth1, eth2 or eth3. Nothing was changed.",
+		});
+		expect(lab.parse("link down node9:eth0")).toMatchObject({
+			message: "No machine called node9. You have node1, node2, node3. Nothing was changed.",
+		});
+		expect(lab.parsed("link down node*:eth1").preview(lab.store.state)).toMatchObject({
+			will: "cut the cable to node3:eth1 on port 4 · skipped node1: no eth1, node2: no eth1",
+		});
+	});
+
+	it("offers a machine's NICs by name once it has more than one", async () => {
+		const lab = storeLab();
+		await lab.lab(1);
+		await lab.run("spawn 1 alpine --nics 2 --net switch0,none");
+		lab.ready("node2");
+		const { suggestions } = completeLine(lab.registry, "link up ", 8, lab.store.state);
+		expect(suggestions.map((s) => [s.insert, s.detail])).toEqual([
+			["node1", "10.88.0.11 · up"],
+			["node2", "10.88.0.12 · up"],
+			["node2:eth0", "port 2 · up"],
+			["node2:eth1", "no cable"],
+			["all", "every machine that can take it"],
+		]);
+	});
+
+	it("refuses to plug in more NICs than the switch has ports for", async () => {
+		const lab = storeLab();
+		await lab.lab(7);
+		await lab.run("spawn 1 alpine --nics 2 --no-net");
+		lab.ready("node8");
+		expect(lab.parsed("link up node8").validate(lab.store.state)).toEqual({
+			message:
+				"switch0 has 1 free port, and this takes 2. Remove a machine with rm to free its ports. Nothing was changed.",
+			token: 2,
 		});
 	});
 
@@ -56,13 +142,24 @@ describe("link", () => {
 		const lab = storeLab();
 		await lab.lab(3);
 		const result = await lab.run("link down node3", "agent");
-		expect(result).toEqual({ kind: "visible", text: "node3 cut", data: [{ machine: "node3", port: 3, link: "cut" }] });
+		expect(result).toEqual({
+			kind: "visible",
+			text: "node3 cut",
+			data: [{ machine: "node3", nic: "eth0", port: 3, link: "cut" }],
+		});
 		expect(lab.events[0]).toEqual({
 			type: "cmd/link",
-			changes: [{ machine: "node3", up: false, port: 3, newPort: false }],
+			changes: [{ machine: "node3", nic: 0, up: false, port: 3, newPort: false }],
 			cause: "agent",
 		});
-		expect(lab.effects).toContainEqual({ type: "link/set", port: 3, machine: "node3", up: false, cause: "agent" });
+		expect(lab.effects).toContainEqual({
+			type: "link/set",
+			port: 3,
+			machine: "node3",
+			nic: 0,
+			up: false,
+			cause: "agent",
+		});
 	});
 
 	it("is the link_set tool", () => {

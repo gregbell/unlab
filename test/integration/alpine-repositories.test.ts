@@ -1,7 +1,8 @@
-import { createKernel, fetchDistro, fetchRoutes } from "unkernel/node";
+import { createKernel, fetchRoutes } from "unkernel/node";
 import { expect, test } from "vitest";
 import { execAsRoot } from "../../src/runtime/guest.ts";
 import { alpinePackageSetup } from "../../src/runtime/package-repositories.ts";
+import { imagePath } from "../support/images.ts";
 
 test("apk requests both main and community indexes for the guest's release", async () => {
 	const indexes: string[] = [];
@@ -11,7 +12,7 @@ test("apk requests both main and community indexes for the guest's release", asy
 			return new Response(null, { status: 404 });
 		},
 	});
-	const vm = await createKernel({ distro: await fetchDistro("alpine"), net });
+	const vm = await createKernel({ distro: imagePath("alpine"), net });
 	try {
 		const version = String((await vm.exec("cat", ["/etc/alpine-release"])).stdout)
 			.trim()

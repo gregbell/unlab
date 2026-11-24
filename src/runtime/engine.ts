@@ -12,7 +12,7 @@
 
 import type { CaptureLog } from "../capture/index.ts";
 import type { ExecOutcome, ExecPort } from "../commands/index.ts";
-import type { Effect, HostEntry, MachineName, PortNo, RuntimeEvent, SessionId } from "../model/index.ts";
+import type { Effect, HostEntry, MachineName, NicRef, PortNo, RuntimeEvent, SessionId } from "../model/index.ts";
 import type { LineMark, Screen, Screens } from "./screens.ts";
 import type { ShellEvent } from "./shell-tracker.ts";
 import type { LabSwitch, MacEntry, PortCounters } from "./switch.ts";
@@ -130,7 +130,7 @@ export function createEngine(deps: EngineDeps): Engine {
 
 	const vms = new Map<MachineName, VmEntry>();
 	const sessions = new Map<SessionId, SessionEntry>();
-	const ports = new Map<PortNo, MachineName>();
+	const ports = new Map<PortNo, NicRef>();
 	let published: readonly HostEntry[] | null = null;
 	let clock: { readonly hz: 1 | 10; readonly stop: () => void } | null = null;
 
@@ -222,10 +222,10 @@ export function createEngine(deps: EngineDeps): Engine {
 			endSessions(ref.machine);
 			dispatch({ type: "vm/failed", ...ref, reason });
 		},
-		frame(ref, frame) {
+		frame(ref, nic, frame) {
 			if (!listening(ref)) return;
-			for (const [port, machine] of ports) {
-				if (machine !== ref.machine) continue;
+			for (const [port, plugged] of ports) {
+				if (plugged.machine !== ref.machine || plugged.nic !== nic) continue;
 				sw.receive(port, frame);
 				return;
 			}
@@ -345,14 +345,15 @@ export function createEngine(deps: EngineDeps): Engine {
 				return;
 			}
 			case "port/attach": {
-				const { port, machine } = effect;
-				if (ports.get(port) === machine) return;
+				const { port, machine, nic } = effect;
+				const held = ports.get(port);
+				if (held?.machine === machine && held.nic === nic) return;
 				sw.detach(port);
-				ports.set(port, machine);
+				ports.set(port, { machine, nic });
 				sw.attach(port, {
 					deliver(frame) {
 						const entry = vms.get(machine);
-						if (entry && entry.phase !== "stopping") entry.vm.deliver(frame);
+						if (entry && entry.phase !== "stopping") entry.vm.deliver(nic, frame);
 					},
 				});
 				// Reserved, not live: the model raises the link when the machine is ready.
@@ -364,9 +365,9 @@ export function createEngine(deps: EngineDeps): Engine {
 				sw.detach(effect.port);
 				return;
 			case "link/set": {
-				const { port, machine, up, cause } = effect;
+				const { port, machine, nic, up, cause } = effect;
 				sw.setLink(port, up);
-				capture.appendLink({ port, machine, up, cause });
+				capture.appendLink({ port, machine, nic, up, cause });
 				return;
 			}
 			case "pty/open": {

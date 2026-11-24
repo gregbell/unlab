@@ -5,7 +5,7 @@ import { STOP_GRACE_MS, startVm, type VmSink, type WorkerEvents } from "./vm.ts"
 
 const NODE3: BootConfig = {
 	identity: { n: 3, name: "node3", ip: "10.88.0.13", mac: "52:54:00:88:00:0d" },
-	spec: { image: "alpine", memMiB: 256, net: "switch0" },
+	spec: { image: "alpine", memMiB: 256, nics: [{ net: "switch0" }] },
 	hosts: [
 		{ ip: "10.88.0.11", name: "node1" },
 		{ ip: "10.88.0.13", name: "node3" },
@@ -14,7 +14,7 @@ const NODE3: BootConfig = {
 
 type Call = readonly [name: keyof VmSink, ...args: unknown[]];
 
-function boot(attempt = 1) {
+function boot(attempt = 1, config = NODE3) {
 	const posted: { message: ToVm; transfer: Transferable[] }[] = [];
 	const timers: { ms: number; fn: () => void }[] = [];
 	const calls: Call[] = [];
@@ -43,7 +43,7 @@ function boot(attempt = 1) {
 		{
 			machine: "node3",
 			attempt,
-			config: NODE3,
+			config,
 			cols: 100,
 			rows: 30,
 			promptToken: "00112233aabbccdd",
@@ -108,8 +108,7 @@ describe("boot", () => {
 					name: "node3",
 					ip: "10.88.0.13",
 					prefixBits: 24,
-					mac: "52:54:00:88:00:0d",
-					labCidr: "10.88.0.0/24",
+					macs: ["52:54:00:88:00:0d"],
 					image,
 					distro: "alpine",
 					memoryMiB: 256,
@@ -125,12 +124,27 @@ describe("boot", () => {
 		]);
 	});
 
+	test("gives each NIC its MAC, and puts the package gateway on eth0 alone", async () => {
+		const cfg = async (...nets: ("switch0" | "none")[]) => {
+			const t = boot(1, { ...NODE3, spec: { ...NODE3.spec, nics: nets.map((net) => ({ net })) } });
+			await t.imageArrives(new ArrayBuffer(16));
+			const [message] = t.messages();
+			if (message?.type !== "boot") throw new Error("expected a boot message");
+			return message.cfg;
+		};
+		expect(await cfg("switch0", "none", "switch0")).toMatchObject({
+			macs: ["52:54:00:88:00:0d", "52:54:00:88:01:0d", "52:54:00:88:02:0d"],
+			packageRepositories: true,
+		});
+		expect(await cfg("none", "switch0")).toMatchObject({ packageRepositories: false });
+	});
+
 	test("every report carries the machine and the attempt it was started for", async () => {
 		const t = boot(4);
 		const bytes = Uint8Array.of(1, 2, 3);
 		t.from({ type: "stage", stage: "kernel" });
 		t.from({ type: "console", bytes });
-		t.from({ type: "frame", frame: bytes });
+		t.from({ type: "frame", nic: 0, frame: bytes });
 		t.from({ type: "pty-ready", sid: 2, pid: 80, pts: 1 });
 		t.from({ type: "pty-output", sid: 2, bytes });
 		t.from({ type: "pty-exit", sid: 2, code: 0, reason: "" });
@@ -141,7 +155,7 @@ describe("boot", () => {
 			["stage", at, "fetching image"],
 			["stage", at, "kernel"],
 			["consoleBytes", at, bytes],
-			["frame", at, bytes],
+			["frame", at, 0, bytes],
 			["ptyOpened", at, 2],
 			["ptyBytes", at, 2, bytes],
 			["ptyExited", at, 2],
@@ -253,10 +267,11 @@ describe("what the page sends", () => {
 	test("a delivered frame is copied, because the switch shares one frame with every port of a flood", () => {
 		const t = boot();
 		const frame = Uint8Array.of(9, 8, 7, 6);
-		t.vm.deliver(frame);
+		t.vm.deliver(1, frame);
 
 		const [sent] = t.posted;
 		if (sent.message.type !== "frame") throw new Error("expected a frame message");
+		expect(sent.message.nic).toBe(1);
 		expect(sent.message.frame).toEqual(frame);
 		expect(sent.message.frame.buffer).not.toBe(frame.buffer);
 		expect(sent.transfer).toEqual([sent.message.frame.buffer]);

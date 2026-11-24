@@ -1,4 +1,11 @@
-import { type LabState, type LinkChange, MAX_MACHINES, type MachineName, type SessionId } from "../../model/index.ts";
+import {
+	type LabState,
+	type LinkChange,
+	lowestFreePorts,
+	MAX_MACHINES,
+	type MachineName,
+	type SessionId,
+} from "../../model/index.ts";
 import { defineVerb, type ParsedLine, refuse } from "../define.ts";
 import * as slots from "../grammar/slots.ts";
 import { createRegistry } from "../index.ts";
@@ -22,8 +29,9 @@ export const link = defineVerb({
 		for (const name of a.targets.machines) {
 			const m = lab.machines[name];
 			if (m?.life.phase !== "ready") return refuse(`${name} is no longer ready.`, "targets");
-			if (m.life.plug.kind === "port") {
-				changes.push({ machine: name, up: a.dir === "up", port: m.life.plug.port, newPort: false });
+			const [plug] = m.life.plugs;
+			if (plug.kind === "port") {
+				changes.push({ machine: name, nic: 0, up: a.dir === "up", port: plug.port, newPort: false });
 			}
 		}
 		return { changes, skipped: a.targets.skipped };
@@ -57,11 +65,7 @@ export const spawn = defineVerb({
 		]),
 	},
 	plan(a, lab) {
-		const plugged = lab.rail.filter((n) => {
-			const life = lab.machines[n]?.life;
-			return life?.phase === "removing" ? life.port !== null : life?.phase !== "failed" && life?.plug.kind === "port";
-		});
-		const free = MAX_MACHINES - plugged.length;
+		const free = lowestFreePorts(lab, MAX_MACHINES).length;
 		if (a.net === "switch0" && free < a.count) {
 			return refuse(`switch0 has ${free} free ports. Add --no-net to boot them unplugged.`, "count");
 		}
@@ -72,7 +76,7 @@ export const spawn = defineVerb({
 	async execute(plan, _ctx, deps) {
 		deps.dispatch({
 			type: "cmd/spawn",
-			plan: { machines: [], spec: { image: plan.image, memMiB: plan.memMiB, net: plan.net } },
+			plan: { machines: [], spec: { image: plan.image, memMiB: plan.memMiB, nics: [{ net: plan.net }] } },
 			at: deps.now(),
 		});
 		return { kind: "visible", text: `booting ${plan.names.join(", ")}`, data: { names: plan.names } };
@@ -164,7 +168,7 @@ export const boot = defineVerb({
 	plan: (a) => ({ machine: a.machine }),
 	describe: (p) => `boot ${p.machine} again`,
 	async execute(plan, _ctx, deps) {
-		deps.dispatch({ type: "cmd/boot-again", machine: plan.machine, port: null, at: deps.now() });
+		deps.dispatch({ type: "cmd/boot-again", machine: plan.machine, ports: [null], at: deps.now() });
 		return { kind: "visible", text: "", data: null };
 	},
 });

@@ -16,6 +16,7 @@
 		"test:e2e": "playwright test",
 		"check": "npm run typecheck && npm run lint && npm run check:imports && npm test && npm run build",
 		"distros": "node scripts/fetch-distros.ts",
+		"nic-helper": "node scripts/build-nic-helper.ts",
 		"check:imports": "node scripts/check-imports.ts"
 	},
 	"keywords": [],

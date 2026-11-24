@@ -46,13 +46,6 @@ export function macStr(b: Uint8Array, off = 0): string {
 	return s;
 }
 
-/** A stable per-machine MAC in the locally administered 52:54:00 range. */
-export function labMac(index: number): string {
-	const hi = (index >> 8) & 0xff;
-	const lo = index & 0xff;
-	return `52:54:00:88:${hi.toString(16).padStart(2, "0")}:${lo.toString(16).padStart(2, "0")}`;
-}
-
 export const dstMac = (f: Uint8Array): string => macStr(f, 0);
 export const srcMac = (f: Uint8Array): string => macStr(f, 6);
 export const BROADCAST_MAC = "ff:ff:ff:ff:ff:ff";
@@ -94,48 +87,8 @@ export function l4Ports(f: Uint8Array, ip: { proto: number; ihl: number }): { sp
 	return { sport: (f[o] << 8) | f[o + 1], dport: (f[o + 2] << 8) | f[o + 3] };
 }
 
-/** One IPv4 subnet, for deciding what belongs to the lab. */
-export class Subnet {
-	readonly network: number;
-	readonly mask: number;
-	readonly bits: number;
-	constructor(cidr: string) {
-		const [addr, len] = cidr.split("/");
-		this.bits = Number(len);
-		if (!Number.isInteger(this.bits) || this.bits < 0 || this.bits > 32) throw new Error(`bad CIDR: ${cidr}`);
-		this.mask = this.bits === 0 ? 0 : (0xffffffff << (32 - this.bits)) >>> 0;
-		this.network = (ip4(addr) & this.mask) >>> 0;
-	}
-	contains(ip: number): boolean {
-		return (ip & this.mask) >>> 0 === this.network;
-	}
-	/** The directed broadcast address, e.g. 10.88.0.255. */
-	get broadcast(): number {
-		return (this.network | (~this.mask >>> 0)) >>> 0;
-	}
-	host(n: number): string {
-		return ip4str((this.network + n) >>> 0);
-	}
-	toString(): string {
-		return `${ip4str(this.network)}/${this.bits}`;
-	}
-}
-
-/**
- * Where a frame the guest sent belongs: the lab segment (bridged to the
- * other machines at layer 2) or the package gateway. DHCP and
- * everything else goes to the uplink, which owns 10.0.2.0/24.
- */
-export function classify(f: Uint8Array, lab: Subnet): "lab" | "uplink" | "drop" {
-	const et = ethertype(f);
-	if (et === ETH_IPV6) return "drop";
-	const arp = arpAddrs(f);
-	if (arp) return lab.contains(arp.tpa) || lab.contains(arp.spa) ? "lab" : "uplink";
+/** To a DHCP server, whichever one is listening. */
+export function isDhcpRequest(f: Uint8Array): boolean {
 	const ip = ipAddrs(f);
-	if (ip) {
-		if (ip.dst === 0xffffffff) return "uplink"; // DHCP discover: the uplink serves it
-		if (ip.dst === lab.broadcast) return "lab";
-		return lab.contains(ip.dst) ? "lab" : "uplink";
-	}
-	return et === ETH_ARP || et === ETH_IPV4 ? "drop" : "uplink";
+	return ip?.proto === IP_UDP && l4Ports(f, ip)?.dport === 67;
 }

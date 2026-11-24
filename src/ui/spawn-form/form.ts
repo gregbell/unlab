@@ -12,6 +12,7 @@ import {
 	MAX_MACHINES,
 	type MachineName,
 	type MachineSpec,
+	type NicSpec,
 	PORTS,
 	planSpawn,
 	SWITCH_NAME,
@@ -29,7 +30,9 @@ export interface SpawnChoice {
 	readonly mem: Memory;
 	readonly disk: DiskSize;
 	readonly cpus: number;
-	readonly net: MachineSpec["net"];
+	/** The form gives every machine one NIC. The bar's `--nics` gives more. */
+	readonly nics: 1;
+	readonly net: NicSpec["net"];
 }
 
 export interface NewMachine {
@@ -46,7 +49,7 @@ export interface FormView {
 	readonly most: number;
 	/** `768 MiB of memory in total` */
 	readonly memoryNote: string;
-	/** What happens to the switch. The lab never has more machines than ports, so room runs out before ports do. */
+	/** What happens to the switch. */
 	readonly networkNote: string;
 	readonly machines: readonly NewMachine[];
 	/** The bar line for this choice, as the bar would log it. */
@@ -63,6 +66,7 @@ export function defaultChoice(lab: LabState): SpawnChoice {
 		mem: 256,
 		cpus: DEFAULT_CPUS,
 		disk: "4",
+		nics: 1,
 		net: SWITCH_NAME,
 	};
 	return { ...choice, count: Math.max(1, Math.min(choice.count, mostOf(choice, lab))) };
@@ -70,9 +74,12 @@ export function defaultChoice(lab: LabState): SpawnChoice {
 
 /** Asks the spawn plan itself, so the stepper and the verb agree on every limit, the address range included. */
 function mostOf(choice: SpawnChoice, lab: LabState): number {
-	const spec = { image: choice.image, memMiB: choice.mem, net: choice.net };
-	for (let n = MAX_MACHINES; n > 0; n--) if (!isPlanError(planSpawn(lab, n, spec))) return n;
+	for (let n = MAX_MACHINES; n > 0; n--) if (!isPlanError(planSpawn(lab, n, specOf(choice)))) return n;
 	return 0;
+}
+
+function specOf({ image, mem, net }: SpawnChoice): MachineSpec {
+	return { image, memMiB: mem, nics: [{ net }] };
 }
 
 function memoryTotal(mib: number): string {
@@ -92,9 +99,9 @@ function networkNote(choice: SpawnChoice, lab: LabState): string {
 }
 
 function machinesOf(choice: SpawnChoice, lab: LabState): readonly NewMachine[] {
-	const plan = planSpawn(lab, choice.count, { image: choice.image, memMiB: choice.mem, net: choice.net });
+	const plan = planSpawn(lab, choice.count, specOf(choice));
 	if (isPlanError(plan)) return [];
-	return plan.machines.map(({ identity, hue, port }) => ({
+	return plan.machines.map(({ identity, hue, ports: [port] }) => ({
 		name: identity.name,
 		hue,
 		address: `${identity.ip}/${LAB_PREFIX_BITS}`,

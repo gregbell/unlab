@@ -2,7 +2,7 @@ import fc from "fast-check";
 import { expect, test } from "vitest";
 import { arpReply, arpRequest, eth, ipv4Packet, ping, tcpSegment, udpSegment } from "../../test/support/frames.ts";
 import type { Cause, MachineName, PortNo } from "../model/index.ts";
-import { type CaptureFilter, compileFilter, type Flood, MATCH_ALL } from "../net/index.ts";
+import { type CaptureFilter, compileFilter, type Flood, MATCH_ALL, NICS, type NicNo } from "../net/index.ts";
 import { createCaptureLog, type SwitchedFrame } from "./log.ts";
 
 const node = (n: number): MachineName => `node${n}`;
@@ -30,6 +30,7 @@ const TERMS = [
 	"ip",
 	"node1",
 	"node2",
+	"node2:eth1",
 	"node3",
 	"node4",
 	"10.88.0.12",
@@ -53,7 +54,7 @@ const filterSource = fc
 
 type Op =
 	| { op: "frame"; frame: SwitchedFrame }
-	| { op: "link"; port: PortNo; n: number; up: boolean; cause: Cause }
+	| { op: "link"; port: PortNo; n: number; nic: NicNo; up: boolean; cause: Cause }
 	| { op: "filter"; source: string }
 	| { op: "pause"; paused: boolean }
 	| { op: "clear" }
@@ -67,6 +68,7 @@ const operation: fc.Arbitrary<Op> = fc.oneof(
 			op: fc.constant("link" as const),
 			port,
 			n: fc.integer({ min: 1, max: 4 }),
+			nic: fc.constantFrom(...NICS),
 			up: fc.boolean(),
 			cause: fc.constantFrom<Cause>("bar", "button", "agent", "runtime"),
 		}),
@@ -79,7 +81,7 @@ const operation: fc.Arbitrary<Op> = fc.oneof(
 
 type Kept =
 	| { seq: number; kind: "frame"; frame: SwitchedFrame }
-	| { seq: number; kind: "link"; port: PortNo; machine: MachineName };
+	| { seq: number; kind: "link"; port: PortNo; machine: MachineName; nic: NicNo };
 
 function compile(source: string): CaptureFilter {
 	const r = compileFilter(source);
@@ -112,8 +114,8 @@ test("the incremental match index agrees with filtering the whole buffer", () =>
 						if (!paused) keep({ seq: seq++, kind: "frame", frame: o.frame });
 						break;
 					case "link":
-						log.appendLink({ port: o.port, machine: node(o.n), up: o.up, cause: o.cause });
-						if (!paused) keep({ seq: seq++, kind: "link", port: o.port, machine: node(o.n) });
+						log.appendLink({ port: o.port, machine: node(o.n), nic: o.nic, up: o.up, cause: o.cause });
+						if (!paused) keep({ seq: seq++, kind: "link", port: o.port, machine: node(o.n), nic: o.nic });
 						break;
 					case "filter":
 						filter = compile(o.source);
@@ -136,7 +138,7 @@ test("the incremental match index agrees with filtering the whole buffer", () =>
 				const expected = buffer.filter((k) =>
 					k.kind === "frame"
 						? filter.matchesFrame(k.frame.frame, k.frame.from, k.frame.to)
-						: filter.matchesLink(k.port, k.machine),
+						: filter.matchesLink(k.port, k.machine, k.nic),
 				);
 				expect(log.window(0, log.matchCount).map((r) => r.seq)).toEqual(expected.map((k) => k.seq));
 				expect(log.matchedFrames).toBe(expected.filter((k) => k.kind === "frame").length);

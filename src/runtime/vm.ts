@@ -3,10 +3,10 @@
 // keeps no lifecycle state; it reports, stamped with the attempt it was started
 // for, and whoever listens decides what a report means.
 
-import type { BootConfig, HostEntry, MachineName } from "../model/index.ts";
+import { type BootConfig, type HostEntry, type MachineName, type NicNo, nicMac } from "../model/index.ts";
+import { NICS } from "../net/index.ts";
 import type { FromVm, ToVm, VmConfig } from "./protocol.ts";
 
-export const LAB_CIDR = "10.88.0.0/24";
 const LAB_PREFIX_BITS = 24;
 /** A kernel parked in Atomics.wait may never see `stop`, so the thread is dropped this long after asking. */
 export const STOP_GRACE_MS = 250;
@@ -27,8 +27,8 @@ export interface VmSink {
 	ready(vm: VmRef, bootMs: number): void;
 	/** One sentence, as the runtime gave it. Reported at most once. */
 	failed(vm: VmRef, reason: string): void;
-	/** A frame the guest put on the wire. */
-	frame(vm: VmRef, frame: Uint8Array): void;
+	/** A frame one of the guest's NICs put on the wire. */
+	frame(vm: VmRef, nic: NicNo, frame: Uint8Array): void;
 	consoleBytes(vm: VmRef, bytes: Uint8Array): void;
 	ptyOpened(vm: VmRef, pty: number): void;
 	ptyBytes(vm: VmRef, pty: number, bytes: Uint8Array): void;
@@ -42,8 +42,8 @@ export interface Vm {
 	closePty(pty: number): void;
 	/** Give the guest a new host table. */
 	reconfigure(hosts: readonly HostEntry[]): void;
-	/** A frame from the switch, into the guest. */
-	deliver(frame: Uint8Array): void;
+	/** A frame from the switch, into one of the guest's NICs. */
+	deliver(nic: NicNo, frame: Uint8Array): void;
 	/** Ask the guest to stop, then drop its thread. Every call returns the same promise. */
 	stop(): Promise<void>;
 }
@@ -109,7 +109,7 @@ export function startVm(boot: VmBoot, sink: VmSink, deps: VmDeps): Vm {
 					sink.ready(ref, Math.round(deps.now() - startedAt));
 					return;
 				case "frame":
-					sink.frame(ref, m.frame);
+					sink.frame(ref, m.nic, m.frame);
 					return;
 				case "console":
 					sink.consoleBytes(ref, m.bytes);
@@ -144,14 +144,14 @@ export function startVm(boot: VmBoot, sink: VmSink, deps: VmDeps): Vm {
 		name: identity.name,
 		ip: identity.ip,
 		prefixBits: LAB_PREFIX_BITS,
-		mac: identity.mac,
-		labCidr: LAB_CIDR,
+		macs: NICS.slice(0, spec.nics.length).map((nic) => nicMac(identity.n, nic)),
 		distro: spec.image,
 		memoryMiB: spec.memMiB,
 		cpus: spec.cpus ?? 1,
 		diskGiB: Number(spec.diskGiB ?? 4),
 		hosts: boot.config.hosts,
-		packageRepositories: spec.net === "switch0",
+		// The gateway shares eth0's cable.
+		packageRepositories: spec.nics[0].net === "switch0",
 		cols: boot.cols,
 		rows: boot.rows,
 		promptToken: boot.promptToken,
@@ -186,11 +186,11 @@ export function startVm(boot: VmBoot, sink: VmSink, deps: VmDeps): Vm {
 				hosts,
 			});
 		},
-		deliver(frame) {
+		deliver(nic, frame) {
 			// The switch shares one frame with every port of a flood, so the
 			// bytes are copied before the buffer is transferred away.
 			const copy = frame.slice();
-			post({ type: "frame", frame: copy }, [copy.buffer]);
+			post({ type: "frame", nic, frame: copy }, [copy.buffer]);
 		},
 		stop() {
 			stopped ??= new Promise((resolve) => {

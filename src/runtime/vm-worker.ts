@@ -1,20 +1,18 @@
 // One Linux machine, alone in its thread.
 //
-// The kernel gets a LabNic as its network device, which splits what the guest
-// sends: lab traffic goes to the page's switch over postMessage and reaches
-// the other machines at layer 2, while anything else goes to a NetStack that
-// handles DHCP, DNS and the supported package repositories.
+// Frames a NIC sends go to the page's switch over postMessage and reach the
+// other machines at layer 2. eth0 also reaches a NetStack that handles DHCP,
+// DNS and the supported package repositories.
 //
 // Terminals come in two kinds. The kernel console (one per machine) carries
 // the boot log and a shell. Beyond that each tab opens its own pty through
 // vm.spawn(), so a machine can have several independent shells.
 
 import { createKernel, type KernelInstance, NetStack, type Pty } from "unkernel";
-import { Subnet } from "../net/index.ts";
 import { diskName } from "./disk-name.ts";
 import { execAsRoot, hostsScript, setupScript } from "./guest.ts";
 import { MemoryDisk } from "./image.ts";
-import { LabNic } from "./nic.ts";
+import { MachineNics } from "./machine-nics.ts";
 import { alpinePackageSetup, packageBackend } from "./package-repositories.ts";
 import type { FromVm, PtySpec, ToVm, VmConfig } from "./protocol.ts";
 import { createShellTracker } from "./shell-tracker.ts";
@@ -30,7 +28,7 @@ function fail(message: string, fatal: boolean): void {
 type Queued = Exclude<ToVm, { type: "boot" | "frame" }>;
 
 let vm: KernelInstance | undefined;
-let nic: LabNic | undefined;
+let nics: MachineNics | undefined;
 /** Shells opened beside the console, by session id. */
 const ptys = new Map<number, Pty>();
 /** Messages that arrive while the kernel is still booting. */
@@ -47,7 +45,7 @@ self.addEventListener("message", (ev: MessageEvent<ToVm>) => {
 	}
 	if (m.type === "frame") {
 		// Never queued: a NIC whose driver is not up yet drops frames, as a real one does.
-		nic?.deliver(m.frame);
+		nics?.deliver(m.nic, m.frame);
 		return;
 	}
 	if (booting) {
@@ -153,18 +151,17 @@ async function openPty(spec: PtySpec): Promise<void> {
 
 async function boot(c: VmConfig): Promise<void> {
 	const t0 = performance.now();
-	const lab = new Subnet(c.labCidr);
 
-	// The uplink is a NetStack of its own, told the same MAC as the NIC so its
+	// The gateway is a NetStack of its own, told the same MAC as eth0 so its
 	// DHCP lease and ARP replies are addressed to this machine.
-	const uplink = c.packageRepositories ? new NetStack({ mac: c.mac, backend: packageBackend() }) : undefined;
+	const gateway = c.packageRepositories ? new NetStack({ mac: c.macs[0], backend: packageBackend() }) : undefined;
 
-	nic = new LabNic({
-		mac: c.mac,
-		lab,
-		uplink,
+	nics = new MachineNics({
+		macs: c.macs,
+		gateway,
 		// A right-sized copy already, so transferring it costs nothing further.
-		toSwitch: (frame) => post({ type: "frame", frame }, [frame.buffer]),
+		toSwitch: (nic, frame) => post({ type: "frame", nic, frame }, [frame.buffer]),
+		lost: (reason) => fail(reason, false),
 	});
 
 	try {
@@ -173,7 +170,7 @@ async function boot(c: VmConfig): Promise<void> {
 			distro: new MemoryDisk(c.image),
 			disks: [{ kind: "data", template: "bundled", name: diskName(c.id), size: (c.diskGiB ?? 4) * 2 ** 30 }],
 			onDiskError: (_, error) => fail(`Saving ${c.name} failed: ${error}`, true),
-			net: nic,
+			net: nics.eth0,
 			memoryMiB: c.memoryMiB,
 			memoryFallbackMiB: [],
 			cpus: c.cpus,
@@ -208,16 +205,18 @@ async function boot(c: VmConfig): Promise<void> {
 	});
 	void vm.exited.then((r) => post({ type: "exited", code: r.code, reason: r.reason ?? "" }));
 
-	// Name, lab address, /etc/hosts and the marked prompt; with an uplink,
-	// udhcpc also brings up 10.0.2.15 and the default route. A machine that
+	// The NICs, name, lab address, /etc/hosts and the marked prompt; with a
+	// gateway, udhcpc also brings up 10.0.2.15 and the default route. A machine that
 	// cannot be set up is not on the lab, so it has not booted.
 	try {
+		await nics.start(vm);
 		const setup = setupScript({
 			hostname: c.name,
 			ip: c.ip,
 			prefixBits: c.prefixBits,
+			nics: c.macs.length,
 			hosts: c.hosts,
-			dhcp: Boolean(uplink),
+			dhcp: Boolean(gateway),
 			promptToken: c.promptToken,
 		});
 		const prepareApk = c.packageRepositories && c.distro === "alpine";

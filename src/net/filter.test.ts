@@ -9,6 +9,7 @@ import {
 	ipv6,
 	mac,
 	ping,
+	routedPing,
 	tcpSegment,
 	udpSegment,
 } from "../../test/support/frames.ts";
@@ -33,7 +34,7 @@ describe("filter terms", () => {
 		for (const source of ["", "   "]) {
 			const f = compile(source);
 			expect(f.matchesFrame(ping(1, 2), 1, bit(2))).toBe(true);
-			expect(f.matchesLink(3, "node3")).toBe(true);
+			expect(f.matchesLink(3, "node3", 0)).toBe(true);
 		}
 		expect(MATCH_ALL.matchesFrame(arpRequest(1, 2), 1, 0)).toBe(true);
 	});
@@ -101,6 +102,28 @@ describe("filter terms", () => {
 		expect(f.matchesFrame(arpRequest(1, 2), 1, bit(2))).toBe(false);
 	});
 
+	test("a machine name matches any of its NICs, and a NIC only its own", () => {
+		const intoRouter = routedPing(mac(1), mac(2), 1, 3);
+		const outOfRouter = routedPing(mac(2, 1), mac(3), 1, 3);
+		const matching = (source: string) => [intoRouter, outOfRouter].map((f) => compile(source).matchesFrame(f, 1, 0));
+		expect(matching("node2")).toEqual([true, true]);
+		expect(matching("node2:eth0")).toEqual([true, false]);
+		expect(matching("node2:eth1")).toEqual([false, true]);
+		expect(matching("node2:eth2")).toEqual([false, false]);
+		expect(matching("NODE2:ETH1")).toEqual([false, true]);
+		expect(matching("node3:eth0")).toEqual([false, true]);
+	});
+
+	test("a NIC is its MAC, so an address some other NIC carries does not name it", () => {
+		const fromEth1WithEth0sAddress = routedPing(mac(2, 1), mac(3), 2, 3);
+		expect(compile("node2:eth0").matchesFrame(fromEth1WithEth0sAddress, 2, 0)).toBe(false);
+		expect(compile("node2:eth1").matchesFrame(fromEth1WithEth0sAddress, 2, 0)).toBe(true);
+	});
+
+	test.each(["node2:", "node2:eth4", "node2:eth01", "node2:sh1", "node0:eth1", ":eth1"])("%s is no NIC", (term) => {
+		expect(compileFilter(term)).toMatchObject({ ok: false, error: { message: `Capture cannot read ${term}.` } });
+	});
+
 	test("matching ignores case", () => {
 		expect(compile("ARP NODE2").matchesFrame(arpRequest(1, 2), 1, 0)).toBe(true);
 		expect(compile("52:54:00:88:00:0C").matchesFrame(ping(1, 2), 1, 0)).toBe(true);
@@ -127,18 +150,26 @@ describe("filter combinators", () => {
 
 describe("link rows", () => {
 	test("protocol terms do not hide link rows", () => {
-		expect(compile("arp").matchesLink(3, "node3")).toBe(true);
+		expect(compile("arp").matchesLink(3, "node3", 0)).toBe(true);
 	});
 
 	test("port, machine, address and MAC terms keep only link rows about them", () => {
-		expect(compile("port:3").matchesLink(3, "node3")).toBe(true);
-		expect(compile("port:2").matchesLink(3, "node3")).toBe(false);
-		expect(compile("node3").matchesLink(3, "node3")).toBe(true);
-		expect(compile("node2").matchesLink(3, "node3")).toBe(false);
-		expect(compile("10.88.0.13").matchesLink(3, "node3")).toBe(true);
-		expect(compile("10.0.2.2").matchesLink(3, "node3")).toBe(false);
-		expect(compile("52:54:00:88:00:0d").matchesLink(3, "node3")).toBe(true);
-		expect(compile("arp port:2 or icmp port:3").matchesLink(3, "node3")).toBe(true);
+		expect(compile("port:3").matchesLink(3, "node3", 0)).toBe(true);
+		expect(compile("port:2").matchesLink(3, "node3", 0)).toBe(false);
+		expect(compile("node3").matchesLink(3, "node3", 0)).toBe(true);
+		expect(compile("node2").matchesLink(3, "node3", 0)).toBe(false);
+		expect(compile("10.88.0.13").matchesLink(3, "node3", 0)).toBe(true);
+		expect(compile("10.0.2.2").matchesLink(3, "node3", 0)).toBe(false);
+		expect(compile("52:54:00:88:00:0d").matchesLink(3, "node3", 0)).toBe(true);
+		expect(compile("arp port:2 or icmp port:3").matchesLink(3, "node3", 0)).toBe(true);
+	});
+
+	test("a NIC's link rows are its own, and its machine's name takes them all", () => {
+		const links = (source: string) => ([0, 1] as const).map((nic) => compile(source).matchesLink(3, "node3", nic));
+		expect(links("node3")).toEqual([true, true]);
+		expect(links("node3:eth1")).toEqual([false, true]);
+		expect(links("52:54:00:88:01:0d")).toEqual([false, true]);
+		expect(links("10.88.0.13")).toEqual([true, false]);
 	});
 });
 

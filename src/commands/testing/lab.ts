@@ -35,18 +35,18 @@ function life(f: MachineFixture): Lifecycle {
 	const port = portOf(f.n);
 	switch (f.phase ?? "ready") {
 		case "booting":
-			return { phase: "booting", attempt: 1, since: 0, stage: "kernel", plug: { kind: "port", port, link: "up" } };
+			return { phase: "booting", attempt: 1, since: 0, stage: "kernel", plugs: [{ kind: "port", port, link: "up" }] };
 		case "ready":
 			return {
 				phase: "ready",
 				attempt: 1,
 				bootMs: 3582,
-				plug: f.link === "none" ? { kind: "none" } : { kind: "port", port, link: f.link ?? "up" },
+				plugs: [f.link === "none" ? { kind: "none" } : { kind: "port", port, link: f.link ?? "up" }],
 			};
 		case "failed":
 			return { phase: "failed", attempt: 1, reason: "No prompt after 120 s." };
 		case "removing":
-			return { phase: "removing", attempt: 1, port };
+			return { phase: "removing", attempt: 1, ports: [port] };
 	}
 }
 
@@ -66,7 +66,7 @@ export function labWith(fixtures: readonly MachineFixture[], images: readonly Im
 			mac: `02:00:0a:58:00:${(10 + f.n).toString(16).padStart(2, "0")}`,
 			life: life(f),
 			hue: HUES[(f.n - 1) % HUES.length],
-			spec: { image: "alpine", memMiB: 256, net: "switch0" },
+			spec: { image: "alpine", memMiB: 256, nics: [{ net: "switch0" }] },
 			sessions: ids,
 			activeSession: ids[0],
 			nextShell: (f.shells ?? 0) + 1,

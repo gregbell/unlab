@@ -32,17 +32,18 @@ Open the command bar with `⌘K` on macOS or `Ctrl+/` elsewhere. It completes
 commands as you type and previews their effects. Run Linux commands directly in
 a guest console, or use `exec` in the bar to address a guest by name.
 
-| Command bar example                          | What it does                                                                                                           |
-| -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `ls`                                         | List machines, addresses, and link states.                                                                             |
-| `spawn 2 alpine --mem 512 --cpus 2 --disk 8` | Add two Alpine machines with 512 MiB of RAM, two CPUs, and an 8 GiB disk each. Use `--no-net` to leave them unplugged. |
-| `exec node1 -- ping -c 1 10.88.0.12`         | Send one ping from node1 and read the exit code from its shell.                                                        |
-| `link down node2`                            | Cut node2's cable. Reconnect it with `link up node2`.                                                                  |
-| `capture arp or node2`                       | Open the Wire view with a filter for ARP or traffic involving node2.                                                   |
-| `sh node2`                                   | Open another shell on node2.                                                                                           |
-| `focus node2 --max`                          | Maximise or restore its pane. Use `--main` to promote it to the main pane.                                             |
-| `boot node2`                                 | Retry a failed boot.                                                                                                   |
-| `rm node2`                                   | Remove the machine and delete its disk after confirmation.                                                             |
+| Command bar example                          | What it does                                                                                                                      |
+| -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `ls`                                         | List machines, and each network interface's MAC, address, port, and link.                                                         |
+| `spawn 2 alpine --mem 512 --cpus 2 --disk 8` | Add two Alpine machines with 512 MiB of RAM, two CPUs, and an 8 GiB disk each. Use `--no-net` to leave them unplugged.            |
+| `spawn 1 alpine --nics 2 --net switch0,none` | Add a machine with two network interfaces: `eth0` plugged in and `eth1` left unplugged. Without `--net`, each takes its own port. |
+| `exec node1 -- ping -c 1 10.88.0.12`         | Send one ping from node1 and read the exit code from its shell.                                                                   |
+| `link down node2`                            | Cut node2's cables. Reconnect them with `link up node2`. Name one of several with `node2:eth1`.                                   |
+| `capture arp or node2`                       | Open the Wire view with a filter for ARP or traffic involving node2. `node2:eth1` keeps one interface's frames.                   |
+| `sh node2`                                   | Open another shell on node2.                                                                                                      |
+| `focus node2 --max`                          | Maximise or restore its pane. Use `--main` to promote it to the main pane.                                                        |
+| `boot node2`                                 | Retry a failed boot.                                                                                                              |
+| `rm node2`                                   | Remove the machine and delete its disk after confirmation.                                                                        |
 
 Commands that accept multiple machines can take a list (`node1,node3`), a glob
 (`node*`), or `all`. Globs and `all` select ready machines.
@@ -156,7 +157,7 @@ them. Your choices survive a reload.
 | `machines_remove` | Remove machines and delete their disks. | `ask me` |
 | `shell_exec`      | Run a command in a guest's shell.       | `run`    |
 | `shell_read`      | Read what a guest's terminal shows.     | `run`    |
-| `link_set`        | Cut or reconnect a machine's cable.     | `run`    |
+| `link_set`        | Cut or reconnect a machine's cables.    | `run`    |
 | `capture_read`    | Read captured frames from the switch.   | `run`    |
 
 Commands run inside the guests, not on your computer. Guest output can contain
@@ -178,9 +179,13 @@ a separate window opens when you wanted your own browser, reconnect `unlab` in
 
 ## Network and storage
 
-- The switch has eight ports and supports up to eight machines. Each guest has
-  one network interface. The switch carries IPv4 traffic between guests. A
-  separate gateway on that interface provides access to package repositories.
+- The switch has eight ports and supports up to eight machines. A machine has one
+  to four network interfaces, and each takes a port or is left unplugged. The
+  switch carries IPv4 traffic between guests. A separate gateway on `eth0`
+  provides access to package repositories.
+- `eth0` starts with the machine's address. `eth1` and up start without one, so
+  set it in the guest with `ip`. To make a machine a router, also run
+  `sudo sysctl -w net.ipv4.ip_forward=1` in it.
 - Each guest defaults to 256 MiB of RAM, a sparse 4 GiB disk, and two CPUs, or
   one CPU if the browser lacks multicore support. The disk uses browser storage
   as the guest writes to it.
@@ -234,6 +239,12 @@ Each guest runs in its own worker. When Linux sends an Ethernet frame, the
 Terminal output goes straight to the terminal, so the UI can update the capture
 once per animation frame.
 
+unkernel drives one network device, which is `eth0`. The others are TAP devices
+that a [small helper](src/runtime/unlab-nic.c) holds open in the guest, with their
+frames on its stdin and stdout. The built helper is checked in. After changing its
+source, rebuild it with `npm run nic-helper`, which needs
+[Zig](https://ziglang.org).
+
 The [command registry](src/commands/verbs/) serves the buttons, command bar, and
 agent tools. The [model](src/model/) turns events into state changes and
 effects. The [runtime](src/runtime/) carries them out. For the reasoning behind
@@ -251,7 +262,7 @@ After local setup, run the checks that cover your change.
 | Command                    | Coverage                                                                     |
 | -------------------------- | ---------------------------------------------------------------------------- |
 | `npm run check`            | Type checking, lint, import boundaries, unit tests, and the production build |
-| `npm run test:integration` | Two Linux guests exchanging traffic across the switch in Node.js             |
+| `npm run test:integration` | Linux guests switching and routing traffic in Node.js                        |
 | `npm run test:browser`     | UI components and guest workers in Chromium                                  |
 | `npm run test:e2e`         | The built app, including the first boot, ping, and reload                    |
 

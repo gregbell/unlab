@@ -74,7 +74,7 @@ describe("run", () => {
 		const result = await line.run({ source: "agent", signal });
 		expect(result).toMatchObject({ kind: "visible" });
 		expect(events).toEqual([
-			{ type: "cmd/link", changes: [{ machine: "node1", up: false, port: 1, newPort: false }], cause: "agent" },
+			{ type: "cmd/link", changes: [{ machine: "node1", nic: 0, up: false, port: 1, newPort: false }], cause: "agent" },
 			{ type: "cmd/logged", line: "link down node1", source: "agent", at: expect.any(Number), outcome: "ok" },
 		]);
 	});

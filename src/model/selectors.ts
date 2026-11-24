@@ -2,8 +2,9 @@
 // it returns the same object until one of them changes and a subscriber can
 // compare with Object.is.
 
-import { LAB_PREFIX_BITS, sessionLabel } from "./identity.ts";
-import { ACCEPTS, type Accepts, machineList, portOf } from "./machines.ts";
+import { NICS, nicName } from "../net/index.ts";
+import { LAB_PREFIX_BITS, nicLabel, nicMac, sessionLabel } from "./identity.ts";
+import { ACCEPTS, type Accepts, machineList, nicPortsOf, plugsOf, portsOf } from "./machines.ts";
 import { keyboardHolder, parkedPanes, visiblePanes } from "./panes.ts";
 import { type Tiling, tile } from "./tiling.ts";
 import {
@@ -13,7 +14,10 @@ import {
 	type LogEntry,
 	type Machine,
 	type MachineName,
+	type NicName,
+	type NicNo,
 	type Phase,
+	type Plug,
 	PORTS,
 	type PortNo,
 	SWITCH_NAME,
@@ -51,9 +55,13 @@ export const selectFocused = (state: LabState): MachineName | null => keyboardHo
 
 export type LinkWord = "up" | "cut" | "unplugged";
 
-function linkWord(machine: Machine): LinkWord | null {
-	if (machine.life.phase !== "ready") return null;
-	return machine.life.plug.kind === "none" ? "unplugged" : machine.life.plug.link;
+const plugWord = (plug: Plug): LinkWord => (plug.kind === "none" ? "unplugged" : plug.link);
+
+/** The machine's links in one word, or null unless it is ready. One cut cable among several is what there is to say. */
+export function machineLink({ life }: Pick<Machine, "life">): LinkWord | null {
+	if (life.phase !== "ready") return null;
+	const words = life.plugs.map(plugWord);
+	return (["cut", "up"] as const).find((word) => words.includes(word)) ?? "unplugged";
 }
 
 export interface RailRow {
@@ -83,7 +91,7 @@ export const selectRail: (state: LabState) => readonly RailRow[] = memo(
 				word:
 					life.phase === "booting"
 						? bootingFor(life.since, now)
-						: (linkWord(machine) ?? (life.phase === "ready" ? "unplugged" : life.phase)),
+						: (machineLink(machine) ?? (life.phase === "ready" ? "unplugged" : life.phase)),
 				focused: name === focused,
 				parked: isParked,
 			};
@@ -91,18 +99,39 @@ export const selectRail: (state: LabState) => readonly RailRow[] = memo(
 );
 
 export interface DetailRow {
-	readonly label: "state" | "image" | "CPUs" | "disk" | "memory" | "address" | "mac" | "uplink" | "link" | "shells";
+	readonly label:
+		| "state"
+		| "image"
+		| "CPUs"
+		| "disk"
+		| "memory"
+		| "address"
+		| "mac"
+		| "uplink"
+		| "link"
+		| "shells"
+		| NicName;
 	readonly value: string;
+	readonly tone?: "ok" | "down";
+}
+
+/** A cable the cut and reconnect action works on. */
+export interface Cable {
+	/** What `link up` and `link down` call it: `node2`, or `node2:eth1` when the machine has more than one. */
+	readonly label: string;
+	/** The NIC to tell it apart by, or null when it is the machine's only one. */
+	readonly nic: NicName | null;
+	readonly link: LinkWord;
 }
 
 export interface MachineDetails {
 	readonly name: MachineName;
 	readonly hue: HueNo;
 	readonly phase: Phase;
-	/** The port its cable holds or has reserved. The element reads the port's frame counters with it. */
-	readonly port: PortNo | null;
-	/** The cable the cut and reconnect action works on. Null unless the machine is ready. */
-	readonly link: LinkWord | null;
+	/** The ports its cables hold or have reserved. The element reads the ports' frame counters with them. */
+	readonly ports: readonly PortNo[];
+	/** One for each NIC, eth0 first. Empty unless the machine is ready. */
+	readonly cables: readonly Cable[];
 	/** Why it failed, as the runtime said it. */
 	readonly reason: string | null;
 	readonly accepts: Accepts;
@@ -119,13 +148,44 @@ function stateValue(machine: Machine, now: number): string {
 	return life.phase === "ready" ? `ready · ${Math.round(life.bootMs)} ms` : life.phase;
 }
 
-function linkValue(machine: Machine): string {
-	const { life } = machine;
-	const port = portOf(life);
-	if (port === null) return "unplugged";
-	if (life.phase === "booting") return "reserved";
-	if (life.phase === "removing") return "down";
-	return linkWord(machine) === "cut" ? "cable cut" : "connected";
+function stateTone(machine: Machine): Pick<DetailRow, "tone"> {
+	return machine.life.phase === "failed" ? { tone: "down" } : {};
+}
+
+function linkRow(label: "link" | NicName, { life }: Machine, nic: NicNo): DetailRow {
+	if (life.phase === "removing" && life.ports[nic]) return { label, value: `port ${life.ports[nic]} down` };
+	const plug = plugsOf(life)[nic];
+	if (!plug || plug.kind === "none") return { label, value: "unplugged" };
+	if (life.phase === "booting") return { label, value: `port ${plug.port} reserved` };
+	if (plug.link === "cut") return { label, value: `cable cut on port ${plug.port}`, tone: "down" };
+	return { label, value: `connected on port ${plug.port}`, tone: "ok" };
+}
+
+/** One NIC reads as the machine's own address and link. Several are told apart by name. */
+function nicRows(machine: Machine): DetailRow[] {
+	const address: DetailRow = { label: "address", value: `${machine.ip}/${LAB_PREFIX_BITS}` };
+	const mac: DetailRow = { label: "mac", value: machine.mac };
+	const uplink: DetailRow = { label: "uplink", value: "lab only" };
+	const nics = NICS.slice(0, machine.spec.nics.length);
+	if (nics.length === 1) return [address, mac, uplink, linkRow("link", machine, 0)];
+	return [
+		uplink,
+		...nics.flatMap((nic): DetailRow[] => [
+			linkRow(nicName(nic), machine, nic),
+			nic === 0 ? address : { label: "address", value: "none" },
+			{ label: "mac", value: nicMac(machine.n, nic) },
+		]),
+	];
+}
+
+function cables(machine: Machine): readonly Cable[] {
+	if (machine.life.phase !== "ready") return [];
+	const { plugs } = machine.life;
+	return NICS.slice(0, plugs.length).map((nic) => ({
+		label: nicLabel(machine, nic),
+		nic: plugs.length > 1 ? nicName(nic) : null,
+		link: plugWord(plugs[nic]),
+	}));
 }
 
 /** The details panel under the rail shows the machine that has the keyboard. */
@@ -142,31 +202,37 @@ export const selectDetails: (state: LabState) => MachineDetails | null = memo(
 			name: machine.name,
 			hue: machine.hue,
 			phase: machine.life.phase,
-			port: portOf(machine.life),
-			link: linkWord(machine),
+			ports: portsOf(machine.life),
+			cables: cables(machine),
 			reason: machine.life.phase === "failed" ? machine.life.reason : null,
 			accepts: ACCEPTS[machine.life.phase],
 			rows: [
-				{ label: "state", value: stateValue(machine, now) },
+				{ label: "state", value: stateValue(machine, now), ...stateTone(machine) },
 				{ label: "image", value: image ? image.label : machine.spec.image },
 				{ label: "CPUs", value: String(machine.spec.cpus ?? 1) },
 				{ label: "disk", value: `${machine.spec.diskGiB ?? 4} GiB` },
 				{ label: "memory", value: `${machine.spec.memMiB} MiB` },
-				{ label: "address", value: `${machine.ip}/${LAB_PREFIX_BITS}` },
-				{ label: "mac", value: machine.mac },
-				{ label: "uplink", value: "lab only" },
-				{ label: "link", value: linkValue(machine) },
+				...nicRows(machine),
 				{ label: "shells", value: machine.sessions.map(sessionLabel).join(", ") },
 			],
 		};
 	},
 );
 
+export interface PortHolder {
+	readonly name: MachineName;
+	readonly hue: HueNo;
+	/** What `link up` and `link down` call the cable: `node2`, or `node2:eth1` when the machine has more than one NIC. */
+	readonly label: string;
+	/** The NIC to tell it apart by, or null when it is the machine's only one. */
+	readonly nic: NicName | null;
+}
+
 export interface PortView {
 	readonly port: PortNo;
 	/** In `removing` the link is already down and the port frees when the machine is gone. */
 	readonly state: "empty" | "booting" | "up" | "cut" | "removing";
-	readonly machine: { readonly name: MachineName; readonly hue: HueNo } | null;
+	readonly machine: PortHolder | null;
 	/** The word under the socket, one of `boot`, `up`, `cut`, `down`. An empty port shows only its number. */
 	readonly word: string | null;
 	/** What a click will do, for the button's accessible name. Null when a click does nothing. */
@@ -176,22 +242,19 @@ export interface PortView {
 function portView(port: PortNo, machine: Machine | undefined): PortView {
 	if (!machine) return { port, state: "empty", machine: null, word: null, actionLabel: null };
 	const { name, hue, life } = machine;
-	const holder = { name, hue };
+	const nic = NICS.find((k) => nicPortsOf(life)[k] === port) ?? 0;
+	const label = nicLabel(machine, nic);
+	const holder = { name, hue, label, nic: machine.spec.nics.length > 1 ? nicName(nic) : null };
 	if (life.phase === "removing") return { port, state: "removing", machine: holder, word: "down", actionLabel: null };
-	if (linkWord(machine) === "up") {
-		return {
-			port,
-			state: "up",
-			machine: holder,
-			word: "up",
-			actionLabel: `Cut the cable from ${name} to port ${port}`,
-		};
+	const plug = plugsOf(life)[nic];
+	if (life.phase === "booting" || !plug)
+		return { port, state: "booting", machine: holder, word: "boot", actionLabel: null };
+	if (plugWord(plug) === "up") {
+		const actionLabel = `Cut the cable from ${label} to port ${port}`;
+		return { port, state: "up", machine: holder, word: "up", actionLabel };
 	}
-	if (linkWord(machine) === "cut") {
-		const actionLabel = `Reconnect the cable from ${name} to port ${port}`;
-		return { port, state: "cut", machine: holder, word: "cut", actionLabel };
-	}
-	return { port, state: "booting", machine: holder, word: "boot", actionLabel: null };
+	const actionLabel = `Reconnect the cable from ${label} to port ${port}`;
+	return { port, state: "cut", machine: holder, word: "cut", actionLabel };
 }
 
 /** The faceplate's eight ports, lowest first. */
@@ -202,7 +265,7 @@ export const selectPorts: (state: LabState) => readonly PortView[] = memo(
 		return PORTS.map((port) =>
 			portView(
 				port,
-				list.find((machine) => portOf(machine.life) === port),
+				list.find((machine) => portsOf(machine.life).includes(port)),
 			),
 		);
 	},
@@ -210,7 +273,7 @@ export const selectPorts: (state: LabState) => readonly PortView[] = memo(
 
 export interface LinkCount {
 	readonly up: number;
-	/** Cables plugged in, whether up, cut, or waiting for a boot. A machine being removed no longer counts. */
+	/** Cables plugged in, whether up, cut, or waiting for a boot. Those of a machine being removed no longer count. */
 	readonly total: number;
 	readonly cut: number;
 }
@@ -219,13 +282,15 @@ export interface LinkCount {
 export const selectLinks: (state: LabState) => LinkCount = memo(
 	(s) => [s.machines, s.rail],
 	(machines, rail) => {
-		const cabled = machineList({ machines, rail }).filter(
-			(machine) => machine.life.phase !== "removing" && portOf(machine.life) !== null,
+		const plugged = machineList({ machines, rail }).flatMap(({ life }) =>
+			plugsOf(life).flatMap((plug) =>
+				plug.kind === "port" ? [{ ready: life.phase === "ready", link: plug.link }] : [],
+			),
 		);
 		return {
-			up: cabled.filter((machine) => linkWord(machine) === "up").length,
-			total: cabled.length,
-			cut: cabled.filter((machine) => linkWord(machine) === "cut").length,
+			up: plugged.filter((cable) => cable.ready && cable.link === "up").length,
+			total: plugged.length,
+			cut: plugged.filter((cable) => cable.ready && cable.link === "cut").length,
 		};
 	},
 );

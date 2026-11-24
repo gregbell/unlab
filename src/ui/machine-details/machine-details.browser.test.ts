@@ -61,7 +61,7 @@ describe("<unlab-machine-details>", () => {
 			["address", "10.88.0.12/24"],
 			["mac", "52:54:00:88:00:0c"],
 			["uplink", "lab only"],
-			["link", "connected"],
+			["link", "connected on port 2"],
 			["frames", "90 in · 91 out"],
 			["shells", "console"],
 		]);
@@ -97,7 +97,7 @@ describe("<unlab-machine-details>", () => {
 		const { runs } = await mount("unlab-machine-details", {
 			state: lab(spawn(2), ready(), link("down", "node1"), focus("node1")),
 		});
-		expect(value("link").textContent).toBe("cable cut");
+		expect(value("link").textContent).toBe("cable cut on port 1");
 		expect(getComputedStyle(value("link")).color).toBe(tokenColor("down"));
 		await action("reconnect").click();
 		expect(runs).toEqual([{ line: "link up node1", source: "button" }]);
@@ -111,6 +111,41 @@ describe("<unlab-machine-details>", () => {
 		expect(runs).toEqual([{ line: "link up node1", source: "button" }]);
 	});
 
+	it("tells a machine's NICs apart, counts the frames of them all, and cuts, reconnects or plugs in each", async () => {
+		const { runs } = await mount("unlab-machine-details", {
+			state: lab(
+				spawn(1, "switch0", "switch0", "none"),
+				ready(),
+				link("down", { machine: "node1", nic: 1 }),
+				focus("node1"),
+			),
+			counters: [
+				[1, { rxFrames: 10, txFrames: 20 }],
+				[2, { rxFrames: 1, txFrames: 2 }],
+			],
+		});
+		expect(facts().slice(5)).toEqual([
+			["uplink", "lab only"],
+			["eth0", "connected on port 1"],
+			["address", "10.88.0.11/24"],
+			["mac", "52:54:00:88:00:0b"],
+			["eth1", "cable cut on port 2"],
+			["address", "none"],
+			["mac", "52:54:00:88:01:0b"],
+			["eth2", "unplugged"],
+			["address", "none"],
+			["mac", "52:54:00:88:02:0b"],
+			["frames", "22 in · 11 out"],
+			["shells", "console"],
+		]);
+		expect(getComputedStyle(value("eth0")).color).toBe(tokenColor("ok"));
+		expect(getComputedStyle(value("eth1")).color).toBe(tokenColor("down"));
+		await action("cut eth0").click();
+		await action("reconnect eth1").click();
+		await action("plug in eth2").click();
+		expect(runs.map((run) => run.line)).toEqual(["link down node1:eth0", "link up node1:eth1", "link up node1:eth2"]);
+	});
+
 	it("cannot ping without a ready peer", async () => {
 		await mount("unlab-machine-details", { state: lab(spawn(2), ready("node1"), focus("node1")) });
 		expect(enabledActions()).toEqual(["new shell", "cut cable", "remove"]);
@@ -119,7 +154,7 @@ describe("<unlab-machine-details>", () => {
 	it("while booting, counts up and only offers remove", async () => {
 		await mount("unlab-machine-details", { state: lab(spawn(1), focus("node1"), tick(1400)) });
 		expect(value("state").textContent).toBe("booting 1.4 s");
-		expect(value("link").textContent).toBe("reserved");
+		expect(value("link").textContent).toBe("port 1 reserved");
 		expect(enabledActions()).toEqual(["remove"]);
 	});
 

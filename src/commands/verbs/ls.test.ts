@@ -15,20 +15,64 @@ describe("ls", () => {
 		if (result.kind !== "report") throw new Error("ls reports");
 		expect(result.header).toBe("5 machines · 3 ready, 1 booting, 1 failed");
 		expect(result.blocks.map((b) => [b.machine, b.status, b.lastLine, b.focus])).toEqual([
-			["node1", { kind: "state", text: "ready" }, "10.88.0.11 · up on port 1 · console, sh1", "node1:sh1"],
-			["node2", { kind: "state", text: "ready" }, "10.88.0.12 · cut on port 2 · console", "node2:console"],
-			["node3", { kind: "state", text: "ready" }, "10.88.0.13 · up on port 3 · console", "node3:console"],
+			[
+				"node1",
+				{ kind: "state", text: "ready" },
+				"10.88.0.11 · 52:54:00:88:00:0b · up on port 1 · console, sh1",
+				"node1:sh1",
+			],
+			[
+				"node2",
+				{ kind: "state", text: "ready" },
+				"10.88.0.12 · 52:54:00:88:00:0c · cut on port 2 · console",
+				"node2:console",
+			],
+			[
+				"node3",
+				{ kind: "state", text: "ready" },
+				"10.88.0.13 · 52:54:00:88:00:0d · up on port 3 · console",
+				"node3:console",
+			],
 			["node4", { kind: "state", text: "failed" }, "No prompt after 120 s.", "node4:console"],
-			["node5", { kind: "state", text: "booting" }, "10.88.0.15 · unplugged · console", "node5:console"],
+			[
+				"node5",
+				{ kind: "state", text: "booting" },
+				"10.88.0.15 · 52:54:00:88:00:0f · unplugged · console",
+				"node5:console",
+			],
 		]);
 		expect(result.data).toContainEqual({
 			name: "node2",
 			state: "ready",
 			address: "10.88.0.12",
-			port: 2,
-			link: "cut",
+			nics: [{ name: "eth0", mac: "52:54:00:88:00:0c", address: "10.88.0.12", port: 2, link: "cut" }],
 			sessions: ["node2:console"],
 		});
+	});
+
+	it("gives each NIC of a machine its own line, with its MAC, address and port", async () => {
+		const lab = storeLab();
+		await lab.run("spawn 1 alpine --nics 3 --net switch0,switch0,none");
+		lab.ready("node1");
+		await lab.run("link down node1:eth1");
+		const result = await lab.run("ls");
+		if (result.kind !== "report") throw new Error("ls reports");
+		expect(result.blocks[0].lastLine.split("\n")).toEqual([
+			"eth0 · 10.88.0.11 · 52:54:00:88:00:0b · up on port 1",
+			"eth1 · no address · 52:54:00:88:01:0b · cut on port 2",
+			"eth2 · no address · 52:54:00:88:02:0b · unplugged",
+			"console",
+		]);
+		expect(result.data).toMatchObject([
+			{
+				address: "10.88.0.11",
+				nics: [
+					{ name: "eth0", mac: "52:54:00:88:00:0b", address: "10.88.0.11", port: 1, link: "up" },
+					{ name: "eth1", mac: "52:54:00:88:01:0b", address: null, port: 2, link: "cut" },
+					{ name: "eth2", mac: "52:54:00:88:02:0b", address: null, port: null, link: "unplugged" },
+				],
+			},
+		]);
 	});
 
 	it("says so when the lab is empty", async () => {

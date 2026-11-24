@@ -4,7 +4,7 @@
 export const BROADCAST = Uint8Array.of(0xff, 0xff, 0xff, 0xff, 0xff, 0xff);
 export const ZERO_MAC = new Uint8Array(6);
 
-export const mac = (n: number): Uint8Array => Uint8Array.of(0x52, 0x54, 0x00, 0x88, 0x00, 10 + n);
+export const mac = (n: number, nic = 0): Uint8Array => Uint8Array.of(0x52, 0x54, 0x00, 0x88, nic, 10 + n);
 export const ip = (n: number): number => (0x0a580000 + 10 + n) >>> 0;
 
 function u16(v: number): number[] {
@@ -50,6 +50,11 @@ export function tcpSegment(sport: number, dport: number, flags = 0x02): number[]
 
 export function ping(from: number, to: number, seq = 1, type: 0 | 8 = 8): Uint8Array {
 	return eth(mac(to), mac(from), 0x0800, ipv4Packet(ip(from), ip(to), 1, icmpEcho(type, seq)));
+}
+
+/** A ping through a router: node `from`'s address to node `to`'s, on the wire between the two MACs given. */
+export function routedPing(srcMac: Uint8Array, dstMac: Uint8Array, from: number, to: number): Uint8Array {
+	return eth(dstMac, srcMac, 0x0800, ipv4Packet(ip(from), ip(to), 1, icmpEcho(8, 1)));
 }
 
 export function ipv6(src: Uint8Array, dst: Uint8Array): Uint8Array {

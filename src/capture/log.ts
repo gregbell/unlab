@@ -6,8 +6,8 @@
 // flush, whatever the frame rate.
 
 import type { Cause, MachineName, PortNo } from "../model/index.ts";
-import { arpAddrs, type CaptureFilter, ETH_ARP, type Flood, MATCH_ALL } from "../net/index.ts";
-import { type CaptureRow, captureRow } from "./rows.ts";
+import { arpAddrs, type CaptureFilter, ETH_ARP, type Flood, MATCH_ALL, type NicNo } from "../net/index.ts";
+import { type CaptureRow, captureRow, type HasSeveralNics } from "./rows.ts";
 
 export interface FrameEntry {
 	readonly kind: "frame";
@@ -30,6 +30,7 @@ export interface LinkEntry {
 	readonly t: number;
 	readonly port: PortNo;
 	readonly machine: MachineName;
+	readonly nic: NicNo;
 	readonly up: boolean;
 	readonly cause: Cause;
 }
@@ -47,6 +48,7 @@ export interface SwitchedFrame {
 export interface LinkEvent {
 	readonly port: PortNo;
 	readonly machine: MachineName;
+	readonly nic: NicNo;
 	readonly up: boolean;
 	readonly cause: Cause;
 }
@@ -105,6 +107,8 @@ export interface CaptureOptions {
 	readonly schedule: (fn: () => void) => void;
 	/** ms since the lab started. */
 	readonly now: () => number;
+	/** Rows name a NIC of these machines, and of any other machine's only past eth0. Default none. */
+	readonly severalNics?: HasSeveralNics;
 }
 
 export const NO_REPLY_MS = 1000;
@@ -122,7 +126,7 @@ const arpKey = (asker: number, asked: number): string => `${asker}>${asked}`;
 
 export function createCaptureLog(opts: CaptureOptions): CaptureLog {
 	const limit = opts.limit ?? 10_000;
-	const { schedule, now } = opts;
+	const { schedule, now, severalNics } = opts;
 
 	const ring: (Stored | undefined)[] = new Array(limit);
 	let first = 1;
@@ -163,7 +167,7 @@ export function createCaptureLog(opts: CaptureOptions): CaptureLog {
 	const at = (seq: number): Stored | undefined => (seq >= first && seq < next ? ring[seq % limit] : undefined);
 	const matchAt = (i: number): number => matches[(matchHead + i) % limit];
 	const passes = (e: Stored): boolean =>
-		e.kind === "frame" ? filter.matchesFrame(e.bytes, e.from, e.to) : filter.matchesLink(e.port, e.machine);
+		e.kind === "frame" ? filter.matchesFrame(e.bytes, e.from, e.to) : filter.matchesLink(e.port, e.machine, e.nic);
 	const index = (e: Stored) => {
 		if (!passes(e)) return;
 		matches[(matchHead + matchLen) % limit] = e.seq;
@@ -204,7 +208,7 @@ export function createCaptureLog(opts: CaptureOptions): CaptureLog {
 		const out: CaptureRow[] = [];
 		for (let i = start; i < end; i++) {
 			const e = at(matchAt(i));
-			if (e) out.push(captureRow(e));
+			if (e) out.push(captureRow(e, severalNics));
 		}
 		return out;
 	};
@@ -276,9 +280,9 @@ export function createCaptureLog(opts: CaptureOptions): CaptureLog {
 			changed();
 		},
 
-		appendLink({ port, machine, up, cause }) {
+		appendLink({ port, machine, nic, up, cause }) {
 			if (paused) return;
-			push({ kind: "link", seq: next, t: now(), port, machine, up, cause });
+			push({ kind: "link", seq: next, t: now(), port, machine, nic, up, cause });
 			changed();
 		},
 

@@ -125,8 +125,8 @@ describe("machine details", () => {
 			name: "node2",
 			hue: 2,
 			phase: "ready",
-			port: 2,
-			link: "up",
+			ports: [2],
+			cables: [{ label: "node2", nic: null, link: "up" }],
 			reason: null,
 			accepts: { commands: true, bootAgain: false, remove: true },
 			rows: [
@@ -138,7 +138,7 @@ describe("machine details", () => {
 				{ label: "address", value: "10.88.0.12/24" },
 				{ label: "mac", value: "52:54:00:88:00:0c" },
 				{ label: "uplink", value: "lab only" },
-				{ label: "link", value: "connected" },
+				{ label: "link", value: "connected on port 2", tone: "ok" },
 				{ label: "shells", value: "console, sh1" },
 			],
 		});
@@ -148,11 +148,11 @@ describe("machine details", () => {
 
 	test("the link row reads connected, cable cut or unplugged", () => {
 		const s = oneOfEach();
-		expect(value(run(s, focus("node1")), "link")).toBe("connected");
-		expect(value(run(s, focus("node2")), "link")).toBe("cable cut");
+		expect(value(run(s, focus("node1")), "link")).toBe("connected on port 1");
+		expect(value(run(s, focus("node2")), "link")).toBe("cable cut on port 2");
 		expect(value(run(s, focus("node3")), "link")).toBe("unplugged");
-		expect(selectDetails(run(s, focus("node2")))).toMatchObject({ link: "cut", port: 2 });
-		expect(selectDetails(run(s, focus("node3")))).toMatchObject({ link: "unplugged", port: null });
+		expect(selectDetails(run(s, focus("node2")))).toMatchObject({ cables: [{ link: "cut" }], ports: [2] });
+		expect(selectDetails(run(s, focus("node3")))).toMatchObject({ cables: [{ link: "unplugged" }], ports: [] });
 	});
 
 	test("the state row follows the lifecycle, and a frozen boot time is a whole number of ms", () => {
@@ -169,25 +169,25 @@ describe("machine details", () => {
 		const s = oneOfEach();
 		expect(selectDetails(run(s, focus("node4")))).toMatchObject({
 			phase: "booting",
-			link: null,
-			port: 3,
+			cables: [],
+			ports: [3],
 			accepts: { commands: false, bootAgain: false, remove: true },
 		});
-		expect(value(run(s, focus("node4")), "link")).toBe("reserved");
+		expect(value(run(s, focus("node4")), "link")).toBe("port 3 reserved");
 		expect(selectDetails(run(s, focus("node5")))).toMatchObject({
 			phase: "failed",
-			link: null,
-			port: null,
+			cables: [],
+			ports: [],
 			reason: "Kernel panic.",
 			accepts: { commands: false, bootAgain: true, remove: true },
 		});
 		expect(value(run(s, focus("node5")), "link")).toBe("unplugged");
 		expect(selectDetails(run(s, focus("node6")))).toMatchObject({
 			phase: "removing",
-			link: null,
+			cables: [],
 			accepts: { commands: false, bootAgain: false, remove: false },
 		});
-		expect(value(run(s, focus("node6")), "link")).toBe("down");
+		expect(value(run(s, focus("node6")), "link")).toBe("port 5 down");
 	});
 
 	test("image and memory are what the machine was spawned with", () => {
@@ -204,20 +204,32 @@ describe("the switch faceplate", () => {
 			{
 				port: 1,
 				state: "up",
-				machine: { name: "node1", hue: 1 },
+				machine: { name: "node1", hue: 1, label: "node1", nic: null },
 				word: "up",
 				actionLabel: "Cut the cable from node1 to port 1",
 			},
 			{
 				port: 2,
 				state: "cut",
-				machine: { name: "node2", hue: 2 },
+				machine: { name: "node2", hue: 2, label: "node2", nic: null },
 				word: "cut",
 				actionLabel: "Reconnect the cable from node2 to port 2",
 			},
-			{ port: 3, state: "booting", machine: { name: "node4", hue: 4 }, word: "boot", actionLabel: null },
+			{
+				port: 3,
+				state: "booting",
+				machine: { name: "node4", hue: 4, label: "node4", nic: null },
+				word: "boot",
+				actionLabel: null,
+			},
 			{ port: 4, state: "empty", machine: null, word: null, actionLabel: null },
-			{ port: 5, state: "removing", machine: { name: "node6", hue: 6 }, word: "down", actionLabel: null },
+			{
+				port: 5,
+				state: "removing",
+				machine: { name: "node6", hue: 6, label: "node6", nic: null },
+				word: "down",
+				actionLabel: null,
+			},
 			{ port: 6, state: "empty", machine: null, word: null, actionLabel: null },
 			{ port: 7, state: "empty", machine: null, word: null, actionLabel: null },
 			{ port: 8, state: "empty", machine: null, word: null, actionLabel: null },
@@ -228,6 +240,82 @@ describe("the switch faceplate", () => {
 		expect(selectLinks(oneOfEach())).toEqual({ up: 1, total: 3, cut: 1 });
 		expect(selectLinks(labWith(3))).toEqual({ up: 3, total: 3, cut: 0 });
 		expect(selectLinks(emptyLab())).toEqual({ up: 0, total: 0, cut: 0 });
+	});
+});
+
+describe("a machine with several NICs", () => {
+	/** node1 with eth0 on port 1, eth1 on port 2, and eth2 unplugged. */
+	const three = () => {
+		const s = emptyLab();
+		return run(s, spawnEvent(s, 1, { net: ["switch0", "switch0", "none"] }), isReady("node1"));
+	};
+
+	test("its details tell each NIC apart, with its MAC, address and port", () => {
+		const s = run(three(), linkEvent(three(), false, { machine: "node1", nic: 1 }));
+		const details = selectDetails(s);
+		expect(details?.rows.slice(5)).toEqual([
+			{ label: "uplink", value: "lab only" },
+			{ label: "eth0", value: "connected on port 1", tone: "ok" },
+			{ label: "address", value: "10.88.0.11/24" },
+			{ label: "mac", value: "52:54:00:88:00:0b" },
+			{ label: "eth1", value: "cable cut on port 2", tone: "down" },
+			{ label: "address", value: "none" },
+			{ label: "mac", value: "52:54:00:88:01:0b" },
+			{ label: "eth2", value: "unplugged" },
+			{ label: "address", value: "none" },
+			{ label: "mac", value: "52:54:00:88:02:0b" },
+			{ label: "shells", value: "console" },
+		]);
+		expect(details).toMatchObject({
+			ports: [1, 2],
+			cables: [
+				{ label: "node1:eth0", nic: "eth0", link: "up" },
+				{ label: "node1:eth1", nic: "eth1", link: "cut" },
+				{ label: "node1:eth2", nic: "eth2", link: "unplugged" },
+			],
+		});
+	});
+
+	test("each cable is its own port on the faceplate and its own link in the count", () => {
+		const s = run(three(), linkEvent(three(), false, { machine: "node1", nic: 1 }));
+		const holder = (nic: string) => ({ name: "node1", hue: 1, label: `node1:${nic}`, nic });
+		expect(selectPorts(s).slice(0, 3)).toEqual([
+			{
+				port: 1,
+				state: "up",
+				machine: holder("eth0"),
+				word: "up",
+				actionLabel: "Cut the cable from node1:eth0 to port 1",
+			},
+			{
+				port: 2,
+				state: "cut",
+				machine: holder("eth1"),
+				word: "cut",
+				actionLabel: "Reconnect the cable from node1:eth1 to port 2",
+			},
+			{ port: 3, state: "empty", machine: null, word: null, actionLabel: null },
+		]);
+		expect(selectLinks(s)).toEqual({ up: 1, total: 2, cut: 1 });
+	});
+
+	test("the rail says cut while any cable is, up while any is up, and unplugged when none is there", () => {
+		const word = (s: LabState) => selectRail(s)[0].word;
+		const s = three();
+		expect(word(s)).toBe("up");
+		expect(word(run(s, linkEvent(s, false, { machine: "node1", nic: 1 })))).toBe("cut");
+		const loose = emptyLab();
+		expect(word(run(loose, spawnEvent(loose, 1, { net: ["none", "none"] }), isReady("node1")))).toBe("unplugged");
+	});
+
+	test("keeps its cables apart while it is being removed", () => {
+		const s = run(three(), remove("node1"));
+		expect(selectPorts(s)[1]).toMatchObject({ state: "removing", machine: { label: "node1:eth1" }, word: "down" });
+		expect(
+			selectDetails(s)
+				?.rows.filter((r) => r.label.startsWith("eth"))
+				.map((r) => r.value),
+		).toEqual(["port 1 down", "port 2 down", "unplugged"]);
 	});
 });
 

@@ -17,7 +17,8 @@ import {
 	type LabEvent,
 	type LabState,
 	type MachineName,
-	type MachineSpec,
+	type NicRef,
+	type NicSpec,
 	type PortNo,
 	planLink,
 	planSpawn,
@@ -46,9 +47,10 @@ export function lab(...steps: readonly Step[]): LabState {
 }
 
 export const spawn =
-	(count: number, net: MachineSpec["net"] = "switch0"): Step =>
+	(count: number, ...nets: readonly NicSpec["net"][]): Step =>
 	(state) => {
-		const plan = planSpawn(state, count, { image: "alpine", memMiB: 256, net });
+		const nics = (nets.length > 0 ? nets : ["switch0" as const]).map((net) => ({ net }));
+		const plan = planSpawn(state, count, { image: "alpine", memMiB: 256, nics });
 		if (isPlanError(plan)) throw new Error(`cannot spawn ${count}: ${plan.kind}`);
 		return [{ type: "cmd/spawn", plan, at: state.now }];
 	};
@@ -67,9 +69,9 @@ export const fail =
 	(state) => [{ type: "vm/failed", machine, attempt: state.machines[machine]?.life.attempt ?? 1, reason }];
 
 export const link =
-	(direction: "up" | "down", ...machines: readonly MachineName[]): Step =>
+	(direction: "up" | "down", ...cables: readonly (MachineName | NicRef)[]): Step =>
 	(state) => {
-		const changes = planLink(state, machines, direction === "up");
+		const changes = planLink(state, cables, direction === "up");
 		if (isPlanError(changes)) throw new Error(`cannot link ${direction}: ${changes.kind}`);
 		return [{ type: "cmd/link", changes, cause: "bar" }];
 	};

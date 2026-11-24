@@ -1,12 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
-import { arpReply, arpRequest, ping } from "../../test/support/frames.ts";
+import { arpReply, arpRequest, mac, ping, routedPing } from "../../test/support/frames.ts";
 import { createCaptureLog } from "../capture/index.ts";
 import { createRegistry, isLineError, parseLine, VERBS } from "../commands/index.ts";
 import {
 	type AgentCall,
 	createStore,
 	initialState,
+	isPlanError,
 	type MachineName,
+	planSpawn,
 	type SessionId,
 	selectRecent,
 	type ToolName,
@@ -562,6 +564,28 @@ describe("capture_read", () => {
 		});
 		expect(lastCall()).toMatchObject({ line: 'capture_read("arp", 1)', result: "1 frame" });
 		await expect(call("capture_read", {})).resolves.toMatchObject({ rows: { length: 3 } });
+	});
+
+	it("says which NIC of a machine with several, and filters by it", async () => {
+		const { call, capture, store } = await setup();
+		const plan = planSpawn(store.state, 1, {
+			image: "alpine",
+			memMiB: 256,
+			nics: [{ net: "switch0" }, { net: "switch0" }],
+		});
+		if (isPlanError(plan)) throw new Error("cannot spawn");
+		store.dispatchCommand({ type: "cmd/spawn", plan, at: 0 });
+		capture.appendFrame({ from: 1, to: 0b100, flood: null, frame: routedPing(mac(1), mac(3), 1, 2) });
+		capture.appendFrame({ from: 4, to: 0b10, flood: null, frame: routedPing(mac(3, 1), mac(2), 1, 2) });
+		await expect(call("capture_read", {})).resolves.toMatchObject({
+			rows: [
+				{ from: { kind: "machine", name: "node1" }, to: { name: "node3", nic: "eth0" } },
+				{ from: { name: "node3", nic: "eth1" }, to: { kind: "machine", name: "node2" } },
+			],
+		});
+		await expect(call("capture_read", { filter: "node3:eth1" })).resolves.toMatchObject({
+			rows: [{ from: { name: "node3", nic: "eth1" } }],
+		});
 	});
 
 	it("refuses a filter Wire would refuse", async () => {

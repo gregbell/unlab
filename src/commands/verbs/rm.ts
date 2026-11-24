@@ -1,11 +1,12 @@
-import { ACCEPTS, type Machine, type MachineName, machineList, portOf } from "../../model/index.ts";
+import { ACCEPTS, type Machine, type MachineName, machineList, plugsOf, portsOf } from "../../model/index.ts";
 import { defineVerb, refuse } from "../define.ts";
 import * as slots from "../grammar/slots.ts";
 import { andList, count, ports, skippedPart } from "./words.ts";
 
-/** Answering peers: ready, with the cable up. */
+/** Answering peers: ready, with the cable up to the NIC that has the lab address. */
 function answering(m: Machine): boolean {
-	return m.life.phase === "ready" && m.life.plug.kind === "port" && m.life.plug.link === "up";
+	const [eth0] = plugsOf(m.life);
+	return m.life.phase === "ready" && eth0?.kind === "port" && eth0.link === "up";
 }
 
 export const rm = defineVerb({
@@ -26,7 +27,7 @@ export const rm = defineVerb({
 	},
 	describe(plan) {
 		const names = plan.machines.map((m) => m.name);
-		const freed = plan.machines.flatMap((m) => portOf(m.life) ?? []);
+		const freed = plan.machines.flatMap((m) => portsOf(m.life));
 		return [
 			`remove ${andList(names)} with ${names.length === 1 ? "its disk" : "their disks"}`,
 			...(freed.length > 0 ? [`frees ${ports(freed)}`] : []),
@@ -46,7 +47,7 @@ export const rm = defineVerb({
 				: `Their consoles and ${count(shells, "shell")} close`;
 		const lost = `${closes} and everything on ${one ? "its disk" : "their disks"} is gone. There is no undo.`;
 
-		const freed = plan.machines.flatMap((m) => portOf(m.life) ?? []);
+		const freed = plan.machines.flatMap((m) => portsOf(m.life));
 		const going = new Set<MachineName>(names);
 		const silenced = plan.machines.filter(answering).map((m) => m.ip);
 		const peers = machineList(lab).filter((m) => !going.has(m.name) && answering(m));
