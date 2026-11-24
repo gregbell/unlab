@@ -104,8 +104,12 @@ describe("<unlab-app> regions", () => {
 		expect(centre.left).toBeCloseTo(rail.right + 8, 5);
 		expect(centre.right).toBe(box(".body").right);
 		expect(style(".body").backgroundColor).toBe("rgba(0, 0, 0, 0)");
-		expect(style("unlab-rail").backgroundColor).toBe(tokenColor("glass-panel"));
-		expect(style("unlab-pane").backgroundColor).toBe(tokenColor("glass-terminal"));
+		for (const selector of ["unlab-rail", "unlab-capture", "unlab-switch", "unlab-pane"]) {
+			const panel = style(selector);
+			expect(panel.backgroundColor, selector).toBe(tokenColor("glass-panel"));
+			expect(panel.borderRadius, selector).toBe("0px");
+			expect(panel.borderWidth, selector).toBe("0px");
+		}
 		expect(style("unlab-pane-area").backgroundColor).toBe("rgba(0, 0, 0, 0)");
 	});
 

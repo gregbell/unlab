@@ -64,25 +64,27 @@ const SHELL: readonly Step[] = [
 const withShell = (): LabState => lab(...SHELL);
 
 describe("<unlab-pane> anatomy", () => {
-	it("draws the focused pane's 2px bar and header in its hue and --pane-focus, the others in --base", async () => {
-		await mountPanes(lab(spawn(2), ready(), focus("node1")));
-		const header = style("node1", ".header");
-		expect([header.borderTopWidth, header.borderTopColor, header.backgroundColor]).toEqual([
-			"2px",
-			tokenColor("hue-1"),
-			tokenColor("pane-focus"),
-		]);
-		const other = style("node2", ".header");
-		expect([other.borderTopWidth, other.borderTopColor, other.backgroundColor]).toEqual([
-			"2px",
-			tokenColor("base"),
-			tokenColor("base"),
-		]);
-		expect(paneOf("node1").hasAttribute("focused")).toBe(true);
-		expect(paneOf("node2").hasAttribute("focused")).toBe(false);
+	it("moves the outline with the active terminal without resizing the panes", async () => {
+		const { store, settle } = await mountPanes(lab(spawn(2), ready(), focus("node1")));
+		const first = paneOf("node1");
+		const second = paneOf("node2");
+		const before = second.getBoundingClientRect();
+		expect(getComputedStyle(first).outlineColor).toBe(tokenColor("hue-1"));
+		expect(getComputedStyle(first).outlineWidth).toBe("1px");
+		expect(getComputedStyle(second).outlineStyle).toBe("none");
+
+		await userEvent.click(page.getByRole("tablist", { name: "Sessions on node2" }));
+		expect(getComputedStyle(first).outlineStyle).toBe("none");
+		expect(getComputedStyle(second).outlineColor).toBe(tokenColor("hue-2"));
+		expect(getComputedStyle(second).outlineWidth).toBe("1px");
+		expect(second.getBoundingClientRect().toJSON()).toEqual(before.toJSON());
+
+		store.dispatchUi({ type: "ui/bar", open: true });
+		await settle();
+		expect(document.querySelector("unlab-pane[focused]")).toBeNull();
 	});
 
-	it("sizes the header 30px under the bar, padded 14px left and 6px right", async () => {
+	it("sizes the header to 32px, padded 14px left and 6px right", async () => {
 		await mountPanes(lab(spawn(1), ready()));
 		const header = part("node1", ".header").getBoundingClientRect();
 		expect(header.height).toBe(32);
@@ -100,12 +102,12 @@ describe("<unlab-pane> anatomy", () => {
 		]);
 	});
 
-	it("draws tabs 28px high with 8px padding: the active one in --text over a 2px hue underline, the rest in --text-3", async () => {
+	it("aligns the selected tab's underline with the lower edge of the title bar", async () => {
 		await mountPanes(withShell());
 		expect(tabs("node1")).toEqual(["console", "sh1"]);
 		const [consoleTab, shellTab] = [...paneOf("node1").querySelectorAll<HTMLElement>("[role=tab]")];
 		if (!consoleTab || !shellTab) throw new Error("no tabs");
-		expect(shellTab.getBoundingClientRect().height).toBe(28);
+		expect(shellTab.getBoundingClientRect().bottom).toBe(part("node1", ".header").getBoundingClientRect().bottom);
 		const active = getComputedStyle(shellTab);
 		expect([active.color, active.borderBottomWidth, active.borderBottomColor, active.paddingLeft]).toEqual([
 			tokenColor("text"),

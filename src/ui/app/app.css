@@ -107,10 +107,6 @@
 			background: transparent;
 		}
 
-		.agent-panel {
-			background: var(--mantle);
-		}
-
 		.centre {
 			container-type: inline-size;
 		}
@@ -149,7 +145,7 @@
 			gap: 4px 12px;
 			min-height: 34px;
 			padding: 4px var(--gutter);
-			background: var(--mantle);
+			background: var(--glass-panel);
 		}
 
 		.dock-strip .title {
@@ -171,10 +167,7 @@
 
 		.agent-panel {
 			flex: 0 0 460px;
-		}
-
-		.wire-view {
-			background: var(--glass-panel);
+			max-width: 100%;
 		}
 
 		.spawn-view {

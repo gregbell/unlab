@@ -7,7 +7,6 @@ import {
 	type MachineName,
 	type RailRow,
 	type SessionId,
-	selectFocused,
 	selectRail,
 	sessionLabel,
 } from "../../model/index.ts";
@@ -39,7 +38,7 @@ const panelId = (session: SessionId): string => `panel-${session.replace(":", "-
 const NAV_KEYS = new Set(["ArrowLeft", "ArrowRight", "Home", "End"]);
 
 /**
- * One machine's pane: the focus bar, the header with its session tabs, and one
+ * One machine's pane: the header with its session tabs, and one
  * terminal per session. Inactive tabs are hidden, never unmounted, so every
  * terminal keeps its screen for the session's life.
  *
@@ -52,8 +51,6 @@ export class UnlabPane extends UnlabElement {
 
 	readonly #machine = new Select(this, (s) => s.machines[this.machine]);
 	readonly #word = new Select(this, (s) => selectRail(s).find((row) => row.name === this.machine)?.word);
-	/** Highlighted: it has the keyboard, or gets it back when the command bar closes. */
-	readonly #focused = new Select(this, (s) => selectFocused(s) === this.machine);
 	/** Holds the keyboard right now. While the bar is open nothing in a pane does. */
 	readonly #keyboard = new Select(this, (s) => s.keyboard.kind === "pane" && s.keyboard.machine === this.machine);
 	readonly #shown = new Select(this, (s) => s.view === "lab" && s.panes.parked[this.machine] === undefined);
@@ -65,7 +62,7 @@ export class UnlabPane extends UnlabElement {
 		super.willUpdate(changed);
 		const machine = this.#machine.value;
 		if (machine) this.dataset.hue = String(machine.hue);
-		this.toggleAttribute("focused", this.#focused.value);
+		this.toggleAttribute("focused", this.#keyboard.value);
 		this.toggleAttribute("maximised", this.#maximised.value);
 		this.inert = machine?.life.phase === "removing";
 	}

@@ -21,7 +21,7 @@ describe("<unlab-parked-strip>", () => {
 		});
 		expect(element.hidden).toBe(false);
 		expect(element.getBoundingClientRect().height).toBe(32);
-		expect(getComputedStyle(element).backgroundColor).toBe(tokenColor("mantle"));
+		expect(getComputedStyle(element).backgroundColor).toBe(tokenColor("glass-panel"));
 		expect(element.querySelector(".label")?.textContent).toBe("parked");
 		expect(chips().map((chip) => chip.textContent?.trim())).toEqual(["node1", "node3"]);
 		expect(element.querySelector(".note")?.textContent).toBe("Still running. Click to bring it back.");

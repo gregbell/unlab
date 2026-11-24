@@ -7,15 +7,15 @@
 			display: flex;
 			flex: 1 1 auto;
 			flex-direction: column;
-			gap: 1px;
+			gap: var(--panel-gap);
 			min-width: 0;
-			background: var(--line);
+			background: transparent;
 		}
 
 		.top {
 			display: grid;
 			grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
-			gap: 1px;
+			gap: var(--panel-gap);
 		}
 
 		:scope > unlab-capture {
