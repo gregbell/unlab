@@ -11,12 +11,10 @@ async function shell(page: Page, node: number, command: string, result: string) 
 
 test("reload restores distinct sized machines, private files and a cut cable", async ({ page }) => {
 	await page.goto("/");
-	await page.getByRole("button", { name: "Add machine", exact: true }).click();
-	await page.getByRole("button", { name: "One fewer" }).click();
+	await page.getByText("Customize machines", { exact: true }).click();
 	await page.getByLabel("CPUs each").selectOption("2");
 	await page.getByRole("button", { name: "512 MiB" }).click();
 	await page.getByRole("button", { name: "8 GiB" }).click();
-	await expect(page.locator("unlab-spawn-form .code.line")).toContainText("spawn 2 alpine --mem 512 --cpus 2 --disk 8");
 	await page.getByRole("button", { name: "Boot 2 machines" }).click();
 	await expect(page.getByText("2 of 2 machines ready")).toBeVisible({ timeout: 90000 });
 	for (const n of [1, 2]) {

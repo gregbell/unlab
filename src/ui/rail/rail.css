@@ -14,10 +14,35 @@
 
 		.header {
 			display: flex;
+			align-items: center;
 			justify-content: space-between;
-			padding: 12px var(--gutter) 8px;
-			font: inherit;
+			padding: 5px var(--gutter);
 			color: var(--text-3);
+		}
+
+		.header h2 {
+			display: flex;
+			gap: 8px;
+			font: inherit;
+		}
+
+		.add {
+			display: grid;
+			place-items: center;
+			width: var(--h-sm);
+			height: var(--h-sm);
+			padding: 0;
+			border: 0;
+			border-radius: var(--r-control);
+			background: transparent;
+			color: var(--text-2);
+			cursor: pointer;
+		}
+
+		.add:hover,
+		.add:focus-visible {
+			background: var(--line);
+			color: var(--text);
 		}
 
 		.empty {

@@ -13,7 +13,7 @@ export type { ExecData, ExecRun } from "./exec.ts";
 export type { CableState } from "./link.ts";
 export type { ListedMachine } from "./ls.ts";
 export type { RemoveData } from "./rm.ts";
-export type { SpawnData } from "./spawn.ts";
+export { DEFAULT_CPUS, MULTICPU_BLOCKER, type SpawnData } from "./spawn.ts";
 export { boot, capture, exec, focus, link, ls, rm, sh, spawn };
 
 /** The one verb list, in the order the bar's verbs group shows them. */

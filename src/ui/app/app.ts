@@ -8,7 +8,6 @@ import "../statusline/statusline.ts";
 import "../capture/capture.ts";
 import "../switch/switch.ts";
 import "../wire/wire.ts";
-import "../start/start.ts";
 import "../spawn-form/spawn-form.ts";
 import "../agent-panel/agent-panel.ts";
 import { ContextProvider } from "@lit/context";
@@ -90,6 +89,7 @@ export class UnlabApp extends LitElement {
 		const indicator = this.#indicator.value;
 		const agentPanel = this.#agentPanel.value;
 		const empty = this.#empty.value;
+		const creating = view === "spawn" || (empty && view === "lab");
 		return html`<header class="top-bar">
 				<button type="button" class="wordmark" aria-label="unlab, back to the lab" @click=${() => this.#ui({ type: "ui/view", view: "lab" })}>
 					unlab
@@ -107,15 +107,15 @@ export class UnlabApp extends LitElement {
 				>
 					${indicator === "agent active" ? html`<span class="square" aria-hidden="true"></span>` : nothing}${indicator}
 				</button>
-				<button type="button" class="button primary" @click=${() => this.#ui({ type: "ui/view", view: "spawn" })}>
-					Add machine
+				<button ?hidden=${creating} type="button" class="button primary" @click=${() => this.#ui({ type: "ui/view", view: "spawn" })}>
+					Add machines
 				</button>
 			</header>
-			<div class="body" ?hidden=${view === "spawn"}>
-				<div class="lab" ?hidden=${view !== "lab"}>
+			<div class="body">
+				${creating ? html`<main class="spawn-view"><unlab-spawn-form></unlab-spawn-form></main>` : nothing}
+				<div class="lab" ?hidden=${view !== "lab" || empty}>
 					<unlab-rail role="complementary" aria-label="Machines"></unlab-rail>
 					<main class="centre">
-						<unlab-start ?hidden=${!empty}></unlab-start>
 						<unlab-pane-area ?hidden=${empty}></unlab-pane-area>
 						<unlab-parked-strip></unlab-parked-strip>
 						<div id=${DOCK_ID} class="dock" ?hidden=${empty}>
@@ -132,7 +132,6 @@ export class UnlabApp extends LitElement {
 					${agentPanel ? html`<unlab-agent-panel></unlab-agent-panel>` : nothing}
 				</div>
 			</div>
-			<main class="spawn-view" ?hidden=${view !== "spawn"}>${view === "spawn" ? html`<unlab-spawn-form></unlab-spawn-form>` : nothing}</main>
 			<unlab-statusline role="contentinfo"></unlab-statusline>
 			<div id=${ANNOUNCER} class="visually-hidden" role="status"></div>`;
 	}

@@ -5,7 +5,7 @@
 	@scope (unlab-spawn-form) {
 		:scope {
 			display: block;
-			padding: 64px 24px 48px;
+			padding: clamp(16px, 8vh, 80px) clamp(4px, 3vw, 32px);
 			background: transparent;
 		}
 
@@ -13,16 +13,36 @@
 			display: flex;
 			flex-wrap: wrap;
 			align-items: flex-start;
-			gap: 40px 64px;
-			max-width: 1000px;
+			gap: 32px 40px;
+			width: min(100%, 980px);
+			padding: clamp(16px, 4vw, 48px);
+			background: var(--glass-panel);
 			margin: 0 auto;
 		}
 
-		.back {
+		.intro {
 			flex: 1 0 100%;
-			margin-bottom: -16px;
 		}
-
+		.intro p {
+			max-width: 66ch;
+			margin-top: 10px;
+			font-size: var(--fs-input);
+			line-height: 1.55;
+			color: var(--text-2);
+		}
+		.customize {
+			border-top: 1px solid var(--line-strong);
+			padding-top: 12px;
+		}
+		.customize summary {
+			cursor: pointer;
+			color: var(--link-hover);
+			padding: 8px 0;
+		}
+		.network-summary {
+			color: var(--text-2);
+			margin-bottom: 12px;
+		}
 		.choices-column,
 		.result-column {
 			display: flex;
@@ -31,15 +51,13 @@
 		}
 
 		.choices-column {
-			flex: 1 1 400px;
+			flex: 1 1 280px;
 			gap: 32px;
 		}
 
-		/* Level with the first question, below the 36px title and its 32px gap. */
 		.result-column {
 			flex: 1 1 360px;
 			gap: 24px;
-			padding-top: 68px;
 		}
 
 		h1 {
@@ -57,6 +75,10 @@
 			display: flex;
 			flex-direction: column;
 			gap: 10px;
+		}
+
+		.customize .question {
+			margin-top: 18px;
 		}
 
 		.label {
@@ -107,10 +129,6 @@
 			font-weight: 500;
 		}
 
-		.stepper .note {
-			margin-left: 14px;
-		}
-
 		.you-get ul {
 			display: flex;
 			flex-direction: column;
@@ -149,48 +167,6 @@
 			color: var(--text-3);
 		}
 
-		.equivalents {
-			display: flex;
-			flex-direction: column;
-			gap: 6px;
-		}
-
-		.code {
-			padding: 10px 12px;
-			border: 1px solid var(--line);
-			border-radius: var(--r-control);
-			background: var(--crust);
-			font-size: 13px;
-			overflow-wrap: anywhere;
-		}
-
-		.code .prompt {
-			color: var(--ok);
-		}
-
-		.call {
-			color: var(--agent);
-		}
-
-		.preview {
-			display: grid;
-			grid-template-columns: auto 1fr;
-			gap: 0 10px;
-		}
-
-		.will-label,
-		.preview .assumed {
-			color: var(--text-3);
-		}
-
-		.preview .assumed {
-			grid-column: 2;
-		}
-
-		.preview[data-tone="warn"] .will {
-			color: var(--warn);
-		}
-
 		.actions {
 			display: flex;
 			flex-wrap: wrap;
@@ -213,10 +189,6 @@
 
 		.link:hover {
 			color: var(--link-hover);
-		}
-
-		.back .link {
-			min-height: var(--h-sm);
 		}
 	}
 }

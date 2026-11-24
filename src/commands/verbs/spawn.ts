@@ -3,6 +3,17 @@ import { defineVerb, refuse } from "../define.ts";
 import * as slots from "../grammar/slots.ts";
 import { andList, imageLabel, planErrorSentence, ports } from "./words.ts";
 
+function multiCpuBlocker(): string | undefined {
+	if (globalThis.crossOriginIsolated === false || typeof SharedArrayBuffer !== "function")
+		return "shared memory requires a cross-origin isolated page";
+	if (typeof Atomics.waitAsync !== "function" || (typeof window !== "undefined" && typeof Worker !== "function"))
+		return "the browser lacks support for shared CPU workers";
+	return undefined;
+}
+
+export const MULTICPU_BLOCKER = multiCpuBlocker();
+export const DEFAULT_CPUS = MULTICPU_BLOCKER ? 1 : 2;
+
 export const spawn = defineVerb({
 	name: "spawn",
 	about: "boot machines",
@@ -15,7 +26,7 @@ export const spawn = defineVerb({
 			slots.count({ label: "MiB", noun: "a size in MiB", suggest: () => [128, 256, 512, 1024] }),
 			256,
 		),
-		cpus: slots.option("--cpus", slots.count({ label: "CPUs", suggest: () => [1, 2, 4, 8, 16] }), 1),
+		cpus: slots.option("--cpus", slots.count({ label: "CPUs", suggest: () => [1, 2, 4, 8, 16] }), DEFAULT_CPUS),
 		disk: slots.option("--disk", slots.choice(DISK_SIZES), "4"),
 		net: slots.exclusive<"switch0" | "none">("switch0", [
 			slots.valued("--net", slots.choice(["switch0"])),
@@ -24,8 +35,7 @@ export const spawn = defineVerb({
 	},
 	plan(a, lab) {
 		if (a.cpus > 16) return refuse("Choose 1 to 16 CPUs per machine.", "cpus");
-		if (a.cpus > 1 && globalThis.crossOriginIsolated === false)
-			return refuse("Multiple CPUs need a cross-origin isolated page.", "cpus");
+		if (a.cpus > 1 && MULTICPU_BLOCKER) return refuse(`Multiple CPUs unavailable: ${MULTICPU_BLOCKER}.`, "cpus");
 		const plan = planSpawn(lab, a.count, { image: a.image, memMiB: a.mem, diskGiB: a.disk, cpus: a.cpus, net: a.net });
 		return isPlanError(plan)
 			? refuse(planErrorSentence(plan), plan.kind === "unknown-image" ? "image" : "count")

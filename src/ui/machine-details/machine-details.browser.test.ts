@@ -72,9 +72,9 @@ describe("<unlab-machine-details>", () => {
 
 	it("runs each action's command as a button", async () => {
 		const { runs } = await mount("unlab-machine-details", { state: lab(spawn(3), ready(), focus("node2")) });
-		expect(enabledActions()).toEqual(["new shell", "ping peers", "cut cable", "remove"]);
+		expect(enabledActions()).toEqual(["new shell", "Ping peers", "cut cable", "remove"]);
 		await action("new shell").click();
-		await action("ping peers").click();
+		await action("Ping peers").click();
 		await action("cut cable").click();
 		expect(runs).toEqual([
 			{ line: "sh node2", source: "button" },

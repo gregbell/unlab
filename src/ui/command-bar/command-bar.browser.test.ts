@@ -223,9 +223,9 @@ describe("<unlab-command-bar> CmdComplete: completing", () => {
 		expect(the('[role="option"]').getAttribute("aria-selected")).toBe("true");
 		expect(text('[role="status"] .preview .label')).toBe("will");
 		expect(text('[role="status"] .will')).toBe(
-			"boot node4 and node5 · alpine 3.24 · 256 MiB each · 1 CPU · 4 GiB disk · plugged into switch0 on ports 4 and 5",
+			"boot node4 and node5 · alpine 3.24 · 256 MiB each · 2 CPUs · 4 GiB disk · plugged into switch0 on ports 4 and 5",
 		);
-		expect(text('[role="status"] .assumed')).toBe("Left out, so assumed: --mem 256 --cpus 1 --disk 4 --net switch0");
+		expect(text('[role="status"] .assumed')).toBe("Left out, so assumed: --mem 256 --cpus 2 --disk 4 --net switch0");
 		expect(box(".assumed").left).toBe(box(".will").left);
 	});
 

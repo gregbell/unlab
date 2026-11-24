@@ -170,7 +170,7 @@ describe("<unlab-app> top bar", () => {
 
 	it("makes Add machine the 28px primary button", async () => {
 		await mountApp();
-		const add = page.getByRole("button", { name: "Add machine" });
+		const add = page.getByRole("banner").getByRole("button", { name: "Add machines" });
 		const added = getComputedStyle(add.element());
 		expect(add.element().getBoundingClientRect().height).toBe(28);
 		expect([added.backgroundColor, added.color, added.fontWeight]).toEqual([
@@ -202,9 +202,9 @@ describe("<unlab-app> views", () => {
 	it("opens Add machines over the whole body, keeping the lab mounted", async () => {
 		const { settle } = await mountApp();
 		const rail = the("unlab-rail");
-		await page.getByRole("button", { name: "Add machine" }).click();
+		await page.getByRole("banner").getByRole("button", { name: "Add machines" }).click();
 		await settle();
-		expect(the(".body").hidden).toBe(true);
+		expect(the(".lab").hidden).toBe(true);
 		expect(the(".spawn-view").hidden).toBe(false);
 		expect(rail.isConnected).toBe(true);
 		expect(the("unlab-rail")).toBe(rail);

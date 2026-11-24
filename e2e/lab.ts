@@ -3,7 +3,7 @@ import { expect, type Page } from "@playwright/test";
 /** A fresh lab starts empty; most tests want two ready machines, typed into the bar as a person would. */
 export async function openWithTwoMachines(page: Page): Promise<void> {
 	await page.goto("/");
-	await expect(page.getByRole("heading", { name: "Boot some Linux." })).toBeVisible();
+	await expect(page.getByRole("heading", { name: "Your Linux lab in a tab." })).toBeVisible();
 	await page.keyboard.press("Control+/");
 	await expect(page.getByRole("combobox", { name: "Command" })).toBeFocused();
 	await page.keyboard.type("spawn 2 alpine");

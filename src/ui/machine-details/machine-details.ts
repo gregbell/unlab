@@ -73,7 +73,7 @@ export class UnlabMachineDetails extends UnlabElement {
 					?disabled=${!accepts.commands || peers.length === 0}
 					@click=${() => this.runLine(this.#pingLine(name, peers))}
 				>
-					ping peers
+					${peers.length === 1 ? `Ping ${peers[0]}` : "Ping peers"}
 				</button>
 				<button
 					type="button"

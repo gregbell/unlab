@@ -7,13 +7,13 @@ describe("spawn", () => {
 		const lab = storeLab();
 		await lab.lab(3);
 		expect(lab.parsed("spawn 2 alpine").preview(lab.store.state)).toEqual({
-			will: "boot node4 and node5 · alpine 3.24 · 256 MiB each · 1 CPU · 4 GiB disk · plugged into switch0 on ports 4 and 5",
-			assumed: "Left out, so assumed: --mem 256 --cpus 1 --disk 4 --net switch0",
+			will: "boot node4 and node5 · alpine 3.24 · 256 MiB each · 2 CPUs · 4 GiB disk · plugged into switch0 on ports 4 and 5",
+			assumed: "Left out, so assumed: --mem 256 --cpus 2 --disk 4 --net switch0",
 			tone: "plain",
 		});
 		expect(lab.parsed("spawn 1 debian --mem 512 --no-net").preview(lab.store.state)).toEqual({
-			will: "boot node4 · debian 13 · 512 MiB · 1 CPU · 4 GiB disk · unplugged",
-			assumed: "Left out, so assumed: --cpus 1 --disk 4",
+			will: "boot node4 · debian 13 · 512 MiB · 2 CPUs · 4 GiB disk · unplugged",
+			assumed: "Left out, so assumed: --cpus 2 --disk 4",
 			tone: "plain",
 		});
 	});

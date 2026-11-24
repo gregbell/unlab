@@ -1,6 +1,6 @@
 import "./spawn-form.css";
 import { html, nothing, type TemplateResult } from "lit";
-import { isLineError } from "../../commands/index.ts";
+import { isLineError, MULTICPU_BLOCKER } from "../../commands/index.ts";
 import { DISK_SIZES } from "../../model/index.ts";
 import { Select, UnlabElement } from "../base/index.ts";
 import { defaultChoice, formView, MEMORY, type Memory, type SpawnChoice } from "./form.ts";
@@ -9,8 +9,7 @@ const memoryLabel = (mib: Memory): string => (mib >= 1024 ? `${mib / 1024} GiB` 
 
 /**
  * Add machines: `spawn` as a form. Each choice is an argument; the line, its
- * preview and its errors are the bar's own, and Boot runs exactly the line
- * shown. It starts afresh each time the view opens, because the app mounts
+ * validation and execution use the same command as the bar. It starts afresh each time the view opens, because the app mounts
  * it only while the view is open.
  */
 export class UnlabSpawnForm extends UnlabElement {
@@ -30,6 +29,8 @@ export class UnlabSpawnForm extends UnlabElement {
 	override render(): TemplateResult {
 		const { choice } = this;
 		const lab = this.#lab.value;
+		const firstRun = lab.rail.length === 0;
+		const distro = lab.images.find((image) => image.name === choice.image)?.label ?? choice.image;
 		const view = formView(choice, lab, this.app.commands);
 		const pick = (patch: Partial<SpawnChoice>) => () => {
 			this.choice = { ...this.choice, ...patch };
@@ -38,59 +39,63 @@ export class UnlabSpawnForm extends UnlabElement {
 			html`<button type="button" class="choice" aria-pressed=${pressed ? "true" : "false"} @click=${pick(patch)}>${label}</button>`;
 
 		return html`<div class="sheet">
-			<div class="back">
-				<button type="button" class="link" @click=${this.#close}>← back to the lab</button>
-			</div>
+			<header class="intro">
+				<h1>${firstRun ? "Your Linux lab in a tab." : "Add machines"}</h1>
+				${firstRun ? html`<p>Boot Alpine or Debian machines on a shared network. They run on your device, and their files stay in this browser.</p>` : nothing}
+			</header>
 			<div class="choices-column">
-				<h1>Add machines</h1>
 				<div class="question" role="group" aria-labelledby="spawn-count">
-					<div class="label" id="spawn-count">how many</div>
+					<div class="label" id="spawn-count">Machines</div>
 					<div class="stepper">
 						<button type="button" class="step" aria-label="One fewer" ?disabled=${choice.count <= 1} @click=${pick({ count: choice.count - 1 })}>−</button>
 						<span class="count">${choice.count}</span>
 						<button type="button" class="step" aria-label="One more" ?disabled=${choice.count >= view.most} @click=${pick({ count: choice.count + 1 })}>+</button>
-						<span class="note">${view.memoryNote}</span>
 					</div>
 				</div>
 				<div class="question">
-					<div class="label" id="spawn-image">image</div>
+					<div class="label" id="spawn-image">Distribution</div>
 					<div class="choices" role="group" aria-labelledby="spawn-image">
 						${lab.images.map((image) => option(image.label, choice.image === image.name, { image: image.name }))}
 					</div>
 				</div>
-				<div class="question">
-					<div class="label" id="spawn-memory">memory each</div>
-					<div class="choices" role="group" aria-labelledby="spawn-memory">
-						${MEMORY.map((mib) => option(memoryLabel(mib), choice.mem === mib, { mem: mib }))}
+				<details class="customize">
+					<summary>Customize machines</summary>
+					<div class="question">
+						<div class="label" id="spawn-memory">Memory per machine</div>
+						<div class="choices" role="group" aria-labelledby="spawn-memory">
+							${MEMORY.map((mib) => option(memoryLabel(mib), choice.mem === mib, { mem: mib }))}
+						</div>
+						<p class="note memory-note">${view.memoryNote}</p>
 					</div>
-				</div>
-				<div class="question">
-					<label class="label" for="spawn-cpus">CPUs each</label>
-					<select class="field" id="spawn-cpus" @change=${(event: Event) => {
-						if (event.target instanceof HTMLSelectElement) pick({ cpus: Number(event.target.value) })();
-					}}>
-						${[1, 2, 4, 8, 16].map((n) => html`<option .value=${String(n)} ?selected=${choice.cpus === n} ?disabled=${n > 1 && !crossOriginIsolated}>${n}</option>`)}
-					</select>
-					${crossOriginIsolated ? nothing : html`<p class="note">Multiple CPUs require cross-origin isolation.</p>`}
-				</div>
-				<div class="question">
-					<div class="label" id="spawn-disk">persistent disk each</div>
-					<div class="choices" role="group" aria-labelledby="spawn-disk">
-						${DISK_SIZES.map((disk) => option(`${disk} GiB`, choice.disk === disk, { disk }))}
+					<div class="question">
+						<label class="label" for="spawn-cpus">CPUs each</label>
+						<select class="field" id="spawn-cpus" @change=${(event: Event) => {
+							if (event.target instanceof HTMLSelectElement) pick({ cpus: Number(event.target.value) })();
+						}}>
+							${[1, 2, 4, 8, 16].map((n) => html`<option .value=${String(n)} ?selected=${choice.cpus === n} ?disabled=${n > 1 && !!MULTICPU_BLOCKER}>${n}</option>`)}
+						</select>
+						${MULTICPU_BLOCKER ? html`<p class="note">Multiple CPUs unavailable: ${MULTICPU_BLOCKER}.</p>` : nothing}
 					</div>
-				</div>
-				<div class="question">
-					<div class="label" id="spawn-network">network</div>
-					<div class="choices" role="group" aria-labelledby="spawn-network">
-						${option("plug into switch0", choice.net === "switch0", { net: "switch0" })}
-						${option("leave unplugged", choice.net === "none", { net: "none" })}
+					<div class="question">
+						<div class="label" id="spawn-disk">Disk per machine</div>
+						<div class="choices" role="group" aria-labelledby="spawn-disk">
+							${DISK_SIZES.map((disk) => option(`${disk} GiB`, choice.disk === disk, { disk }))}
+						</div>
 					</div>
-					<p class="note">${view.networkNote}</p>
-				</div>
+					<div class="question">
+						<div class="label" id="spawn-network">Network</div>
+						<div class="choices" role="group" aria-labelledby="spawn-network">
+							${option("plug into switch0", choice.net === "switch0", { net: "switch0" })}
+							${option("leave unplugged", choice.net === "none", { net: "none" })}
+						</div>
+						<p class="note">${view.networkNote}</p>
+					</div>
+				</details>
 			</div>
 			<div class="result-column">
 				<div class="you-get">
-					<h2 class="label">you get</h2>
+					<h2 class="label">Network preview</h2>
+					<p class="network-summary">${distro} · ${choice.net === "none" ? "unplugged" : "switch0"}</p>
 					<ul role="list">
 						${view.machines.map(
 							(m) => html`<li data-hue=${m.hue}>
@@ -99,25 +104,12 @@ export class UnlabSpawnForm extends UnlabElement {
 						)}
 					</ul>
 				</div>
-				<div class="equivalents">
-					<h2 class="label">same thing from the command bar</h2>
-					<div class="code line"><span class="prompt" aria-hidden="true">:</span> ${view.line}</div>
-					${
-						view.check.ok
-							? html`<div class="preview" data-tone=${view.check.preview.tone}>
-									<span class="will-label">will</span><span class="will">${view.check.preview.will}</span>
-									${view.check.preview.assumed === null ? nothing : html`<span class="assumed">${view.check.preview.assumed}</span>`}
-								</div>`
-							: html`<p class="error" role="alert">${view.check.error.message}</p>`
-					}
-					<h2 class="label">and from an agent</h2>
-					<div class="code call">${view.call}</div>
-				</div>
+				${view.error ? html`<p class="error" role="alert">${view.error.message}</p>` : nothing}
 				<div class="actions">
-					<button type="button" class="button primary lg" ?disabled=${!view.check.ok || this.running} @click=${() => void this.#boot(view.line)}>
+					<button type="button" class="button primary lg" ?disabled=${view.error !== null || this.running} @click=${() => void this.#boot(view.line)}>
 						${view.bootLabel}
 					</button>
-					<button type="button" class="link" @click=${this.#close}>Cancel</button>
+					${firstRun ? nothing : html`<button type="button" class="link" @click=${this.#close}>Cancel</button>`}
 				</div>
 			</div>
 		</div>`;

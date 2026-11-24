@@ -4,7 +4,7 @@ import "../machine-row/machine-row.ts";
 import { html, type TemplateResult } from "lit";
 import { repeat } from "lit/directives/repeat.js";
 import { LAB_CIDR, PORTS, SWITCH_NAME, selectRail } from "../../model/index.ts";
-import { Select, UnlabElement } from "../base/index.ts";
+import { plusIcon, Select, UnlabElement } from "../base/index.ts";
 
 /**
  * The machine rail: one row per machine in spawn order, then the details of
@@ -16,7 +16,11 @@ export class UnlabRail extends UnlabElement {
 
 	override render(): TemplateResult {
 		const rows = this.#rows.value;
-		return html`<h2 class="header"><span>machines</span><span>${rows.length}</span></h2>
+		return html`<div class="header">
+				<h2>machines <span>${rows.length}</span></h2>
+				<button type="button" class="add" aria-label="Add machines" title="Add machines"
+					@click=${() => this.app.store.dispatchUi({ type: "ui/view", view: "spawn" })}>${plusIcon}</button>
+			</div>
 			${
 				rows.length === 0
 					? html`<p class="empty">Nothing booted yet.</p>

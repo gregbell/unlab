@@ -15,11 +15,11 @@ Try it at https://gregbell.github.io/unlab/.
 
 ```sh
 npm install
-npm run distros alpine        # add `debian` for the 72 MB image too
+npm run distros alpine debian
 npm run dev
 ```
 
-Open the printed URL. A new lab starts empty: pick a starting point, type a line such as `spawn 2 alpine`, or use **Add machine**.
+Open the printed URL and choose **Boot 2 machines** to start a pair of Alpine guests on the shared switch. When both are ready, choose **Ping node2** to see replies in the terminal and packets in the network dock. Use **+ Machines** to extend the lab.
 
 ## Using it
 
@@ -86,7 +86,7 @@ The browser and e2e suites need Chromium. Playwright's own download is used when
 
 Nothing here is rebuilt or repacked. The kernel is `unkernel.wasm` from the pinned `unkernel` npm package. The root images are the `.erofs` assets from the GitHub release matching that package version; `npm run distros` reads the release's `distros.json`, downloads each image and checks its size and SHA-256 before writing it. `public/distros/distros.json` records what was mirrored, down to the upstream build id.
 
-The Add machines form sizes each guest independently of its peers. The defaults are one CPU, 256 MiB of RAM and a sparse 4 GiB disk. The disk consumes browser storage as the guest writes to it. For example, `spawn 2 alpine --mem 512 --cpus 2 --disk 8` boots a pair with two CPUs, 512 MiB of RAM and an 8 GiB disk apiece.
+The Add machines form sizes each guest independently of its peers. Each machine defaults to two CPUs (one when the browser cannot run multiple CPUs), 256 MiB of RAM and a sparse 4 GiB disk. The disk consumes browser storage as the guest writes to it. For example, `spawn 2 alpine --mem 512 --cpus 2 --disk 8` boots a pair with two CPUs, 512 MiB of RAM and an 8 GiB disk apiece.
 
 ## Limits
 

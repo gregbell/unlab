@@ -2,7 +2,7 @@
 // The form holds `spawn` arguments; the line, its preview and its errors come
 // from the same command the bar and the agent use, so the three cannot drift.
 
-import { type CommandService, isLineError, type LineError, type Preview, spawn } from "../../commands/index.ts";
+import { type CommandService, DEFAULT_CPUS, isLineError, type LineError, spawn } from "../../commands/index.ts";
 import {
 	type DiskSize,
 	type HueNo,
@@ -51,20 +51,17 @@ export interface FormView {
 	readonly machines: readonly NewMachine[];
 	/** The bar line for this choice, as the bar would log it. */
 	readonly line: string;
-	/** The `machines_spawn(...)` call an agent would make. */
-	readonly call: string;
-	/** What the bar would show under the same line. */
-	readonly check: { readonly ok: true; readonly preview: Preview } | { readonly ok: false; readonly error: LineError };
+	readonly error: LineError | null;
 	/** `Boot 3 machines` */
 	readonly bootLabel: string;
 }
 
 export function defaultChoice(lab: LabState): SpawnChoice {
 	const choice: SpawnChoice = {
-		count: 3,
-		image: lab.images[0]?.name ?? "alpine",
+		count: 2,
+		image: lab.images.find((image) => image.name === "alpine")?.name ?? lab.images[0]?.name ?? "alpine",
 		mem: 256,
-		cpus: 1,
+		cpus: DEFAULT_CPUS,
 		disk: "4",
 		net: SWITCH_NAME,
 	};
@@ -113,19 +110,14 @@ export function formView(
 	const command = commands.registry.command(spawn);
 	const line = command.format(choice);
 	const parsed = commands.parse(line);
-	const preview = isLineError(parsed) ? parsed : parsed.preview(lab);
-	const check = isLineError(preview) ? { ok: false as const, error: preview } : { ok: true as const, preview };
-	const input = Object.entries(choice)
-		.map(([key, value]) => `"${key}": ${JSON.stringify(value)}`)
-		.join(", ");
+	const error = isLineError(parsed) ? parsed : parsed.validate(lab);
 	return {
 		most: mostOf(choice, lab),
 		memoryNote: `${memoryTotal(choice.count * choice.mem)} of memory in total`,
 		networkNote: networkNote(choice, lab),
-		machines: check.ok ? machinesOf(choice, lab) : [],
+		machines: !error ? machinesOf(choice, lab) : [],
 		line,
-		call: `${command.tool?.name ?? "machines_spawn"}({${input}})`,
-		check,
+		error,
 		bootLabel: `Boot ${plural(choice.count, "machine")}`,
 	};
 }
