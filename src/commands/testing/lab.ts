@@ -96,6 +96,7 @@ export function labWith(fixtures: readonly MachineFixture[], images: readonly Im
 		dock: "open",
 		capture: { filter: "", paused: false, selected: null },
 		agent: {
+			webmcp: { kind: "absent" },
 			policies: {
 				machines_list: "run",
 				machines_spawn: "ask",

@@ -3,7 +3,7 @@ import axe from "axe-core";
 import { afterEach, describe, expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import type { AgentCall, AgentEvent, LabEvent } from "../../model/index.ts";
-import { lab, mount, ready, spawn, tick, tokenColor, unmountAll } from "../base/testing.ts";
+import { lab, mount, ready, spawn, tick, tokenColor, unmountAll, webmcp } from "../base/testing.ts";
 
 afterEach(unmountAll);
 
@@ -182,7 +182,7 @@ describe("<unlab-agent-panel>", () => {
 	});
 
 	it("says so when the browser has no WebMCP", async () => {
-		const { element } = await mount("unlab-agent-panel", { state: lab(), webmcp: false });
+		const { element } = await mount("unlab-agent-panel", { state: lab(webmcp({ kind: "absent" })) });
 		expect(text(element.querySelector(".about"))).toContain("This browser has no WebMCP");
 		expect(element.querySelectorAll(".tool")).toHaveLength(7);
 	});

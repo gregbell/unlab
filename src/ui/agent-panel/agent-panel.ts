@@ -43,8 +43,8 @@ function resultText(call: AgentCall): string {
 	}
 }
 
-function sentence(available: boolean, paused: boolean): string {
-	if (!available) {
+function sentence({ webmcp, paused }: LabState["agent"]): string {
+	if (webmcp.kind === "absent") {
 		return "This browser has no WebMCP, so no agent can call these yet. The verbs and your choices are ready for when it does.";
 	}
 	if (paused) return "Tools are paused, so an agent in this browser sees none of them until you resume.";
@@ -93,7 +93,7 @@ export class UnlabAgentPanel extends UnlabElement {
 
 	override render(): TemplateResult {
 		const agent = this.#agent.value;
-		const { available, tools } = this.app.agent;
+		const { tools } = this.app.agent;
 		const machines = this.#machines.value;
 		const status = agent.paused ? "tools paused" : this.#indicator.value;
 		const log = agent.calls.filter((call) => call.status !== "waiting");
@@ -113,7 +113,7 @@ export class UnlabAgentPanel extends UnlabElement {
 				</button>
 			</div>
 			<div class="scroll">
-				<p class="about">${sentence(available, agent.paused)}</p>
+				<p class="about">${sentence(agent)}</p>
 				<ul class="tools" aria-label="Tools">
 					${tools.map((tool) => this.#toolRow(tool.name, tool.args, agent))}
 				</ul>

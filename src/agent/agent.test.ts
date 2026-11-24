@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { arpReply, arpRequest, ping } from "../../test/support/frames.ts";
 import { createCaptureLog } from "../capture/index.ts";
 import { createRegistry, isLineError, parseLine, VERBS } from "../commands/index.ts";
@@ -11,7 +11,7 @@ import {
 	selectRecent,
 	type ToolName,
 } from "../model/index.ts";
-import { detectModelContext, startAgent, type WebMcpTool } from "./index.ts";
+import { detectModelContext, type ModelContextLike, startAgent, type WebMcpTool } from "./index.ts";
 
 /** The real store and every verb; the runtime stand-in answers vm/stop so removals finish. */
 function storeLab() {
@@ -72,6 +72,14 @@ const ALL_TOOLS: readonly ToolName[] = [
 	"link_set",
 	"capture_read",
 ];
+
+/** An agent over an empty lab, in a browser whose modelContext the test brings. */
+function start(modelContext: ModelContextLike | null) {
+	const { store, registry } = storeLab();
+	const capture = createCaptureLog({ schedule: (fn) => fn(), now: () => 0 });
+	const agent = startAgent({ store, registry, screens: { get: () => undefined }, capture, modelContext });
+	return { agent, store };
+}
 
 async function setup(machines = 2, screens: Partial<Record<SessionId, string>> = {}) {
 	const lab = storeLab();
@@ -176,19 +184,68 @@ describe("registration", () => {
 		expect(lastCall()).toMatchObject({ status: "failed", tool: "machines_list" });
 	});
 
-	it("does nothing without WebMCP, and says so", async () => {
-		const lab = storeLab();
-		const capture = createCaptureLog({ schedule: (fn) => fn(), now: () => 0 });
-		const agent = startAgent({
-			store: lab.store,
-			registry: lab.registry,
-			screens: { get: () => undefined },
-			capture,
-			modelContext: null,
-		});
-		lab.store.dispatchUi({ type: "ui/tools-paused", paused: true });
-		expect(agent.available).toBe(false);
+	it("says in the store what the browser made of the tools", async () => {
+		const { store } = await setup();
+		expect(store.state.agent.webmcp).toEqual({ kind: "registered" });
+	});
+
+	it("does nothing without WebMCP, and says so", () => {
+		const { agent, store } = start(null);
+		store.dispatchUi({ type: "ui/tools-paused", paused: true });
+		expect(store.state.agent.webmcp).toEqual({ kind: "absent" });
 		expect(agent.tools).toHaveLength(ALL_TOOLS.length);
+	});
+
+	it.each([
+		[
+			"throws",
+			() => {
+				throw new Error("Tools are not allowed in this frame.");
+			},
+		],
+		["rejects", () => Promise.reject(new Error("Tools are not allowed in this frame."))],
+	])(
+		"says the browser refused the tools when registerTool %s, and does not try again on every change",
+		async (_, refuse) => {
+			const registerTool = vi.fn(refuse);
+			const { store } = start({ registerTool });
+			const refused = { kind: "refused", message: "Tools are not allowed in this frame." };
+			await expect.poll(() => store.state.agent.webmcp).toEqual(refused);
+			store.dispatchUi({ type: "ui/tools-paused", paused: true });
+			await turn();
+			expect(store.state.agent.webmcp).toEqual(refused);
+			expect(registerTool).toHaveBeenCalledTimes(ALL_TOOLS.length);
+		},
+	);
+
+	it("takes the refusal back once the browser accepts the tools, or the refused tool is off", async () => {
+		const context = fakeModelContext();
+		let refuse = true;
+		const { store } = start({
+			registerTool(tool, options) {
+				if (refuse && tool.name === "link_set") throw new Error("No link_set here.");
+				context.registerTool(tool, options);
+			},
+		});
+		expect(store.state.agent.webmcp).toEqual({ kind: "refused", message: "No link_set here." });
+		store.dispatchUi({ type: "ui/policy", tool: "link_set", policy: "off" });
+		expect(store.state.agent.webmcp).toEqual({ kind: "registered" });
+		store.dispatchUi({ type: "ui/policy", tool: "link_set", policy: "ask" });
+		expect(store.state.agent.webmcp).toEqual({ kind: "refused", message: "No link_set here." });
+		refuse = false;
+		store.dispatchUi({ type: "ui/tools-paused", paused: true });
+		store.dispatchUi({ type: "ui/tools-paused", paused: false });
+		expect(store.state.agent.webmcp).toEqual({ kind: "registered" });
+	});
+
+	it("does not take its own unregistering for a refusal", async () => {
+		const { store } = start({
+			registerTool: (_tool, { signal }) =>
+				new Promise((_resolve, reject) => signal.addEventListener("abort", () => reject(signal.reason))),
+		});
+		store.dispatchUi({ type: "ui/tools-paused", paused: true });
+		await turn();
+		expect(store.state.agent.webmcp).toEqual({ kind: "registered" });
 	});
 
 	it("stops registering once disposed", async () => {

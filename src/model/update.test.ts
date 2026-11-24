@@ -56,6 +56,7 @@ describe("initialState", () => {
 		});
 		expect(s.panes.grid).toEqual({ cols: 2, rows: 2 });
 		expect(s.agent).toEqual({
+			webmcp: { kind: "absent" },
 			policies: {
 				machines_list: "run",
 				machines_spawn: "ask",
@@ -808,6 +809,18 @@ describe("agent calls", () => {
 	test("a call never goes back to waiting", () => {
 		const s = run(emptyLab(), { type: "agent/call", call: agentCall(1, 0, { status: "running" }) });
 		expect(update(s, { type: "agent/settled", id: 1, status: "waiting", result: null }).state).toBe(s);
+	});
+
+	test("what the browser made of the tools is recorded, and hearing it again changes nothing", () => {
+		const refused = { kind: "refused", message: "Not allowed." } as const;
+		const s = run(emptyLab(), { type: "agent/webmcp", webmcp: refused });
+		expect(s.agent.webmcp).toEqual(refused);
+		expect(update(s, { type: "agent/webmcp", webmcp: { ...refused } }).state).toBe(s);
+		const other = { kind: "refused", message: "Too many tools." } as const;
+		expect(run(s, { type: "agent/webmcp", webmcp: other }).agent.webmcp).toEqual(other);
+		expect(run(s, { type: "agent/webmcp", webmcp: { kind: "registered" } }).agent.webmcp).toEqual({
+			kind: "registered",
+		});
 	});
 
 	test("policies and the pause are the user's to set", () => {

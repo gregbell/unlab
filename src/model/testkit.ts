@@ -24,7 +24,9 @@ export const IMAGES: readonly ImageInfo[] = [
 /** Room for three columns and two rows. */
 export const WIDE = { width: 1300, height: 500 };
 
-export const emptyLab = (area: { width: number; height: number } = WIDE): LabState => initialState(IMAGES, area);
+/** In a browser that took the tools. */
+export const emptyLab = (area: { width: number; height: number } = WIDE): LabState =>
+	run(initialState(IMAGES, area), { type: "agent/webmcp", webmcp: { kind: "registered" } });
 
 export function run(state: LabState, ...events: readonly LabEvent[]): LabState {
 	return events.reduce((s, event) => update(s, event).state, state);
