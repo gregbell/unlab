@@ -1,7 +1,20 @@
 import "./machine-details.ts";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { page } from "vitest/browser";
-import { fail, focus, lab, link, mount, ready, remove, spawn, tick, tokenColor, unmountAll } from "../base/testing.ts";
+import {
+	fail,
+	focus,
+	lab,
+	link,
+	mount,
+	ready,
+	remove,
+	spawn,
+	spawnAt,
+	tick,
+	tokenColor,
+	unmountAll,
+} from "../base/testing.ts";
 
 beforeEach(() => page.viewport(1440, 900));
 afterEach(unmountAll);
@@ -81,6 +94,14 @@ describe("<unlab-machine-details>", () => {
 			{ line: "exec node2 -- ping -c 3 10.88.0.11; ping -c 3 10.88.0.13", source: "button" },
 			{ line: "link down node2", source: "button" },
 		]);
+	});
+
+	it("pings each peer where it can be reached, and leaves out one with no address", async () => {
+		const { runs } = await mount("unlab-machine-details", {
+			state: lab(spawnAt("10.1.0.1/24", "10.2.0.1/24"), spawnAt("10.2.0.9/24"), spawnAt(null), ready(), focus("node2")),
+		});
+		await action("Ping node1").click();
+		expect(runs).toEqual([{ line: "exec node2 -- ping -c 3 10.2.0.1", source: "button" }]);
 	});
 
 	it("asks in the bar before removing, and runs nothing itself", async () => {

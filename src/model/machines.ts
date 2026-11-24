@@ -1,8 +1,19 @@
-import { MAX_NODE, NICS, type NicNo } from "../net/index.ts";
+import {
+	type AddressBook,
+	defaultAddress,
+	GATEWAY_SUBNETS,
+	ip4str,
+	MAX_NODE,
+	NICS,
+	type NicNo,
+	type NodeNic,
+	subnetsOverlap,
+} from "../net/index.ts";
 import { identity, nicLabel } from "./identity.ts";
 import { without } from "./record.ts";
 import { andThen, later, patch, step } from "./step.ts";
 import {
+	type Address,
 	BOOT_TIMEOUT_MS,
 	type Cause,
 	type Effect,
@@ -27,6 +38,7 @@ import {
 	type Session,
 	type SessionId,
 	type SpawnPlan,
+	type SpawnRequest,
 	type Step,
 } from "./types.ts";
 
@@ -83,9 +95,34 @@ export function firstFreeHues(state: LabState, count: number): readonly HueNo[] 
 	return HUES.filter((hue) => !used.has(hue)).slice(0, Math.max(0, count));
 }
 
-/** Every machine in the lab, for each guest's /etc/hosts. */
+/** The address a machine goes by: the first one the lab set on it, or null when it set none. */
+export function addressOf({ spec }: Pick<Machine, "spec">): Address | null {
+	return addressed(spec)[0]?.address ?? null;
+}
+
+/** Every machine in the lab that has an address, for each guest's /etc/hosts. */
 export function hostsFor(state: LabState): readonly HostEntry[] {
-	return machineList(state).map(({ ip, name }) => ({ ip, name }));
+	return machineList(state).flatMap((machine) => {
+		const address = addressOf(machine);
+		return address ? [{ ip: ip4str(address.ip), name: machine.name }] : [];
+	});
+}
+
+/** A machine's NICs that have an address, eth0 first. */
+function addressed(spec: MachineSpec): readonly { readonly nic: NicNo; readonly address: Address }[] {
+	return NICS.flatMap((nic) => {
+		const address = spec.nics[nic]?.address;
+		return address ? [{ nic, address }] : [];
+	});
+}
+
+/** Whose NIC each address the lab set is on. */
+export function addressBook(state: Pick<LabState, "machines" | "rail">): AddressBook {
+	const book = new Map<number, NodeNic>();
+	for (const { name, spec } of machineList(state)) {
+		for (const { nic, address } of addressed(spec)) book.set(address.ip, { node: name, nic });
+	}
+	return book;
 }
 
 export function isPlanError(plan: object | null): plan is PlanError {
@@ -97,30 +134,60 @@ export function isPlanError(plan: object | null): plan is PlanError {
  * are the first free ones, ports the lowest free ones in machine and NIC
  * order. The reducer applies this plan and no other.
  */
-export function planSpawn(state: LabState, count: number, spec: MachineSpec): SpawnPlan | PlanError {
-	if (!state.images.some((image) => image.name === spec.image)) return { kind: "unknown-image", image: spec.image };
+export function planSpawn(state: LabState, count: number, request: SpawnRequest): SpawnPlan | PlanError {
+	if (!state.images.some((image) => image.name === request.image))
+		return { kind: "unknown-image", image: request.image };
 	const held = state.rail.length;
 	const room = Math.max(0, Math.min(MAX_MACHINES - held, HUES.length - held, MAX_NODE + 1 - state.nextN));
 	if (count > room) return { kind: "no-room", free: room, wanted: count };
-	const ports = claimPorts(state, count * pluggedNics(spec.nics));
+	const plugged = pluggedNics(request.nics);
+	const ports = claimPorts(state, count * plugged);
 	if (isPlanError(ports)) return ports;
-	const hues = firstFreeHues(state, count);
+	const machines = firstFreeHues(state, count).map((hue, i): SpawnPlan["machines"][number] => ({
+		identity: identity(state.nextN + i),
+		hue,
+		ports: nicPorts(request.nics, ports.slice(i * plugged)),
+		spec: specFor(request, state.nextN + i),
+	}));
+	const book = new Map(addressBook(state));
+	for (const { identity: id, spec } of machines) {
+		const clash = addressClash(spec, book);
+		if (clash) return clash;
+		for (const { nic, address } of addressed(spec)) book.set(address.ip, { node: id.name, nic });
+	}
+	return { machines, request };
+}
+
+function specFor(request: SpawnRequest, n: number): MachineSpec {
 	return {
-		machines: hues.map((hue, i) => ({
-			identity: identity(state.nextN + i),
-			hue,
-			ports: nicPorts(spec.nics, ports.slice(i * pluggedNics(spec.nics))),
+		...request,
+		nics: request.nics.map(({ net, address }) => ({
+			net,
+			address: address === "default" ? defaultAddress(n) : address,
 		})),
-		spec,
 	};
 }
 
-function pluggedNics(nics: readonly NicSpec[]): number {
+/** Why the machine cannot have the addresses it asks for, or null when it can. */
+function addressClash(spec: MachineSpec, book: AddressBook): PlanError | null {
+	const own = addressed(spec);
+	for (const [i, { nic, address }] of own.entries()) {
+		const holder = book.get(address.ip);
+		if (holder) return { kind: "address-taken", address, by: { machine: holder.node, nic: holder.nic } };
+		const subnet = spec.gateway ? GATEWAY_SUBNETS.find((kept) => subnetsOverlap(kept, address)) : undefined;
+		if (subnet) return { kind: "address-gateway", address, subnet };
+		const other = own.slice(i + 1).find((later) => subnetsOverlap(later.address, address));
+		if (other) return { kind: "address-overlap", nics: [nic, other.nic] };
+	}
+	return null;
+}
+
+function pluggedNics(nics: readonly Pick<NicSpec, "net">[]): number {
 	return nics.filter((nic) => nic.net === "switch0").length;
 }
 
 /** The claimed ports, in order, to the NICs that plug in. */
-function nicPorts(nics: readonly NicSpec[], ports: readonly PortNo[]): NicPorts {
+function nicPorts(nics: readonly Pick<NicSpec, "net">[], ports: readonly PortNo[]): NicPorts {
 	let next = 0;
 	return nics.map((nic) => (nic.net === "switch0" ? ports[next++] : null));
 }
@@ -189,27 +256,9 @@ function claimPorts(state: LabState, wanted: number): readonly PortNo[] | PlanEr
 	return ports.length < wanted ? { kind: "no-ports", free: ports.length, wanted } : ports;
 }
 
+/** Both are plain data that `planSpawn` laid out from the same request. */
 function samePlan(a: SpawnPlan, b: SpawnPlan): boolean {
-	return (
-		a.spec.image === b.spec.image &&
-		a.spec.memMiB === b.spec.memMiB &&
-		a.spec.cpus === b.spec.cpus &&
-		a.spec.diskGiB === b.spec.diskGiB &&
-		a.spec.nics.length === b.spec.nics.length &&
-		a.spec.nics.every((nic, i) => nic.net === b.spec.nics[i].net) &&
-		a.machines.length === b.machines.length &&
-		a.machines.every((one, i) => {
-			const other = b.machines[i];
-			return (
-				one.hue === other.hue &&
-				samePorts(one.ports, other.ports) &&
-				one.identity.n === other.identity.n &&
-				one.identity.name === other.identity.name &&
-				one.identity.ip === other.identity.ip &&
-				one.identity.mac === other.identity.mac
-			);
-		})
-	);
+	return JSON.stringify(a.machines) === JSON.stringify(b.machines);
 }
 
 function samePorts(a: NicPorts, b: NicPorts): boolean {
@@ -245,14 +294,14 @@ function linksDown({ name, life }: Machine, cause: Cause): Effect[] {
 
 /** The ports go on the switch before the kernel boots, so its first frame has somewhere to go. */
 function bootEffects(machine: Machine, attempt: number, state: LabState): Effect[] {
-	const { n, name, ip, mac, spec } = machine;
+	const { n, name, mac, spec } = machine;
 	return [
 		...cablesOf(machine.life).map(({ port, nic }): Effect => ({ type: "port/attach", port, machine: name, nic })),
 		{
 			type: "vm/boot",
 			machine: name,
 			attempt,
-			config: { identity: { n, name, ip, mac }, spec, hosts: hostsFor(state) },
+			config: { identity: { n, name, mac }, spec, hosts: hostsFor(state) },
 		},
 	];
 }
@@ -263,15 +312,10 @@ function bootEffects(machine: Machine, attempt: number, state: LabState): Effect
  * ignored, so allocation has one owner.
  */
 export function spawn(state: LabState, plan: SpawnPlan, at: number): Step {
-	const fresh = planSpawn(state, plan.machines.length, plan.spec);
+	const fresh = planSpawn(state, plan.machines.length, plan.request);
 	if (isPlanError(fresh) || fresh.machines.length === 0 || !samePlan(fresh, plan)) return step(state);
 
-	const nodes = fresh.machines.map(({ identity, hue, ports }) => ({
-		identity,
-		hue,
-		spec: fresh.spec,
-		plugs: plugInto(ports),
-	}));
+	const nodes = fresh.machines.map(({ ports, ...machine }) => ({ ...machine, plugs: plugInto(ports) }));
 	return bootMachines(state, nodes, state.nextN + nodes.length, at);
 }
 

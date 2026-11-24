@@ -7,17 +7,17 @@ import {
 	type DiskSize,
 	type HueNo,
 	isPlanError,
-	LAB_PREFIX_BITS,
 	type LabState,
 	MAX_MACHINES,
 	type MachineName,
-	type MachineSpec,
 	type NicSpec,
 	PORTS,
 	planSpawn,
+	type SpawnRequest,
 	SWITCH_NAME,
 	takenPorts,
 } from "../../model/index.ts";
+import { addressStr } from "../../net/index.ts";
 
 /** The memory choices, in MiB. */
 export const MEMORY = [64, 128, 256, 512, 1024, 2048, 4096] as const;
@@ -33,6 +33,9 @@ export interface SpawnChoice {
 	/** The form gives every machine one NIC. The bar's `--nics` gives more. */
 	readonly nics: 1;
 	readonly net: NicSpec["net"];
+	/** The form leaves both to the lab. The bar's `--addr` and `--no-gateway` choose. */
+	readonly addr: null;
+	readonly gateway: "on";
 }
 
 export interface NewMachine {
@@ -68,18 +71,20 @@ export function defaultChoice(lab: LabState): SpawnChoice {
 		disk: "4",
 		nics: 1,
 		net: SWITCH_NAME,
+		addr: null,
+		gateway: "on",
 	};
 	return { ...choice, count: Math.max(1, Math.min(choice.count, mostOf(choice, lab))) };
 }
 
 /** Asks the spawn plan itself, so the stepper and the verb agree on every limit, the address range included. */
 function mostOf(choice: SpawnChoice, lab: LabState): number {
-	for (let n = MAX_MACHINES; n > 0; n--) if (!isPlanError(planSpawn(lab, n, specOf(choice)))) return n;
+	for (let n = MAX_MACHINES; n > 0; n--) if (!isPlanError(planSpawn(lab, n, requestOf(choice)))) return n;
 	return 0;
 }
 
-function specOf({ image, mem, net }: SpawnChoice): MachineSpec {
-	return { image, memMiB: mem, nics: [{ net }] };
+function requestOf({ image, mem, net }: SpawnChoice): SpawnRequest {
+	return { image, memMiB: mem, gateway: net === SWITCH_NAME, nics: [{ net, address: "default" }] };
 }
 
 function memoryTotal(mib: number): string {
@@ -99,12 +104,12 @@ function networkNote(choice: SpawnChoice, lab: LabState): string {
 }
 
 function machinesOf(choice: SpawnChoice, lab: LabState): readonly NewMachine[] {
-	const plan = planSpawn(lab, choice.count, specOf(choice));
+	const plan = planSpawn(lab, choice.count, requestOf(choice));
 	if (isPlanError(plan)) return [];
-	return plan.machines.map(({ identity, hue, ports: [port] }) => ({
+	return plan.machines.map(({ identity, hue, ports: [port], spec }) => ({
 		name: identity.name,
 		hue,
-		address: `${identity.ip}/${LAB_PREFIX_BITS}`,
+		address: spec.nics[0].address ? addressStr(spec.nics[0].address) : "no address",
 		port: port === null ? "unplugged" : `port ${port}`,
 	}));
 }

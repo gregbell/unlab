@@ -1,7 +1,9 @@
 // Shared by the model's tests. Every fixture is built through `update`, the way the app builds state.
 
+import { isAddressFault, parseAddress } from "../net/index.ts";
 import { isPlanError, planBootAgain, planLink, planSpawn } from "./machines.ts";
 import type {
+	Address,
 	AgentCall,
 	CommandEvent,
 	Effect,
@@ -14,6 +16,7 @@ import type {
 	NicSpec,
 	RuntimeEvent,
 	Source,
+	SpawnRequest,
 } from "./types.ts";
 import { initialState, update } from "./update.ts";
 
@@ -47,15 +50,37 @@ export function effectsOf(state: LabState, ...events: readonly LabEvent[]): Effe
 export interface SpawnOptions {
 	/** Each NIC's network. One value, or one for each NIC, eth0 first. */
 	readonly net?: NicSpec["net"] | readonly NicSpec["net"][];
+	/** Each NIC's address, or null for none. The lab chooses when it is left out. */
+	readonly addr?: readonly (string | null)[];
+	readonly gateway?: boolean;
 	readonly image?: string;
 	readonly memMiB?: number;
 	readonly at?: number;
 }
 
+export function address(text: string): Address {
+	const read = parseAddress(text);
+	if (isAddressFault(read)) throw new Error(`${text}: ${read.kind}`);
+	return read;
+}
+
+export function spawnRequest(options: SpawnOptions = {}): SpawnRequest {
+	const { addr, image = "alpine", memMiB = 256 } = options;
+	const nets = [options.net ?? "switch0"].flat();
+	return {
+		image,
+		memMiB,
+		gateway: options.gateway ?? nets[0] === "switch0",
+		nics: nets.map((net, nic) => {
+			if (addr === undefined) return { net, address: nic === 0 ? "default" : null };
+			const chosen = addr[nic];
+			return { net, address: chosen === null ? null : address(chosen) };
+		}),
+	};
+}
+
 export function spawnEvent(state: LabState, count: number, options: SpawnOptions = {}): CommandEvent {
-	const nics = [options.net ?? "switch0"].flat().map((net) => ({ net }));
-	const spec = { image: options.image ?? "alpine", memMiB: options.memMiB ?? 256, nics };
-	const plan = planSpawn(state, count, spec);
+	const plan = planSpawn(state, count, spawnRequest(options));
 	if (isPlanError(plan)) throw new Error(`cannot plan the spawn: ${JSON.stringify(plan)}`);
 	return { type: "cmd/spawn", plan, at: options.at ?? state.now };
 }

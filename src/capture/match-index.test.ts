@@ -1,6 +1,15 @@
 import fc from "fast-check";
 import { expect, test } from "vitest";
-import { arpReply, arpRequest, eth, ipv4Packet, ping, tcpSegment, udpSegment } from "../../test/support/frames.ts";
+import {
+	ADDRESSES,
+	arpReply,
+	arpRequest,
+	eth,
+	ipv4Packet,
+	ping,
+	tcpSegment,
+	udpSegment,
+} from "../../test/support/frames.ts";
 import type { Cause, MachineName, PortNo } from "../model/index.ts";
 import { type CaptureFilter, compileFilter, type Flood, MATCH_ALL, NICS, type NicNo } from "../net/index.ts";
 import { createCaptureLog, type SwitchedFrame } from "./log.ts";
@@ -93,7 +102,7 @@ test("the incremental match index agrees with filtering the whole buffer", () =>
 	fc.assert(
 		fc.property(fc.integer({ min: 1, max: 24 }), fc.array(operation, { maxLength: 200 }), (limit, ops) => {
 			let clock = 0;
-			const log = createCaptureLog({ limit, now: () => clock, schedule: () => {} });
+			const log = createCaptureLog({ limit, now: () => clock, schedule: () => {}, addresses: () => ADDRESSES });
 			let buffer: Kept[] = [];
 			let filter = MATCH_ALL;
 			let paused = false;
@@ -137,8 +146,8 @@ test("the incremental match index agrees with filtering the whole buffer", () =>
 
 				const expected = buffer.filter((k) =>
 					k.kind === "frame"
-						? filter.matchesFrame(k.frame.frame, k.frame.from, k.frame.to)
-						: filter.matchesLink(k.port, k.machine, k.nic),
+						? filter.matchesFrame(k.frame.frame, k.frame.from, k.frame.to, ADDRESSES)
+						: filter.matchesLink(k.port, k.machine, k.nic, ADDRESSES),
 				);
 				expect(log.window(0, log.matchCount).map((r) => r.seq)).toEqual(expected.map((k) => k.seq));
 				expect(log.matchedFrames).toBe(expected.filter((k) => k.kind === "frame").length);
@@ -157,7 +166,12 @@ test("the incremental match index agrees with filtering the whole buffer", () =>
 
 test("100 000 appends into a full ring with a filter stay cheap and notify once per flush", () => {
 	const queue: (() => void)[] = [];
-	const log = createCaptureLog({ limit: 10_000, now: () => 0, schedule: (fn) => queue.push(fn) });
+	const log = createCaptureLog({
+		limit: 10_000,
+		now: () => 0,
+		schedule: (fn) => queue.push(fn),
+		addresses: () => ADDRESSES,
+	});
 	log.setFilter(compile("icmp node2 or arp port:3"));
 	const frames = FRAMES.map((frame, i) => ({ from: ((i % 4) + 1) as PortNo, to: 1 << (i % 4), flood: null, frame }));
 	const calls = [0, 0];

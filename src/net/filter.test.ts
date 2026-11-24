@@ -1,6 +1,7 @@
 import fc from "fast-check";
 import { describe, expect, test } from "vitest";
 import {
+	ADDRESSES,
 	arpRequest,
 	BROADCAST,
 	eth,
@@ -13,12 +14,18 @@ import {
 	tcpSegment,
 	udpSegment,
 } from "../../test/support/frames.ts";
-import { type CaptureFilter, compileFilter, MATCH_ALL } from "./filter.ts";
+import { compileFilter, MATCH_ALL } from "./filter.ts";
+import type { AddressBook, NicNo, NodeName } from "./identity.ts";
 
-function compile(source: string): CaptureFilter {
+/** The filter over frames captured while the lab's addresses were `names`. */
+function compile(source: string, names: AddressBook = ADDRESSES) {
 	const r = compileFilter(source);
 	if (!r.ok) throw new Error(`expected ${source} to compile: ${r.error.message}`);
-	return r.filter;
+	const { filter } = r;
+	return {
+		matchesFrame: (f: Uint8Array, from: number, to: number) => filter.matchesFrame(f, from, to, names),
+		matchesLink: (port: number, machine: NodeName, nic: NicNo) => filter.matchesLink(port, machine, nic, names),
+	};
 }
 
 const EXTERNAL_MAC = Uint8Array.of(0x02, 0x00, 0x00, 0x00, 0x00, 0x01);
@@ -36,7 +43,7 @@ describe("filter terms", () => {
 			expect(f.matchesFrame(ping(1, 2), 1, bit(2))).toBe(true);
 			expect(f.matchesLink(3, "node3", 0)).toBe(true);
 		}
-		expect(MATCH_ALL.matchesFrame(arpRequest(1, 2), 1, 0)).toBe(true);
+		expect(MATCH_ALL.matchesFrame(arpRequest(1, 2), 1, 0, ADDRESSES)).toBe(true);
 	});
 
 	test("protocols", () => {
@@ -78,6 +85,20 @@ describe("filter terms", () => {
 		// An outsider's MAC carrying node2's address still names node2.
 		const spoofed = eth(BROADCAST, EXTERNAL_MAC, 0x0800, ipv4Packet(ip(2), GATEWAY, 1, []));
 		expect(f.matchesFrame(spoofed, 4, 0)).toBe(true);
+	});
+
+	test("a machine name matches by the addresses the lab set when the frame was captured, on any NIC", () => {
+		const [left, right, elsewhere] = [0x0a010001, 0x0a020001, 0x0a030001];
+		const book: AddressBook = new Map([
+			[left, { node: "node2", nic: 0 }],
+			[right, { node: "node2", nic: 2 }],
+		]);
+		const from = (src: number) => eth(BROADCAST, EXTERNAL_MAC, 0x0800, ipv4Packet(src, GATEWAY, 1, []));
+		const named = (names: AddressBook) =>
+			[left, right, elsewhere, ip(2)].map((a) => compile("node2", names).matchesFrame(from(a), 1, 0));
+		expect(named(book)).toEqual([true, true, false, false]);
+		expect(named(ADDRESSES)).toEqual([false, false, false, true]);
+		expect(compile("node2", book).matchesFrame(arpRequest(1, 3, right), 1, 0)).toBe(true);
 	});
 
 	test("an IPv4 address matches IP source, IP destination and ARP addresses", () => {
@@ -170,6 +191,11 @@ describe("link rows", () => {
 		expect(links("node3:eth1")).toEqual([false, true]);
 		expect(links("52:54:00:88:01:0d")).toEqual([false, true]);
 		expect(links("10.88.0.13")).toEqual([true, false]);
+		const chosen: AddressBook = new Map([[0x0a010001, { node: "node3", nic: 1 }]]);
+		expect(([0, 1] as const).map((nic) => compile("10.1.0.1", chosen).matchesLink(3, "node3", nic))).toEqual([
+			false,
+			true,
+		]);
 	});
 });
 

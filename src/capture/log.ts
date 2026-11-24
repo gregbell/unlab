@@ -6,7 +6,16 @@
 // flush, whatever the frame rate.
 
 import type { Cause, MachineName, PortNo } from "../model/index.ts";
-import { arpAddrs, type CaptureFilter, ETH_ARP, type Flood, MATCH_ALL, type NicNo } from "../net/index.ts";
+import {
+	type AddressBook,
+	arpAddrs,
+	type CaptureFilter,
+	ETH_ARP,
+	type Flood,
+	MATCH_ALL,
+	type NicNo,
+	NO_ADDRESSES,
+} from "../net/index.ts";
 import { type CaptureRow, captureRow, type HasSeveralNics } from "./rows.ts";
 
 export interface FrameEntry {
@@ -20,6 +29,8 @@ export interface FrameEntry {
 	readonly flood: Flood | null;
 	/** The switch's snapshot. Never mutated. */
 	readonly bytes: Uint8Array;
+	/** Whose addresses were whose when it was captured. A later machine can be given one of them. */
+	readonly names: AddressBook;
 	/** An ARP request that went a second unanswered. */
 	readonly noReply: boolean;
 }
@@ -33,6 +44,7 @@ export interface LinkEntry {
 	readonly nic: NicNo;
 	readonly up: boolean;
 	readonly cause: Cause;
+	readonly names: AddressBook;
 }
 
 export type CaptureEntry = FrameEntry | LinkEntry;
@@ -107,6 +119,8 @@ export interface CaptureOptions {
 	readonly schedule: (fn: () => void) => void;
 	/** ms since the lab started. */
 	readonly now: () => number;
+	/** The addresses the lab has set, as they are now. Default none. */
+	readonly addresses?: () => AddressBook;
 	/** Rows name a NIC of these machines, and of any other machine's only past eth0. Default none. */
 	readonly severalNics?: HasSeveralNics;
 }
@@ -126,7 +140,7 @@ const arpKey = (asker: number, asked: number): string => `${asker}>${asked}`;
 
 export function createCaptureLog(opts: CaptureOptions): CaptureLog {
 	const limit = opts.limit ?? 10_000;
-	const { schedule, now, severalNics } = opts;
+	const { schedule, now, severalNics, addresses = () => NO_ADDRESSES } = opts;
 
 	const ring: (Stored | undefined)[] = new Array(limit);
 	let first = 1;
@@ -167,7 +181,9 @@ export function createCaptureLog(opts: CaptureOptions): CaptureLog {
 	const at = (seq: number): Stored | undefined => (seq >= first && seq < next ? ring[seq % limit] : undefined);
 	const matchAt = (i: number): number => matches[(matchHead + i) % limit];
 	const passes = (e: Stored): boolean =>
-		e.kind === "frame" ? filter.matchesFrame(e.bytes, e.from, e.to) : filter.matchesLink(e.port, e.machine, e.nic);
+		e.kind === "frame"
+			? filter.matchesFrame(e.bytes, e.from, e.to, e.names)
+			: filter.matchesLink(e.port, e.machine, e.nic, e.names);
 	const index = (e: Stored) => {
 		if (!passes(e)) return;
 		matches[(matchHead + matchLen) % limit] = e.seq;
@@ -272,7 +288,17 @@ export function createCaptureLog(opts: CaptureOptions): CaptureLog {
 				changed();
 				return;
 			}
-			const e: StoredFrame = { kind: "frame", seq: next, t: now(), from, to, flood, bytes: frame, noReply: false };
+			const e: StoredFrame = {
+				kind: "frame",
+				seq: next,
+				t: now(),
+				from,
+				to,
+				flood,
+				bytes: frame,
+				names: addresses(),
+				noReply: false,
+			};
 			if (addrs?.op === 1 && addrs.spa !== addrs.tpa) {
 				pending.push({ frame: e, key: arpKey(addrs.spa, addrs.tpa), tick: arpTick });
 			}
@@ -282,7 +308,7 @@ export function createCaptureLog(opts: CaptureOptions): CaptureLog {
 
 		appendLink({ port, machine, nic, up, cause }) {
 			if (paused) return;
-			push({ kind: "link", seq: next, t: now(), port, machine, nic, up, cause });
+			push({ kind: "link", seq: next, t: now(), port, machine, nic, up, cause, names: addresses() });
 			changed();
 		},
 

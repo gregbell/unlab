@@ -1,8 +1,9 @@
 // Machines on a switch, each in its own thread, for tests on real kernels in Node.
 
 import { Worker } from "node:worker_threads";
+import { address } from "../../src/model/testkit.ts";
 import type { PortNo } from "../../src/model/types.ts";
-import { ip4str, macStr, NICS, type NicNo, nodeIp, nodeMac } from "../../src/net/index.ts";
+import { addressStr, defaultAddress, ip4str, macStr, NICS, type NicNo, nodeMac } from "../../src/net/index.ts";
 import { LabSwitch, type TapEvent } from "../../src/runtime/switch.ts";
 import { imagePath } from "../support/images.ts";
 import type { ExecDone, FromMachine, MachineData, ToMachine } from "./vm-worker.ts";
@@ -11,13 +12,17 @@ export interface MachineSetup {
 	readonly n: number;
 	/** The port each NIC is plugged into, eth0 first. Null leaves it unplugged. */
 	readonly ports: readonly (PortNo | null)[];
+	/** Each NIC's address, or null for none. Left out, the lab's own choice. */
+	readonly addr?: readonly (string | null)[];
 	readonly distro?: "alpine" | "debian";
-	readonly gateway?: boolean;
+	/** `packages` is the app's own gateway, which reaches only the package repositories. */
+	readonly gateway?: boolean | "packages";
 }
 
 export interface TestMachine {
 	readonly name: string;
-	readonly ip: string;
+	/** How long it took to be set up, kernel included. */
+	readonly bootMs: number;
 	readonly macs: readonly string[];
 	/** Run a shell script as root. */
 	exec(cmd: string): Promise<ExecDone>;
@@ -45,13 +50,21 @@ export async function bootLab(setups: readonly MachineSetup[]): Promise<TestLab>
 	const stop = async () => {
 		await Promise.all(workers.map((worker) => worker.terminate()));
 	};
-	const hosts = setups.map(({ n }) => ({ ip: ip4str(nodeIp(n)), name: `node${n}` }));
+	const addressesOf = ({ n, ports, addr }: MachineSetup) =>
+		(addr ?? ports.map((_, nic) => (nic === 0 ? addressStr(defaultAddress(n)) : null))).map((text) =>
+			text === null ? null : address(text),
+		);
+	const hosts = setups.flatMap((setup) => {
+		const first = addressesOf(setup).find((a) => a !== null);
+		return first ? [{ ip: ip4str(first.ip), name: `node${setup.n}` }] : [];
+	});
 
 	const boot = async (setup: MachineSetup): Promise<TestMachine> => {
 		const data: MachineData = {
 			name: `node${setup.n}`,
-			ip: ip4str(nodeIp(setup.n)),
+			addresses: addressesOf(setup),
 			macs: NICS.slice(0, setup.ports.length).map((nic) => macStr(nodeMac(setup.n, nic))),
+			image: setup.distro ?? "alpine",
 			distro: imagePath(setup.distro ?? "alpine"),
 			hosts,
 			gateway: setup.gateway ?? false,
@@ -69,6 +82,7 @@ export async function bootLab(setups: readonly MachineSetup[]): Promise<TestLab>
 			if (port) sw.attach(port, { deliver: (frame) => deliver(nic, frame) });
 		}
 
+		const startedAt = performance.now();
 		const pending = new Map<number, (result: ExecDone) => void>();
 		const lost: string[] = [];
 		await new Promise<void>((resolve, reject) => {
@@ -97,6 +111,7 @@ export async function bootLab(setups: readonly MachineSetup[]): Promise<TestLab>
 			});
 		});
 
+		const bootMs = performance.now() - startedAt;
 		let calls = 0;
 		const exec = (cmd: string) =>
 			new Promise<ExecDone>((resolve) => {
@@ -106,7 +121,7 @@ export async function bootLab(setups: readonly MachineSetup[]): Promise<TestLab>
 			});
 		return {
 			name: data.name,
-			ip: data.ip,
+			bootMs,
 			macs: data.macs,
 			exec,
 			async run(cmd) {

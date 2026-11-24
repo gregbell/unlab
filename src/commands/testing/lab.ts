@@ -1,4 +1,5 @@
 import {
+	type Address,
 	type CommandEvent,
 	HUES,
 	type ImageInfo,
@@ -12,6 +13,7 @@ import {
 	type Session,
 	type SessionId,
 } from "../../model/index.ts";
+import { defaultAddress } from "../../net/index.ts";
 import type { CommandDeps, ExecPort } from "../define.ts";
 
 export interface MachineFixture {
@@ -20,6 +22,9 @@ export interface MachineFixture {
 	/** Ready machines only. Plugged machines sit on port n. */
 	readonly link?: "up" | "cut" | "none";
 	readonly shells?: number;
+	/** Null for a machine with none. Left out, the lab's own choice. */
+	readonly address?: Address | null;
+	readonly gateway?: boolean;
 }
 
 export const IMAGES: readonly ImageInfo[] = [
@@ -62,11 +67,15 @@ export function labWith(fixtures: readonly MachineFixture[], images: readonly Im
 		machines[name] = {
 			n: f.n,
 			name,
-			ip: `10.88.0.${10 + f.n}`,
 			mac: `02:00:0a:58:00:${(10 + f.n).toString(16).padStart(2, "0")}`,
 			life: life(f),
 			hue: HUES[(f.n - 1) % HUES.length],
-			spec: { image: "alpine", memMiB: 256, nics: [{ net: "switch0" }] },
+			spec: {
+				image: "alpine",
+				memMiB: 256,
+				gateway: f.gateway ?? true,
+				nics: [{ net: "switch0", address: f.address === undefined ? defaultAddress(f.n) : f.address }],
+			},
 			sessions: ids,
 			activeSession: ids[0],
 			nextShell: (f.shells ?? 0) + 1,

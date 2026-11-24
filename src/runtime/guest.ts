@@ -6,7 +6,9 @@
 // is taken from unkernel's own web/src/sudo.ts (MIT, Pooya Parsa).
 
 import type { ExecOptions, ExecResult, KernelHandle } from "unkernel";
-import type { HostEntry } from "../model/index.ts";
+import type { Address, HostEntry } from "../model/index.ts";
+import { addressStr } from "../net/index.ts";
+import { BOOT_LEASE } from "./boot-lease.ts";
 
 export const SUDO_SH = `if [ "$(id -u)" != 0 ] && command -v sudo >/dev/null 2>&1; then SUDO=sudo; else SUDO=; fi`;
 
@@ -27,22 +29,18 @@ export function execAsRoot(
 
 export interface SetupOptions {
 	hostname: string;
-	/** This machine's lab address and prefix length, e.g. 10.88.0.11 and 24. */
-	ip: string;
-	prefixBits: number;
-	/** How many NICs the machine has. eth1 and up come up with no address. */
-	nics: number;
-	/** The other machines, written into /etc/hosts so names work with no DNS. */
+	/** The address the lab set on each NIC, eth0 first, or null for one that comes up with none. */
+	addresses: readonly (Address | null)[];
+	/** The machines that have an address, written into /etc/hosts so names work with no DNS. */
 	hosts: readonly HostEntry[];
-	/** The image runs DHCP at boot when the package gateway is attached. */
-	dhcp: boolean;
+	/** The package gateway leases eth0 an address of its own, beside the lab's. */
+	gateway: boolean;
 	/** Carried in every prompt mark, so marks printed by programs are not believed. Hex only. */
 	promptToken: string;
 }
 
 export interface HostsOptions {
 	hostname: string;
-	ip: string;
 	hosts: readonly HostEntry[];
 }
 
@@ -87,10 +85,10 @@ const promptScript = (token: string) =>
 	].join("\n");
 
 /**
- * Bring the machine onto the lab segment: its name, its lab address on eth0,
- * /etc/hosts for every machine in the lab, and the marked prompt. With an
- * uplink, udhcpc also claims 10.0.2.15 and installs the default route, which
- * carries package repository traffic.
+ * Bring the machine onto the lab: its name, the address the lab set on each
+ * NIC, /etc/hosts for every machine that has one, and the marked prompt. With
+ * the gateway, the image's udhcpc also claims 10.0.2.15 and installs the
+ * default route, which carries package repository traffic.
  *
  * Idempotent: a second run with the same options changes nothing, and a run
  * with a new host table changes only /etc/hosts.
@@ -106,12 +104,19 @@ export function setupScript(o: SetupOptions): string {
 		// works without sudo. Harmless: it only widens who may send echoes.
 		`sysctl -w net.ipv4.ping_group_range='0 2147483647' >/dev/null 2>&1 || true`,
 		// Every NIC is on the one switch, and Linux would answer on all of them for an address that only one has.
-		...(o.nics > 1 ? [`sysctl -w net.ipv4.conf.all.arp_ignore=1 net.ipv4.conf.all.arp_announce=2 >/dev/null`] : []),
-		...Array.from({ length: o.nics }, (_, nic) => `ip link set eth${nic} up`),
+		...(o.addresses.length > 1
+			? [`sysctl -w net.ipv4.conf.all.arp_ignore=1 net.ipv4.conf.all.arp_announce=2 >/dev/null`]
+			: []),
+		...o.addresses.map((_, nic) => `ip link set eth${nic} up`),
 		// The image's DHCP script flushes eth0 before installing its lease.
-		// Wait for it before adding the lab address (Debian runs DHCP in the background).
-		o.dhcp ? `/usr/lib/kw/net wait` : `:`,
-		`ip addr replace ${o.ip}/${o.prefixBits} dev eth0`,
+		// Wait for it before adding the lab's address (Debian runs DHCP in the background).
+		...(o.gateway
+			? [`/usr/lib/kw/net wait`]
+			: [
+					`/usr/lib/kw/net wait || true`,
+					`ip addr del ${BOOT_LEASE.address}/${BOOT_LEASE.prefix} dev eth0 2>/dev/null || true`,
+				]),
+		...o.addresses.flatMap((address, nic) => (address ? [`ip addr replace ${addressStr(address)} dev eth${nic}`] : [])),
 		// Last, so the first marked prompt appears on a machine that is already configured.
 		promptScript(o.promptToken),
 	].join("\n");
@@ -127,11 +132,9 @@ const END = "# unlab: end";
  * a link, an address or a hostname someone set on purpose.
  */
 export function hostsScript(o: HostsOptions): string {
-	const entries = [
-		// A matching entry keeps sudo from stalling on a name lookup.
-		`${o.ip} ${o.hostname}`,
-		...o.hosts.filter((h) => h.name !== o.hostname).map((h) => `${h.ip} ${h.name}`),
-	];
+	// sudo looks its own machine's name up, and one with no address is nowhere else to be found.
+	const own = o.hosts.find((h) => h.name === o.hostname) ?? { ip: "127.0.1.1", name: o.hostname };
+	const entries = [own, ...o.hosts.filter((h) => h.name !== o.hostname)].map((h) => `${h.ip} ${h.name}`);
 	const block = [BEGIN, ...entries, END].map((line) => sh(line)).join(" ");
 	return [
 		`{ sed ${sh(`/^${BEGIN}$/,/^${END}$/d`)} /etc/hosts 2>/dev/null || true; printf '%s\\n' ${block}; } > /etc/hosts.unlab`,

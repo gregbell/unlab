@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+	ADDRESSES,
 	arpReply,
 	arpRequest,
 	eth,
@@ -17,7 +18,18 @@ import { frameDetail, type LabNames, type Named } from "./frame-detail-model.ts"
 const ports = (mask: readonly PortNo[]): number => mask.reduce((m, p) => m | (1 << (p - 1)), 0);
 
 function entry(bytes: Uint8Array, fields: Partial<Omit<FrameEntry, "kind" | "bytes">> = {}): FrameEntry {
-	return { kind: "frame", seq: 189, t: 1_618_520, from: 1, to: 0, flood: null, noReply: false, ...fields, bytes };
+	return {
+		kind: "frame",
+		seq: 189,
+		t: 1_618_520,
+		from: 1,
+		to: 0,
+		flood: null,
+		names: ADDRESSES,
+		noReply: false,
+		...fields,
+		bytes,
+	};
 }
 
 const only = (machine: MachineName): Named => ({ machine, label: machine });
@@ -46,6 +58,18 @@ describe("frameDetail", () => {
 				{ label: "type", value: "0x0806 ARP", who: null },
 			],
 		});
+	});
+
+	it("names an address by whose it was when the frame was captured, in its field and its bytes", () => {
+		const names = new Map([[ip(3), { node: "node7" as const, nic: 1 as const }]]);
+		const who = (names: FrameEntry["names"]) => {
+			const d = frameDetail(entry(arpRequest(1, 3), { names }), holder);
+			const target = d.groups[1].fields.find((f) => f.label === "target ip")?.who;
+			const bytes = d.dump.flatMap((row) => row.runs).find((r) => r.text === "0a 58 00 0d")?.machine;
+			return [target, bytes];
+		};
+		expect(who(names)).toEqual([{ kind: "machine", ...only("node7") }, "node7"]);
+		expect(who(new Map())).toEqual([null, undefined]);
 	});
 
 	it("decodes an ARP request as the group under ethernet", () => {

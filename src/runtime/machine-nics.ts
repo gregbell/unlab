@@ -4,6 +4,7 @@
 
 import type { KernelHandle } from "unkernel";
 import { NICS, type NicNo, nicName } from "../net/index.ts";
+import { bootLease } from "./boot-lease.ts";
 import { type Gateway, LabNic } from "./nic.ts";
 import { NIC_HELPER } from "./nic-helper.ts";
 import { NIC_HELPER_PATH, openTap, type Tap } from "./tap.ts";
@@ -11,7 +12,7 @@ import { NIC_HELPER_PATH, openTap, type Tap } from "./tap.ts";
 export interface MachineNicsOptions {
 	/** One MAC for each NIC, eth0 first. */
 	readonly macs: readonly string[];
-	/** The package gateway, on eth0 alone. */
+	/** The package gateway, on eth0 alone. Without it, nothing but the switch is on the cable once the guest has booted. */
 	readonly gateway?: Gateway;
 	/** A frame a NIC sent, in a buffer of its own. */
 	readonly toSwitch: (nic: NicNo, frame: Uint8Array) => void;
@@ -29,7 +30,7 @@ export class MachineNics {
 		this.#opts = opts;
 		this.eth0 = new LabNic({
 			mac: opts.macs[0],
-			gateway: opts.gateway,
+			gateway: opts.gateway ?? bootLease(),
 			toSwitch: (frame) => opts.toSwitch(0, frame),
 		});
 	}
@@ -43,6 +44,8 @@ export class MachineNics {
 	async start(vm: Pick<KernelHandle, "exec" | "spawn">): Promise<void> {
 		const install = `cat > ${NIC_HELPER_PATH} && chmod 755 ${NIC_HELPER_PATH} && ${NIC_HELPER_PATH} plain eth0`;
 		const installed = await vm.exec("/bin/sh", ["-c", install], { user: "root", input: NIC_HELPER });
+		// The guest runs nothing for us until its boot's DHCP client is done.
+		if (!this.#opts.gateway) this.eth0.dropGateway();
 		if (installed.exitCode !== 0) {
 			throw new Error(`eth0: ${installed.stderr.trim() || `exit ${installed.exitCode}`}`);
 		}

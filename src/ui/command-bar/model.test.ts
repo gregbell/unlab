@@ -196,6 +196,8 @@ describe("the artboards, replayed", () => {
 				"[--disk 4 | 8 | 16 | 32 | 64]",
 				"[--nics NICs]",
 				"[--net network,... | --no-net]",
+				"[--addr address,...]",
+				"[--no-gateway]",
 			],
 			current: 1,
 		});

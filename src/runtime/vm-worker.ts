@@ -98,7 +98,7 @@ function handle(m: Queued): void {
 
 async function reconfigure(m: Extract<ToVm, { type: "reconfigure" }>): Promise<void> {
 	if (!vm) return;
-	const r = await execAsRoot(vm, hostsScript({ hostname: m.name, ip: m.ip, hosts: m.hosts }));
+	const r = await execAsRoot(vm, hostsScript({ hostname: m.name, hosts: m.hosts }));
 	if (r.exitCode !== 0) fail(`reconfigure: ${String(r.stderr).trim()}`, false);
 }
 
@@ -154,7 +154,7 @@ async function boot(c: VmConfig): Promise<void> {
 
 	// The gateway is a NetStack of its own, told the same MAC as eth0 so its
 	// DHCP lease and ARP replies are addressed to this machine.
-	const gateway = c.packageRepositories ? new NetStack({ mac: c.macs[0], backend: packageBackend() }) : undefined;
+	const gateway = c.gateway ? new NetStack({ mac: c.macs[0], backend: packageBackend() }) : undefined;
 
 	nics = new MachineNics({
 		macs: c.macs,
@@ -205,21 +205,19 @@ async function boot(c: VmConfig): Promise<void> {
 	});
 	void vm.exited.then((r) => post({ type: "exited", code: r.code, reason: r.reason ?? "" }));
 
-	// The NICs, name, lab address, /etc/hosts and the marked prompt; with a
+	// The NICs, name, addresses, /etc/hosts and the marked prompt; with a
 	// gateway, udhcpc also brings up 10.0.2.15 and the default route. A machine that
 	// cannot be set up is not on the lab, so it has not booted.
 	try {
 		await nics.start(vm);
 		const setup = setupScript({
 			hostname: c.name,
-			ip: c.ip,
-			prefixBits: c.prefixBits,
-			nics: c.macs.length,
+			addresses: c.addresses,
 			hosts: c.hosts,
-			dhcp: Boolean(gateway),
+			gateway: c.gateway,
 			promptToken: c.promptToken,
 		});
-		const prepareApk = c.packageRepositories && c.distro === "alpine";
+		const prepareApk = c.gateway && c.distro === "alpine";
 		const r = await execAsRoot(vm, prepareApk ? `${alpinePackageSetup}\n${setup}` : setup);
 		if (r.exitCode !== 0) {
 			fail(`setup: ${String(r.stderr).trim() || `exit ${r.exitCode}`}`, true);

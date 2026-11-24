@@ -18,26 +18,26 @@ describe("ls", () => {
 			[
 				"node1",
 				{ kind: "state", text: "ready" },
-				"10.88.0.11 · 52:54:00:88:00:0b · up on port 1 · console, sh1",
+				"10.88.0.11/24 · 52:54:00:88:00:0b · up on port 1 · console, sh1",
 				"node1:sh1",
 			],
 			[
 				"node2",
 				{ kind: "state", text: "ready" },
-				"10.88.0.12 · 52:54:00:88:00:0c · cut on port 2 · console",
+				"10.88.0.12/24 · 52:54:00:88:00:0c · cut on port 2 · console",
 				"node2:console",
 			],
 			[
 				"node3",
 				{ kind: "state", text: "ready" },
-				"10.88.0.13 · 52:54:00:88:00:0d · up on port 3 · console",
+				"10.88.0.13/24 · 52:54:00:88:00:0d · up on port 3 · console",
 				"node3:console",
 			],
 			["node4", { kind: "state", text: "failed" }, "No prompt after 120 s.", "node4:console"],
 			[
 				"node5",
 				{ kind: "state", text: "booting" },
-				"10.88.0.15 · 52:54:00:88:00:0f · unplugged · console",
+				"10.88.0.15/24 · 52:54:00:88:00:0f · unplugged · console",
 				"node5:console",
 			],
 		]);
@@ -45,7 +45,8 @@ describe("ls", () => {
 			name: "node2",
 			state: "ready",
 			address: "10.88.0.12",
-			nics: [{ name: "eth0", mac: "52:54:00:88:00:0c", address: "10.88.0.12", port: 2, link: "cut" }],
+			gateway: true,
+			nics: [{ name: "eth0", mac: "52:54:00:88:00:0c", address: "10.88.0.12", prefix: 24, port: 2, link: "cut" }],
 			sessions: ["node2:console"],
 		});
 	});
@@ -58,7 +59,7 @@ describe("ls", () => {
 		const result = await lab.run("ls");
 		if (result.kind !== "report") throw new Error("ls reports");
 		expect(result.blocks[0].lastLine.split("\n")).toEqual([
-			"eth0 · 10.88.0.11 · 52:54:00:88:00:0b · up on port 1",
+			"eth0 · 10.88.0.11/24 · 52:54:00:88:00:0b · up on port 1",
 			"eth1 · no address · 52:54:00:88:01:0b · cut on port 2",
 			"eth2 · no address · 52:54:00:88:02:0b · unplugged",
 			"console",
@@ -72,6 +73,33 @@ describe("ls", () => {
 					{ name: "eth2", mac: "52:54:00:88:02:0b", address: null, port: null, link: "unplugged" },
 				],
 			},
+		]);
+	});
+
+	it("shows the addresses the lab set, and which machines have no package gateway", async () => {
+		const lab = storeLab();
+		await lab.run("spawn 1 alpine --nics 2 --addr none,10.2.0.1/16 --no-gateway");
+		await lab.run("spawn 1 alpine --addr none");
+		const result = await lab.run("ls");
+		if (result.kind !== "report") throw new Error("ls reports");
+		expect(result.blocks.map((b) => b.lastLine.split("\n"))).toEqual([
+			[
+				"eth0 · no address · 52:54:00:88:00:0b · port 1 reserved",
+				"eth1 · 10.2.0.1/16 · 52:54:00:88:01:0b · port 2 reserved",
+				"no package gateway · console",
+			],
+			["no address · 52:54:00:88:00:0c · port 3 reserved · console"],
+		]);
+		expect(result.data).toMatchObject([
+			{
+				address: "10.2.0.1",
+				gateway: false,
+				nics: [
+					{ address: null, prefix: null },
+					{ address: "10.2.0.1", prefix: 16 },
+				],
+			},
+			{ address: null, gateway: true },
 		]);
 	});
 

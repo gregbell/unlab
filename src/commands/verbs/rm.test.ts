@@ -38,6 +38,19 @@ describe("rm", () => {
 		});
 	});
 
+	it("names every address that stops answering, and no one who has none", async () => {
+		const lab = storeLab();
+		await lab.run("spawn 1 alpine --nics 2 --addr 10.1.0.1/24,10.2.0.1/24");
+		await lab.run("spawn 1 alpine --addr 10.1.0.2/24");
+		await lab.run("spawn 1 alpine --addr none");
+		for (const name of ["node1", "node2", "node3"] as const) lab.ready(name);
+		const detail = (line: string) => danger(lab.parsed(line)).confirm(lab.store.state);
+		expect(detail("rm node1")).toMatchObject({
+			detail: expect.stringContaining("node2 will stop getting answers from 10.1.0.1 and 10.2.0.1."),
+		});
+		expect(detail("rm node3")).toMatchObject({ detail: expect.stringMatching(/Port 4 on switch0 frees up\.$/) });
+	});
+
 	it("previews in the warn tone, naming the port it frees", async () => {
 		const lab = storeLab();
 		await lab.lab(3);

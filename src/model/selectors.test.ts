@@ -10,6 +10,7 @@ import {
 	selectRail,
 	selectRecent,
 	selectStatus,
+	selectSubnets,
 	selectTiling,
 } from "./selectors.ts";
 import {
@@ -36,6 +37,29 @@ const texts = (s: LabState) => ({
 });
 const tone = (s: LabState, key: string) =>
 	[...selectStatus(s).left, ...selectStatus(s).right].find((segment) => segment.key === key)?.tone;
+
+describe("chosen addresses", () => {
+	let s = emptyLab();
+	s = run(s, spawnEvent(s, 1, { net: ["switch0", "switch0"], addr: ["10.1.0.1/16", null], gateway: false }));
+	s = run(s, spawnEvent(s, 1, { addr: [null] }), isReady("node1"), isReady("node2"));
+	const values = (name: MachineName) =>
+		selectDetails(run(s, focus(name)))?.rows.flatMap((r) =>
+			["address", "gateway"].includes(r.label) ? [r.value] : [],
+		);
+
+	test("show in the rail and the details, or that there is none", () => {
+		expect(selectRail(s).map((r) => r.line2)).toEqual(["10.1.0.1", "no address"]);
+		expect(values("node1")).toEqual(["off", "10.1.0.1/16", "none"]);
+		expect(values("node2")).toEqual(["none"]);
+	});
+
+	test("name the switch's subnet, and how many once there are several", () => {
+		expect(selectSubnets(emptyLab())).toBe("10.88.0.0/24");
+		expect(selectSubnets(labWith(2))).toBe("10.88.0.0/24");
+		expect(selectSubnets(s)).toBe("10.1.0.0/16");
+		expect(selectSubnets(run(s, spawnEvent(s, 1)))).toBe("2 subnets");
+	});
+});
 
 /** node1 up, node2 cut, node3 unplugged, node4 booting for 1.4 s, node5 failed, node6 removing. */
 function oneOfEach(): LabState {

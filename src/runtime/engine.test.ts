@@ -2,6 +2,7 @@ import { describe, expect, test, vi } from "vitest";
 import { arpRequest, mac, ping, routedPing } from "../../test/support/frames.ts";
 import { createCaptureLog } from "../capture/index.ts";
 import type { BootConfig, Effect, HostEntry, MachineName, RuntimeEvent, SessionId } from "../model/index.ts";
+import { defaultAddress } from "../net/index.ts";
 import { createEngine, ExecRefused } from "./engine.ts";
 import type { LineMark, MarkSource, Screen, ScreenIo, Screens } from "./screens.ts";
 import { createShellTracker } from "./shell-tracker.ts";
@@ -25,10 +26,9 @@ function config(n: number, hosts: readonly HostEntry[] = hostsOf(n), image = "al
 		identity: {
 			n,
 			name: `node${n}`,
-			ip: `10.88.0.${10 + n}`,
 			mac: `52:54:00:88:00:${(10 + n).toString(16).padStart(2, "0")}`,
 		},
-		spec: { image, memMiB: 256, nics: [{ net: "switch0" }] },
+		spec: { image, memMiB: 256, gateway: true, nics: [{ net: "switch0", address: defaultAddress(n) }] },
 		hosts,
 	};
 }

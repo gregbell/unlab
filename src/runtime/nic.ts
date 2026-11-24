@@ -5,13 +5,14 @@
 // Two things sit on this one cable, as if a small hub joined them:
 //   * the switch, and so the other machines: their own stacks talk to each
 //     other, nothing emulated in between;
-//   * the package gateway, a NetStack that owns 10.0.2.0/24 and serves DHCP,
-//     DNS and the package repositories. Only this machine can see it.
+//   * a gateway only this machine can see. The package gateway is a NetStack
+//     that owns 10.0.2.0/24 and serves DHCP, DNS and the package repositories.
+//     A machine without one has the boot lease in its place until it is set up.
 
 import type { Kernel, NetDevice } from "unkernel";
 import { arpAddrs, ipAddrs, isDhcpRequest, isGroupMac, macStr, parseMac } from "../net/index.ts";
 
-/** The NetStack, as much of it as tells which frames are its own. */
+/** As much of a gateway as tells which frames are its own. */
 export interface Gateway extends NetDevice {
 	readonly gwMac: Uint8Array;
 	readonly net: number;
@@ -23,7 +24,6 @@ export interface LabNicOptions {
 	mac: string;
 	/** Put a frame on the cable to the switch. Must not retain the array. */
 	toSwitch: (frame: Uint8Array) => void;
-	/** The package gateway, when enabled at boot. */
 	gateway?: Gateway;
 }
 
@@ -41,7 +41,7 @@ export function isForGateway(f: Uint8Array, gateway: Gateway): boolean {
 export class LabNic implements NetDevice {
 	readonly mac: Uint8Array;
 	readonly #toSwitch: (frame: Uint8Array) => void;
-	readonly #gateway?: Gateway;
+	#gateway?: Gateway;
 	#kernel: Kernel | undefined;
 
 	constructor(opts: LabNicOptions) {
@@ -54,6 +54,12 @@ export class LabNic implements NetDevice {
 	attach(kernel: Kernel): void {
 		this.#kernel = kernel;
 		this.#gateway?.attach?.(kernel);
+	}
+
+	/** From here on every frame the guest sends is the switch's. */
+	dropGateway(): void {
+		this.#gateway?.close?.();
+		this.#gateway = undefined;
 	}
 
 	/** A frame from the guest. */

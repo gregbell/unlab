@@ -6,9 +6,6 @@
 
 export {
 	identity,
-	LAB_CIDR,
-	LAB_PREFIX_BITS,
-	nameForIp,
 	nameForMac,
 	nicLabel,
 	nicMac,
@@ -20,6 +17,8 @@ export {
 export {
 	ACCEPTS,
 	type Accepts,
+	addressBook,
+	addressOf,
 	type BootAgainPlan,
 	firstFreeHues,
 	hostsFor,

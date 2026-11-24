@@ -16,6 +16,7 @@ import {
 	restoreWorkspace,
 	type Store,
 	saveWorkspace,
+	selectAddresses,
 	severalNics,
 } from "./model/index.ts";
 import { compileFilter } from "./net/index.ts";
@@ -75,6 +76,7 @@ async function main(): Promise<void> {
 	const capture = createCaptureLog({
 		schedule,
 		now,
+		addresses: () => selectAddresses(store.state),
 		severalNics: (machine) => severalNics(store.state, machine),
 	});
 	let runtime: Engine | undefined;

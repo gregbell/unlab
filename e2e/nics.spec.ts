@@ -1,6 +1,6 @@
 import { expect, type Page, test } from "@playwright/test";
 import { chromiumExecutable } from "../test/support/chromium.ts";
-import { openWithTwoMachines } from "./lab.ts";
+import { openWithTwoMachines, root, shell, typed } from "./lab.ts";
 import { call } from "./webmcp.ts";
 
 /** When set, the test also saves screenshots of a lab with a two-NIC machine there. */
@@ -9,32 +9,6 @@ const shots = process.env.UI_SHOTS;
 test.use({
 	launchOptions: { executablePath: chromiumExecutable(), args: ["--enable-features=WebMCP"] },
 });
-
-async function typed(page: Page, line: string): Promise<void> {
-	await page.keyboard.press("Control+/");
-	await expect(page.getByRole("combobox", { name: "Command" })).toBeFocused();
-	await page.keyboard.type(line);
-	await page.keyboard.press("Enter");
-}
-
-interface Ran {
-	readonly exitCode: number | null;
-	readonly output: string;
-}
-
-async function shell(page: Page, node: number, script: string): Promise<Ran> {
-	const reply = (await call(page, "shell_exec", { targets: `node${node}`, command: script })) as {
-		data: { ran: Ran[] };
-	};
-	return reply.data.ran[0];
-}
-
-/** A command that must succeed, as root. */
-async function root(page: Page, node: number, script: string): Promise<string> {
-	const ran = await shell(page, node, `sudo sh -c '${script}'`);
-	expect(ran, script).toMatchObject({ exitCode: 0 });
-	return ran.output;
-}
 
 /** node3 has two NICs and forwards between node1's subnet and node2's. */
 async function openRouted(page: Page): Promise<void> {
@@ -130,7 +104,7 @@ test("a cable per NIC: cut one by name, from the faceplate and by machine, and a
 
 	await typed(page, "ls");
 	const listed = page.locator(".machine-result", { hasText: "node3" });
-	await expect(listed).toContainText("eth0 · 10.88.0.13 · 52:54:00:88:00:0d · up on port 3");
+	await expect(listed).toContainText("eth0 · 10.88.0.13/24 · 52:54:00:88:00:0d · up on port 3");
 	await expect(listed).toContainText("eth1 · no address · 52:54:00:88:01:0d · cut on port 4");
 	if (shots) await page.screenshot({ path: `${shots}/ls-nics.png` });
 	await page.keyboard.press("Escape");
@@ -200,4 +174,5 @@ test("a lab saved before machines had several NICs boots on the ports it had", a
 	await expect(faceplate.getByRole("button", { name: "Cut the cable from node1 to port 2" })).toBeVisible();
 	await faceplate.getByRole("button", { name: "Reconnect the cable from node2 to port 5" }).click();
 	expect(await shell(page, 1, "ping -c 1 -W 2 node2")).toMatchObject({ exitCode: 0 });
+	for (const n of [1, 2]) expect(await root(page, n, "ip -4 -o addr show eth0")).toContain(`10.88.0.1${n}/24`);
 });

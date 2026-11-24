@@ -1,19 +1,21 @@
 // One machine, in its own thread: the browser worker's NICs and setup, on Node's kernel.
 import { parentPort, workerData } from "node:worker_threads";
 import { createKernel, directBackend, NetStack } from "unkernel/node";
-import type { HostEntry } from "../../src/model/types.ts";
+import type { Address, HostEntry } from "../../src/model/types.ts";
 import type { NicNo } from "../../src/net/index.ts";
 import { execAsRoot, setupScript } from "../../src/runtime/guest.ts";
 import { MachineNics } from "../../src/runtime/machine-nics.ts";
+import { alpinePackageSetup, packageBackend } from "../../src/runtime/package-repositories.ts";
 
 export interface MachineData {
 	readonly name: string;
-	readonly ip: string;
+	readonly addresses: readonly (Address | null)[];
+	readonly image: "alpine" | "debian";
 	readonly macs: readonly string[];
 	readonly distro: string;
 	readonly hosts: readonly HostEntry[];
-	/** Whether eth0 reaches the internet through a gateway, as the app's reaches the package repositories. */
-	readonly gateway: boolean;
+	/** Whether eth0 reaches the internet through a gateway, or only the package repositories, as the app's does. */
+	readonly gateway: boolean | "packages";
 }
 
 export type ToMachine =
@@ -38,7 +40,8 @@ if (!port) throw new Error("not a worker");
 const say = (message: FromMachine, transfer: ArrayBuffer[] = []) => port.postMessage(message, transfer);
 
 const data: MachineData = workerData;
-const gateway = data.gateway ? new NetStack({ mac: data.macs[0], backend: directBackend() }) : undefined;
+const backend = data.gateway === "packages" ? packageBackend() : directBackend();
+const gateway = data.gateway ? new NetStack({ mac: data.macs[0], backend }) : undefined;
 const nics = new MachineNics({
 	macs: data.macs,
 	gateway,
@@ -54,18 +57,15 @@ try {
 	);
 	void running;
 	await nics.start(vm);
-	const setup = await execAsRoot(
-		vm,
-		setupScript({
-			hostname: data.name,
-			ip: data.ip,
-			prefixBits: 24,
-			nics: data.macs.length,
-			hosts: data.hosts,
-			dhcp: data.gateway,
-			promptToken: "0123456789abcdef",
-		}),
-	);
+	const script = setupScript({
+		hostname: data.name,
+		addresses: data.addresses,
+		hosts: data.hosts,
+		gateway: data.gateway !== false,
+		promptToken: "0123456789abcdef",
+	});
+	const prepareApk = data.gateway === "packages" && data.image === "alpine";
+	const setup = await execAsRoot(vm, prepareApk ? `${alpinePackageSetup}\n${script}` : script);
 	if (setup.exitCode !== 0) throw new Error(`setup: ${setup.stderr}`);
 
 	port.on("message", (m: ToMachine) => {

@@ -1,6 +1,6 @@
 import "./switch.css";
 import { html, nothing, type TemplateResult } from "lit";
-import { type PortView, SWITCH_NAME, selectLinks, selectPorts } from "../../model/index.ts";
+import { type PortView, SWITCH_NAME, selectLinks, selectPorts, selectSubnets } from "../../model/index.ts";
 import { Select, UnlabElement } from "../base/index.ts";
 
 /** What a click on a port column runs. Empty, booting and removing ports do nothing. */
@@ -24,6 +24,7 @@ export class UnlabSwitch extends UnlabElement {
 
 	readonly #ports = new Select(this, selectPorts);
 	readonly #links = new Select(this, selectLinks);
+	readonly #subnets = new Select(this, selectSubnets);
 
 	constructor() {
 		super();
@@ -35,7 +36,7 @@ export class UnlabSwitch extends UnlabElement {
 		return html`<div class="header">
 				${this.compact ? nothing : html`<a class="back" href="#lab" @click=${this.#back}>← lab</a>`}
 				<span class="title">${SWITCH_NAME}</span>
-				<span class="subnet">L2 · 10.88.0.0/24</span>
+				<span class="subnet">L2 · ${this.#subnets.value}</span>
 				<span class="spacer"></span>
 				<span class="links" data-cut=${links.cut > 0}>${links.up} of ${links.total} links up</span>
 			</div>

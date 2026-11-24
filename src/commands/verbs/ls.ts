@@ -1,4 +1,5 @@
 import {
+	addressOf,
 	type Machine,
 	type MachineName,
 	machineList,
@@ -11,7 +12,7 @@ import {
 	type SessionId,
 	sessionLabel,
 } from "../../model/index.ts";
-import { NICS, nicName } from "../../net/index.ts";
+import { ip4str, NICS, nicName } from "../../net/index.ts";
 import { defineVerb } from "../define.ts";
 import type { ReportBlock } from "../types.ts";
 import { count } from "./words.ts";
@@ -20,8 +21,9 @@ import { count } from "./words.ts";
 export interface ListedNic {
 	readonly name: NicName;
 	readonly mac: string;
-	/** The address the lab gave it, or null. A guest can add others. */
+	/** The address the lab set on it, or null. A guest can add others. */
 	readonly address: string | null;
+	readonly prefix: number | null;
 	readonly port: PortNo | null;
 	/** Null unless the machine is ready. */
 	readonly link: "up" | "cut" | "unplugged" | null;
@@ -31,7 +33,10 @@ export interface ListedNic {
 export interface ListedMachine {
 	readonly name: MachineName;
 	readonly state: Phase;
-	readonly address: string;
+	/** The first address the lab set on it, or null. */
+	readonly address: string | null;
+	/** Whether eth0 reaches the package gateway. */
+	readonly gateway: boolean;
 	/** eth0 first. */
 	readonly nics: readonly ListedNic[];
 	readonly sessions: readonly SessionId[];
@@ -44,18 +49,22 @@ function listed(m: Machine): ListedMachine {
 	const plugs = plugsOf(m.life);
 	const nics = NICS.slice(0, m.spec.nics.length).map((nic): ListedNic => {
 		const plug = plugs[nic];
+		const { address } = m.spec.nics[nic];
 		return {
 			name: nicName(nic),
 			mac: nicMac(m.n, nic),
-			address: nic === 0 ? m.ip : null,
+			address: address && ip4str(address.ip),
+			prefix: address?.prefix ?? null,
 			port: ports[nic] ?? null,
 			link: m.life.phase !== "ready" || !plug ? null : plug.kind === "port" ? plug.link : "unplugged",
 		};
 	});
+	const address = addressOf(m);
 	return {
 		name: m.name,
 		state: m.life.phase,
-		address: m.ip,
+		address: address && ip4str(address.ip),
+		gateway: m.spec.gateway,
 		nics,
 		sessions: m.sessions,
 		...(m.life.phase === "failed" ? { reason: m.life.reason } : {}),
@@ -69,13 +78,14 @@ function nicLine(nic: ListedNic): string {
 			: nic.link === null
 				? `port ${nic.port} reserved`
 				: `${nic.link} on port ${nic.port}`;
-	return [nic.address ?? "no address", nic.mac, cable].join(" · ");
+	return [nic.address === null ? "no address" : `${nic.address}/${nic.prefix}`, nic.mac, cable].join(" · ");
 }
 
 /** A machine with one NIC is one line. With more, each NIC has its own. */
 function lines(m: ListedMachine): string {
 	if (m.reason !== undefined) return m.reason;
-	const sessions = m.sessions.map(sessionLabel).join(", ");
+	const off = !m.gateway && m.nics[0].port !== null;
+	const sessions = [...(off ? ["no package gateway"] : []), m.sessions.map(sessionLabel).join(", ")].join(" · ");
 	if (m.nics.length === 1) return `${nicLine(m.nics[0])} · ${sessions}`;
 	return [...m.nics.map((nic) => `${nic.name} · ${nicLine(nic)}`), sessions].join("\n");
 }
@@ -114,7 +124,7 @@ export const ls = defineVerb({
 		name: "machines_list",
 		title: "List machines",
 		description:
-			"List every machine in the lab with its state, sessions and NICs. Each NIC has its MAC, address, switch port and link.",
+			"List every machine in the lab with its state, sessions and NICs. Each NIC has its MAC, the address and prefix the lab set, switch port and link.",
 		policy: "run",
 		annotations: { readOnlyHint: true },
 	},

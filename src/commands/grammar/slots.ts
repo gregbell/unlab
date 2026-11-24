@@ -1,4 +1,6 @@
 import {
+	type Address,
+	addressText,
 	type LabState,
 	type Machine,
 	type MachineName,
@@ -10,7 +12,17 @@ import {
 	plugsOf,
 	type SessionId,
 } from "../../model/index.ts";
-import { NICS, type NicNo, nicName, parseNicName } from "../../net/index.ts";
+import {
+	type AddressFault,
+	addressStr,
+	ip4str,
+	isAddressFault,
+	NICS,
+	type NicNo,
+	nicName,
+	parseAddress,
+	parseNicName,
+} from "../../net/index.ts";
 import type { JsonSchema, Suggestion } from "../types.ts";
 import { globMatch } from "./glob.ts";
 
@@ -149,7 +161,7 @@ function plugDetail(m: Machine, nic: NicNo): string {
 }
 
 function machineSuggestion(m: Machine, insert: string = m.name): Suggestion {
-	return { insert, label: m.name, detail: `${m.ip} · ${linkWord(m)}`, hue: m.hue };
+	return { insert, label: m.name, detail: `${addressText(m)} · ${linkWord(m)}`, hue: m.hue };
 }
 
 function allowed(m: Machine, ctx: ReadContext): boolean {
@@ -455,6 +467,54 @@ export function networks(): Value<string> {
 			type: "string",
 			description:
 				"switch0 or none for every NIC, or a comma list with one for each, eth0 first, such as switch0,none. A NIC with none boots unplugged.",
+		},
+	};
+}
+
+function addressFault(part: string, fault: AddressFault): string {
+	switch (fault.kind) {
+		case "unreadable":
+			return `--addr wants an address with its prefix, such as 10.1.0.1/24, or none, not ${part || "nothing"}.`;
+		case "prefix":
+			return `--addr ${part} needs a prefix from 1 to 32, as in ${ip4str(fault.ip)}/24.`;
+		case "reserved":
+			return `--addr ${part} is not an address a NIC can have, so use one such as 10.1.0.1/24.`;
+		case "network":
+		case "broadcast": {
+			const what = fault.kind === "network" ? "names its whole subnet" : "is its subnet's broadcast address";
+			return `--addr ${part} ${what}, so use one from ${ip4str(fault.first)} to ${ip4str(fault.last)}.`;
+		}
+	}
+}
+
+/** The address of each NIC, eth0 first, or `none`. Null is what no option says: the lab's own choice. */
+export function addresses(): Value<readonly (Address | null)[] | null> {
+	return {
+		kind: "positional",
+		label: "address,...",
+		noun: "addresses such as 10.1.0.1/24,none",
+		read(text) {
+			const read: (Address | null)[] = [];
+			for (const { part, ...span } of listParts(text)) {
+				if (part === "none") {
+					read.push(null);
+					continue;
+				}
+				const address = parseAddress(part);
+				if (isAddressFault(address)) return new Miss(addressFault(part, address), span, address.kind === "unreadable");
+				read.push(address);
+			}
+			return read;
+		},
+		suggest(typed) {
+			const head = typed.slice(0, typed.lastIndexOf(",") + 1);
+			return [{ insert: `${head}none`, label: "none", detail: "up, with no address" }];
+		},
+		format: (list) => (list ?? []).map((address) => (address ? addressStr(address) : "none")).join(","),
+		schema: {
+			type: "string",
+			description:
+				"An address for each NIC, eth0 first, such as 10.1.0.1/24,none. none leaves it up with no address. Left out, eth0 gets one in 10.88.0.0/24.",
 		},
 	};
 }

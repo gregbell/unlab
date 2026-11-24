@@ -1,11 +1,12 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
-import type { BootConfig } from "../model/index.ts";
+import type { Address, BootConfig } from "../model/index.ts";
+import { defaultAddress } from "../net/index.ts";
 import type { FromVm, ToVm } from "./protocol.ts";
 import { STOP_GRACE_MS, startVm, type VmSink, type WorkerEvents } from "./vm.ts";
 
 const NODE3: BootConfig = {
-	identity: { n: 3, name: "node3", ip: "10.88.0.13", mac: "52:54:00:88:00:0d" },
-	spec: { image: "alpine", memMiB: 256, nics: [{ net: "switch0" }] },
+	identity: { n: 3, name: "node3", mac: "52:54:00:88:00:0d" },
+	spec: { image: "alpine", memMiB: 256, gateway: true, nics: [{ net: "switch0", address: defaultAddress(3) }] },
 	hosts: [
 		{ ip: "10.88.0.11", name: "node1" },
 		{ ip: "10.88.0.13", name: "node3" },
@@ -106,16 +107,15 @@ describe("boot", () => {
 				cfg: {
 					id: "node3",
 					name: "node3",
-					ip: "10.88.0.13",
-					prefixBits: 24,
 					macs: ["52:54:00:88:00:0d"],
+					addresses: [{ ip: 0x0a58000d, prefix: 24 }],
 					image,
 					distro: "alpine",
 					memoryMiB: 256,
 					cpus: 1,
 					diskGiB: 4,
 					hosts: NODE3.hosts,
-					packageRepositories: true,
+					gateway: true,
 					cols: 100,
 					rows: 30,
 					promptToken: "00112233aabbccdd",
@@ -124,19 +124,22 @@ describe("boot", () => {
 		]);
 	});
 
-	test("gives each NIC its MAC, and puts the package gateway on eth0 alone", async () => {
-		const cfg = async (...nets: ("switch0" | "none")[]) => {
-			const t = boot(1, { ...NODE3, spec: { ...NODE3.spec, nics: nets.map((net) => ({ net })) } });
+	test("gives each NIC its MAC and address, and the machine its gateway or none", async () => {
+		const cfg = async (gateway: boolean, ...addresses: (Address | null)[]) => {
+			const nics = addresses.map((address) => ({ net: "switch0" as const, address }));
+			const t = boot(1, { ...NODE3, spec: { ...NODE3.spec, gateway, nics } });
 			await t.imageArrives(new ArrayBuffer(16));
 			const [message] = t.messages();
 			if (message?.type !== "boot") throw new Error("expected a boot message");
 			return message.cfg;
 		};
-		expect(await cfg("switch0", "none", "switch0")).toMatchObject({
+		const chosen: Address = { ip: 0x0a020001, prefix: 16 };
+		expect(await cfg(true, null, chosen, null)).toMatchObject({
 			macs: ["52:54:00:88:00:0d", "52:54:00:88:01:0d", "52:54:00:88:02:0d"],
-			packageRepositories: true,
+			addresses: [null, chosen, null],
+			gateway: true,
 		});
-		expect(await cfg("none", "switch0")).toMatchObject({ packageRepositories: false });
+		expect(await cfg(false, chosen)).toMatchObject({ addresses: [chosen], gateway: false });
 	});
 
 	test("every report carries the machine and the attempt it was started for", async () => {
@@ -258,7 +261,6 @@ describe("what the page sends", () => {
 			{
 				type: "reconfigure",
 				name: "node3",
-				ip: "10.88.0.13",
 				hosts: [{ ip: "10.88.0.14", name: "node4" }],
 			},
 		]);

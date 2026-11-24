@@ -110,6 +110,90 @@ describe("spawn", () => {
 		});
 	});
 
+	it("gives each NIC its address or none, and says so in the preview", async () => {
+		const lab = storeLab();
+		const will = (line: string) => lab.parsed(line).preview(lab.store.state);
+		const head = "boot node1 · alpine 3.24 · 256 MiB · 2 CPUs · 4 GiB disk";
+		expect(will("spawn 1 alpine --addr 10.1.0.1/24")).toEqual({
+			will: `${head} · plugged into switch0 on port 1 · 10.1.0.1/24`,
+			assumed: "Left out, so assumed: --mem 256 --cpus 2 --disk 4 --nics 1 --net switch0",
+			tone: "plain",
+		});
+		expect(will("spawn 1 alpine --nics 2 --addr none,10.2.0.1/16 --no-gateway")).toMatchObject({
+			will: `${head} · 2 NICs · plugged into switch0 on ports 1 and 2 · eth0 no address · eth1 10.2.0.1/16 · no package gateway`,
+		});
+		await lab.run("spawn 1 alpine --nics 2 --addr none,10.2.0.1/16 --no-gateway");
+		expect(lab.store.state.machines.node1?.spec).toMatchObject({
+			gateway: false,
+			nics: [{ address: null }, { address: { ip: 0x0a020001, prefix: 16 } }],
+		});
+		expect(lab.events.at(-1)).toMatchObject({
+			line: "spawn 1 alpine --nics 2 --addr none,10.2.0.1/16 --no-gateway",
+		});
+		await lab.run("spawn 2 alpine --addr none");
+		expect(lab.store.state.machines.node3?.spec).toMatchObject({ gateway: true, nics: [{ address: null }] });
+		await lab.run("spawn 1 alpine --no-net");
+		expect(lab.store.state.machines.node4?.spec).toMatchObject({ gateway: false });
+	});
+
+	it.each([
+		["--addr 10.1.0.1", "--addr 10.1.0.1 needs a prefix from 1 to 32, as in 10.1.0.1/24."],
+		["--addr 10.1.0.1/33", "--addr 10.1.0.1/33 needs a prefix from 1 to 32, as in 10.1.0.1/24."],
+		["--addr 10.1.0.1/0", "--addr 10.1.0.1/0 needs a prefix from 1 to 32, as in 10.1.0.1/24."],
+		["--addr 10.1.0/24", "--addr wants an address with its prefix, such as 10.1.0.1/24, or none, not 10.1.0/24."],
+		[
+			"--addr 10.1.0.256/24",
+			"--addr wants an address with its prefix, such as 10.1.0.1/24, or none, not 10.1.0.256/24.",
+		],
+		["--addr 10.1.0.0/24", "--addr 10.1.0.0/24 names its whole subnet, so use one from 10.1.0.1 to 10.1.0.254."],
+		[
+			"--addr 10.1.0.255/24",
+			"--addr 10.1.0.255/24 is its subnet's broadcast address, so use one from 10.1.0.1 to 10.1.0.254.",
+		],
+		["--addr 127.0.0.1/8", "--addr 127.0.0.1/8 is not an address a NIC can have, so use one such as 10.1.0.1/24."],
+		["--addr 224.0.0.5/24", "--addr 224.0.0.5/24 is not an address a NIC can have, so use one such as 10.1.0.1/24."],
+		["--addr none,", "--addr wants an address with its prefix, such as 10.1.0.1/24, or none, not nothing."],
+	])("cannot read %s", (option, sentence) => {
+		expect(storeLab().parse(`spawn 1 alpine ${option}`)).toMatchObject({ message: `${sentence} Nothing was changed.` });
+	});
+
+	it.each([
+		["spawn 1 alpine --addr 10.1.0.1/24,none", "--addr names 2 NICs, so add --nics 2."],
+		[
+			"spawn 1 alpine --nics 3 --addr 10.1.0.1/24",
+			"--addr names 1 NIC of 3, so end it with none for each of the others.",
+		],
+		["spawn 1 alpine --nics 2 --addr none,none,none,none,none", "A machine has 1 to 4 NICs, and --addr names 5."],
+		["spawn 2 alpine --addr 10.1.0.1/24", "--addr gives one machine its addresses, so spawn 1 at a time with it."],
+		["spawn 1 alpine --addr 10.88.0.11/16", "10.88.0.11 is already node1's, so give another address with --addr."],
+		[
+			"spawn 1 alpine --nics 2 --addr 10.1.0.1/16,10.1.2.1/24",
+			"--addr puts eth0 and eth1 in overlapping subnets, so give each its own, as in 10.1.0.1/24,10.2.0.1/24.",
+		],
+		[
+			"spawn 1 alpine --addr 10.0.2.9/24",
+			"--addr 10.0.2.9/24 overlaps 10.0.2.0/24, which the package gateway uses, so choose another subnet or add --no-gateway.",
+		],
+		[
+			"spawn 1 alpine --addr 198.51.100.9/24",
+			"--addr 198.51.100.9/24 overlaps 198.51.100.0/24, which the package gateway uses, so choose another subnet or add --no-gateway.",
+		],
+	])("refuses %s", async (line, sentence) => {
+		const lab = storeLab();
+		await lab.lab(1);
+		const token = line.split(" ").indexOf("--addr");
+		expect(lab.parsed(line).validate(lab.store.state)).toEqual({ message: `${sentence} Nothing was changed.`, token });
+		expect(lab.parsed("spawn 1 alpine --addr 10.0.2.9/24 --no-gateway").validate(lab.store.state)).toBeNull();
+	});
+
+	it("completes none in an --addr list", () => {
+		const lab = storeLab();
+		const line = "spawn 1 alpine --nics 2 --addr 10.1.0.1/24,";
+		expect(completeLine(lab.registry, line, line.length, lab.store.state).suggestions.map((s) => s.insert)).toEqual([
+			"10.1.0.1/24,none",
+		]);
+	});
+
 	it("completes each network of a --net list", () => {
 		const lab = storeLab();
 		const line = "spawn 1 alpine --nics 2 --net switch0,";
@@ -129,7 +213,14 @@ describe("spawn", () => {
 		]);
 		const line = "spawn 2 alpine --no-net --";
 		const options = completeLine(lab.registry, line, line.length, lab.store.state);
-		expect(options.suggestions.map((s) => s.insert)).toEqual(["--mem", "--cpus", "--disk", "--nics"]);
+		expect(options.suggestions.map((s) => s.insert)).toEqual([
+			"--mem",
+			"--cpus",
+			"--disk",
+			"--nics",
+			"--addr",
+			"--no-gateway",
+		]);
 	});
 
 	it("logs the canonical line, leaving out what is the default", () => {
@@ -153,6 +244,9 @@ describe("spawn", () => {
 		expect(tool).toMatchObject({ name: "machines_spawn", policy: "ask", annotations: {} });
 		expect(tool?.toLine({ count: 1, image: "alpine", nics: 2, net: "switch0,none" })).toBe(
 			"spawn 1 alpine --nics 2 --net switch0,none",
+		);
+		expect(tool?.toLine({ count: 1, image: "alpine", addr: "10.1.0.1/24", gateway: "off" })).toBe(
+			"spawn 1 alpine --addr 10.1.0.1/24 --no-gateway",
 		);
 		expect(tool?.toLine({ count: 2, image: "alpine", mem: 512, net: "none" })).toBe(
 			"spawn 2 alpine --mem 512 --no-net",

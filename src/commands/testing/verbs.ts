@@ -76,7 +76,15 @@ export const spawn = defineVerb({
 	async execute(plan, _ctx, deps) {
 		deps.dispatch({
 			type: "cmd/spawn",
-			plan: { machines: [], spec: { image: plan.image, memMiB: plan.memMiB, nics: [{ net: plan.net }] } },
+			plan: {
+				machines: [],
+				request: {
+					image: plan.image,
+					memMiB: plan.memMiB,
+					gateway: true,
+					nics: [{ net: plan.net, address: "default" }],
+				},
+			},
 			at: deps.now(),
 		});
 		return { kind: "visible", text: `booting ${plan.names.join(", ")}`, data: { names: plan.names } };

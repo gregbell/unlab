@@ -214,7 +214,7 @@ describe("<unlab-command-bar> CmdComplete: completing", () => {
 		await typeLine("spawn 2 alp");
 		expect(text(".hint")).toBe("tab → alpine");
 		expect(text(".signature")).toBe(
-			"spawn <count> <image> [--mem MiB] [--cpus CPUs] [--disk 4 | 8 | 16 | 32 | 64] [--nics NICs] [--net network,... | --no-net]",
+			"spawn <count> <image> [--mem MiB] [--cpus CPUs] [--disk 4 | 8 | 16 | 32 | 64] [--nics NICs] [--net network,... | --no-net] [--addr address,...] [--no-gateway]",
 		);
 		expect(text(".signature .current")).toBe("<image>");
 		expect(style(".signature .current").textDecorationLine).toBe("underline");
@@ -448,7 +448,7 @@ describe("<unlab-command-bar> CmdFanout: exec results", () => {
 		await expect.poll(() => document.querySelector("unlab-command-bar .result")).not.toBeNull();
 		expect(text(".summary")).toBe("3 machines · 3 ready");
 		expect(texts(".machine-result .status")).toEqual(["ready", "ready", "ready"]);
-		expect(text(".machine-result .last")).toBe("10.88.0.11 · 52:54:00:88:00:0b · up on port 1 · console");
+		expect(text(".machine-result .last")).toBe("10.88.0.11/24 · 52:54:00:88:00:0b · up on port 1 · console");
 		expect(document.querySelector("unlab-command-bar .footnote")).toBeNull();
 	});
 });

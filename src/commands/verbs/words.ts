@@ -1,4 +1,5 @@
 import type { LabState, PlanError } from "../../model/index.ts";
+import { addressStr, ip4str, nicName, subnetStr } from "../../net/index.ts";
 import type { Selection } from "../grammar/slots.ts";
 
 /** `node1`, `node1 and node2`, `node1, node2 and node3`. */
@@ -33,6 +34,12 @@ export function planErrorSentence(error: PlanError, ports = "Remove a machine wi
 				: `The lab has room for ${count(error.free, "more machine")}, not ${error.wanted}.`;
 		case "unknown-image":
 			return `No image called ${error.image}.`;
+		case "address-taken":
+			return `${ip4str(error.address.ip)} is already ${error.by.machine}'s, so give another address with --addr.`;
+		case "address-overlap":
+			return `--addr puts ${andList(error.nics.map(nicName))} in overlapping subnets, so give each its own, as in 10.1.0.1/24,10.2.0.1/24.`;
+		case "address-gateway":
+			return `--addr ${addressStr(error.address)} overlaps ${subnetStr(error.subnet)}, which the package gateway uses, so choose another subnet or add --no-gateway.`;
 	}
 }
 
