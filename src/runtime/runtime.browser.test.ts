@@ -158,6 +158,10 @@ describe.skipIf(!haveImage)("real kernels", () => {
 		const sum = await engine.exec.inject("node1:sh1", "echo unlab-$((40+2))", "bar", never);
 		expect(sum).toMatchObject({ exitCode: 0, output: "unlab-42", lastLine: "unlab-42" });
 
+		const wide = `echo ${"w".repeat(150)}; echo done`;
+		const wrapped = await engine.exec.inject("node1:console", wide, "agent", never);
+		expect(wrapped).toMatchObject({ exitCode: 0, output: `${"w".repeat(150)}\ndone` });
+
 		const busy = engine.exec.inject("node1:sh1", "sleep 30", "bar", never);
 		await expect(engine.exec.inject("node1:sh1", "ls", "bar", never)).rejects.toThrow(
 			"node1:sh1 is running a program.",

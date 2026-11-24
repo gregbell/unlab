@@ -34,6 +34,7 @@ function config(n: number, hosts: readonly HostEntry[] = hostsOf(n), image = "al
 }
 
 interface FakeMark extends LineMark {
+	readonly line: string;
 	ended: number;
 }
 
@@ -87,9 +88,10 @@ function fakeScreens() {
 				mount: async () => {},
 				setVisible() {},
 				setFocused() {},
-				beginMark(source: MarkSource) {
+				beginMark(source: MarkSource, line: string) {
 					const mark: FakeMark = {
 						source,
+						line,
 						ended: 0,
 						end() {
 							mark.ended++;
@@ -744,7 +746,7 @@ describe("exec", () => {
 
 		const result = t.engine.exec.inject("node1:console", "ping -c1 node2", "bar", never);
 		expect(vm.sent).toEqual([["write", "console", "ping -c1 node2\r"]]);
-		expect(screen.made.map((m) => [m.source, m.ended])).toEqual([["bar", 0]]);
+		expect(screen.made.map((m) => [m.source, m.line, m.ended])).toEqual([["bar", "ping -c1 node2", 0]]);
 		expect(t.take()).toEqual([{ type: "session/shell", session: "node1:console", shell: "running" }]);
 
 		screen.printed = "PING node2 (10.88.0.12)\n64 bytes from 10.88.0.12\n\n1 packets transmitted, 1 received";

@@ -91,8 +91,8 @@ export interface Screen {
 	setVisible(visible: boolean): void;
 	/** The focused screen has the keyboard and a solid cursor; the others show a hollow one. */
 	setFocused(focused: boolean): void;
-	/** Start a mark at the cursor. */
-	beginMark(source: MarkSource): LineMark;
+	/** Start a mark at the cursor, where `line` is about to be typed. */
+	beginMark(source: MarkSource, line: string): LineMark;
 	/** The marks on screen now. Marks whose rows have all left the scrollback are forgotten. */
 	marks(): readonly VisibleMark[];
 	/** Hear, at most once per animation frame, that `marks()` may have changed. */
@@ -220,6 +220,28 @@ function linesOf(core: TerminalCore, from: number, to: number, lastCols = Number
 		wrapped = r.wraps;
 	}
 	return lines;
+}
+
+/**
+ * How many of `lines` are the echo of the typed line. readline lets the
+ * terminal wrap, which reads back as one line, but busybox's line editor ends
+ * each full row with a line feed, so its echo can be several. Spaces are left
+ * out of the comparison: those at the end of a row do not read back. An echo
+ * that does not add up to the line, such as one the shell redrew, is taken to
+ * be the first.
+ */
+function echoedLines(lines: readonly string[], prompt: string, typed: string): number {
+	const solid = (s: string) => s.replace(/\s+/g, "");
+	const whole = solid(typed);
+	const before = solid(prompt);
+	let echo = "";
+	for (let i = 0; i < lines.length; i++) {
+		const text = solid(lines[i]);
+		echo += i === 0 && text.startsWith(before) ? text.slice(before.length) : text;
+		if (echo === whole) return i + 1;
+		if (!whole.startsWith(echo)) break;
+	}
+	return 1;
 }
 
 function createScreen(session: SessionId, io: ScreenIo, loadCore: () => Promise<GhosttyCore>): OwnedScreen {
@@ -425,7 +447,7 @@ function createScreen(session: SessionId, io: ScreenIo, loadCore: () => Promise<
 			if (active instanceof HTMLElement && state.el.contains(active)) active.blur();
 		},
 
-		beginMark(source) {
+		beginMark(source, line) {
 			if (state.kind !== "live") return unanchored(source);
 			const { core } = state;
 			for (const mark of [...marks]) if (!ends(mark, core)) drop(mark);
@@ -451,7 +473,9 @@ function createScreen(session: SessionId, io: ScreenIo, loadCore: () => Promise<
 							? linesOf(state.core, span.from.row, span.end.row)
 							: linesOf(state.core, span.from.row, span.end.row + 1, span.end.col);
 					const { truncated } = span;
-					return { text: lines.slice(truncated ? 0 : 1).join("\n"), truncated };
+					if (truncated) return { text: lines.join("\n"), truncated };
+					const prompt = linesOf(state.core, span.from.row, span.from.row + 1, span.from.col)[0] ?? "";
+					return { text: lines.slice(echoedLines(lines, prompt, line)).join("\n"), truncated };
 				},
 			};
 		},
