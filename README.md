@@ -32,18 +32,20 @@ Open the command bar with `⌘K` on macOS or `Ctrl+/` elsewhere. It completes
 commands as you type and previews their effects. Run Linux commands directly in
 a guest console, or use `exec` in the bar to address a guest by name.
 
-| Command bar example                          | What it does                                                                                                                      |
-| -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| `ls`                                         | List machines, and each network interface's MAC, address, port, and link.                                                         |
-| `spawn 2 alpine --mem 512 --cpus 2 --disk 8` | Add two Alpine machines with 512 MiB of RAM, two CPUs, and an 8 GiB disk each. Use `--no-net` to leave them unplugged.            |
-| `spawn 1 alpine --nics 2 --net switch0,none` | Add a machine with two network interfaces: `eth0` plugged in and `eth1` left unplugged. Without `--net`, each takes its own port. |
-| `exec node1 -- ping -c 1 10.88.0.12`         | Send one ping from node1 and read the exit code from its shell.                                                                   |
-| `link down node2`                            | Cut node2's cables. Reconnect them with `link up node2`. Name one of several with `node2:eth1`.                                   |
-| `capture arp or node2`                       | Open the Wire view with a filter for ARP or traffic involving node2. `node2:eth1` keeps one interface's frames.                   |
-| `sh node2`                                   | Open another shell on node2.                                                                                                      |
-| `focus node2 --max`                          | Maximise or restore its pane. Use `--main` to promote it to the main pane.                                                        |
-| `boot node2`                                 | Retry a failed boot.                                                                                                              |
-| `rm node2`                                   | Remove the machine and delete its disk after confirmation.                                                                        |
+| Command bar example                          | What it does                                                                                                                           |
+| -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `ls`                                         | List machines, and each network interface's MAC, address, port, and link.                                                              |
+| `spawn 2 alpine --mem 512 --cpus 2 --disk 8` | Add two Alpine machines with 512 MiB of RAM, two CPUs, and an 8 GiB disk each. Use `--no-net` to leave them unplugged.                 |
+| `spawn 1 alpine --nics 2 --net switch0,none` | Add a machine with two network interfaces: `eth0` plugged in and `eth1` left unplugged. Without `--net`, each takes its own port.      |
+| `spawn 1 alpine --addr 10.1.0.1/24`          | Add a machine with an address you choose. With `--nics`, give each interface an address or `none`: `--nics 2 --addr 10.1.0.1/24,none`. |
+| `spawn 1 alpine --no-gateway`                | Add a machine on the switch but without the package gateway. DHCP on its `eth0` then goes to the other machines.                       |
+| `exec node1 -- ping -c 1 10.88.0.12`         | Send one ping from node1 and read the exit code from its shell.                                                                        |
+| `link down node2`                            | Cut node2's cables. Reconnect them with `link up node2`. Name one of several with `node2:eth1`.                                        |
+| `capture arp or node2`                       | Open the Wire view with a filter for ARP or traffic involving node2. `node2:eth1` keeps one interface's frames.                        |
+| `sh node2`                                   | Open another shell on node2.                                                                                                           |
+| `focus node2 --max`                          | Maximise or restore its pane. Use `--main` to promote it to the main pane.                                                             |
+| `boot node2`                                 | Retry a failed boot.                                                                                                                   |
+| `rm node2`                                   | Remove the machine and delete its disk after confirmation.                                                                             |
 
 Commands that accept multiple machines can take a list (`node1,node3`), a glob
 (`node*`), or `all`. Globs and `all` select ready machines.
@@ -183,9 +185,14 @@ a separate window opens when you wanted your own browser, reconnect `unlab` in
   to four network interfaces, and each takes a port or is left unplugged. The
   switch carries IPv4 traffic between guests. A separate gateway on `eth0`
   provides access to package repositories.
-- `eth0` starts with the machine's address. `eth1` and up start without one, so
-  set it in the guest with `ip`. To make a machine a router, also run
+- Unless you choose, `eth0` starts with an address in `10.88.0.0/24` and `eth1` and
+  up start without one. `--addr` sets one in any subnet. The lab applies the
+  addresses it set again at every boot, and `/etc/hosts` in each machine lists
+  every machine's first one. To make a machine a router, run
   `sudo sysctl -w net.ipv4.ip_forward=1` in it.
+- The package gateway also gives `eth0` the address `10.0.2.15` and a default
+  route, and it answers DHCP there. `--no-gateway` leaves all three to you. With
+  the gateway on, `10.0.2.0/24` and `198.51.100.0/24` are its own.
 - Each guest defaults to 256 MiB of RAM, a sparse 4 GiB disk, and two CPUs, or
   one CPU if the browser lacks multicore support. The disk uses browser storage
   as the guest writes to it.
@@ -210,7 +217,7 @@ distribution signatures, and installed packages persist on the guest disk.
 
 The gateway accepts only package repository requests. It requires no Wisp
 relay. Switch cable controls affect traffic between guests independently.
-Use `spawn 1 alpine --no-net` to boot without repository access.
+Use `spawn 1 alpine --no-gateway` to boot without repository access.
 
 ## Run locally
 
