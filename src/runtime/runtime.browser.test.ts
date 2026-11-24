@@ -162,6 +162,25 @@ describe.skipIf(!haveImage)("real kernels", () => {
 		const wrapped = await engine.exec.inject("node1:console", wide, "agent", never);
 		expect(wrapped).toMatchObject({ exitCode: 0, output: `${"w".repeat(150)}\ndone` });
 
+		// A resize keeps what the terminal holds: at a prompt, and while a command runs.
+		const settled = () => new Promise((resolve) => setTimeout(resolve, 500));
+		const prompts = () =>
+			console1
+				.readText()
+				.split("\n")
+				.filter((line) => line.startsWith("~ ⇒")).length;
+		const before = prompts();
+		for (const size of ["width:600px;height:320px;", "width:720px;height:220px;", "width:720px;height:320px;"]) {
+			el.style.cssText = size;
+			await settled();
+			expect(console1.lastLines(1)).toBe("~ ⇒");
+			expect(prompts()).toBe(before);
+		}
+		const slow = engine.exec.inject("node1:console", "echo early; sleep 2; echo late", "agent", never);
+		await new Promise((resolve) => setTimeout(resolve, 500));
+		el.style.cssText = "width:600px;height:220px;";
+		expect(await slow).toMatchObject({ exitCode: 0, output: "early\nlate" });
+
 		const busy = engine.exec.inject("node1:sh1", "sleep 30", "bar", never);
 		await expect(engine.exec.inject("node1:sh1", "ls", "bar", never)).rejects.toThrow(
 			"node1:sh1 is running a program.",

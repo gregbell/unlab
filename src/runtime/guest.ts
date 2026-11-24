@@ -52,11 +52,15 @@ const PROMPT_FILE = "/etc/profile.d/kw-unlab.sh";
  * input-start mark (B), each carrying this boot's token. shell-tracker.ts reads
  * these to learn exit codes and whether a session is busy, and ignores marks
  * without the token. busybox ash and bash both expand it.
+ *
+ * `redraw=0` keeps the terminal from erasing the prompt on a resize for the
+ * shell to print again. It takes everything since the prompt for the prompt,
+ * so it would erase a running command and its output too.
  */
 function promptLine(token: string): string {
 	if (!/^[0-9a-f]+$/.test(token)) throw new Error("the prompt token must be hex");
 	const tag = `;unlab=${token}`;
-	return String.raw`PS1='\[\033]133;D;$?$(sync)${tag}\007\033]133;A${tag}\007\]'"$PS1"'\[\033]133;B${tag}\007\]'`;
+	return String.raw`PS1='\[\033]133;D;$?$(sync)${tag}\007\033]133;A;redraw=0${tag}\007\]'"$PS1"'\[\033]133;B${tag}\007\]'`;
 }
 
 /**

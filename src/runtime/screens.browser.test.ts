@@ -13,7 +13,7 @@ const frames = async (n: number) => {
 };
 
 /** What the guest's shell prints once a command returns: its status, then a fresh prompt. */
-const prompt = (exit: number) => `${ESC}]133;D;${exit}${BEL}${ESC}]133;A${BEL}node1:~$ ${ESC}]133;B${BEL}`;
+const prompt = (exit: number) => `${ESC}]133;D;${exit}${BEL}${ESC}]133;A;redraw=0${BEL}node1:~$ ${ESC}]133;B${BEL}`;
 
 const screens = createScreens();
 const hosts: HTMLElement[] = [];
@@ -424,6 +424,23 @@ describe("line marks", () => {
 		s.submitted();
 		s.write(bytes(`one\r\nout\r\n${prompt(0)}`));
 		expect(mark.output().text).toBe("out");
+	});
+
+	test("a resize while a command runs keeps the command and its output", async () => {
+		const { s, el } = await ready();
+		const token = "unlab=3f9c2a71e0b4d5c8";
+		// As guest.ts marks it.
+		s.write(bytes(`\r${ESC}]133;A;redraw=0;${token}${BEL}node1:~$ ${ESC}]133;B;${token}${BEL}`));
+		const mark = s.beginMark("agent", "make");
+		s.submitted();
+		s.write(bytes("make\r\nstep 1\r\n"));
+		for (const size of ["500px", "640px"]) {
+			el.style.width = size;
+			await frames(5);
+		}
+		s.write(bytes(`step 2\r\n${prompt(0)}`));
+		expect(mark.output()).toEqual({ text: "step 1\nstep 2", truncated: false });
+		expect(s.readText()).toContain("node1:~$ make\nstep 1\nstep 2");
 	});
 
 	test("ending a mark by hand closes it at the cursor", async () => {
