@@ -7,7 +7,7 @@ const shots = process.env.UI_SHOTS;
 
 /** The browser's own WebMCP, so every call here goes through it as an agent's would. */
 test.use({
-	launchOptions: { executablePath: chromiumExecutable(), args: ["--enable-features=WebMCPTesting"] },
+	launchOptions: { executablePath: chromiumExecutable(), args: ["--enable-features=WebMCP"] },
 });
 
 interface RegisteredTool {
