@@ -122,6 +122,8 @@ export interface MountOptions<E extends HTMLElement> {
 	readonly switch?: Pick<SwitchReadout, "macTable" | "now">;
 	/** The terminal screens. Defaults to none: every `host` is null. */
 	readonly terminals?: TerminalService;
+	/** What `services.agent.tryCall` is. Defaults to null, as where a page cannot call tools. */
+	readonly tryCall?: AgentService["tryCall"];
 	/** Runs before the element connects: <unlab-app> takes its services here. */
 	readonly prepare?: (element: E, services: AppServices) => void;
 }
@@ -184,6 +186,7 @@ export async function mount<K extends keyof HTMLElementTagNameMap>(
 			answer: (call, allow) => {
 				answers.push({ call, allow });
 			},
+			tryCall: options.tryCall ?? null,
 		},
 	};
 

@@ -18,13 +18,22 @@ export interface WebMcpTool {
 export interface ModelContextLike {
 	/** May return a promise; aborting `signal` removes the tool. */
 	registerTool(tool: WebMcpTool, options: { readonly signal: AbortSignal }): unknown;
+	/** With `executeTool`, how a page calls the tools it can see. A browser may lack both. */
+	getTools?(): unknown;
+	/** `tool` is one that `getTools` gave. */
+	executeTool?(tool: unknown, input: object): unknown;
+}
+
+function method(target: object, name: string): ((...args: unknown[]) => unknown) | undefined {
+	const found: unknown = Reflect.get(target, name);
+	return typeof found === "function" ? (...args) => Reflect.apply(found, target, args) : undefined;
 }
 
 function asModelContext(value: unknown): ModelContextLike | null {
-	if (typeof value !== "object" || value === null || !("registerTool" in value)) return null;
-	const { registerTool } = value;
-	if (typeof registerTool !== "function") return null;
-	return { registerTool: (tool, options) => Reflect.apply(registerTool, value, [tool, options]) };
+	if (typeof value !== "object" || value === null) return null;
+	const registerTool = method(value, "registerTool");
+	if (!registerTool) return null;
+	return { registerTool, getTools: method(value, "getTools"), executeTool: method(value, "executeTool") };
 }
 
 /** `document.modelContext`, else `navigator.modelContext` from earlier drafts, else null: then no agent can call in. */

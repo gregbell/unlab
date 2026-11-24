@@ -10,6 +10,9 @@ import type { ModelContextLike, WebMcpTool } from "./webmcp.ts";
 
 export const DENIED = "Denied by the user.";
 
+/** Takes no input and changes nothing. */
+const TRIED: ToolName = "machines_list";
+
 export interface AgentDeps {
 	readonly store: Pick<Store, "state" | "subscribe" | "dispatchAgent">;
 	readonly registry: Registry;
@@ -29,6 +32,12 @@ export interface Agent {
 	readonly tools: readonly ToolRow[];
 	/** The person's answer to a waiting call. Anything else is ignored. */
 	answer(call: number, allow: boolean): void;
+	/**
+	 * Calls machines_list through the browser, as an agent would. Rejects when
+	 * the browser does not get the call to the tool. Null in a browser where a
+	 * page cannot call tools.
+	 */
+	readonly tryCall: (() => Promise<void>) | null;
 	/** Unregisters every tool. Waiting calls stay waiting. */
 	dispose(): void;
 }
@@ -193,6 +202,17 @@ export function startAgent(deps: AgentDeps): Agent {
 		}
 	}
 
+	function tryCall(): Agent["tryCall"] {
+		const { getTools, executeTool } = modelContext ?? {};
+		if (!getTools || !executeTool) return null;
+		return async () => {
+			const listed = await getTools();
+			const tool: unknown = Array.isArray(listed) ? listed.find((t) => t?.name === TRIED) : undefined;
+			if (tool === undefined) throw new Error(`The browser does not list ${TRIED}.`);
+			await executeTool(tool, {});
+		};
+	}
+
 	const unsubscribe = store.subscribe(reconcile);
 	reconcile();
 
@@ -203,6 +223,7 @@ export function startAgent(deps: AgentDeps): Agent {
 			waiting.delete(id);
 			resume?.(allow);
 		},
+		tryCall: tryCall(),
 		dispose() {
 			unsubscribe();
 			for (const controller of registered.values()) controller.abort();

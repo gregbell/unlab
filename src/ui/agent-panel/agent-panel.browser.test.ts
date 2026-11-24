@@ -1,11 +1,14 @@
 import "./agent-panel.ts";
 import axe from "axe-core";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import type { AgentCall, AgentEvent, LabEvent } from "../../model/index.ts";
 import { lab, mount, ready, spawn, tick, tokenColor, unmountAll, webmcp } from "../base/testing.ts";
 
-afterEach(unmountAll);
+afterEach(() => {
+	unmountAll();
+	vi.restoreAllMocks();
+});
 
 function called(id: number, fields: Partial<AgentCall> & Pick<AgentCall, "tool" | "line" | "status">): AgentEvent {
 	return { type: "agent/call", call: { id, preview: null, actionLabel: null, result: null, at: 0, ...fields } };
@@ -33,8 +36,11 @@ describe("<unlab-agent-panel>", () => {
 		const { element } = await mount("unlab-agent-panel", { state: lab(spawn(3), ready()) });
 		expect(text(element.querySelector(".head"))).toBe("webmcp pause tools");
 		expect(text(element.querySelector(".about"))).toBe(
-			"An agent in this browser gets the same verbs as the command bar. You decide which ones run without asking.",
+			"An agent in this browser gets the same verbs as the command bar. You decide which ones run without asking. To start, connect an agent.",
 		);
+		await expect
+			.element(page.getByRole("link", { name: "connect an agent" }))
+			.toHaveAttribute("href", "https://github.com/gregbell/unlab#use-the-lab-with-an-ai-agent");
 		const rows = [...element.querySelectorAll(".tool .name")].map(text);
 		expect(rows).toEqual([
 			"machines_list()",
@@ -181,9 +187,91 @@ describe("<unlab-agent-panel>", () => {
 		]);
 	});
 
-	it("says so when the browser has no WebMCP", async () => {
-		const { element } = await mount("unlab-agent-panel", { state: lab(webmcp({ kind: "absent" })) });
-		expect(text(element.querySelector(".about"))).toContain("This browser has no WebMCP");
+	it("without WebMCP: how to turn it on, with the flag's address to select or copy", async () => {
+		const writeText = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue();
+		const { element, settle } = await mount("unlab-agent-panel", {
+			state: lab(webmcp({ kind: "absent" })),
+			tryCall: async () => {},
+		});
+		expect(text(element.querySelector(".about"))).toBe(
+			"This tab has no WebMCP, so no agent can call these yet. In Chrome or Edge 150 or later, open chrome://flags/#enable-webmcp-testing, choose Enabled and relaunch.",
+		);
 		expect(element.querySelectorAll(".tool")).toHaveLength(7);
+		expect(page.getByRole("button", { name: "try a call" }).elements()).toEqual([]);
+
+		const copy = page.getByRole("button", { name: "copy address" }).element();
+		if (copy instanceof HTMLElement) copy.focus();
+		await userEvent.keyboard("{Enter}");
+		await settle();
+		expect(writeText).toHaveBeenCalledWith("chrome://flags/#enable-webmcp-testing");
+		await expect.element(page.getByRole("status")).toHaveTextContent("Copied.");
+		expect((await axe.run(element)).violations).toEqual([]);
+
+		writeText.mockRejectedValue(new Error("no permission"));
+		await userEvent.keyboard("{Enter}");
+		await expect
+			.element(page.getByRole("status"))
+			.toHaveTextContent("Not copied. Select the address to copy it yourself.");
+	});
+
+	it("refused: the browser's own message, paused or not, and no call to try", async () => {
+		const { element } = await mount("unlab-agent-panel", {
+			state: lab(webmcp({ kind: "refused", message: "Tools are not allowed in this frame." }), {
+				type: "ui/tools-paused",
+				paused: true,
+			}),
+			tryCall: async () => {},
+		});
+		expect(text(element.querySelector(".about"))).toBe(
+			"This browser refused the tools, so an agent may not be able to call them. It said: Tools are not allowed in this frame.",
+		);
+		expect(page.getByRole("button", { name: "try a call" }).elements()).toEqual([]);
+		expect((await axe.run(element)).violations).toEqual([]);
+	});
+
+	it("offers a call to try until one is made, and hands the keyboard on to the log", async () => {
+		const { element, store, settle } = await mount("unlab-agent-panel", {
+			state: lab(),
+			tryCall: async (): Promise<void> =>
+				store.dispatchAgent(called(1, { tool: "machines_list", line: "ls", status: "done" })),
+		});
+		const attempt = page.getByRole("button", { name: "try a call" });
+		expect((await axe.run(element)).violations).toEqual([]);
+
+		store.dispatchUi({ type: "ui/tools-paused", paused: true });
+		await settle();
+		await expect.element(attempt).toBeDisabled();
+		store.dispatchUi({ type: "ui/tools-paused", paused: false });
+		store.dispatchUi({ type: "ui/policy", tool: "machines_list", policy: "off" });
+		await settle();
+		await expect.element(attempt).toBeDisabled();
+		store.dispatchUi({ type: "ui/policy", tool: "machines_list", policy: "run" });
+		await settle();
+
+		const button = attempt.element();
+		if (button instanceof HTMLElement) button.focus();
+		await userEvent.keyboard("{Enter}");
+		await expect.poll(() => element.querySelectorAll(".call").length).toBe(1);
+		expect(attempt.elements()).toEqual([]);
+		expect(page.getByRole("link", { name: "connect an agent" }).elements()).toEqual([]);
+		expect(document.activeElement).toBe(element.querySelector(".calls-head"));
+	});
+
+	it("says why a tried call did not go through, and leaves it to try again", async () => {
+		const { element } = await mount("unlab-agent-panel", {
+			state: lab(),
+			tryCall: () => Promise.reject(new Error("The browser does not list machines_list.")),
+		});
+		await userEvent.click(page.getByRole("button", { name: "try a call" }));
+		await expect
+			.element(page.getByRole("status"))
+			.toHaveTextContent("The call did not go through. The browser does not list machines_list.");
+		await expect.element(page.getByRole("button", { name: "try a call" })).toBeEnabled();
+		expect((await axe.run(element)).violations).toEqual([]);
+	});
+
+	it("offers no call where a page cannot make one", async () => {
+		await mount("unlab-agent-panel", { state: lab() });
+		expect(page.getByRole("button", { name: "try a call" }).elements()).toEqual([]);
 	});
 });

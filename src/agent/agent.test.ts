@@ -49,7 +49,7 @@ function storeLab() {
 	};
 }
 
-/** A browser's modelContext that keeps what is registered, as the e2e page fake does. */
+/** A browser's modelContext that keeps what is registered. */
 function fakeModelContext() {
 	const tools = new Map<string, WebMcpTool>();
 	return {
@@ -301,6 +301,20 @@ describe("detectModelContext", () => {
 		const other = { registerTool: () => "navigator" };
 		expect(detectModelContext({}, { modelContext: other })?.registerTool(probe, options)).toBe("navigator");
 	});
+	it("finds the calling half where the browser has it", async () => {
+		const full = {
+			...ctx,
+			tools: ["a"],
+			getTools() {
+				return this.tools;
+			},
+			executeTool: () => "ran",
+		};
+		const found = detectModelContext({ modelContext: full }, {});
+		expect(found?.getTools?.()).toEqual(["a"]);
+		expect(found?.executeTool?.("a", {})).toBe("ran");
+		expect(detectModelContext({ modelContext: ctx }, {})?.getTools).toBeUndefined();
+	});
 	it("is null when neither has a registerTool", () => {
 		expect(detectModelContext({}, {})).toBeNull();
 		expect(detectModelContext({ modelContext: {} }, { modelContext: 3 })).toBeNull();
@@ -335,6 +349,37 @@ describe("a tool set to run", () => {
 		await expect(call("machines_remove", { names: "node2" })).resolves.toMatchObject({ data: { removed: ["node2"] } });
 		expect(waiting()).toEqual([]);
 		expect(store.state.machines.node2).toBeUndefined();
+	});
+});
+
+describe("trying a call", () => {
+	function callable() {
+		const context = fakeModelContext();
+		return {
+			...context,
+			getTools: async () => [...context.tools.values()].map(({ name }) => ({ name })),
+			executeTool: async (tool: unknown, input: object) => {
+				const name = Reflect.get(Object(tool), "name");
+				return JSON.stringify(await context.tools.get(name)?.execute(input, {}));
+			},
+		};
+	}
+
+	it("goes through the browser, so it is logged as an agent's call", async () => {
+		const { agent, store } = start(callable());
+		await agent.tryCall?.();
+		expect(store.state.agent.calls).toMatchObject([{ tool: "machines_list", line: "ls", status: "done" }]);
+	});
+
+	it("says so when the browser does not list the tool", async () => {
+		const { agent, store } = start(callable());
+		store.dispatchUi({ type: "ui/policy", tool: "machines_list", policy: "off" });
+		await expect(agent.tryCall?.()).rejects.toThrow("The browser does not list machines_list.");
+	});
+
+	it("is not offered where a page cannot call tools", () => {
+		expect(start(fakeModelContext()).agent.tryCall).toBeNull();
+		expect(start(null).agent.tryCall).toBeNull();
 	});
 });
 
