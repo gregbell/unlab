@@ -98,6 +98,20 @@ describe("<unlab-spawn-form> stepper", () => {
 		await expect.element(button("One more")).toBeDisabled();
 	});
 
+	it("goes no higher than the ports machines with several NICs have left, and boots unplugged past them", async () => {
+		const three = ["switch0", "switch0", "switch0"] as const;
+		const { settle, runs } = await mountForm(opened(lab(spawn(2, ...three), spawn(1), ready())));
+		expect(text(".count")).toBe("1");
+		await expect.element(button("One more")).toBeDisabled();
+		expect(rows()).toEqual([["node4", "10.88.0.14/24", "port 8"]]);
+		await customize();
+		await button("leave unplugged").click();
+		await settle();
+		await expect.element(button("One more")).toBeEnabled();
+		await button("Boot 1 machine").click();
+		expect(runs.map((run) => run.line)).toEqual(["spawn 1 alpine --no-net"]);
+	});
+
 	it("counts up to eight in an empty lab", async () => {
 		const { settle } = await mountForm();
 		for (let i = 0; i < 6; i++) await button("One more").click();

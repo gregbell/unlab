@@ -65,6 +65,28 @@ describe("<unlab-switch>", () => {
 		expect(runs).toEqual([{ line: "link up node2", source: "button" }]);
 	});
 
+	it("tags each cable of a machine with several NICs, and cuts the one clicked", async () => {
+		const { runs } = await mount("unlab-switch", { state: lab(spawn(1), spawn(1, "switch0", "switch0"), ready()) });
+		expect(column(1).querySelector(".nic")).toBeNull();
+		for (const [port, nic] of [
+			[2, "eth0"],
+			[3, "eth1"],
+		] as const) {
+			expect(part(column(port), ".name").textContent).toBe("node2");
+			const tag = part(column(port), ".nic");
+			expect(tag.textContent).toBe(nic);
+			const [cable, at] = [part(column(port), ".cable"), tag].map((e) => e.getBoundingClientRect());
+			expect(at.top).toBeGreaterThan(cable.top);
+			expect(at.bottom).toBeLessThan(cable.bottom);
+			expect(tag.scrollWidth).toBeLessThanOrEqual(column(port).clientWidth);
+		}
+		await expect
+			.element(page.getByRole("button").nth(2))
+			.toHaveAccessibleName("Cut the cable from node2:eth1 to port 3");
+		part(column(3), "button").click();
+		expect(runs).toEqual([{ line: "link down node2:eth1", source: "button" }]);
+	});
+
 	it("does nothing for a booting, removing or empty port", async () => {
 		const { runs } = await mount("unlab-switch", { state: mixed });
 		for (const n of [3, 4, 5]) {

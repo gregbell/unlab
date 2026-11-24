@@ -2,7 +2,7 @@ import "./capture.ts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { testCapture } from "../../../test/support/capture.ts";
-import { arpReply, arpRequest, ping } from "../../../test/support/frames.ts";
+import { arpReply, arpRequest, mac, ping, routedPing } from "../../../test/support/frames.ts";
 import { lab, mount, ready, spawn, tokenColor, unmountAll } from "../base/testing.ts";
 import type { CaptureMode } from "./capture.ts";
 
@@ -53,6 +53,12 @@ describe("<unlab-capture mode=dock>", () => {
 		expect(text(shown[0])).toBe("5.00 ICMP node1 → node2 echo request seq 5, 64 bytes");
 		expect(text(shown[7])).toBe("12.00 ICMP node1 → node2 echo request seq 12, 64 bytes");
 		for (const row of shown) expect(row.getBoundingClientRect().height).toBe(22);
+	});
+
+	it("names a machine's NIC in its hue, for a NIC past eth0", async () => {
+		const { element } = await mountCapture("dock", (c) => c.frame(routedPing(mac(2, 1), mac(3), 1, 3), 2, [3]));
+		expect(text(rows(element)[0])).toContain("node2:eth1 → node3");
+		expect(colour(part(element, ".route .machine"))).toBe(tokenColor("hue-2"));
 	});
 
 	it("adds new rows as they arrive", async () => {

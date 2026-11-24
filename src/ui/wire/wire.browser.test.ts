@@ -113,6 +113,25 @@ describe("<unlab-mac-table>", () => {
 		expect(colour(node1)).toBe(tokenColor("hue-1"));
 	});
 
+	it("names the NIC of a machine with several", async () => {
+		const { element } = await mount("unlab-mac-table", {
+			state: lab(spawn(1), spawn(1, "switch0", "switch0"), ready()),
+			switch: {
+				macTable: () => [
+					{ mac: "52:54:00:88:00:0b", port: 1, seen: 0, flushed: false },
+					{ mac: "52:54:00:88:00:0c", port: 2, seen: 0, flushed: false },
+					{ mac: "52:54:00:88:01:0c", port: 3, seen: 0, flushed: false },
+				],
+				now: () => 0,
+			},
+		});
+		expect([...element.querySelectorAll("tbody .machine")].map((m) => [text(m), colour(m)])).toEqual([
+			["node1", tokenColor("hue-1")],
+			["node2:eth0", tokenColor("hue-2")],
+			["node2:eth1", tokenColor("hue-2")],
+		]);
+	});
+
 	it("strikes a flushed entry through and says why in --down", async () => {
 		const { element } = await mount("unlab-mac-table", {
 			state: cutThree,

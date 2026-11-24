@@ -44,7 +44,7 @@ describe("<unlab-agent-panel>", () => {
 		const rows = [...element.querySelectorAll(".tool .name")].map(text);
 		expect(rows).toEqual([
 			"machines_list()",
-			"machines_spawn(count, image, mem, cpus, disk, net)",
+			"machines_spawn(count, image, mem, cpus, disk, nics, net)",
 			"machines_remove(names)",
 			"shell_exec(targets, command)",
 			"shell_read(machine, lines)",

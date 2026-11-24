@@ -214,7 +214,7 @@ describe("<unlab-command-bar> CmdComplete: completing", () => {
 		await typeLine("spawn 2 alp");
 		expect(text(".hint")).toBe("tab → alpine");
 		expect(text(".signature")).toBe(
-			"spawn <count> <image> [--mem MiB] [--cpus CPUs] [--disk 4 | 8 | 16 | 32 | 64] [--net switch0 | --no-net]",
+			"spawn <count> <image> [--mem MiB] [--cpus CPUs] [--disk 4 | 8 | 16 | 32 | 64] [--nics NICs] [--net network,... | --no-net]",
 		);
 		expect(text(".signature .current")).toBe("<image>");
 		expect(style(".signature .current").textDecorationLine).toBe("underline");
@@ -225,7 +225,9 @@ describe("<unlab-command-bar> CmdComplete: completing", () => {
 		expect(text('[role="status"] .will')).toBe(
 			"boot node4 and node5 · alpine 3.24 · 256 MiB each · 2 CPUs · 4 GiB disk · plugged into switch0 on ports 4 and 5",
 		);
-		expect(text('[role="status"] .assumed')).toBe("Left out, so assumed: --mem 256 --cpus 2 --disk 4 --net switch0");
+		expect(text('[role="status"] .assumed')).toBe(
+			"Left out, so assumed: --mem 256 --cpus 2 --disk 4 --nics 1 --net switch0",
+		);
 		expect(box(".assumed").left).toBe(box(".will").left);
 	});
 
@@ -446,7 +448,7 @@ describe("<unlab-command-bar> CmdFanout: exec results", () => {
 		await expect.poll(() => document.querySelector("unlab-command-bar .result")).not.toBeNull();
 		expect(text(".summary")).toBe("3 machines · 3 ready");
 		expect(texts(".machine-result .status")).toEqual(["ready", "ready", "ready"]);
-		expect(text(".machine-result .last")).toBe("10.88.0.11 · up on port 1 · console");
+		expect(text(".machine-result .last")).toBe("10.88.0.11 · 52:54:00:88:00:0b · up on port 1 · console");
 		expect(document.querySelector("unlab-command-bar .footnote")).toBeNull();
 	});
 });
