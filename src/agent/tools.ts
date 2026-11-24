@@ -27,11 +27,6 @@ import {
 } from "../model/index.ts";
 import { compileFilter } from "../net/index.ts";
 
-/** A call the tool refused, in a sentence the agent reads as the tool's error. */
-export class ToolError extends Error {
-	override readonly name = "ToolError";
-}
-
 /** What a finished call gives back: a short line for the panel and the value the agent reads. */
 export interface Answer {
 	readonly summary: string;
@@ -52,6 +47,7 @@ export type Prepared =
 			readonly preview: string;
 			/** The approval button, named for the action: `Remove node3`. */
 			readonly actionLabel: string;
+			/** Rejects with an Error whose message is a sentence for the agent. */
 			run(signal: AbortSignal): Promise<Answer>;
 	  };
 
@@ -144,7 +140,7 @@ function verbTool(registry: Registry, tool: ToolFace): AgentTool {
 					const result = line.danger
 						? await line.run({ source: "agent", signal, approval: grantApproval(line.line) })
 						: await line.run({ source: "agent", signal });
-					if (result.kind === "failed") throw new ToolError(result.error.message);
+					if (result.kind === "failed") throw new Error(result.error.message);
 					const summary = summarise(result);
 					const said = result.kind === "report" ? result.header : summary;
 					return { summary, reply: { result: said, data: result.data } };

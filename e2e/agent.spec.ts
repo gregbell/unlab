@@ -146,7 +146,7 @@ test("deny, abort, off and pause, each as the handoff says", async ({ page }) =>
 	await start(page, "deny", "machines_remove", { names: "node1" });
 	await expect(block).toContainText("rm node1");
 	await panel.getByRole("button", { name: "Deny", exact: true }).click();
-	expect(await finish(page, "deny")).toBe("Denied by the user.");
+	expect(await finish(page, "deny")).toEqual({ error: "Denied by the user." });
 	await expect(block).toHaveCount(0);
 	await expect(page.getByText("2 of 2 machines ready")).toBeVisible();
 
@@ -156,7 +156,9 @@ test("deny, abort, off and pause, each as the handoff says", async ({ page }) =>
 	await expect(block).toHaveCount(0);
 	await expect(panel.locator(".call").last()).toContainText("withdrawn by the agent");
 
-	await expect(call(page, "machines_remove", { names: "node9" })).rejects.toThrow("No machine called node9.");
+	expect(await call(page, "machines_remove", { names: "node9" })).toEqual({
+		error: expect.stringContaining("No machine called node9."),
+	});
 
 	await panel.getByRole("combobox", { name: "Policy for machines_list" }).selectOption("off");
 	await expect.poll(() => registered(page)).not.toContain("machines_list");

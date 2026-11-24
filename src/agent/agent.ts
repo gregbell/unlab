@@ -5,7 +5,7 @@
 import type { CaptureView } from "../capture/index.ts";
 import type { Registry } from "../commands/index.ts";
 import type { AgentCall, LabState, Store, ToolName, WebMcp } from "../model/index.ts";
-import { type AgentTool, type Answer, type SessionScreens, ToolError, toolTable } from "./tools.ts";
+import { type AgentTool, type Answer, type SessionScreens, toolTable } from "./tools.ts";
 import type { ModelContextLike, WebMcpTool } from "./webmcp.ts";
 
 export const DENIED = "Denied by the user.";
@@ -31,6 +31,14 @@ export interface Agent {
 	answer(call: number, allow: boolean): void;
 	/** Unregisters every tool. Waiting calls stay waiting. */
 	dispose(): void;
+}
+
+/**
+ * What the agent reads when a call fails or is refused. A value and not a
+ * rejection, because the browser replaces a rejection's message with its own.
+ */
+interface Failure {
+	readonly error: string;
 }
 
 function sentence(error: unknown): string {
@@ -69,18 +77,18 @@ export function startAgent(deps: AgentDeps): Agent {
 		const id = nextId(lab);
 		const fields = { id, tool: tool.name, preview: null, actionLabel: null, result: null, at: lab.now };
 		const prepared = tool.prepare(input, lab);
-		const refused = (error: string) => {
+		const refused = (error: string): Failure => {
 			store.dispatchAgent({
 				type: "agent/call",
 				call: { ...fields, line: prepared.line, status: "failed", result: error },
 			});
-			return new ToolError(error);
+			return { error };
 		};
 		const { policies, paused } = lab.agent;
-		if (!prepared.ok) throw refused(prepared.error);
+		if (!prepared.ok) return refused(prepared.error);
 		// The browser can still deliver a call to a tool unregistered a moment ago.
-		if (paused) throw refused("Tools are paused in the agent panel.");
-		if (policies[tool.name] === "off") throw refused(`${tool.name} is off in the agent panel.`);
+		if (paused) return refused("Tools are paused in the agent panel.");
+		if (policies[tool.name] === "off") return refused(`${tool.name} is off in the agent panel.`);
 
 		if (policies[tool.name] === "ask") {
 			const { preview, actionLabel } = prepared;
@@ -97,7 +105,7 @@ export function startAgent(deps: AgentDeps): Agent {
 			}
 			if (!allow) {
 				settle(id, "denied", DENIED);
-				return DENIED;
+				return { error: DENIED } satisfies Failure;
 			}
 			settle(id, "running", null);
 		} else {
@@ -113,7 +121,7 @@ export function startAgent(deps: AgentDeps): Agent {
 				throw signal.reason;
 			}
 			settle(id, "failed", sentence(error));
-			throw error instanceof ToolError ? error : new ToolError(sentence(error));
+			return { error: sentence(error) } satisfies Failure;
 		}
 		settle(id, "done", answer.summary);
 		return answer.reply;

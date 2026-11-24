@@ -10,7 +10,7 @@ export interface WebMcpTool {
 	readonly description: string;
 	readonly inputSchema: JsonSchema;
 	readonly annotations: ToolAnnotations;
-	/** Resolves with what the agent reads; rejects with an Error whose message is a sentence. */
+	/** Resolves with what the agent reads, `{ error }` for a call that failed or was refused; rejects only when the agent aborts. */
 	execute(input: unknown, options: { readonly signal?: AbortSignal }): Promise<unknown>;
 }
 

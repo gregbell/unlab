@@ -139,6 +139,9 @@ function pending(promise: Promise<unknown>) {
 	return () => state;
 }
 
+/** A reply the agent reads as a failure, saying at least this. */
+const refusal = (sentence: string) => ({ error: expect.stringContaining(sentence) });
+
 describe("registration", () => {
 	it("registers every tool in the handoff's table with its annotations", async () => {
 		const { context } = await setup();
@@ -180,7 +183,7 @@ describe("registration", () => {
 		const { context, policy, lastCall } = await setup();
 		const list = context.tools.get("machines_list");
 		policy("machines_list", "off");
-		await expect(list?.execute({}, {})).rejects.toThrow("machines_list is off in the agent panel.");
+		await expect(list?.execute({}, {})).resolves.toEqual(refusal("machines_list is off in the agent panel."));
 		expect(lastCall()).toMatchObject({ status: "failed", tool: "machines_list" });
 	});
 
@@ -317,23 +320,27 @@ describe("bad input", () => {
 	it("returns the verb's own sentence, as the bar says it", async () => {
 		const { call, barError, lastCall, store } = await setup();
 		const expected = barError("rm node9");
-		await expect(call("machines_remove", { names: "node9" })).rejects.toThrow(expected);
+		await expect(call("machines_remove", { names: "node9" })).resolves.toEqual(refusal(expected));
 		expect(lastCall()).toMatchObject({ line: "rm node9", status: "failed", result: expected });
 		expect(store.state.machines.node1).toBeDefined();
 	});
 
 	it("checks fields itself rather than trusting the browser's schema check", async () => {
 		const { call, waiting } = await setup();
-		await expect(call("machines_remove", { names: "node2", force: true })).rejects.toThrow("no field called force");
-		await expect(call("machines_spawn", { count: "lots", image: "alpine" })).rejects.toThrow("Nothing was changed.");
-		await expect(call("shell_exec", { targets: "node1", command: "a\nb" })).rejects.toThrow("one line");
-		await expect(call("machines_list", "ls")).rejects.toThrow("object of fields");
+		await expect(call("machines_remove", { names: "node2", force: true })).resolves.toEqual(
+			refusal("no field called force"),
+		);
+		await expect(call("machines_spawn", { count: "lots", image: "alpine" })).resolves.toEqual(
+			refusal("Nothing was changed."),
+		);
+		await expect(call("shell_exec", { targets: "node1", command: "a\nb" })).resolves.toEqual(refusal("one line"));
+		await expect(call("machines_list", "ls")).resolves.toEqual(refusal("object of fields"));
 		expect(waiting()).toEqual([]);
 	});
 
 	it("refuses an argument that would sneak in an option", async () => {
 		const { call, store } = await setup();
-		await expect(call("machines_remove", { names: "--all" })).rejects.toThrow();
+		await expect(call("machines_remove", { names: "--all" })).resolves.toEqual({ error: expect.any(String) });
 		expect(store.state.rail).toEqual(["node1", "node2"]);
 	});
 });
@@ -360,13 +367,13 @@ describe("a tool set to ask", () => {
 		expect(store.state.log.at(-1)).toMatchObject({ line: "rm node2", source: "agent", outcome: "ok" });
 	});
 
-	it("resolves Denied by the user. after Deny and changes nothing", async () => {
+	it("answers that the user denied it after Deny and changes nothing", async () => {
 		const { call, waiting, agent, store } = await setup();
 		const removing = call("machines_remove", { names: "node2" });
 		await turn();
 		const id = waiting()[0]?.id ?? -1;
 		agent.answer(id, false);
-		await expect(removing).resolves.toBe("Denied by the user.");
+		await expect(removing).resolves.toEqual({ error: "Denied by the user." });
 		expect(store.state.machines.node2).toBeDefined();
 		expect(store.state.agent.calls.find((c) => c.id === id)).toMatchObject({
 			status: "denied",
@@ -410,7 +417,7 @@ describe("a tool set to ask", () => {
 		await turn();
 		expect(waiting().map((c) => c.line)).toEqual(["rm node3", "rm node2"]);
 		agent.answer(waiting()[1]?.id ?? -1, false);
-		await expect(second).resolves.toBe("Denied by the user.");
+		await expect(second).resolves.toEqual({ error: "Denied by the user." });
 		expect(waiting().map((c) => c.line)).toEqual(["rm node3"]);
 		agent.answer(waiting()[0]?.id ?? -1, true);
 		await first;
@@ -436,7 +443,7 @@ describe("a tool set to ask", () => {
 		lab.store.dispatchCommand({ type: "cmd/remove", machines: [gone], cause: "bar" });
 		expect(lab.store.state.machines[gone]).toBeUndefined();
 		agent.answer(id, true);
-		await expect(removing).rejects.toThrow("node2 is already gone.");
+		await expect(removing).resolves.toEqual(refusal("node2 is already gone."));
 		expect(lastCall()).toMatchObject({ id, status: "failed" });
 	});
 });
@@ -457,11 +464,15 @@ describe("shell_read", () => {
 
 	it("says which machines exist when it is asked for one that does not", async () => {
 		const { call } = await setup();
-		await expect(call("shell_read", { machine: "node9" })).rejects.toThrow(
-			"No machine called node9. You have node1, node2.",
+		await expect(call("shell_read", { machine: "node9" })).resolves.toEqual(
+			refusal("No machine called node9. You have node1, node2."),
 		);
-		await expect(call("shell_read", { machine: "node1", lines: 0 })).rejects.toThrow("whole number from 1 to 500");
-		await expect(call("shell_read", { machine: "node1:sh4" })).rejects.toThrow("node1 has no session called sh4");
+		await expect(call("shell_read", { machine: "node1", lines: 0 })).resolves.toEqual(
+			refusal("whole number from 1 to 500"),
+		);
+		await expect(call("shell_read", { machine: "node1:sh4" })).resolves.toEqual(
+			refusal("node1 has no session called sh4"),
+		);
 	});
 
 	it("does not log a line, because nothing ran", async () => {
@@ -488,6 +499,6 @@ describe("capture_read", () => {
 
 	it("refuses a filter Wire would refuse", async () => {
 		const { call } = await setup();
-		await expect(call("capture_read", { filter: "arp or" })).rejects.toThrow("A term is a protocol");
+		await expect(call("capture_read", { filter: "arp or" })).resolves.toEqual(refusal("A term is a protocol"));
 	});
 });
