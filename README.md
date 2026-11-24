@@ -70,6 +70,10 @@ You also need Node.js 22.12 or later.
      --no-javascript-evaluation --no-category-input
    ```
 
+   If you use Chromium, or Chrome is not in its default place, also add
+   `--executablePath=` with the browser's full path. `command -v chromium` prints
+   Chromium's.
+
 2. Start a new Claude Code session and ask:
 
    > Open https://gregbell.github.io/unlab/ and use its WebMCP tools to boot two
@@ -86,8 +90,40 @@ Keep the last two flags. Without them, the server also lets the agent click and
 run JavaScript in the page, so it could approve its own calls. The server sends
 usage statistics to Google unless you add `--no-usage-statistics`.
 
+To change the flags later, run `claude mcp remove --scope user unlab`, then add the
+server again. A running session keeps the old flags until you reconnect `unlab` in
+`/mcp` or restart Claude Code.
+
 In another MCP client, add a server with the command `npx` and the arguments
 that follow it in step 1.
+
+### Use the browser you already have open
+
+The server can attach to your own browser instead of opening a window, so the
+agent works with the lab in your open tab.
+
+**The agent can then see every tab in that browser, including sites you are
+signed in to.** It can read and screenshot those pages and navigate the tabs. Use
+the separate window unless you need this.
+
+1. Open `chrome://inspect/#remote-debugging` in your browser and turn on remote
+   debugging.
+2. Add the server with `--autoConnect` in place of `--chromeArg` and any
+   `--executablePath`:
+
+   ```sh
+   claude mcp add --scope user unlab -- npx -y chrome-devtools-mcp@latest \
+     --categoryExperimentalWebmcp --autoConnect \
+     --no-javascript-evaluation --no-category-input
+   ```
+
+   For Chromium on Linux, also add `--userDataDir=$HOME/.config/chromium`.
+
+3. Ask the agent to use the lab that is already open. The lab runs in one tab at a
+   time, so a second tab will not load it. Your browser may ask you to allow the
+   connection.
+
+When you are done, turn remote debugging off.
 
 ### Connect a browser extension
 
@@ -135,6 +171,11 @@ text that tries to instruct the agent, so unlab marks it as untrusted.
 | `webmcp: blocked`                | Click it to read the browser's reason.                                                           |
 | `webmcp: paused`                 | Click it, then click **resume tools**.                                                           |
 | `webmcp: 1 call waiting for you` | Click it, then approve or deny the call.                                                         |
+
+If the server reports `Could not find Google Chrome executable`, add
+`--executablePath=` as in step 1 of [Connect Claude Code](#connect-claude-code). If
+a separate window opens when you wanted your own browser, reconnect `unlab` in
+`/mcp`.
 
 ## Network and storage
 
