@@ -76,6 +76,7 @@ export const rm = defineVerb({
 	},
 	tool: {
 		name: "machines_remove",
+		title: "Remove machines",
 		description:
 			"Remove machines and everything on their disks. There is no undo. Returns the names removed once they are gone.",
 		policy: "ask",

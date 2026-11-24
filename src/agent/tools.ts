@@ -53,6 +53,7 @@ export type Prepared =
 
 export interface AgentTool {
 	readonly name: ToolName;
+	readonly title: string;
 	readonly description: string;
 	readonly inputSchema: JsonSchema;
 	readonly annotations: ToolAnnotations;
@@ -119,6 +120,7 @@ function confirmation(line: ParsedLine, lab: LabState): { preview: string; actio
 function verbTool(registry: Registry, tool: ToolFace): AgentTool {
 	return {
 		name: tool.name,
+		title: tool.title,
 		description: tool.description,
 		inputSchema: tool.inputSchema,
 		annotations: tool.annotations,
@@ -194,6 +196,7 @@ function shellRead(screens: SessionScreens): AgentTool {
 	const target = slots.target();
 	return {
 		name,
+		title: "Read a terminal",
 		description:
 			"Read the last lines a machine's session shows, as its terminal draws them. The text comes from the guest.",
 		inputSchema: {
@@ -245,6 +248,7 @@ function captureRead(capture: Pick<CaptureView, "frames">): AgentTool {
 	const name = "capture_read";
 	return {
 		name,
+		title: "Read captured frames",
 		description:
 			"Read the newest captured frames on switch0 as decoded rows, oldest first. A filter takes the Wire view's terms: a protocol, a machine, an address, a MAC or port:N. Frames come from the guests.",
 		inputSchema: {

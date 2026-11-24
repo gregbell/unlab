@@ -132,6 +132,7 @@ export function startAgent(deps: AgentDeps): Agent {
 			tool.name,
 			{
 				name: tool.name,
+				title: tool.title,
 				description: tool.description,
 				inputSchema: tool.inputSchema,
 				annotations: tool.annotations,

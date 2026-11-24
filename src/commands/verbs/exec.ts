@@ -253,6 +253,7 @@ export const exec = defineVerb({
 	},
 	tool: {
 		name: "shell_exec",
+		title: "Run a shell command",
 		description:
 			"Type a shell command into machines' sessions, as a person would, and wait for each to finish. Returns each exit code and output. Long output keeps only its end and has truncated set. The output comes from the guests.",
 		policy: "run",

@@ -153,6 +153,27 @@ describe("registration", () => {
 		expect(context.tools.get("capture_read")?.annotations).toEqual({ readOnlyHint: true, untrustedContentHint: true });
 	});
 
+	it("titles every tool, and keeps what it says about itself within the lengths Chrome recommends", async () => {
+		const { context } = await setup();
+		expect([...context.tools.values()].map((tool) => tool.title).sort()).toEqual([
+			"Boot machines",
+			"List machines",
+			"Plug in or cut cables",
+			"Read a terminal",
+			"Read captured frames",
+			"Remove machines",
+			"Run a shell command",
+		]);
+		const long = [...context.tools.values()].flatMap(({ name, description, inputSchema }) => [
+			...(name.length > 30 ? [name] : []),
+			...(description.length > 500 ? [`${name} description`] : []),
+			...Object.entries(inputSchema.properties ?? {}).flatMap(([field, schema]) =>
+				field.length > 30 || (schema.description ?? "").length > 150 ? [`${name} ${field}`] : [],
+			),
+		]);
+		expect(long).toEqual([]);
+	});
+
 	it("lists the tools in the handoff's order with their arguments", async () => {
 		const { agent } = await setup();
 		expect(agent.tools.map((t) => t.name)).toEqual(ALL_TOOLS);
@@ -264,6 +285,7 @@ describe("detectModelContext", () => {
 	const ctx = { registerTool: () => undefined };
 	const probe: WebMcpTool = {
 		name: "probe",
+		title: "Probe",
 		description: "",
 		inputSchema: {},
 		annotations: {},

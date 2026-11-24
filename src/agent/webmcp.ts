@@ -7,6 +7,7 @@ import type { JsonSchema, ToolAnnotations } from "../commands/index.ts";
 
 export interface WebMcpTool {
 	readonly name: string;
+	readonly title: string;
 	readonly description: string;
 	readonly inputSchema: JsonSchema;
 	readonly annotations: ToolAnnotations;

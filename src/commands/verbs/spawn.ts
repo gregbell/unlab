@@ -62,6 +62,7 @@ export const spawn = defineVerb({
 	},
 	tool: {
 		name: "machines_spawn",
+		title: "Boot machines",
 		description:
 			"Boot new Linux machines on the lab's switch. Returns the names created. Each boots on its own and takes commands once ready.",
 		policy: "ask",
