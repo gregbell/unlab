@@ -4,6 +4,7 @@
 	"description": "A browser Linux lab: many unkernel machines on one virtual layer-2 network",
 	"scripts": {
 		"dev": "vite",
+		"prototype:packages": "vite --mode packages --port 5180 --strictPort",
 		"build": "vite build",
 		"preview": "vite preview",
 		"typecheck": "tsc -p .",

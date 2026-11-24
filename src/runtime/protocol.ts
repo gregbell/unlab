@@ -22,6 +22,8 @@ export interface VmConfig {
 	hosts: readonly HostEntry[];
 	/** Give this machine a NAT uplink to the internet (needed by `apk add`). */
 	internet: boolean;
+	/** Enable the prototype's package repository routes on this boot. */
+	packageRepositories?: true;
 	wispServers?: string[];
 	cols: number;
 	rows: number;

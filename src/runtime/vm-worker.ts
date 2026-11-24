@@ -15,6 +15,7 @@ import { diskName } from "./disk-name.ts";
 import { execAsRoot, hostsScript, setupScript } from "./guest.ts";
 import { MemoryDisk } from "./image.ts";
 import { LabNic } from "./nic.ts";
+import { alpinePackageSetup, packageBackend } from "./package-prototype.ts";
 import type { FromVm, PtySpec, ToVm, VmConfig } from "./protocol.ts";
 import { createShellTracker } from "./shell-tracker.ts";
 
@@ -36,6 +37,8 @@ const ptys = new Map<number, Pty>();
 /** Messages that arrive while the kernel is still booting. */
 const queued: Queued[] = [];
 let booting = true;
+// Each host-table update rewrites the same guest file. Apply them in publication order.
+let hostUpdate = Promise.resolve();
 
 self.addEventListener("message", (ev: MessageEvent<ToVm>) => {
 	const m = ev.data;
@@ -65,7 +68,11 @@ function handle(m: Queued): void {
 			vm.resize(m.cols, m.rows);
 			return;
 		case "reconfigure":
-			void reconfigure(m);
+			hostUpdate = hostUpdate
+				.then(() => reconfigure(m))
+				.catch((error: unknown) => {
+					fail(`reconfigure: ${error instanceof Error ? error.message : String(error)}`, false);
+				});
 			return;
 		case "pty-open":
 			void openPty(m.spec);
@@ -153,12 +160,15 @@ async function boot(c: VmConfig): Promise<void> {
 
 	// The uplink is a NetStack of its own, told the same MAC as the NIC so its
 	// DHCP lease and ARP replies are addressed to this machine.
-	const uplink = c.internet
-		? new NetStack({
-				backend: wispBackend(c.wispServers?.length ? c.wispServers : [...DEFAULT_WISP_SERVERS]),
-				mac: c.mac,
-			})
-		: undefined;
+	let uplink: NetStack | undefined;
+	if (c.packageRepositories) {
+		uplink = new NetStack({ mac: c.mac, backend: packageBackend() });
+	} else if (c.internet) {
+		uplink = new NetStack({
+			mac: c.mac,
+			backend: wispBackend(c.wispServers?.length ? c.wispServers : [...DEFAULT_WISP_SERVERS]),
+		});
+	}
 
 	nic = new LabNic({
 		mac: c.mac,
@@ -213,17 +223,16 @@ async function boot(c: VmConfig): Promise<void> {
 	// udhcpc also brings up 10.0.2.15 and the default route. A machine that
 	// cannot be set up is not on the lab, so it has not booted.
 	try {
-		const r = await execAsRoot(
-			vm,
-			setupScript({
-				hostname: c.name,
-				ip: c.ip,
-				prefixBits: c.prefixBits,
-				hosts: c.hosts,
-				dhcp: c.internet,
-				promptToken: c.promptToken,
-			}),
-		);
+		const setup = setupScript({
+			hostname: c.name,
+			ip: c.ip,
+			prefixBits: c.prefixBits,
+			hosts: c.hosts,
+			dhcp: Boolean(uplink),
+			promptToken: c.promptToken,
+		});
+		const prepareApk = c.packageRepositories && c.distro === "alpine";
+		const r = await execAsRoot(vm, prepareApk ? `${alpinePackageSetup}\n${setup}` : setup);
 		if (r.exitCode !== 0) {
 			fail(`setup: ${String(r.stderr).trim() || `exit ${r.exitCode}`}`, true);
 			return;

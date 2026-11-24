@@ -82,6 +82,29 @@ The kernel comes directly from that package's `unkernel.wasm`. The
 [image manifest](public/distros/distros.json) records the upstream build IDs and
 checksums.
 
+### Try the package-install prototype
+
+After the local setup above, run `npm run prototype:packages` and open
+[the prototype lab](http://localhost:5180/). In the command bar, run
+`spawn 1 alpine` and `spawn 1 debian`. Try these commands in their consoles:
+
+| Guest  | Install and run                                            |
+| ------ | ---------------------------------------------------------- |
+| Alpine | `sudo apk update && sudo apk add jq && jq -n '6*7'`        |
+| Debian | `sudo apt update && sudo apt install -y jq && jq -n '6*7'` |
+
+Both should print `42`. The browser fetches repository indexes and packages
+over HTTPS from [an Alpine mirror](https://repo.c48.uk/alpine/) and
+[Unkernel's Debian mirror](https://github.com/pithings/unkernel/blob/8f039c5/web/src/config.ts#L166-L173).
+The guest package managers verify the distribution signatures as usual.
+Unlab only handles requests for those repository paths. This uses no Wisp
+relay and needs no hosted Unlab service.
+
+Package access is selected at boot. `spawn 1 alpine --no-net` skips it.
+The switch's cable controls affect traffic between lab machines independently.
+Installs require the selected mirror to be reachable and to allow browser
+requests from the lab's origin.
+
 ## How it works
 
 Each guest runs in its own worker. When Linux sends an Ethernet frame, the
