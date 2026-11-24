@@ -199,7 +199,7 @@ Run these commands in the guest console:
 
 The browser downloads indexes and packages over HTTPS from the configured
 [Alpine mirror](https://repo.c48.uk/alpine/) or
-[Debian mirror](https://github.com/pithings/unkernel/blob/8f039c5/web/src/config.ts#L166-L173).
+[Debian mirror](https://github.com/pithings/unkernel/blob/c08e977/web/src/config.ts#L166-L173).
 Alpine includes both `main` and `community`. The package managers verify the
 distribution signatures, and installed packages persist on the guest disk.
 
