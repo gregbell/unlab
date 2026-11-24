@@ -286,7 +286,7 @@ function captureRead(capture: Pick<CaptureView, "frames">): AgentTool {
 				async run() {
 					const matched: FrameEntry[] = [];
 					for (const frame of capture.frames()) {
-						if (filter.matchesFrame(frame.bytes, frame.from, frame.to)) matched.push(frame);
+						if (filter.matchesFrame(frame.bytes, frame.from, frame.to, frame.names)) matched.push(frame);
 					}
 					// Decode only the rows the agent gets: a full buffer is ten thousand frames.
 					const rows = matched.slice(-limit).flatMap((frame) => {

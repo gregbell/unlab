@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import { identity } from "./identity.ts";
 import {
 	ACCEPTS,
+	addressBook,
 	firstFreeHues,
 	hostsFor,
 	isPlanError,
@@ -11,7 +12,9 @@ import {
 	planSpawn,
 	takenPorts,
 } from "./machines.ts";
+import { addressText } from "./selectors.ts";
 import {
+	address,
 	bootAgainEvent,
 	effectsOf,
 	emptyLab,
@@ -23,7 +26,9 @@ import {
 	machine,
 	remove,
 	run,
+	type SpawnOptions,
 	spawnEvent,
+	spawnRequest,
 } from "./testkit.ts";
 import {
 	BOOT_TIMEOUT_MS,
@@ -37,8 +42,14 @@ import {
 } from "./types.ts";
 import { update } from "./update.ts";
 
-const ALPINE: MachineSpec = { image: "alpine", memMiB: 256, nics: [{ net: "switch0" }] };
-const UNPLUGGED: MachineSpec = { image: "alpine", memMiB: 256, nics: [{ net: "none" }] };
+const ALPINE = spawnRequest();
+const UNPLUGGED = spawnRequest({ net: "none" });
+const alpineAt = (text: string, net: "switch0" | "none" = "switch0"): MachineSpec => ({
+	image: "alpine",
+	memMiB: 256,
+	gateway: true,
+	nics: [{ net, address: address(text) }],
+});
 
 /** A lab whose node1 is in `phase` on boot attempt `attempt`, beside a ready node2. */
 function labIn(phase: Phase, attempt: 1 | 2): LabState {
@@ -404,14 +415,21 @@ describe("planSpawn", () => {
 		const s = labWith(3);
 		expect(planSpawn(s, 2, ALPINE)).toEqual({
 			machines: [
-				{ identity: identity(4), hue: 4, ports: [4] },
-				{ identity: identity(5), hue: 5, ports: [5] },
+				{ identity: identity(4), hue: 4, ports: [4], spec: alpineAt("10.88.0.14/24") },
+				{ identity: identity(5), hue: 5, ports: [5], spec: alpineAt("10.88.0.15/24") },
 			],
-			spec: ALPINE,
+			request: ALPINE,
 		});
 		expect(planSpawn(s, 1, UNPLUGGED)).toEqual({
-			machines: [{ identity: identity(4), hue: 4, ports: [null] }],
-			spec: UNPLUGGED,
+			machines: [
+				{
+					identity: identity(4),
+					hue: 4,
+					ports: [null],
+					spec: { ...alpineAt("10.88.0.14/24", "none"), gateway: false },
+				},
+			],
+			request: UNPLUGGED,
 		});
 	});
 
@@ -429,8 +447,8 @@ describe("planSpawn", () => {
 		expect(planSpawn(s, 1, UNPLUGGED)).toEqual({ kind: "no-room", free: 0, wanted: 1 });
 		s = run(s, hasStopped("node3"));
 		expect(planSpawn(s, 1, ALPINE)).toEqual({
-			machines: [{ identity: identity(9), hue: 3, ports: [3] }],
-			spec: ALPINE,
+			machines: [{ identity: identity(9), hue: 3, ports: [3], spec: alpineAt("10.88.0.19/24") }],
+			request: ALPINE,
 		});
 	});
 
@@ -438,7 +456,7 @@ describe("planSpawn", () => {
 		expect(planSpawn(emptyLab(), 1, { ...ALPINE, image: "plan9" })).toEqual({ kind: "unknown-image", image: "plan9" });
 	});
 
-	test("names are never reused, so a lab runs out of addresses after node244", () => {
+	test("names are never reused, so a lab runs out of MACs after node244", () => {
 		let s = emptyLab();
 		for (let round = 0; round < 30; round++) {
 			s = run(s, spawnEvent(s, 8, { net: "none" }));
@@ -448,7 +466,7 @@ describe("planSpawn", () => {
 		expect(planSpawn(s, 5, ALPINE)).toEqual({ kind: "no-room", free: 4, wanted: 5 });
 		s = run(s, spawnEvent(s, 4));
 		expect(s.rail).toEqual(["node241", "node242", "node243", "node244"]);
-		expect(machine(s, "node244").ip).toBe("10.88.0.254");
+		expect(addressText(machine(s, "node244"))).toBe("10.88.0.254");
 		expect(planSpawn(s, 1, ALPINE)).toEqual({ kind: "no-room", free: 0, wanted: 1 });
 	});
 
@@ -521,12 +539,105 @@ describe("hostsFor", () => {
 	});
 });
 
+describe("addresses", () => {
+	const plan = (s: LabState, options: SpawnOptions, count = 1) => planSpawn(s, count, spawnRequest(options));
+	const addresses = (s: LabState, name: MachineName) => machine(s, name).spec.nics.map((nic) => nic.address);
+
+	test("with no choice, eth0 has 10.88.0.(10+n) and the others none", () => {
+		const s = run(emptyLab(), spawnEvent(emptyLab(), 2, { net: ["switch0", "switch0"] }));
+		expect(addresses(s, "node1")).toEqual([address("10.88.0.11/24"), null]);
+		expect(addresses(s, "node2")).toEqual([address("10.88.0.12/24"), null]);
+	});
+
+	test("chosen ones are the machine's, and stay when it boots again", () => {
+		let s = emptyLab();
+		s = run(s, spawnEvent(s, 1, { net: ["switch0", "switch0"], addr: [null, "10.1.0.1/16"], gateway: false }));
+		expect(machine(s, "node1").spec).toMatchObject({
+			gateway: false,
+			nics: [{ address: null }, { address: address("10.1.0.1/16") }],
+		});
+		s = run(s, hasFailed("node1"));
+		const again = effectsOf(s, bootAgainEvent(s, "node1")).find((e) => e.type === "vm/boot");
+		expect(again).toMatchObject({ config: { spec: machine(s, "node1").spec } });
+	});
+
+	test("a machine goes by its first one, and one with none is not in the host table", () => {
+		let s = emptyLab();
+		s = run(s, spawnEvent(s, 1, { net: ["switch0", "switch0"], addr: [null, "10.2.0.1/24"] }));
+		s = run(s, spawnEvent(s, 1, { addr: [null] }));
+		s = run(s, spawnEvent(s, 1, { net: ["switch0", "switch0"], addr: ["10.3.0.1/24", "10.2.0.3/24"] }));
+		expect(hostsFor(s)).toEqual([
+			{ ip: "10.2.0.1", name: "node1" },
+			{ ip: "10.3.0.1", name: "node3" },
+		]);
+		expect(s.rail.map((name) => addressText(machine(s, name)))).toEqual(["10.2.0.1", "no address", "10.3.0.1"]);
+	});
+
+	test("one another machine has is refused, until that machine is gone", () => {
+		let s = run(
+			emptyLab(),
+			spawnEvent(emptyLab(), 1, { net: ["switch0", "switch0"], addr: ["10.1.0.1/24", "10.2.0.1/24"] }),
+		);
+		const taken = { kind: "address-taken", address: address("10.2.0.1/16"), by: { machine: "node1", nic: 1 } };
+		expect(plan(s, { addr: ["10.2.0.1/16"] })).toEqual(taken);
+		s = run(s, hasFailed("node1"));
+		expect(plan(s, { addr: ["10.2.0.1/16"] })).toEqual(taken);
+		s = run(s, remove("node1"));
+		expect(plan(s, { addr: ["10.2.0.1/16"] })).toEqual(taken);
+		s = run(s, hasStopped("node1"));
+		expect(isPlanError(plan(s, { addr: ["10.2.0.1/16"] }))).toBe(false);
+	});
+
+	test("one the lab would give a later machine is refused to that machine", () => {
+		const s = run(emptyLab(), spawnEvent(emptyLab(), 1, { addr: ["10.88.0.13/24"] }));
+		expect(isPlanError(plan(s, {}, 1))).toBe(false);
+		expect(plan(s, {}, 2)).toMatchObject({ kind: "address-taken", by: { machine: "node1" } });
+	});
+
+	test.each([
+		["the same", "10.1.0.1/24", "10.1.0.1/24"],
+		["two in one", "10.1.0.1/24", "10.1.0.2/24"],
+		["a wide one around a narrow one", "10.1.0.1/16", "10.1.9.1/24"],
+		["a narrow one inside a wide one", "10.1.9.1/24", "10.1.0.1/16"],
+	])("a machine cannot have NICs in overlapping subnets: %s", (_what, eth0, eth2) => {
+		const request = { net: ["switch0", "switch0", "switch0"] as const, addr: [eth0, null, eth2] };
+		expect(plan(emptyLab(), request)).toEqual({ kind: "address-overlap", nics: [0, 2] });
+	});
+
+	test("neighbouring subnets do not overlap", () => {
+		const nets = ["switch0", "switch0"] as const;
+		expect(isPlanError(plan(emptyLab(), { net: nets, addr: ["10.1.0.1/24", "10.1.1.1/24"] }))).toBe(false);
+		expect(isPlanError(plan(emptyLab(), { net: nets, addr: ["10.1.0.1/25", "10.1.0.129/25"] }))).toBe(false);
+	});
+
+	test.each(["10.0.2.9/24", "10.0.0.1/16", "10.9.9.9/8", "198.51.100.7/24", "198.51.0.1/16"])(
+		"%s is refused to a machine with the package gateway, and not to one without",
+		(text) => {
+			const nets = ["switch0", "switch0"] as const;
+			for (const request of [{ addr: [text] }, { net: nets, addr: [null, text] }]) {
+				expect(plan(emptyLab(), request)).toMatchObject({ kind: "address-gateway", address: address(text) });
+				expect(isPlanError(plan(emptyLab(), { ...request, gateway: false }))).toBe(false);
+			}
+		},
+	);
+
+	test("the address book holds every NIC's and follows the lab", () => {
+		let s = emptyLab();
+		s = run(s, spawnEvent(s, 1, { net: ["switch0", "switch0"], addr: ["10.1.0.1/24", "10.2.0.1/24"] }));
+		s = run(s, spawnEvent(s, 1, { addr: [null] }));
+		expect(addressBook(s)).toEqual(
+			new Map([
+				[address("10.1.0.1/24").ip, { node: "node1", nic: 0 }],
+				[address("10.2.0.1/24").ip, { node: "node1", nic: 1 }],
+			]),
+		);
+		s = run(s, remove("node1"), hasStopped("node1"));
+		expect(addressBook(s).size).toBe(0);
+	});
+});
+
 describe("machines with several NICs", () => {
-	const ROUTER: MachineSpec = {
-		image: "alpine",
-		memMiB: 256,
-		nics: [{ net: "switch0" }, { net: "none" }, { net: "switch0" }],
-	};
+	const ROUTER = spawnRequest({ net: ["switch0", "none", "switch0"] });
 	const ports = (s: LabState, count: number): unknown => {
 		const plan = planSpawn(s, count, ROUTER);
 		return isPlanError(plan) ? plan : plan.machines.map((m) => m.ports);

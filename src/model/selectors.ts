@@ -2,9 +2,18 @@
 // it returns the same object until one of them changes and a subscriber can
 // compare with Object.is.
 
-import { NICS, nicName } from "../net/index.ts";
-import { LAB_PREFIX_BITS, nicLabel, nicMac, sessionLabel } from "./identity.ts";
-import { ACCEPTS, type Accepts, machineList, nicPortsOf, plugsOf, portsOf } from "./machines.ts";
+import { type AddressBook, addressStr, ip4str, LAB_SUBNET, NICS, nicName, subnetStr } from "../net/index.ts";
+import { nicLabel, nicMac, sessionLabel } from "./identity.ts";
+import {
+	ACCEPTS,
+	type Accepts,
+	addressBook,
+	addressOf,
+	machineList,
+	nicPortsOf,
+	plugsOf,
+	portsOf,
+} from "./machines.ts";
 import { keyboardHolder, parkedPanes, visiblePanes } from "./panes.ts";
 import { type Tiling, tile } from "./tiling.ts";
 import {
@@ -64,11 +73,34 @@ export function machineLink({ life }: Pick<Machine, "life">): LinkWord | null {
 	return (["cut", "up"] as const).find((word) => words.includes(word)) ?? "unplugged";
 }
 
+/** `10.88.0.12`, or `no address` for a machine the lab set none on. */
+export function addressText(machine: Pick<Machine, "spec">): string {
+	const address = addressOf(machine);
+	return address ? ip4str(address.ip) : "no address";
+}
+
+/** Whose NIC each address the lab set is on, for naming what a frame's bytes point at. */
+export const selectAddresses: (state: LabState) => AddressBook = memo(
+	(s) => [s.machines, s.rail],
+	(machines, rail) => addressBook({ machines, rail }),
+);
+
+/** The subnet the lab's addresses are in, or how many there are. A lab that has none yet starts in this one. */
+export const selectSubnets: (state: LabState) => string = memo(
+	(s) => [s.machines, s.rail],
+	(machines, rail) => {
+		const nics = machineList({ machines, rail }).flatMap((machine) => machine.spec.nics);
+		const subnets = [...new Set(nics.flatMap(({ address }) => (address ? [subnetStr(address)] : [])))];
+		if (subnets.length > 1) return plural(subnets.length, "subnet");
+		return subnets[0] ?? subnetStr(LAB_SUBNET);
+	},
+);
+
 export interface RailRow {
 	readonly name: MachineName;
 	readonly hue: HueNo;
 	readonly phase: Phase;
-	/** `10.88.0.12`, `10.88.0.12 · parked`, `did not boot`. */
+	/** `10.88.0.12`, `10.88.0.12 · parked`, `no address`, `did not boot`. */
 	readonly line2: string;
 	/** State always has a word: `booting 1.4 s` while booting, the link state once ready, the phase after. */
 	readonly word: LinkWord | `booting ${string} s` | "failed" | "removing";
@@ -82,7 +114,7 @@ export const selectRail: (state: LabState) => readonly RailRow[] = memo(
 		machineList({ machines, rail }).map((machine): RailRow => {
 			const { life, name } = machine;
 			const isParked = parked[name] !== undefined;
-			const line2 = life.phase === "failed" ? "did not boot" : machine.ip;
+			const line2 = life.phase === "failed" ? "did not boot" : addressText(machine);
 			return {
 				name,
 				hue: machine.hue,
@@ -107,6 +139,7 @@ export interface DetailRow {
 		| "memory"
 		| "address"
 		| "mac"
+		| "gateway"
 		| "uplink"
 		| "link"
 		| "shells"
@@ -163,19 +196,21 @@ function linkRow(label: "link" | NicName, { life }: Machine, nic: NicNo): Detail
 
 /** One NIC reads as the machine's own address and link. Several are told apart by name. */
 function nicRows(machine: Machine): DetailRow[] {
-	const address: DetailRow = { label: "address", value: `${machine.ip}/${LAB_PREFIX_BITS}` };
-	const mac: DetailRow = { label: "mac", value: machine.mac };
-	const uplink: DetailRow = { label: "uplink", value: "lab only" };
-	const nics = NICS.slice(0, machine.spec.nics.length);
-	if (nics.length === 1) return [address, mac, uplink, linkRow("link", machine, 0)];
-	return [
-		uplink,
-		...nics.flatMap((nic): DetailRow[] => [
-			linkRow(nicName(nic), machine, nic),
-			nic === 0 ? address : { label: "address", value: "none" },
-			{ label: "mac", value: nicMac(machine.n, nic) },
-		]),
+	const { spec } = machine;
+	const uplink: DetailRow[] = [
+		{ label: "uplink", value: "lab only" },
+		...(spec.gateway ? [] : [{ label: "gateway", value: "off" } as const]),
 	];
+	const nics = NICS.slice(0, spec.nics.length);
+	const facts = (nic: NicNo): DetailRow[] => {
+		const { address } = spec.nics[nic];
+		return [
+			{ label: "address", value: address ? addressStr(address) : "none" },
+			{ label: "mac", value: nicMac(machine.n, nic) },
+		];
+	};
+	if (nics.length === 1) return [...facts(0), ...uplink, linkRow("link", machine, 0)];
+	return [...uplink, ...nics.flatMap((nic) => [linkRow(nicName(nic), machine, nic), ...facts(nic)])];
 }
 
 function cables(machine: Machine): readonly Cable[] {

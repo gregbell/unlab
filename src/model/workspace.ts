@@ -1,10 +1,13 @@
-import { MAX_NICS, MAX_NODE } from "../net/index.ts";
+import { addressStr, defaultAddress, isAddressFault, MAX_NICS, MAX_NODE, parseAddress } from "../net/index.ts";
 import { identity } from "./identity.ts";
 import { type BootNode, bootMachines, machineList, plugsOf } from "./machines.ts";
 import { addPanes, focusPane, keyboardHolder, parkPane, toggleMaximise } from "./panes.ts";
 import { DISK_SIZES, HUES, type LabState, type NicSpec, type Plug, PORTS, type Step } from "./types.ts";
 
-const VERSION = 2;
+/** 1 had one NIC, saved in the machine itself. 2 had no addresses and no choice of gateway. */
+const VERSIONS = [1, 2, 3] as const;
+type Version = (typeof VERSIONS)[number];
+const VERSION = 3;
 
 export function saveWorkspace(state: LabState): string {
 	const nodes = machineList(state)
@@ -17,9 +20,12 @@ export function saveWorkspace(state: LabState): string {
 				...m.spec,
 				nics: m.spec.nics.map((nic, k) => {
 					const plug = plugs[k];
-					return plug?.kind === "port"
-						? { ...nic, port: plug.port, cut: plug.link === "cut" }
-						: { ...nic, port: null, cut: false };
+					return {
+						net: nic.net,
+						address: nic.address ? addressStr(nic.address) : null,
+						port: plug?.kind === "port" ? plug.port : null,
+						cut: plug?.kind === "port" && plug.link === "cut",
+					};
 				}),
 				failure: m.life.phase === "failed" ? m.life.reason : undefined,
 			};
@@ -58,36 +64,51 @@ function readNic(saved: unknown): SavedNic {
 	)
 		return invalid();
 	return {
-		spec: { net: saved.net },
+		spec: { net: saved.net, address: readAddress(saved.address) },
 		plug: port ? { kind: "port", port, link: saved.cut ? "cut" : "up" } : { kind: "none" },
 	};
 }
 
-/** Version 1 machines had one NIC, saved in the machine itself. */
-function readNics(version: unknown, machine: Record<string, unknown>): readonly SavedNic[] {
-	const saved = version === 1 ? [machine] : machine.nics;
+function readAddress(saved: unknown): NicSpec["address"] {
+	if (saved === null) return null;
+	const address = typeof saved === "string" ? parseAddress(saved) : invalid();
+	return isAddressFault(address) ? invalid() : address;
+}
+
+function readNics(saved: unknown): readonly SavedNic[] {
 	if (!Array.isArray(saved) || saved.length < 1 || saved.length > MAX_NICS) return invalid();
 	return saved.map(readNic);
+}
+
+/** A machine as this version would have saved it. */
+function upgraded(version: Version, machine: Record<string, unknown>, n: number): Record<string, unknown> {
+	if (version === VERSION) return machine;
+	const nics: unknown = version === 1 ? [machine] : machine.nics;
+	if (!Array.isArray(nics)) return invalid();
+	const [eth0, ...rest] = nics.map((nic: unknown) => (record(nic) ? nic : invalid()));
+	if (!eth0) return invalid();
+	return {
+		...machine,
+		gateway: eth0.net === "switch0",
+		nics: [{ ...eth0, address: addressStr(defaultAddress(n)) }, ...rest.map((nic) => ({ ...nic, address: null }))],
+	};
 }
 
 export function restoreWorkspace(base: LabState, raw: string | null): Step {
 	if (raw === null) return { state: base, effects: [] };
 	const saved: unknown = JSON.parse(raw);
-	if (
-		!record(saved) ||
-		(saved.version !== 1 && saved.version !== VERSION) ||
-		!Array.isArray(saved.nodes) ||
-		saved.nodes.length > HUES.length
-	)
-		return invalid();
+	if (!record(saved) || !Array.isArray(saved.nodes) || saved.nodes.length > HUES.length) return invalid();
+	const version = VERSIONS.find((v) => v === saved.version) ?? invalid();
 	const nodes: BootNode[] = [];
 	const taken = new Set<number>();
-	for (const m of saved.nodes as unknown[]) {
-		if (!record(m)) return invalid();
+	for (const node of saved.nodes as unknown[]) {
+		if (!record(node)) return invalid();
+		const id = typeof node.n === "number" ? identity(node.n) : invalid();
+		const m = upgraded(version, node, id.n);
 		const cpus = m.cpus ?? 1;
 		if (typeof cpus !== "number" || !Number.isInteger(cpus) || cpus < 1 || cpus > 16) return invalid();
 		const hue = HUES.find((h) => h === m.hue);
-		const nics = readNics(saved.version, m);
+		const nics = readNics(m.nics);
 		for (const { plug } of nics) {
 			if (plug.kind === "none") continue;
 			if (taken.has(plug.port)) return invalid();
@@ -97,19 +118,26 @@ export function restoreWorkspace(base: LabState, raw: string | null): Step {
 		if (
 			!hue ||
 			!diskGiB ||
-			typeof m.n !== "number" ||
+			typeof m.gateway !== "boolean" ||
 			typeof m.image !== "string" ||
 			typeof m.memMiB !== "number" ||
 			!Number.isSafeInteger(m.memMiB) ||
 			m.memMiB < 1 ||
-			nodes.some((node) => node.identity.n === m.n || node.hue === hue)
+			nodes.some((node) => node.identity.n === id.n || node.hue === hue)
 		)
 			return invalid();
 		nodes.push({
-			identity: identity(m.n),
+			identity: id,
 			failure: typeof m.failure === "string" ? m.failure : undefined,
 			hue,
-			spec: { image: m.image, memMiB: m.memMiB, diskGiB, cpus, nics: nics.map((nic) => nic.spec) },
+			spec: {
+				image: m.image,
+				memMiB: m.memMiB,
+				diskGiB,
+				cpus,
+				gateway: m.gateway,
+				nics: nics.map((nic) => nic.spec),
+			},
 			plugs: nics.map((nic) => nic.plug),
 		});
 	}

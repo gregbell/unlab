@@ -4,6 +4,7 @@ import { html, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { repeat } from "lit/directives/repeat.js";
 import {
 	ACCEPTS,
+	addressText,
 	type MachineName,
 	type RailRow,
 	type SessionId,
@@ -74,7 +75,7 @@ export class UnlabPane extends UnlabElement {
 		const { name, life, sessions, activeSession } = machine;
 		const takesKeys = ACCEPTS[life.phase].commands;
 		const removing = life.phase === "removing";
-		const right = rightSide(word, machine.ip);
+		const right = rightSide(word, addressText(machine));
 		const shown = this.#shown.value && !removing;
 		const keyboard = this.#keyboard.value && takesKeys;
 		const states = this.#sessions.value;

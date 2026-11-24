@@ -3,7 +3,7 @@ import "../machine-details/machine-details.ts";
 import "../machine-row/machine-row.ts";
 import { html, type TemplateResult } from "lit";
 import { repeat } from "lit/directives/repeat.js";
-import { LAB_CIDR, PORTS, SWITCH_NAME, selectRail } from "../../model/index.ts";
+import { PORTS, SWITCH_NAME, selectRail, selectSubnets } from "../../model/index.ts";
 import { plusIcon, Select, UnlabElement } from "../base/index.ts";
 
 /**
@@ -26,7 +26,7 @@ export class UnlabRail extends UnlabElement {
 					? html`<p class="empty">Nothing booted yet.</p>
 							<div class="switch">
 								<p><span class="name">${SWITCH_NAME}</span><span>0 of ${PORTS.length} ports</span></p>
-								<p>L2 · ${LAB_CIDR}</p>
+								<p>L2 · ${selectSubnets(this.app.store.state)}</p>
 							</div>`
 					: html`<ul role="list" class="rows">
 							${repeat(

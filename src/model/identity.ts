@@ -1,20 +1,16 @@
-import { ip4str, MAX_NODE, macStr, type NicNo, nodeIp, nodeMac, nodeNicLabel, parseNodeName } from "../net/index.ts";
+import { MAX_NODE, macStr, type NicNo, nodeMac, nodeNicLabel, parseNodeName } from "../net/index.ts";
 import type { Identity, Machine, MachineName, SessionId } from "./types.ts";
 
-// net/ owns the node<n> arithmetic. These two name a frame's machine from its
-// bytes, live or long removed, and are null for any address the lab cannot name.
-export { nodeOfIp as nameForIp, nodeOfMac as nameForMac } from "../net/index.ts";
+// net/ owns the node<n> arithmetic. This names a frame's machine from its
+// bytes, live or long removed, and is null for any MAC the lab did not give out.
+export { nodeOfMac as nameForMac } from "../net/index.ts";
 
-/** The lab segment. The details panel writes an address with its prefix, as in `10.88.0.12/24`. */
-export const LAB_CIDR = "10.88.0.0/24";
-export const LAB_PREFIX_BITS = 24;
-
-/** Names are never reused, so a lab runs out of addresses after node<MAX_NODE>. `planSpawn` checks before it asks. */
+/** Names are never reused, so a lab runs out of MACs after node<MAX_NODE>. `planSpawn` checks before it asks. */
 export function identity(n: number): Identity {
 	if (!Number.isInteger(n) || n < 1 || n > MAX_NODE) {
 		throw new RangeError(`no node ${n}: a lab holds node1 to node${MAX_NODE}`);
 	}
-	return { n, name: `node${n}`, ip: ip4str(nodeIp(n)), mac: macStr(nodeMac(n)) };
+	return { n, name: `node${n}`, mac: macStr(nodeMac(n)) };
 }
 
 export function nicMac(n: number, nic: NicNo): string {

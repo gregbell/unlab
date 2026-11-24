@@ -4,6 +4,7 @@ import { identity } from "./identity.ts";
 import { isPlanError, lowestFreePorts, planBootAgain, planLink, takenPorts } from "./machines.ts";
 import { capacity, keyboardHolder, reconcilePanes, visiblePanes } from "./panes.ts";
 import {
+	address,
 	agentCall,
 	bootAgainEvent,
 	effectsOf,
@@ -35,7 +36,13 @@ import {
 } from "./types.ts";
 import { clockHz, initialState, update } from "./update.ts";
 
-const ALPINE: MachineSpec = { image: "alpine", memMiB: 256, nics: [{ net: "switch0" }] };
+const alpineAt = (text: string): MachineSpec => ({
+	image: "alpine",
+	memMiB: 256,
+	gateway: true,
+	nics: [{ net: "switch0", address: address(text) }],
+});
+const ALPINE = alpineAt("10.88.0.11/24");
 const shell = (name: MachineName): LabEvent => ({ type: "cmd/shell", machine: name });
 const tick = (now: number): LabEvent => ({ type: "tick", now });
 
@@ -126,7 +133,12 @@ describe("spawn", () => {
 			{ type: "vm/boot", machine: "node1", attempt: 1, config: { identity: identity(1), spec: ALPINE, hosts } },
 			{ type: "screen/create", session: "node2:console" },
 			{ type: "port/attach", port: 2, machine: "node2", nic: 0 },
-			{ type: "vm/boot", machine: "node2", attempt: 1, config: { identity: identity(2), spec: ALPINE, hosts } },
+			{
+				type: "vm/boot",
+				machine: "node2",
+				attempt: 1,
+				config: { identity: identity(2), spec: alpineAt("10.88.0.12/24"), hosts },
+			},
 			{ type: "clock", hz: 10 },
 		]);
 	});

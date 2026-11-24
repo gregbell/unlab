@@ -1,7 +1,17 @@
 import { describe, expect, test } from "vitest";
-import { arpReply, arpRequest, BROADCAST, eth, ipv4Packet, mac, ping, routedPing } from "../../test/support/frames.ts";
+import {
+	ADDRESSES,
+	arpReply,
+	arpRequest,
+	BROADCAST,
+	eth,
+	ipv4Packet,
+	mac,
+	ping,
+	routedPing,
+} from "../../test/support/frames.ts";
 import type { PortNo } from "../model/index.ts";
-import { type CaptureFilter, compileFilter, type Flood } from "../net/index.ts";
+import { type AddressBook, type CaptureFilter, compileFilter, type Flood } from "../net/index.ts";
 import { type CaptureLog, createCaptureLog } from "./log.ts";
 import { formatCounters } from "./rows.ts";
 
@@ -10,7 +20,12 @@ const bit = (p: number) => 1 << (p - 1);
 function setup(limit = 10_000) {
 	let clock = 0;
 	const queue: (() => void)[] = [];
-	const log = createCaptureLog({ limit, now: () => clock, schedule: (fn) => queue.push(fn) });
+	const log = createCaptureLog({
+		limit,
+		now: () => clock,
+		schedule: (fn) => queue.push(fn),
+		addresses: () => ADDRESSES,
+	});
 	const frame = (bytes: Uint8Array, from: PortNo, to: number, flood: Flood | null = null) =>
 		log.appendFrame({ from, to, flood, frame: bytes });
 	const at = (ms: number) => {
@@ -60,7 +75,7 @@ describe("rows", () => {
 		expect(dhcp).toMatchObject({ from: { kind: "raw", text: "10.0.2.2:68" }, to: { kind: "everyone" } });
 	});
 
-	test("an outsider's MAC carrying a lab address is named by the address", () => {
+	test("an outsider's MAC carrying an address the lab set is named by it", () => {
 		const { log, frame } = setup();
 		const outsider = Uint8Array.of(0x02, 0, 0, 0, 0, 9);
 		frame(eth(mac(2), outsider, 0x0800, ipv4Packet(0x0a58000d, 0x0a58000c, 1, [8, 0, 0, 0, 0, 1, 0, 1])), 5, bit(2));
@@ -68,6 +83,33 @@ describe("rows", () => {
 			from: { kind: "machine", name: "node3" },
 			to: { kind: "machine", name: "node2" },
 		});
+	});
+
+	test("a row keeps the name it had when a newer machine is given the address", () => {
+		const address = 0x0a010001;
+		let names: AddressBook = new Map([[address, { node: "node1", nic: 0 }]]);
+		const log = createCaptureLog({ schedule: (fn) => fn(), now: () => 0, addresses: () => names });
+		const outsider = Uint8Array.of(0x02, 0, 0, 0, 0, 9);
+		const frame = eth(mac(7), outsider, 0x0800, ipv4Packet(address, 0x08080808, 1, [8, 0, 0, 0, 0, 1, 0, 1]));
+		const append = () => log.appendFrame({ from: 5, to: 0, flood: null, frame });
+		append();
+		names = new Map();
+		append();
+		names = new Map([[address, { node: "node4", nic: 1 }]]);
+		append();
+		expect(log.tail(3).map((row) => row.kind === "frame" && row.from)).toEqual([
+			{ kind: "machine", name: "node1" },
+			{ kind: "raw", text: "10.1.0.1" },
+			{ kind: "machine", name: "node4" },
+		]);
+		for (const [term, matching] of [
+			["node1", [1]],
+			["node4", [3]],
+			["10.1.0.1", [1, 2, 3]],
+		] as const) {
+			log.setFilter(filter(term));
+			expect(seqs(log)).toEqual(matching);
+		}
 	});
 
 	test("link rows say which port changed and who did it", () => {

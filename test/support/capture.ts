@@ -6,6 +6,7 @@
 import { type CaptureLog, createCaptureLog } from "../../src/capture/index.ts";
 import type { Cause, Effect, MachineName, PortNo, ReadStore } from "../../src/model/index.ts";
 import { compileFilter, type Flood, type NicNo } from "../../src/net/index.ts";
+import { ADDRESSES } from "./frames.ts";
 
 export interface TestCapture {
 	readonly log: CaptureLog;
@@ -21,7 +22,7 @@ export interface TestCapture {
 
 export function testCapture(limit?: number): TestCapture {
 	let now = 0;
-	const log = createCaptureLog({ limit, schedule: (fn) => fn(), now: () => now });
+	const log = createCaptureLog({ limit, schedule: (fn) => fn(), now: () => now, addresses: () => ADDRESSES });
 	return {
 		log,
 		at(ms) {

@@ -18,6 +18,7 @@ import {
 	type LabState,
 	type MachineName,
 	type NicRef,
+	type NicRequest,
 	type NicSpec,
 	type PortNo,
 	planLink,
@@ -27,6 +28,7 @@ import {
 	update,
 	type WebMcp,
 } from "../../model/index.ts";
+import { isAddressFault, parseAddress } from "../../net/index.ts";
 import type { AgentService, AppServices, SwitchReadout, TerminalService } from "../services.ts";
 import { servicesContext } from "./context.ts";
 
@@ -49,9 +51,30 @@ export function lab(...steps: readonly Step[]): LabState {
 export const spawn =
 	(count: number, ...nets: readonly NicSpec["net"][]): Step =>
 	(state) => {
-		const nics = (nets.length > 0 ? nets : ["switch0" as const]).map((net) => ({ net }));
-		const plan = planSpawn(state, count, { image: "alpine", memMiB: 256, nics });
+		const nics = (nets.length > 0 ? nets : ["switch0" as const]).map(
+			(net, nic): NicRequest => ({ net, address: nic === 0 ? "default" : null }),
+		);
+		const plan = planSpawn(state, count, {
+			image: "alpine",
+			memMiB: 256,
+			gateway: nics[0].net === "switch0",
+			nics,
+		});
 		if (isPlanError(plan)) throw new Error(`cannot spawn ${count}: ${plan.kind}`);
+		return [{ type: "cmd/spawn", plan, at: state.now }];
+	};
+
+/** One machine, with each NIC on switch0 at the address given or with none. */
+export const spawnAt =
+	(...addresses: readonly (string | null)[]): Step =>
+	(state) => {
+		const nics = addresses.map((text): NicRequest => {
+			const address = text === null ? null : parseAddress(text);
+			if (address && isAddressFault(address)) throw new Error(`${text}: ${address.kind}`);
+			return { net: "switch0", address };
+		});
+		const plan = planSpawn(state, 1, { image: "alpine", memMiB: 256, gateway: true, nics });
+		if (isPlanError(plan)) throw new Error(`cannot spawn: ${plan.kind}`);
 		return [{ type: "cmd/spawn", plan, at: state.now }];
 	};
 

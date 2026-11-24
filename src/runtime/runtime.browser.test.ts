@@ -5,7 +5,7 @@ import "@wterm/dom/css";
 import { afterAll, describe, expect, test } from "vitest";
 import { createCaptureLog } from "../capture/index.ts";
 import type { BootConfig, Effect, HostEntry, RuntimeEvent } from "../model/index.ts";
-import { macStr, nodeMac } from "../net/index.ts";
+import { defaultAddress, macStr, nodeMac } from "../net/index.ts";
 import type { DistroManifest } from "./image.ts";
 import { createRuntime } from "./runtime.ts";
 
@@ -20,8 +20,8 @@ const HOSTS: HostEntry[] = [
 	{ ip: "10.88.0.12", name: "node2" },
 ];
 const config = (n: number): BootConfig => ({
-	identity: { n, name: `node${n}`, ip: `10.88.0.${10 + n}`, mac: macStr(nodeMac(n)) },
-	spec: { image: "alpine", memMiB: 256, nics: [{ net: "switch0" }] },
+	identity: { n, name: `node${n}`, mac: macStr(nodeMac(n)) },
+	spec: { image: "alpine", memMiB: 256, gateway: true, nics: [{ net: "switch0", address: defaultAddress(n) }] },
 	hosts: HOSTS,
 });
 

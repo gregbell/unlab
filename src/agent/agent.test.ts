@@ -571,7 +571,11 @@ describe("capture_read", () => {
 		const plan = planSpawn(store.state, 1, {
 			image: "alpine",
 			memMiB: 256,
-			nics: [{ net: "switch0" }, { net: "switch0" }],
+			gateway: true,
+			nics: [
+				{ net: "switch0", address: "default" },
+				{ net: "switch0", address: null },
+			],
 		});
 		if (isPlanError(plan)) throw new Error("cannot spawn");
 		store.dispatchCommand({ type: "cmd/spawn", plan, at: 0 });

@@ -2,17 +2,7 @@
 // screen: decoding runs per visible row, never per frame.
 
 import type { Cause, MachineName, PortNo } from "../model/index.ts";
-import {
-	arpAddrs,
-	decode,
-	ipAddrs,
-	isGroupMac,
-	type NicName,
-	nicName,
-	nicOfMac,
-	nodeNicLabel,
-	nodeOfIp,
-} from "../net/index.ts";
+import { arpAddrs, decode, ipAddrs, isGroupMac, type NicName, nicName, nicOfMac, nodeNicLabel } from "../net/index.ts";
 import type { CaptureCounters, CaptureEntry, FrameEntry, LinkEntry } from "./log.ts";
 
 /** Whether a machine has more than one NIC, so that its name alone does not say which. */
@@ -69,29 +59,31 @@ function frameRow(e: FrameEntry, several: HasSeveralNics): FrameRow {
 		seq: e.seq,
 		time: seconds(e.t),
 		proto: d.proto,
-		from: routeEnd(e.bytes, "src", d.src, several),
-		to: isGroupMac(e.bytes) ? { kind: "everyone" } : routeEnd(e.bytes, "dst", d.dst, several),
+		from: routeEnd(e, "src", d.src, several),
+		to: isGroupMac(e.bytes) ? { kind: "everyone" } : routeEnd(e, "dst", d.dst, several),
 		len: e.bytes.length,
 		info: d.info,
 		note: note(e),
 	};
 }
 
-function routeEnd(f: Uint8Array, end: "src" | "dst", raw: string, several: HasSeveralNics): RouteEnd {
-	const at = nicOfMac(f, end === "src" ? 6 : 0);
+/** By the MAC, which says which NIC, or by the IP address when the guest changed its MAC. */
+function routeEnd(e: FrameEntry, end: "src" | "dst", raw: string, several: HasSeveralNics): RouteEnd {
+	const at = nicOfMac(e.bytes, end === "src" ? 6 : 0);
 	if (at) {
 		const shown = at.nic > 0 || several(at.node);
 		return { kind: "machine", name: at.node, ...(shown ? { nic: nicName(at.nic) } : {}) };
 	}
-	const name = nodeOfAddress(f, end);
+	const ip = addressOf(e.bytes, end);
+	const name = ip === null ? undefined : e.names.get(ip)?.node;
 	return name ? { kind: "machine", name } : { kind: "raw", text: raw };
 }
 
-function nodeOfAddress(f: Uint8Array, end: "src" | "dst"): MachineName | null {
+function addressOf(f: Uint8Array, end: "src" | "dst"): number | null {
 	const ip = ipAddrs(f);
-	if (ip) return nodeOfIp(end === "src" ? ip.src : ip.dst);
+	if (ip) return end === "src" ? ip.src : ip.dst;
 	const arp = arpAddrs(f);
-	if (arp) return nodeOfIp(end === "src" ? arp.spa : arp.tpa);
+	if (arp) return end === "src" ? arp.spa : arp.tpa;
 	return null;
 }
 

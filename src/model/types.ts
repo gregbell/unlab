@@ -1,9 +1,9 @@
 // The lab as plain data. Nothing here touches the DOM, a worker, a timer or a
 // clock: time arrives only as `tick` events and `at` stamps.
 
-import type { NicName, NicNo } from "../net/index.ts";
+import type { Address, NicName, NicNo } from "../net/index.ts";
 
-export type { NicName, NicNo };
+export type { Address, NicName, NicNo };
 
 // ───────────────────────────── identity ─────────────────────────────
 
@@ -19,11 +19,10 @@ export const HUES: readonly HueNo[] = [1, 2, 3, 4, 5, 6, 7, 8];
 export const MAX_MACHINES = 8;
 export const SWITCH_NAME = "switch0";
 
-/** node<n> is 10.88.0.(10+n) with a MAC for each NIC, all arithmetic, so any frame names its machine forever. */
+/** node<n> has a MAC for each NIC, all arithmetic, so any frame names its machine forever. */
 export interface Identity {
 	readonly n: number;
 	readonly name: MachineName;
-	readonly ip: string;
 	/** eth0's. */
 	readonly mac: string;
 }
@@ -59,15 +58,35 @@ export type DiskSize = (typeof DISK_SIZES)[number];
 
 export interface NicSpec {
 	readonly net: "switch0" | "none";
+	/** What the lab sets on it at every boot. Null leaves it up with none. */
+	readonly address: Address | null;
 }
 
-export interface MachineSpec {
+interface Hardware {
 	readonly diskGiB?: DiskSize;
 	readonly cpus?: number;
 	readonly image: string;
 	readonly memMiB: number;
-	/** One to MAX_NICS of them, eth0 first. What was asked for at spawn; boot again honours it. */
+	/** Whether eth0 reaches the package gateway. */
+	readonly gateway: boolean;
+}
+
+/** What a machine is, decided at spawn. Boot again honours it. */
+export interface MachineSpec extends Hardware {
+	/** One to MAX_NICS of them, eth0 first. */
 	readonly nics: readonly NicSpec[];
+}
+
+/** A NIC as a spawn asks for it. */
+export interface NicRequest {
+	readonly net: NicSpec["net"];
+	/** `default` is 10.88.0.(10+n)/24, which differs for each machine. */
+	readonly address: Address | null | "default";
+}
+
+/** What a spawn asks of every machine it boots. */
+export interface SpawnRequest extends Hardware {
+	readonly nics: readonly NicRequest[];
 }
 
 /**
@@ -230,8 +249,9 @@ export interface SpawnPlan {
 		readonly identity: Identity;
 		readonly hue: HueNo;
 		readonly ports: NicPorts;
+		readonly spec: MachineSpec;
 	}[];
-	readonly spec: MachineSpec;
+	readonly request: SpawnRequest;
 }
 
 export interface LinkChange extends NicRef {
@@ -244,7 +264,11 @@ export interface LinkChange extends NicRef {
 export type PlanError =
 	| { readonly kind: "no-ports"; readonly free: number; readonly wanted: number }
 	| { readonly kind: "no-room"; readonly free: number; readonly wanted: number }
-	| { readonly kind: "unknown-image"; readonly image: string };
+	| { readonly kind: "unknown-image"; readonly image: string }
+	| { readonly kind: "address-taken"; readonly address: Address; readonly by: NicRef }
+	/** Two of one machine's NICs would be in overlapping subnets. */
+	| { readonly kind: "address-overlap"; readonly nics: readonly [NicNo, NicNo] }
+	| { readonly kind: "address-gateway"; readonly address: Address; readonly subnet: Address };
 
 // ───────────────────────────── events: one union, four producers ─────────────────────────────
 

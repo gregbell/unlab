@@ -4,7 +4,7 @@
 import assert from "node:assert/strict";
 import { createKernel, type KernelInstance } from "unkernel/node";
 import { test } from "vitest";
-import { macStr, nodeMac } from "../../src/net/index.ts";
+import { defaultAddress, macStr, nodeMac } from "../../src/net/index.ts";
 import { execAsRoot, hostsScript, setupScript } from "../../src/runtime/guest.ts";
 import { LabNic } from "../../src/runtime/nic.ts";
 import { createShellTracker, type ShellEvent } from "../../src/runtime/shell-tracker.ts";
@@ -13,11 +13,9 @@ import { imagePath } from "../support/images.ts";
 const TOKEN = "0123456789abcdef";
 const SETUP = setupScript({
 	hostname: "node1",
-	ip: "10.88.0.11",
-	prefixBits: 24,
-	nics: 1,
+	addresses: [defaultAddress(1)],
 	hosts: [],
-	dhcp: false,
+	gateway: false,
 	promptToken: TOKEN,
 });
 const LOGIN_SHELL_PID = `for p in /proc/[0-9]*; do
@@ -107,7 +105,7 @@ test("setup gives every shell a prompt that reports exit codes, and running it a
 		await execAsRoot(vm, "echo '10.0.0.9 mine' >> /etc/hosts && ip addr del 10.88.0.11/24 dev eth0");
 		const update = await execAsRoot(
 			vm,
-			hostsScript({ hostname: "node1", ip: "10.88.0.11", hosts: [{ ip: "10.88.0.12", name: "node2" }] }),
+			hostsScript({ hostname: "node1", hosts: [{ ip: "10.88.0.12", name: "node2" }] }),
 		);
 		assert.equal(update.exitCode, 0, `hosts update failed: ${String(update.stderr)}`);
 		const hosts = String((await execAsRoot(vm, "cat /etc/hosts")).stdout);

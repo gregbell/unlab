@@ -1,5 +1,6 @@
 import { expect, test } from "vitest";
-import { emptyLab, IMAGES, isReady, labWith, linkEvent, machine, run, spawnEvent, WIDE } from "./testkit.ts";
+import { addressText } from "./selectors.ts";
+import { address, emptyLab, IMAGES, isReady, labWith, linkEvent, machine, run, spawnEvent, WIDE } from "./testkit.ts";
 import { initialState } from "./update.ts";
 import { restoreWorkspace, saveWorkspace } from "./workspace.ts";
 
@@ -22,13 +23,24 @@ test("each NIC comes back on its own port, cut or unplugged as it was", () => {
 	s = run(s, linkEvent(s, false, { machine: "node2", nic: 2 }));
 	const { state } = restoreWorkspace(initialState(IMAGES, WIDE), saveWorkspace(s));
 	expect(machine(state, "node2")).toMatchObject({
-		spec: { nics: [{ net: "switch0" }, { net: "none" }, { net: "switch0" }] },
+		spec: { gateway: true, nics: [{ net: "switch0" }, { net: "none" }, { net: "switch0" }] },
 		life: {
 			phase: "booting",
 			plugs: [{ kind: "port", port: 2, link: "up" }, { kind: "none" }, { kind: "port", port: 3, link: "cut" }],
 		},
 	});
-	expect(machine(state, "node1").spec.nics).toEqual([{ net: "switch0" }]);
+	expect(machine(state, "node1").spec.nics).toEqual([{ net: "switch0", address: address("10.88.0.11/24") }]);
+});
+
+test("a machine comes back with the addresses and the gateway it was given", () => {
+	let s = emptyLab();
+	s = run(s, spawnEvent(s, 1, { net: ["switch0", "switch0"], addr: [null, "10.2.0.1/16"], gateway: false }));
+	s = run(s, spawnEvent(s, 1, { net: "none", addr: ["192.168.7.9/30"], gateway: true }));
+	const { state, effects } = restoreWorkspace(initialState(IMAGES, WIDE), saveWorkspace(s));
+	for (const name of s.rail) expect(machine(state, name).spec).toMatchObject(machine(s, name).spec);
+	expect(effects.flatMap((e) => (e.type === "vm/boot" ? [e.config.spec] : []))).toMatchObject(
+		s.rail.map((name) => machine(s, name).spec),
+	);
 });
 
 /** As main wrote it before a machine could have more than one NIC. */
@@ -56,8 +68,38 @@ test("a lab saved before machines had several NICs restores with one each, on th
 		["node3", [{ net: "none" }], { phase: "booting", plugs: [{ kind: "none" }] }],
 	]);
 	expect(machine(state, "node2").spec).toMatchObject({ image: "debian", memMiB: 512, diskGiB: "8", cpus: 1 });
-	expect(JSON.parse(saveWorkspace(state))).toMatchObject({ version: 2 });
+	expect(state.rail.map((name) => [addressText(machine(state, name)), machine(state, name).spec.gateway])).toEqual([
+		["10.88.0.11", true],
+		["10.88.0.12", true],
+		["10.88.0.13", false],
+	]);
+	expect(JSON.parse(saveWorkspace(state))).toMatchObject({ version: 3 });
 });
+
+test("a lab saved before machines chose addresses restores with the ones they had", () => {
+	const nics = [
+		{ net: "switch0", port: 4, cut: false },
+		{ net: "none", port: null, cut: false },
+	];
+	const saved = { ...VERSION_1, version: 2, nodes: [{ ...VERSION_1.nodes[1], nics }] };
+	const { state } = restoreWorkspace(initialState(IMAGES, WIDE), JSON.stringify(saved));
+	expect(machine(state, "node2").spec).toMatchObject({
+		gateway: true,
+		nics: [
+			{ net: "switch0", address: address("10.88.0.12/24") },
+			{ net: "none", address: null },
+		],
+	});
+});
+
+test.each(["10.1.0.1", "10.1.0.0/24", "10.1.0.1/33", "", 7, undefined])(
+	"a saved machine with the address %j is refused",
+	(bad) => {
+		const nics = [{ net: "switch0", port: 4, cut: false, address: bad }];
+		const saved = { ...VERSION_1, version: 3, nodes: [{ ...VERSION_1.nodes[0], gateway: true, nics }] };
+		expect(() => restoreWorkspace(initialState(IMAGES, WIDE), JSON.stringify(saved))).toThrow("could not be read");
+	},
+);
 
 test.each([
 	["no NICs", []],

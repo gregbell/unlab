@@ -1,8 +1,18 @@
-import { DISK_SIZES, isPlanError, MAX_MACHINES, type MachineName, type NicSpec, planSpawn } from "../../model/index.ts";
-import { MAX_NICS, NICS, nicName } from "../../net/index.ts";
+import {
+	type Address,
+	DISK_SIZES,
+	isPlanError,
+	MAX_MACHINES,
+	type MachineName,
+	type NicRequest,
+	type NicSpec,
+	type PlanError,
+	planSpawn,
+} from "../../model/index.ts";
+import { addressStr, MAX_NICS, NICS, nicName } from "../../net/index.ts";
 import { defineVerb, refuse } from "../define.ts";
 import * as slots from "../grammar/slots.ts";
-import { andList, imageLabel, planErrorSentence, ports } from "./words.ts";
+import { andList, count, imageLabel, planErrorSentence, ports } from "./words.ts";
 
 function multiCpuBlocker(): string | undefined {
 	if (globalThis.crossOriginIsolated === false || typeof SharedArrayBuffer !== "function")
@@ -15,11 +25,36 @@ function multiCpuBlocker(): string | undefined {
 export const MULTICPU_BLOCKER = multiCpuBlocker();
 export const DEFAULT_CPUS = MULTICPU_BLOCKER ? 1 : 2;
 
-/** `--net` as typed, for a machine of `count` NICs. Null when it names some other number of them. */
-function nicSpecs(count: number, written: string): readonly NicSpec[] | null {
-	const nets = written.split(",").map((net): NicSpec => ({ net: net === "none" ? "none" : "switch0" }));
-	if (nets.length === 1) return Array.from({ length: count }, () => nets[0]);
-	return nets.length === count ? nets : null;
+/** `--net` as typed, for a machine of `nics` NICs. Null when it names some other number of them. */
+function networks(nics: number, written: string): readonly NicSpec["net"][] | null {
+	const nets = written.split(",").map((net): NicSpec["net"] => (net === "none" ? "none" : "switch0"));
+	if (nets.length === 1) return Array.from({ length: nics }, () => nets[0]);
+	return nets.length === nics ? nets : null;
+}
+
+/** With no `--addr`, eth0 has the lab's default address and the others have none. */
+function requestedAddress(addresses: readonly (Address | null)[] | null, nic: number): NicRequest["address"] {
+	if (addresses === null) return nic === 0 ? "default" : null;
+	return addresses[nic];
+}
+
+/** The argument a plan error is about. */
+const ABOUT: Readonly<Record<PlanError["kind"], "count" | "image" | "addr">> = {
+	"no-ports": "count",
+	"no-room": "count",
+	"unknown-image": "image",
+	"address-taken": "addr",
+	"address-overlap": "addr",
+	"address-gateway": "addr",
+};
+
+/** What the preview says of chosen addresses: nothing when the lab chooses. */
+function addressParts(nics: readonly NicRequest[]): string[] {
+	if (nics[0].address === "default") return [];
+	return nics.map(({ address }, i) => {
+		const what = address === null || address === "default" ? "no address" : addressStr(address);
+		return nics.length === 1 ? what : `${nicName(NICS[i])} ${what}`;
+	});
 }
 
 export const spawn = defineVerb({
@@ -42,13 +77,15 @@ export const spawn = defineVerb({
 			1,
 		),
 		net: slots.exclusive("switch0", [slots.valued("--net", slots.networks()), slots.flag("--no-net", "none")]),
+		addr: slots.option("--addr", slots.addresses(), null),
+		gateway: slots.exclusive<"on" | "off">("on", [slots.flag("--no-gateway", "off")]),
 	},
 	plan(a, lab) {
 		if (a.cpus > 16) return refuse("Choose 1 to 16 CPUs per machine.", "cpus");
 		if (a.cpus > 1 && MULTICPU_BLOCKER) return refuse(`Multiple CPUs unavailable: ${MULTICPU_BLOCKER}.`, "cpus");
 		if (a.nics > MAX_NICS) return refuse(`A machine has 1 to ${MAX_NICS} NICs.`, "nics");
-		const nics = nicSpecs(a.nics, a.net);
-		if (nics === null) {
+		const nets = networks(a.nics, a.net);
+		if (nets === null) {
 			const named = a.net.split(",").length;
 			return refuse(
 				named > MAX_NICS
@@ -57,16 +94,34 @@ export const spawn = defineVerb({
 				"net",
 			);
 		}
-		const plan = planSpawn(lab, a.count, { image: a.image, memMiB: a.mem, diskGiB: a.disk, cpus: a.cpus, nics });
-		return isPlanError(plan)
-			? refuse(
-					planErrorSentence(plan, "Add --no-net to boot unplugged, or leave some NICs out with --net switch0,none."),
-					plan.kind === "unknown-image" ? "image" : "count",
-				)
-			: plan;
+		if (a.addr !== null && a.addr.length !== a.nics) {
+			const named = a.addr.length;
+			return refuse(
+				named > MAX_NICS
+					? `A machine has 1 to ${MAX_NICS} NICs, and --addr names ${named}.`
+					: named < a.nics
+						? `--addr names ${count(named, "NIC")} of ${a.nics}, so end it with none for each of the others.`
+						: `--addr names ${named} NICs, so add --nics ${named}.`,
+				"addr",
+			);
+		}
+		if (a.count > 1 && a.addr?.some((address) => address !== null)) {
+			return refuse("--addr gives one machine its addresses, so spawn 1 at a time with it.", "addr");
+		}
+		const plan = planSpawn(lab, a.count, {
+			image: a.image,
+			memMiB: a.mem,
+			diskGiB: a.disk,
+			cpus: a.cpus,
+			gateway: a.gateway === "on" && nets[0] === "switch0",
+			nics: nets.map((net, nic) => ({ net, address: requestedAddress(a.addr, nic) })),
+		});
+		if (!isPlanError(plan)) return plan;
+		const ports = "Add --no-net to boot unplugged, or leave some NICs out with --net switch0,none.";
+		return refuse(planErrorSentence(plan, ports), ABOUT[plan.kind]);
 	},
 	describe(plan, lab) {
-		const { machines, spec } = plan;
+		const { machines, request: spec } = plan;
 		const many = machines.length > 1;
 		const plugged = machines.flatMap((m) => m.ports.flatMap((port) => port ?? []));
 		const loose = NICS.filter((nic) => spec.nics[nic]?.net === "none").map(nicName);
@@ -79,6 +134,8 @@ export const spawn = defineVerb({
 			...(spec.nics.length === 1 ? [] : [`${spec.nics.length} NICs${many ? " each" : ""}`]),
 			plugged.length === 0 ? "unplugged" : `plugged into switch0 on ${ports(plugged)}`,
 			...(plugged.length === 0 || loose.length === 0 ? [] : [`${andList(loose)} unplugged`]),
+			...addressParts(spec.nics),
+			...(spec.gateway || spec.nics[0].net === "none" ? [] : ["no package gateway"]),
 		].join(" · ");
 	},
 	async execute(plan, ctx, deps) {
@@ -91,7 +148,7 @@ export const spawn = defineVerb({
 		name: "machines_spawn",
 		title: "Boot machines",
 		description:
-			"Boot new Linux machines on the lab's switch. Returns the names created. Each boots on its own and takes commands once ready.",
+			"Boot new Linux machines on the lab's switch. Returns the names created. Each boots on its own and takes commands once ready. gateway off leaves out the package gateway, so DHCP on eth0 goes to the other machines.",
 		policy: "ask",
 	},
 });

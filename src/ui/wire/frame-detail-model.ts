@@ -21,7 +21,6 @@ import {
 	macStr,
 	nicOfMac,
 	nodeNicLabel,
-	nodeOfIp,
 	nodeOfMac,
 } from "../../net/index.ts";
 
@@ -107,7 +106,12 @@ const field = (label: string, value: string | number, who: Who = null): DetailFi
 	who,
 });
 const named = (machine: MachineName): Named => ({ machine, label: machine });
-const machine = (name: MachineName | null): Who => (name ? { kind: "machine", ...named(name) } : null);
+
+/** Which machine had the address when the frame was captured. */
+function ipWho(ip: number, { names }: FrameEntry): Who {
+	const name = names.get(ip)?.node;
+	return name ? { kind: "machine", ...named(name) } : null;
+}
 
 function macNamed(f: Uint8Array, off: number, names: LabNames): Named | null {
 	const at = nicOfMac(f, off);
@@ -121,14 +125,15 @@ function macWho(f: Uint8Array, off: number, names: LabNames): Who {
 }
 
 /** Byte ranges that are a machine's MAC or IPv4 address, by where the protocol puts them. */
-function addressSpans(f: Uint8Array): { readonly start: number; readonly end: number; readonly name: MachineName }[] {
+function addressSpans(e: FrameEntry): { readonly start: number; readonly end: number; readonly name: MachineName }[] {
+	const f = e.bytes;
 	const spans: { start: number; end: number; name: MachineName }[] = [];
 	const mac = (off: number) => {
 		const name = f.length >= off + 6 ? nodeOfMac(f, off) : null;
 		if (name) spans.push({ start: off, end: off + 6, name });
 	};
 	const ip = (off: number) => {
-		const name = nodeOfIp(u32(f, off));
+		const name = e.names.get(u32(f, off))?.node;
 		if (name) spans.push({ start: off, end: off + 4, name });
 	};
 	mac(0);
@@ -145,10 +150,11 @@ function addressSpans(f: Uint8Array): { readonly start: number; readonly end: nu
 	return spans;
 }
 
-function dump(f: Uint8Array): DumpRow[] {
+function dump(e: FrameEntry): DumpRow[] {
+	const f = e.bytes;
 	const owner: (MachineName | null)[] = new Array(f.length).fill(null);
 	const starts = new Set<number>();
-	for (const { start, end, name } of addressSpans(f)) {
+	for (const { start, end, name } of addressSpans(e)) {
 		owner.fill(name, start, end);
 		starts.add(start);
 	}
@@ -165,7 +171,8 @@ function dump(f: Uint8Array): DumpRow[] {
 	return rows;
 }
 
-function groups(f: Uint8Array, names: LabNames): DetailGroup[] {
+function groups(e: FrameEntry, names: LabNames): DetailGroup[] {
+	const f = e.bytes;
 	const type = ethertype(f);
 	const out: DetailGroup[] = [
 		{
@@ -184,9 +191,9 @@ function groups(f: Uint8Array, names: LabNames): DetailGroup[] {
 			title: arp.op === 1 ? "arp request" : arp.op === 2 ? "arp reply" : `arp opcode ${arp.op}`,
 			fields: [
 				field("sender mac", macStr(f, 22), macWho(f, 22, names)),
-				field("sender ip", ip4str(arp.spa), machine(nodeOfIp(arp.spa))),
+				field("sender ip", ip4str(arp.spa), ipWho(arp.spa, e)),
 				field("target mac", macStr(f, 32), macWho(f, 32, names)),
-				field("target ip", ip4str(arp.tpa), machine(nodeOfIp(arp.tpa))),
+				field("target ip", ip4str(arp.tpa), ipWho(arp.tpa, e)),
 			],
 		});
 		return out;
@@ -197,8 +204,8 @@ function groups(f: Uint8Array, names: LabNames): DetailGroup[] {
 	out.push({
 		title: "ipv4",
 		fields: [
-			field("source", ip4str(ip.src), machine(nodeOfIp(ip.src))),
-			field("destination", ip4str(ip.dst), machine(nodeOfIp(ip.dst))),
+			field("source", ip4str(ip.src), ipWho(ip.src, e)),
+			field("destination", ip4str(ip.dst), ipWho(ip.dst, e)),
 			field("ttl", f[ETH_HDR + 8]),
 			field("protocol", `${ip.proto}${IP_PROTOCOLS[ip.proto] ? ` ${IP_PROTOCOLS[ip.proto]}` : ""}`),
 		],
@@ -257,9 +264,10 @@ const atPort = (port: PortNo, names: LabNames): Words => {
 };
 
 /** The destination by name if the lab can name it, else its raw MAC. */
-function destination(f: Uint8Array, names: LabNames): Words {
+function destination(e: FrameEntry, names: LabNames): Words {
+	const f = e.bytes;
 	const ip = ipAddrs(f);
-	const byIp = ip ? nodeOfIp(ip.dst) : null;
+	const byIp = ip ? e.names.get(ip.dst)?.node : undefined;
 	return [macNamed(f, 0, names) ?? (byIp ? named(byIp) : macStr(f, 0))];
 }
 
@@ -274,7 +282,7 @@ function did(e: FrameEntry, names: LabNames): Words[] {
 			return [
 				sentence(
 					`${SWITCH_NAME} did not deliver it: the address it learned for `,
-					...destination(f, names),
+					...destination(e, names),
 					` leads back to port ${e.from} or to a port that is down.`,
 				),
 			];
@@ -282,7 +290,7 @@ function did(e: FrameEntry, names: LabNames): Words[] {
 		return [
 			sentence(
 				`${SWITCH_NAME} had learned `,
-				...destination(f, names),
+				...destination(e, names),
 				` on port ${only}, so it forwarded the frame there only.`,
 			),
 		];
@@ -296,7 +304,7 @@ function did(e: FrameEntry, names: LabNames): Words[] {
 				)
 			: sentence(
 					`${SWITCH_NAME} did not know where `,
-					...destination(f, names),
+					...destination(e, names),
 					" is, so it flooded the frame",
 					...(delivered.length ? [": delivered to ", ...reached, "."] : [", but no other port was up."]),
 				);
@@ -321,8 +329,8 @@ export function frameDetail(e: FrameEntry, names: LabNames): FrameDetail {
 	return {
 		title: `frame ${e.seq}`,
 		summary: `${e.bytes.length} bytes · ${(e.t / 1000).toFixed(2)} s · in on port ${e.from}`,
-		groups: groups(e.bytes, names),
+		groups: groups(e, names),
 		did: did(e, names),
-		dump: dump(e.bytes),
+		dump: dump(e),
 	};
 }

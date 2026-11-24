@@ -21,6 +21,7 @@ export function signature(grammar: Grammar): readonly string[] {
 export function optionTokens(slot: Options<unknown>, value: unknown): readonly string[] | null {
 	const bare = slot.variants.find((v) => "constant" in v && Object.is(v.constant, value));
 	if (bare) return [bare.flag];
+	if (value === null) return null;
 	const valued = slot.variants.find((v) => "value" in v);
 	return valued && "value" in valued ? [valued.flag, valued.value.format(value)] : null;
 }

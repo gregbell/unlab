@@ -7,7 +7,6 @@ import { type BootConfig, type HostEntry, type MachineName, type NicNo, nicMac }
 import { NICS } from "../net/index.ts";
 import type { FromVm, ToVm, VmConfig } from "./protocol.ts";
 
-const LAB_PREFIX_BITS = 24;
 /** A kernel parked in Atomics.wait may never see `stop`, so the thread is dropped this long after asking. */
 export const STOP_GRACE_MS = 250;
 /** What a console or a shell starts at, until its screen has been measured. */
@@ -142,16 +141,14 @@ export function startVm(boot: VmBoot, sink: VmSink, deps: VmDeps): Vm {
 	const cfg: Omit<VmConfig, "image"> = {
 		id: identity.name,
 		name: identity.name,
-		ip: identity.ip,
-		prefixBits: LAB_PREFIX_BITS,
 		macs: NICS.slice(0, spec.nics.length).map((nic) => nicMac(identity.n, nic)),
+		addresses: spec.nics.map((nic) => nic.address),
 		distro: spec.image,
 		memoryMiB: spec.memMiB,
 		cpus: spec.cpus ?? 1,
 		diskGiB: Number(spec.diskGiB ?? 4),
 		hosts: boot.config.hosts,
-		// The gateway shares eth0's cable.
-		packageRepositories: spec.nics[0].net === "switch0",
+		gateway: spec.gateway,
 		cols: boot.cols,
 		rows: boot.rows,
 		promptToken: boot.promptToken,
@@ -179,12 +176,7 @@ export function startVm(boot: VmBoot, sink: VmSink, deps: VmDeps): Vm {
 			post({ type: "pty-close", sid: pty });
 		},
 		reconfigure(hosts) {
-			post({
-				type: "reconfigure",
-				name: identity.name,
-				ip: identity.ip,
-				hosts,
-			});
+			post({ type: "reconfigure", name: identity.name, hosts });
 		},
 		deliver(nic, frame) {
 			// The switch shares one frame with every port of a flood, so the

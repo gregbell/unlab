@@ -1,35 +1,22 @@
 import { describe, expect, test } from "vitest";
-import { MAX_NODE, NICS, nicOfMac } from "../net/index.ts";
-import {
-	identity,
-	LAB_CIDR,
-	nameForIp,
-	nameForMac,
-	nicMac,
-	parseMachineName,
-	parseSessionId,
-	sessionLabel,
-} from "./identity.ts";
+import { addressStr, defaultAddress, LAB_SUBNET, MAX_NODE, NICS, nicOfMac, subnetStr } from "../net/index.ts";
+import { identity, nameForMac, nicMac, parseMachineName, parseSessionId, sessionLabel } from "./identity.ts";
 
 function macBytes(mac: string): Uint8Array {
 	return Uint8Array.from(mac.split(":").map((part) => Number.parseInt(part, 16)));
 }
 
-function ipNumber(ip: string): number {
-	return ip.split(".").reduce((sum, part) => sum * 256 + Number(part), 0);
-}
-
 describe("identity", () => {
-	test("node n is 10.88.0.(10+n) with the lab MAC for host 10+n", () => {
-		expect(identity(1)).toEqual({ n: 1, name: "node1", ip: "10.88.0.11", mac: "52:54:00:88:00:0b" });
-		expect(identity(2)).toEqual({ n: 2, name: "node2", ip: "10.88.0.12", mac: "52:54:00:88:00:0c" });
-		expect(identity(3)).toEqual({ n: 3, name: "node3", ip: "10.88.0.13", mac: "52:54:00:88:00:0d" });
+	test("node n has the lab MAC for host 10+n", () => {
+		expect(identity(1)).toEqual({ n: 1, name: "node1", mac: "52:54:00:88:00:0b" });
+		expect(identity(2)).toEqual({ n: 2, name: "node2", mac: "52:54:00:88:00:0c" });
+		expect(identity(3)).toEqual({ n: 3, name: "node3", mac: "52:54:00:88:00:0d" });
 	});
 
 	test("the last node is the last host of the /24", () => {
-		expect(LAB_CIDR).toBe("10.88.0.0/24");
+		expect(subnetStr(LAB_SUBNET)).toBe("10.88.0.0/24");
 		expect(MAX_NODE).toBe(244);
-		expect(identity(MAX_NODE).ip).toBe("10.88.0.254");
+		expect(addressStr(defaultAddress(MAX_NODE))).toBe("10.88.0.254/24");
 		expect(identity(MAX_NODE).mac).toBe("52:54:00:88:00:fe");
 	});
 
@@ -39,11 +26,10 @@ describe("identity", () => {
 });
 
 describe("naming a frame's machine", () => {
-	test("every node's MAC and address name it again", () => {
+	test("every node's MAC names it again", () => {
 		for (let n = 1; n <= MAX_NODE; n++) {
 			const id = identity(n);
 			expect(nameForMac(macBytes(id.mac), 0)).toBe(id.name);
-			expect(nameForIp(ipNumber(id.ip))).toBe(id.name);
 		}
 	});
 
@@ -69,16 +55,6 @@ describe("naming a frame's machine", () => {
 		expect(nameForMac(new Uint8Array(0), 0)).toBeNull();
 		expect(nameForMac(macBytes("52:54:00:88:00:0c"), -1)).toBeNull();
 	});
-
-	test.each([
-		["the address below node1", "10.88.0.10"],
-		["the network address", "10.88.0.0"],
-		["the broadcast address", "10.88.0.255"],
-		["another subnet", "10.88.1.12"],
-		["the uplink", "10.0.2.15"],
-	])("%s names nothing", (_why, ip) => {
-		expect(nameForIp(ipNumber(ip))).toBeNull();
-	});
 });
 
 describe("parseMachineName", () => {
@@ -94,7 +70,7 @@ describe("parseMachineName", () => {
 	);
 
 	test.each(["node245", "node999", "node99999999999999999999"])(
-		"%s has no address, so it is not a machine name",
+		"%s has no MAC, so it is not a machine name",
 		(text) => {
 			expect(parseMachineName(text)).toBeNull();
 		},
