@@ -13,7 +13,7 @@ const BEL = "\x07";
 const bytes = (s: string) => new TextEncoder().encode(s);
 const TOKEN = "00112233aabbccdd";
 const prompt = (exit: number) =>
-	`${ESC}]133;D;${exit};unlab=${TOKEN}${BEL}${ESC}]133;A;unlab=${TOKEN}${BEL}node1:~$ ${ESC}]133;B;unlab=${TOKEN}${BEL}`;
+	`${ESC}]133;D;${exit};unlab=${TOKEN}${BEL}${ESC}]133;A;redraw=0;unlab=${TOKEN}${BEL}node1:~$ ${ESC}]133;B;unlab=${TOKEN}${BEL}`;
 /** The terminal echoes Enter, the command prints nothing, and the shell is back with a status. */
 const returns = (exit: number) => `\r\n${prompt(exit)}`;
 const settle = () => new Promise<void>((resolve) => setTimeout(resolve, 0));

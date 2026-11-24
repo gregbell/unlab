@@ -29,7 +29,7 @@ function running(): ShellTracker {
 describe("the prompt token", () => {
 	const TOKEN = "3f9c2a71e0b4d5c8";
 	const marked = (exit: number) =>
-		`${osc(`133;D;${exit};unlab=${TOKEN}`)}${osc(`133;A;unlab=${TOKEN}`)}node1:~$ ${osc(`133;B;unlab=${TOKEN}`)}`;
+		`${osc(`133;D;${exit};unlab=${TOKEN}`)}${osc(`133;A;redraw=0;unlab=${TOKEN}`)}node1:~$ ${osc(`133;B;unlab=${TOKEN}`)}`;
 
 	it("ignores a mark without the token: program output cannot end a command or forge its exit code", () => {
 		const t = createShellTracker();
