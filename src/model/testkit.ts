@@ -10,7 +10,8 @@ import type {
 	LabState,
 	Machine,
 	MachineName,
-	MachineSpec,
+	NicRef,
+	NicSpec,
 	RuntimeEvent,
 	Source,
 } from "./types.ts";
@@ -44,14 +45,16 @@ export function effectsOf(state: LabState, ...events: readonly LabEvent[]): Effe
 }
 
 export interface SpawnOptions {
-	readonly net?: MachineSpec["net"];
+	/** Each NIC's network. One value, or one for each NIC, eth0 first. */
+	readonly net?: NicSpec["net"] | readonly NicSpec["net"][];
 	readonly image?: string;
 	readonly memMiB?: number;
 	readonly at?: number;
 }
 
 export function spawnEvent(state: LabState, count: number, options: SpawnOptions = {}): CommandEvent {
-	const spec = { image: options.image ?? "alpine", memMiB: options.memMiB ?? 256, net: options.net ?? "switch0" };
+	const nics = [options.net ?? "switch0"].flat().map((net) => ({ net }));
+	const spec = { image: options.image ?? "alpine", memMiB: options.memMiB ?? 256, nics };
 	const plan = planSpawn(state, count, spec);
 	if (isPlanError(plan)) throw new Error(`cannot plan the spawn: ${JSON.stringify(plan)}`);
 	return { type: "cmd/spawn", plan, at: options.at ?? state.now };
@@ -60,11 +63,11 @@ export function spawnEvent(state: LabState, count: number, options: SpawnOptions
 export function bootAgainEvent(state: LabState, machine: MachineName, at: number = state.now): CommandEvent {
 	const plan = planBootAgain(state, machine);
 	if (plan === null || isPlanError(plan)) throw new Error(`cannot plan boot again: ${JSON.stringify(plan)}`);
-	return { type: "cmd/boot-again", machine, port: plan.port, at };
+	return { type: "cmd/boot-again", machine, ports: plan.ports, at };
 }
 
-export function linkEvent(state: LabState, up: boolean, ...machines: readonly MachineName[]): CommandEvent {
-	const changes = planLink(state, machines, up);
+export function linkEvent(state: LabState, up: boolean, ...cables: readonly (MachineName | NicRef)[]): CommandEvent {
+	const changes = planLink(state, cables, up);
 	if (isPlanError(changes)) throw new Error(`cannot plan the link change: ${JSON.stringify(changes)}`);
 	return { type: "cmd/link", changes, cause: "bar" };
 }

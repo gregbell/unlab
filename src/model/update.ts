@@ -141,7 +141,7 @@ function reduce(state: LabState, event: LabEvent): Step {
 		case "cmd/remove":
 			return remove(state, event.machines, event.cause);
 		case "cmd/boot-again":
-			return bootAgain(state, event.machine, event.port, event.at);
+			return bootAgain(state, event.machine, event.ports, event.at);
 		case "cmd/link":
 			return link(state, event.changes, event.cause);
 		case "cmd/shell":

@@ -1,25 +1,31 @@
-import { MAX_NODE } from "../net/index.ts";
+import { MAX_NICS, MAX_NODE } from "../net/index.ts";
 import { identity } from "./identity.ts";
-import { type BootNode, bootMachines, machineList } from "./machines.ts";
+import { type BootNode, bootMachines, machineList, plugsOf } from "./machines.ts";
 import { addPanes, focusPane, keyboardHolder, parkPane, toggleMaximise } from "./panes.ts";
-import { DISK_SIZES, HUES, type LabState, PORTS, type Step } from "./types.ts";
+import { DISK_SIZES, HUES, type LabState, type NicSpec, type Plug, PORTS, type Step } from "./types.ts";
+
+const VERSION = 2;
 
 export function saveWorkspace(state: LabState): string {
 	const nodes = machineList(state)
 		.filter((m) => m.life.phase !== "removing")
 		.map((m) => {
-			const plug = m.life.phase === "ready" || m.life.phase === "booting" ? m.life.plug : null;
+			const plugs = plugsOf(m.life);
 			return {
 				n: m.n,
 				hue: m.hue,
 				...m.spec,
-				port: plug?.kind === "port" ? plug.port : null,
+				nics: m.spec.nics.map((nic, k) => {
+					const plug = plugs[k];
+					return plug?.kind === "port"
+						? { ...nic, port: plug.port, cut: plug.link === "cut" }
+						: { ...nic, port: null, cut: false };
+				}),
 				failure: m.life.phase === "failed" ? m.life.reason : undefined,
-				cut: plug?.kind === "port" && plug.link === "cut",
 			};
 		});
 	return JSON.stringify({
-		version: 1,
+		version: VERSION,
 		nextN: state.nextN,
 		nodes,
 		dock: state.dock,
@@ -37,42 +43,74 @@ function invalid(): never {
 	throw new Error("The saved Unlab workspace could not be read. Its disks and settings have been kept.");
 }
 
+interface SavedNic {
+	readonly spec: NicSpec;
+	readonly plug: Plug;
+}
+
+function readNic(saved: unknown): SavedNic {
+	if (!record(saved)) return invalid();
+	const port = PORTS.find((p) => p === saved.port);
+	if (
+		(saved.port !== null && !port) ||
+		typeof saved.cut !== "boolean" ||
+		(saved.net !== "none" && saved.net !== "switch0")
+	)
+		return invalid();
+	return {
+		spec: { net: saved.net },
+		plug: port ? { kind: "port", port, link: saved.cut ? "cut" : "up" } : { kind: "none" },
+	};
+}
+
+/** Version 1 machines had one NIC, saved in the machine itself. */
+function readNics(version: unknown, machine: Record<string, unknown>): readonly SavedNic[] {
+	const saved = version === 1 ? [machine] : machine.nics;
+	if (!Array.isArray(saved) || saved.length < 1 || saved.length > MAX_NICS) return invalid();
+	return saved.map(readNic);
+}
+
 export function restoreWorkspace(base: LabState, raw: string | null): Step {
 	if (raw === null) return { state: base, effects: [] };
 	const saved: unknown = JSON.parse(raw);
-	if (!record(saved) || saved.version !== 1 || !Array.isArray(saved.nodes) || saved.nodes.length > HUES.length)
+	if (
+		!record(saved) ||
+		(saved.version !== 1 && saved.version !== VERSION) ||
+		!Array.isArray(saved.nodes) ||
+		saved.nodes.length > HUES.length
+	)
 		return invalid();
 	const nodes: BootNode[] = [];
+	const taken = new Set<number>();
 	for (const m of saved.nodes as unknown[]) {
 		if (!record(m)) return invalid();
 		const cpus = m.cpus ?? 1;
 		if (typeof cpus !== "number" || !Number.isInteger(cpus) || cpus < 1 || cpus > 16) return invalid();
 		const hue = HUES.find((h) => h === m.hue);
-		const port = PORTS.find((p) => p === m.port);
+		const nics = readNics(saved.version, m);
+		for (const { plug } of nics) {
+			if (plug.kind === "none") continue;
+			if (taken.has(plug.port)) return invalid();
+			taken.add(plug.port);
+		}
 		const diskGiB = DISK_SIZES.find((d) => d === (m.diskGiB ?? "4"));
 		if (
 			!hue ||
 			!diskGiB ||
-			(m.port !== null && !port) ||
-			typeof m.cut !== "boolean" ||
 			typeof m.n !== "number" ||
 			typeof m.image !== "string" ||
 			typeof m.memMiB !== "number" ||
 			!Number.isSafeInteger(m.memMiB) ||
 			m.memMiB < 1 ||
-			(m.net !== "none" && m.net !== "switch0") ||
-			nodes.some(
-				(node) =>
-					node.identity.n === m.n || node.hue === hue || (port && node.plug.kind === "port" && node.plug.port === port),
-			)
+			nodes.some((node) => node.identity.n === m.n || node.hue === hue)
 		)
 			return invalid();
 		nodes.push({
 			identity: identity(m.n),
 			failure: typeof m.failure === "string" ? m.failure : undefined,
 			hue,
-			spec: { image: m.image, net: m.net, memMiB: m.memMiB, diskGiB, cpus },
-			plug: port ? { kind: "port", port, link: m.cut ? "cut" : "up" } : { kind: "none" },
+			spec: { image: m.image, memMiB: m.memMiB, diskGiB, cpus, nics: nics.map((nic) => nic.spec) },
+			plugs: nics.map((nic) => nic.plug),
 		});
 	}
 	if (

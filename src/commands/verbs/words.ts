@@ -22,11 +22,11 @@ export function skippedPart(skipped: Selection["skipped"]): string[] {
 	return skipped.length === 0 ? [] : [`skipped ${skipped.map((s) => `${s.name}: ${s.reason}`).join(", ")}`];
 }
 
-/** A plan error from the model, as the verb says it. */
-export function planErrorSentence(error: PlanError): string {
+/** A plan error from the model, as the verb says it. `ports` is what would make the switch's ports enough. */
+export function planErrorSentence(error: PlanError, ports = "Remove a machine with rm to free its ports."): string {
 	switch (error.kind) {
 		case "no-ports":
-			return `switch0 has ${count(error.free, "free port")}. Add --no-net to boot them unplugged.`;
+			return `switch0 has ${count(error.free, "free port")}, and this takes ${error.wanted}. ${ports}`;
 		case "no-room":
 			return error.free === 0
 				? "The lab has no room for another machine. Remove one with rm first."

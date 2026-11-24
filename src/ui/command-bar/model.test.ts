@@ -194,7 +194,8 @@ describe("the artboards, replayed", () => {
 				"[--mem MiB]",
 				"[--cpus CPUs]",
 				"[--disk 4 | 8 | 16 | 32 | 64]",
-				"[--net switch0 | --no-net]",
+				"[--nics NICs]",
+				"[--net network,... | --no-net]",
 			],
 			current: 1,
 		});
@@ -206,7 +207,7 @@ describe("the artboards, replayed", () => {
 			kind: "preview",
 			preview: {
 				will: "boot node4 and node5 · alpine 3.24 · 256 MiB each · 2 CPUs · 4 GiB disk · plugged into switch0 on ports 4 and 5",
-				assumed: "Left out, so assumed: --mem 256 --cpus 2 --disk 4 --net switch0",
+				assumed: "Left out, so assumed: --mem 256 --cpus 2 --disk 4 --nics 1 --net switch0",
 				tone: "plain",
 			},
 		});
@@ -337,7 +338,7 @@ describe("the artboards, replayed", () => {
 		h.press({ kind: "enter", keepOpen: false });
 		expect(h.take()).toEqual([{ type: "run", run: 1, line: "link down node3", source: "bar", approval: null }]);
 		await h.settle();
-		expect(h.lab.store.state.machines.node3?.life).toMatchObject({ plug: { link: "cut" } });
+		expect(h.lab.store.state.machines.node3?.life).toMatchObject({ plugs: [{ link: "cut" }] });
 		expect(h.bar.open).toBe(false);
 	});
 

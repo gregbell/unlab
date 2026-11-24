@@ -2,12 +2,29 @@
 // screen: decoding runs per visible row, never per frame.
 
 import type { Cause, MachineName, PortNo } from "../model/index.ts";
-import { arpAddrs, decode, ipAddrs, isGroupMac, nodeOfIp, nodeOfMac } from "../net/index.ts";
+import {
+	arpAddrs,
+	decode,
+	ipAddrs,
+	isGroupMac,
+	type NicName,
+	nicName,
+	nicOfMac,
+	nodeNicLabel,
+	nodeOfIp,
+} from "../net/index.ts";
 import type { CaptureCounters, CaptureEntry, FrameEntry, LinkEntry } from "./log.ts";
 
-/** A machine name (painted in its hue while the machine exists), broadcast, or an address the lab cannot name. */
+/** Whether a machine has more than one NIC, so that its name alone does not say which. */
+export type HasSeveralNics = (machine: MachineName) => boolean;
+
+/**
+ * A machine name (painted in its hue while the machine exists), broadcast, or
+ * an address the lab cannot name. `nic` is there when the name alone does not
+ * say which NIC it was.
+ */
 export type RouteEnd =
-	| { readonly kind: "machine"; readonly name: MachineName }
+	| { readonly kind: "machine"; readonly name: MachineName; readonly nic?: NicName }
 	| { readonly kind: "everyone" }
 	| { readonly kind: "raw"; readonly text: string };
 
@@ -39,29 +56,34 @@ export interface LinkRow {
 
 export type CaptureRow = FrameRow | LinkRow;
 
-export function captureRow(e: CaptureEntry): CaptureRow {
-	return e.kind === "frame" ? frameRow(e) : linkRow(e);
+export function captureRow(e: CaptureEntry, several: HasSeveralNics = () => false): CaptureRow {
+	return e.kind === "frame" ? frameRow(e, several) : linkRow(e, several);
 }
 
 const seconds = (ms: number): string => (ms / 1000).toFixed(2);
 
-function frameRow(e: FrameEntry): FrameRow {
+function frameRow(e: FrameEntry, several: HasSeveralNics): FrameRow {
 	const d = decode(e.bytes);
 	return {
 		kind: "frame",
 		seq: e.seq,
 		time: seconds(e.t),
 		proto: d.proto,
-		from: routeEnd(e.bytes, "src", d.src),
-		to: isGroupMac(e.bytes) ? { kind: "everyone" } : routeEnd(e.bytes, "dst", d.dst),
+		from: routeEnd(e.bytes, "src", d.src, several),
+		to: isGroupMac(e.bytes) ? { kind: "everyone" } : routeEnd(e.bytes, "dst", d.dst, several),
 		len: e.bytes.length,
 		info: d.info,
 		note: note(e),
 	};
 }
 
-function routeEnd(f: Uint8Array, end: "src" | "dst", raw: string): RouteEnd {
-	const name = nodeOfMac(f, end === "src" ? 6 : 0) ?? nodeOfAddress(f, end);
+function routeEnd(f: Uint8Array, end: "src" | "dst", raw: string, several: HasSeveralNics): RouteEnd {
+	const at = nicOfMac(f, end === "src" ? 6 : 0);
+	if (at) {
+		const shown = at.nic > 0 || several(at.node);
+		return { kind: "machine", name: at.node, ...(shown ? { nic: nicName(at.nic) } : {}) };
+	}
+	const name = nodeOfAddress(f, end);
 	return name ? { kind: "machine", name } : { kind: "raw", text: raw };
 }
 
@@ -97,7 +119,8 @@ function linkVerb(e: LinkEntry): string {
 
 const WHO: Readonly<Record<Cause, string>> = { agent: "the agent", bar: "you", button: "you", runtime: "the lab" };
 
-function linkRow(e: LinkEntry): LinkRow {
+function linkRow(e: LinkEntry, several: HasSeveralNics): LinkRow {
+	const cable = nodeNicLabel({ node: e.machine, nic: e.nic }, several(e.machine));
 	return {
 		kind: "link",
 		seq: e.seq,
@@ -105,7 +128,7 @@ function linkRow(e: LinkEntry): LinkRow {
 		port: e.port,
 		up: e.up,
 		text: `port ${e.port} link ${e.up ? "up" : "down"}`,
-		cause: `Cable to ${e.machine} ${linkVerb(e)} by ${WHO[e.cause]}.`,
+		cause: `Cable to ${cable} ${linkVerb(e)} by ${WHO[e.cause]}.`,
 	};
 }
 

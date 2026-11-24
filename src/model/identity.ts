@@ -1,5 +1,5 @@
-import { ip4str, MAX_NODE, macStr, nodeIp, nodeMac, parseNodeName } from "../net/index.ts";
-import type { Identity, MachineName, SessionId } from "./types.ts";
+import { ip4str, MAX_NODE, macStr, type NicNo, nodeIp, nodeMac, nodeNicLabel, parseNodeName } from "../net/index.ts";
+import type { Identity, Machine, MachineName, SessionId } from "./types.ts";
 
 // net/ owns the node<n> arithmetic. These two name a frame's machine from its
 // bytes, live or long removed, and are null for any address the lab cannot name.
@@ -15,6 +15,15 @@ export function identity(n: number): Identity {
 		throw new RangeError(`no node ${n}: a lab holds node1 to node${MAX_NODE}`);
 	}
 	return { n, name: `node${n}`, ip: ip4str(nodeIp(n)), mac: macStr(nodeMac(n)) };
+}
+
+export function nicMac(n: number, nic: NicNo): string {
+	return macStr(nodeMac(n, nic));
+}
+
+/** `node2` for a machine with one NIC, `node2:eth0` and `node2:eth1` for one with more. */
+export function nicLabel(machine: Pick<Machine, "name" | "spec">, nic: NicNo): string {
+	return nodeNicLabel({ node: machine.name, nic }, machine.spec.nics.length > 1);
 }
 
 /** Only the exact spelling the lab uses, so `node01` cannot alias `node1`. */

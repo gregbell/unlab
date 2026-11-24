@@ -1,10 +1,11 @@
 import { describe, expect, test } from "vitest";
-import { MAX_NODE } from "../net/index.ts";
+import { MAX_NODE, NICS, nicOfMac } from "../net/index.ts";
 import {
 	identity,
 	LAB_CIDR,
 	nameForIp,
 	nameForMac,
+	nicMac,
 	parseMachineName,
 	parseSessionId,
 	sessionLabel,
@@ -58,7 +59,7 @@ describe("naming a frame's machine", () => {
 		["another vendor", "52:54:00:12:00:0c"],
 		["the host below node1", "52:54:00:88:00:0a"],
 		["the broadcast host", "52:54:00:88:00:ff"],
-		["a high byte no node has", "52:54:00:88:01:0c"],
+		["a NIC no machine has", "52:54:00:88:04:0c"],
 	])("a MAC from %s names nothing", (_why, mac) => {
 		expect(nameForMac(macBytes(mac), 0)).toBeNull();
 	});
@@ -125,5 +126,23 @@ describe("parseSessionId", () => {
 	test("the tab label is the part after the machine", () => {
 		expect(sessionLabel("node2:console")).toBe("console");
 		expect(sessionLabel("node10:sh3")).toBe("sh3");
+	});
+});
+
+describe("NICs", () => {
+	test("NIC k of node n has MAC 52:54:00:88:0k:(10+n), and the MAC names both again", () => {
+		expect(NICS.map((nic) => nicMac(2, nic))).toEqual([
+			"52:54:00:88:00:0c",
+			"52:54:00:88:01:0c",
+			"52:54:00:88:02:0c",
+			"52:54:00:88:03:0c",
+		]);
+		for (let n = 1; n <= MAX_NODE; n++) {
+			for (const nic of NICS) expect(nicOfMac(macBytes(nicMac(n, nic)), 0)).toEqual({ node: `node${n}`, nic });
+		}
+	});
+
+	test("every NIC's MAC names its machine", () => {
+		expect(nameForMac(macBytes("52:54:00:88:03:0c"), 0)).toBe("node2");
 	});
 });

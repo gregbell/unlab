@@ -2,57 +2,82 @@ import {
 	type Machine,
 	type MachineName,
 	machineList,
+	type NicName,
+	nicMac,
+	nicPortsOf,
 	type Phase,
 	type PortNo,
+	plugsOf,
 	type SessionId,
 	sessionLabel,
 } from "../../model/index.ts";
+import { NICS, nicName } from "../../net/index.ts";
 import { defineVerb } from "../define.ts";
 import type { ReportBlock } from "../types.ts";
 import { count } from "./words.ts";
+
+/** One NIC as `machines_list` returns it. */
+export interface ListedNic {
+	readonly name: NicName;
+	readonly mac: string;
+	/** The address the lab gave it, or null. A guest can add others. */
+	readonly address: string | null;
+	readonly port: PortNo | null;
+	/** Null unless the machine is ready. */
+	readonly link: "up" | "cut" | "unplugged" | null;
+}
 
 /** One machine as `machines_list` returns it. */
 export interface ListedMachine {
 	readonly name: MachineName;
 	readonly state: Phase;
 	readonly address: string;
-	readonly port: PortNo | null;
-	/** Null unless the machine is ready. */
-	readonly link: "up" | "cut" | "unplugged" | null;
+	/** eth0 first. */
+	readonly nics: readonly ListedNic[];
 	readonly sessions: readonly SessionId[];
 	/** Why it did not boot. */
 	readonly reason?: string;
 }
 
 function listed(m: Machine): ListedMachine {
-	const base = { name: m.name, state: m.life.phase, address: m.ip, sessions: m.sessions };
-	switch (m.life.phase) {
-		case "ready": {
-			const { plug } = m.life;
-			return plug.kind === "port"
-				? { ...base, port: plug.port, link: plug.link }
-				: { ...base, port: null, link: "unplugged" };
-		}
-		case "booting":
-			return { ...base, port: m.life.plug.kind === "port" ? m.life.plug.port : null, link: null };
-		case "failed":
-			return { ...base, port: null, link: null, reason: m.life.reason };
-		case "removing":
-			return { ...base, port: m.life.port, link: null };
-	}
+	const ports = nicPortsOf(m.life);
+	const plugs = plugsOf(m.life);
+	const nics = NICS.slice(0, m.spec.nics.length).map((nic): ListedNic => {
+		const plug = plugs[nic];
+		return {
+			name: nicName(nic),
+			mac: nicMac(m.n, nic),
+			address: nic === 0 ? m.ip : null,
+			port: ports[nic] ?? null,
+			link: m.life.phase !== "ready" || !plug ? null : plug.kind === "port" ? plug.link : "unplugged",
+		};
+	});
+	return {
+		name: m.name,
+		state: m.life.phase,
+		address: m.ip,
+		nics,
+		sessions: m.sessions,
+		...(m.life.phase === "failed" ? { reason: m.life.reason } : {}),
+	};
 }
 
-function oneLine(m: ListedMachine): string {
-	if (m.reason !== undefined) return m.reason;
+function nicLine(nic: ListedNic): string {
 	const cable =
-		m.link === null
-			? m.port === null
-				? "unplugged"
-				: `port ${m.port} reserved`
-			: m.link === "unplugged"
-				? "unplugged"
-				: `${m.link} on port ${m.port}`;
-	return [m.address, cable, m.sessions.map(sessionLabel).join(", ")].join(" · ");
+		nic.port === null
+			? "unplugged"
+			: nic.link === null
+				? `port ${nic.port} reserved`
+				: `${nic.link} on port ${nic.port}`;
+	return [nic.address ?? "no address", nic.mac, cable].join(" · ");
+}
+
+/** A machine with one NIC is one line. With more, each NIC has its own. */
+function lines(m: ListedMachine): string {
+	if (m.reason !== undefined) return m.reason;
+	const sessions = m.sessions.map(sessionLabel).join(", ");
+	if (m.nics.length === 1) return `${nicLine(m.nics[0])} · ${sessions}`;
+	return [...m.nics.map((nic) => `${nic.name} · ${nicLine(nic)}`), sessions].join("\n");
 }
 
 function header(rows: readonly ListedMachine[]): string {
@@ -79,7 +104,7 @@ export const ls = defineVerb({
 				machine: m.name,
 				hue: m.hue,
 				status: { kind: "state", text: m.life.phase },
-				lastLine: oneLine(rows[i]),
+				lastLine: lines(rows[i]),
 				focus: m.life.phase === "removing" ? null : m.activeSession,
 			}),
 		);
@@ -88,7 +113,8 @@ export const ls = defineVerb({
 	tool: {
 		name: "machines_list",
 		title: "List machines",
-		description: "List every machine in the lab with its state, address, switch port, link and sessions.",
+		description:
+			"List every machine in the lab with its state, sessions and NICs. Each NIC has its MAC, address, switch port and link.",
 		policy: "run",
 		annotations: { readOnlyHint: true },
 	},

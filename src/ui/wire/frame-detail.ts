@@ -1,6 +1,6 @@
 import "./frame-detail.css";
 import { html, nothing, type TemplateResult } from "lit";
-import { type MachineName, selectPorts } from "../../model/index.ts";
+import { type MachineName, selectPorts, severalNics } from "../../model/index.ts";
 import { Select, UnlabElement } from "../base/index.ts";
 import { FollowCapture } from "../capture/follow.ts";
 import { type DetailField, frameDetail, type Words } from "./frame-detail-model.ts";
@@ -32,7 +32,14 @@ export class UnlabFrameDetail extends UnlabElement {
 				<p class="hint">Click a frame, or move through the list with the arrow keys.</p>`;
 		}
 		const ports = this.#ports.value;
-		const d = frameDetail(entry, (port) => ports[port - 1]?.machine?.name ?? null);
+		const machines = this.#machines.value;
+		const d = frameDetail(entry, {
+			holder(port) {
+				const machine = ports[port - 1]?.machine;
+				return machine ? { machine: machine.name, label: machine.label } : null;
+			},
+			severalNics: (name) => severalNics({ machines }, name),
+		});
 		return html`<div class="head">
 				<h2 class="title">${d.title}</h2>
 				<span class="summary">${d.summary}</span>
@@ -66,12 +73,12 @@ export class UnlabFrameDetail extends UnlabElement {
 				? nothing
 				: f.who.kind === "everyone"
 					? html` <span class="everyone">everyone</span>`
-					: html` ${this.#name(f.who.name, f.who.name)}`;
+					: html` ${this.#name(f.who.machine, f.who.label)}`;
 		return html`<div class="pair"><dt>${f.label}</dt><dd>${f.value}${who}</dd></div>`;
 	}
 
 	#words(words: Words): TemplateResult {
-		return html`${words.map((w) => (typeof w === "string" ? w : this.#name(w.machine, w.machine)))}`;
+		return html`${words.map((w) => (typeof w === "string" ? w : this.#name(w.machine, w.label)))}`;
 	}
 
 	/** `text` in `name`'s hue while that machine exists; plain otherwise. */

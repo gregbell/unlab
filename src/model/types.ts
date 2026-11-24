@@ -1,6 +1,10 @@
 // The lab as plain data. Nothing here touches the DOM, a worker, a timer or a
 // clock: time arrives only as `tick` events and `at` stamps.
 
+import type { NicName, NicNo } from "../net/index.ts";
+
+export type { NicName, NicNo };
+
 // ───────────────────────────── identity ─────────────────────────────
 
 /** Names are ids. `n` only goes up, so `node4` means one machine for the lab's lifetime. */
@@ -15,12 +19,19 @@ export const HUES: readonly HueNo[] = [1, 2, 3, 4, 5, 6, 7, 8];
 export const MAX_MACHINES = 8;
 export const SWITCH_NAME = "switch0";
 
-/** node<n> is 10.88.0.(10+n) with MAC labMac(10+n): arithmetic, so any frame names its machine forever. */
+/** node<n> is 10.88.0.(10+n) with a MAC for each NIC, all arithmetic, so any frame names its machine forever. */
 export interface Identity {
 	readonly n: number;
 	readonly name: MachineName;
 	readonly ip: string;
+	/** eth0's. */
 	readonly mac: string;
+}
+
+/** One NIC of one machine. NIC 0 is eth0. */
+export interface NicRef {
+	readonly machine: MachineName;
+	readonly nic: NicNo;
 }
 
 // ───────────────────────────── machines ─────────────────────────────
@@ -33,6 +44,9 @@ export type Plug =
 	| { readonly kind: "none" }
 	| { readonly kind: "port"; readonly port: PortNo; readonly link: "up" | "cut" };
 
+/** A port for each NIC, eth0 first, or null for one that is not plugged in. */
+export type NicPorts = readonly (PortNo | null)[];
+
 export interface ImageInfo {
 	/** The manifest name, used in the grammar: `alpine`. */
 	readonly name: string;
@@ -43,19 +57,24 @@ export interface ImageInfo {
 export const DISK_SIZES = ["4", "8", "16", "32", "64"] as const;
 export type DiskSize = (typeof DISK_SIZES)[number];
 
+export interface NicSpec {
+	readonly net: "switch0" | "none";
+}
+
 export interface MachineSpec {
 	readonly diskGiB?: DiskSize;
 	readonly cpus?: number;
 	readonly image: string;
 	readonly memMiB: number;
-	/** What was asked for at spawn; boot again honours it. */
-	readonly net: "switch0" | "none";
+	/** One to MAX_NICS of them, eth0 first. What was asked for at spawn; boot again honours it. */
+	readonly nics: readonly NicSpec[];
 }
 
 /**
- * The lifecycle is the type. A failed machine has no plug, so it cannot hold
- * a port. A removing machine keeps its port (link already down) until it is
- * gone, so nobody can take it mid-teardown. `attempt` stamps every runtime
+ * The lifecycle is the type. A failed machine has no plugs, so it cannot hold
+ * a port. A removing machine keeps its ports (links already down) until it is
+ * gone, so nobody can take them mid-teardown. `plugs` and `ports` have one for
+ * each NIC, eth0 first. `attempt` stamps every runtime
  * event, so a late message from a replaced worker is ignored.
  */
 export type Lifecycle =
@@ -64,11 +83,11 @@ export type Lifecycle =
 			readonly attempt: number;
 			readonly since: number;
 			readonly stage: string;
-			readonly plug: Plug;
+			readonly plugs: readonly Plug[];
 	  }
-	| { readonly phase: "ready"; readonly attempt: number; readonly bootMs: number; readonly plug: Plug }
+	| { readonly phase: "ready"; readonly attempt: number; readonly bootMs: number; readonly plugs: readonly Plug[] }
 	| { readonly phase: "failed"; readonly attempt: number; readonly reason: string }
-	| { readonly phase: "removing"; readonly attempt: number; readonly port: PortNo | null };
+	| { readonly phase: "removing"; readonly attempt: number; readonly ports: NicPorts };
 
 export type Phase = Lifecycle["phase"];
 
@@ -210,16 +229,15 @@ export interface SpawnPlan {
 	readonly machines: readonly {
 		readonly identity: Identity;
 		readonly hue: HueNo;
-		readonly port: PortNo | null;
+		readonly ports: NicPorts;
 	}[];
 	readonly spec: MachineSpec;
 }
 
-export interface LinkChange {
-	readonly machine: MachineName;
+export interface LinkChange extends NicRef {
 	readonly up: boolean;
 	readonly port: PortNo;
-	/** `link up` on an unplugged machine takes the lowest free port. */
+	/** `link up` on an unplugged NIC takes the lowest free port. */
 	readonly newPort: boolean;
 }
 
@@ -249,7 +267,7 @@ export type CommandEvent =
 	| {
 			readonly type: "cmd/boot-again";
 			readonly machine: MachineName;
-			readonly port: PortNo | null;
+			readonly ports: NicPorts;
 			readonly at: number;
 	  }
 	| { readonly type: "cmd/link"; readonly changes: readonly LinkChange[]; readonly cause: Cause }
@@ -317,13 +335,14 @@ export type Effect =
 	| { readonly type: "vm/boot"; readonly machine: MachineName; readonly attempt: number; readonly config: BootConfig }
 	/** Stop, terminate after 250 ms, then report vm/stopped. Idempotent. */
 	| { readonly type: "vm/stop"; readonly machine: MachineName; readonly attempt: number }
-	| { readonly type: "port/attach"; readonly port: PortNo; readonly machine: MachineName }
+	| { readonly type: "port/attach"; readonly port: PortNo; readonly machine: MachineName; readonly nic: NicNo }
 	| { readonly type: "port/detach"; readonly port: PortNo }
 	/** Changes the switch link and writes the capture event row, in that order. */
 	| {
 			readonly type: "link/set";
 			readonly port: PortNo;
 			readonly machine: MachineName;
+			readonly nic: NicNo;
 			readonly up: boolean;
 			readonly cause: Cause;
 	  }

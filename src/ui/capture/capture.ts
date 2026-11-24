@@ -232,7 +232,7 @@ export class UnlabCapture extends UnlabElement {
 	#end(end: RouteEnd): TemplateResult | string {
 		if (end.kind === "everyone") return html`<span class="everyone">everyone</span>`;
 		if (end.kind === "raw") return end.text;
-		return html`<span class="machine" data-hue=${this.#hue(end) ?? nothing}>${end.name}</span>`;
+		return html`<span class="machine" data-hue=${this.#hue(end) ?? nothing}>${end.nic ? `${end.name}:${end.nic}` : end.name}</span>`;
 	}
 
 	#hue(end: RouteEnd): number | null {

@@ -102,10 +102,21 @@
 		}
 
 		.cable {
+			grid-area: 2 / 1;
 			align-self: end;
 			width: 0;
 			height: 40px;
 			border-left: 2px solid var(--machine-hue);
+		}
+
+		/* A tag on the cable, for a machine whose name alone does not say which NIC it is. */
+		.nic {
+			grid-area: 2 / 1;
+			align-self: center;
+			padding: 0 3px;
+			border-radius: var(--r-port);
+			background: var(--crust);
+			color: var(--machine-hue);
 		}
 
 		.port[data-state="booting"] .cable {

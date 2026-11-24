@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { emptyLab, IMAGES, labWith, run, WIDE } from "./testkit.ts";
+import { emptyLab, IMAGES, isReady, labWith, linkEvent, machine, run, spawnEvent, WIDE } from "./testkit.ts";
 import { initialState } from "./update.ts";
 import { restoreWorkspace, saveWorkspace } from "./workspace.ts";
 
@@ -14,4 +14,64 @@ test("the agent's policies and pause come back, and what the last browser made o
 	expect(state.agent.policies.link_set).toBe("off");
 	expect(state.agent.paused).toBe(true);
 	expect(state.agent.webmcp).toEqual({ kind: "absent" });
+});
+
+test("each NIC comes back on its own port, cut or unplugged as it was", () => {
+	let s = labWith(1);
+	s = run(s, spawnEvent(s, 1, { net: ["switch0", "none", "switch0"] }), isReady("node2"));
+	s = run(s, linkEvent(s, false, { machine: "node2", nic: 2 }));
+	const { state } = restoreWorkspace(initialState(IMAGES, WIDE), saveWorkspace(s));
+	expect(machine(state, "node2")).toMatchObject({
+		spec: { nics: [{ net: "switch0" }, { net: "none" }, { net: "switch0" }] },
+		life: {
+			phase: "booting",
+			plugs: [{ kind: "port", port: 2, link: "up" }, { kind: "none" }, { kind: "port", port: 3, link: "cut" }],
+		},
+	});
+	expect(machine(state, "node1").spec.nics).toEqual([{ net: "switch0" }]);
+});
+
+/** As main wrote it before a machine could have more than one NIC. */
+const VERSION_1 = {
+	version: 1,
+	nextN: 4,
+	nodes: [
+		{ n: 1, hue: 1, image: "alpine", memMiB: 256, diskGiB: "4", cpus: 2, net: "switch0", port: 1, cut: false },
+		{ n: 2, hue: 2, image: "debian", memMiB: 512, diskGiB: "8", cpus: 1, net: "switch0", port: 3, cut: true },
+		{ n: 3, hue: 3, image: "alpine", memMiB: 256, diskGiB: "4", cpus: 1, net: "none", port: null, cut: false },
+	],
+	dock: "open",
+	order: ["node1", "node2", "node3"],
+	parked: [],
+	focus: "node1",
+	policies: {},
+	paused: false,
+};
+
+test("a lab saved before machines had several NICs restores with one each, on the ports they had", () => {
+	const { state } = restoreWorkspace(initialState(IMAGES, WIDE), JSON.stringify(VERSION_1));
+	expect(state.rail.map((name) => [name, machine(state, name).spec.nics, machine(state, name).life])).toMatchObject([
+		["node1", [{ net: "switch0" }], { phase: "booting", plugs: [{ kind: "port", port: 1, link: "up" }] }],
+		["node2", [{ net: "switch0" }], { phase: "booting", plugs: [{ kind: "port", port: 3, link: "cut" }] }],
+		["node3", [{ net: "none" }], { phase: "booting", plugs: [{ kind: "none" }] }],
+	]);
+	expect(machine(state, "node2").spec).toMatchObject({ image: "debian", memMiB: 512, diskGiB: "8", cpus: 1 });
+	expect(JSON.parse(saveWorkspace(state))).toMatchObject({ version: 2 });
+});
+
+test.each([
+	["no NICs", []],
+	["more NICs than a machine can have", Array.from({ length: 5 }, () => ({ net: "none", port: null, cut: false }))],
+	[
+		"two NICs on one port",
+		[
+			{ net: "switch0", port: 4, cut: false },
+			{ net: "switch0", port: 4, cut: false },
+		],
+	],
+	["a port the switch does not have", [{ net: "switch0", port: 9, cut: false }]],
+	["a NIC on a network there is not", [{ net: "switch1", port: null, cut: false }]],
+])("a saved machine with %s is refused", (_why, nics) => {
+	const saved = { ...VERSION_1, version: 2, nodes: [{ ...VERSION_1.nodes[0], nics }] };
+	expect(() => restoreWorkspace(initialState(IMAGES, WIDE), JSON.stringify(saved))).toThrow("could not be read");
 });

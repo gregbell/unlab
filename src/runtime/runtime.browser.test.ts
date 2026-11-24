@@ -5,7 +5,7 @@ import "@wterm/dom/css";
 import { afterAll, describe, expect, test } from "vitest";
 import { createCaptureLog } from "../capture/index.ts";
 import type { BootConfig, Effect, HostEntry, RuntimeEvent } from "../model/index.ts";
-import { labMac } from "../net/index.ts";
+import { macStr, nodeMac } from "../net/index.ts";
 import type { DistroManifest } from "./image.ts";
 import { createRuntime } from "./runtime.ts";
 
@@ -20,8 +20,8 @@ const HOSTS: HostEntry[] = [
 	{ ip: "10.88.0.12", name: "node2" },
 ];
 const config = (n: number): BootConfig => ({
-	identity: { n, name: `node${n}`, ip: `10.88.0.${10 + n}`, mac: labMac(10 + n) },
-	spec: { image: "alpine", memMiB: 256, net: "switch0" },
+	identity: { n, name: `node${n}`, ip: `10.88.0.${10 + n}`, mac: macStr(nodeMac(n)) },
+	spec: { image: "alpine", memMiB: 256, nics: [{ net: "switch0" }] },
 	hosts: HOSTS,
 });
 
@@ -83,8 +83,8 @@ describe.skipIf(!haveImage)("real kernels", () => {
 		run(
 			{ type: "screen/create", session: "node1:console" },
 			{ type: "screen/create", session: "node2:console" },
-			{ type: "port/attach", port: 1, machine: "node1" },
-			{ type: "port/attach", port: 2, machine: "node2" },
+			{ type: "port/attach", port: 1, machine: "node1", nic: 0 },
+			{ type: "port/attach", port: 2, machine: "node2", nic: 0 },
 			{ type: "vm/boot", machine: "node1", attempt: 1, config: config(1) },
 			{ type: "vm/boot", machine: "node2", attempt: 1, config: config(2) },
 			{ type: "hosts/publish", hosts: HOSTS },
@@ -98,8 +98,8 @@ describe.skipIf(!haveImage)("real kernels", () => {
 		await until("node2 ready", (e) => e.type === "vm/ready" && e.machine === "node2");
 		// What the model does at ready: a reserved port goes live.
 		run(
-			{ type: "link/set", port: 1, machine: "node1", up: true, cause: "runtime" },
-			{ type: "link/set", port: 2, machine: "node2", up: true, cause: "runtime" },
+			{ type: "link/set", port: 1, machine: "node1", nic: 0, up: true, cause: "runtime" },
+			{ type: "link/set", port: 2, machine: "node2", nic: 0, up: true, cause: "runtime" },
 		);
 
 		const firstPrompt = events.findIndex((e) => e.type === "session/shell" && e.session === "node1:console");
@@ -129,8 +129,8 @@ describe.skipIf(!haveImage)("real kernels", () => {
 		);
 		expect(engine.reads.macTable().map((e) => [e.mac, e.port])).toEqual(
 			expect.arrayContaining([
-				[labMac(11), 1],
-				[labMac(12), 2],
+				[macStr(nodeMac(1)), 1],
+				[macStr(nodeMac(2)), 2],
 			]),
 		);
 
@@ -142,7 +142,7 @@ describe.skipIf(!haveImage)("real kernels", () => {
 		expect(console1.marks().map((m) => m.source)).toEqual(["bar", "agent"]);
 		expect(el.textContent).toContain("2 packets transmitted");
 
-		run({ type: "link/set", port: 2, machine: "node2", up: false, cause: "bar" });
+		run({ type: "link/set", port: 2, machine: "node2", nic: 0, up: false, cause: "bar" });
 		const cut = await engine.exec.inject("node1:console", "ping -c 1 -W 1 node2", "bar", never);
 		expect(cut.exitCode).toBe(1);
 		expect(capture.tail(200)).toContainEqual(

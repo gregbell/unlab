@@ -1,68 +1,84 @@
-// One machine, in its own thread. Mirrors what the browser worker does.
+// One machine, in its own thread: the browser worker's NICs and setup, on Node's kernel.
 import { parentPort, workerData } from "node:worker_threads";
-import { createKernel } from "unkernel/node";
-import { Subnet } from "../../src/net/index.ts";
+import { createKernel, directBackend, NetStack } from "unkernel/node";
+import type { HostEntry } from "../../src/model/types.ts";
+import type { NicNo } from "../../src/net/index.ts";
 import { execAsRoot, setupScript } from "../../src/runtime/guest.ts";
-import { LabNic } from "../../src/runtime/nic.ts";
+import { MachineNics } from "../../src/runtime/machine-nics.ts";
+
+export interface MachineData {
+	readonly name: string;
+	readonly ip: string;
+	readonly macs: readonly string[];
+	readonly distro: string;
+	readonly hosts: readonly HostEntry[];
+	/** Whether eth0 reaches the internet through a gateway, as the app's reaches the package repositories. */
+	readonly gateway: boolean;
+}
+
+export type ToMachine =
+	| { readonly type: "frame"; readonly nic: NicNo; readonly frame: Uint8Array }
+	| { readonly type: "exec"; readonly id: number; readonly cmd: string };
+
+export interface ExecDone {
+	readonly exitCode: number | null;
+	readonly stdout: string;
+	readonly stderr: string;
+}
+
+export type FromMachine =
+	| { readonly type: "frame"; readonly nic: NicNo; readonly frame: Uint8Array }
+	| { readonly type: "ready" }
+	| { readonly type: "failed"; readonly reason: string }
+	| { readonly type: "lost"; readonly reason: string }
+	| { readonly type: "ran"; readonly id: number; readonly result: ExecDone };
 
 const port = parentPort;
 if (!port) throw new Error("not a worker");
+const say = (message: FromMachine, transfer: ArrayBuffer[] = []) => port.postMessage(message, transfer);
 
-const { name, ip, mac, labCidr, distro, memoryMiB, prefixBits, hosts } = workerData as {
-	name: string;
-	ip: string;
-	mac: string;
-	labCidr: string;
-	distro: string;
-	memoryMiB: number;
-	prefixBits: number;
-	hosts?: Array<{ ip: string; name: string }>;
-};
-
-const lab = new Subnet(labCidr);
-const nic = new LabNic({
-	mac,
-	lab,
-	toSwitch: (frame) => port.postMessage({ type: "frame", frame }, [frame.buffer as ArrayBuffer]),
+const data: MachineData = workerData;
+const gateway = data.gateway ? new NetStack({ mac: data.macs[0], backend: directBackend() }) : undefined;
+const nics = new MachineNics({
+	macs: data.macs,
+	gateway,
+	toSwitch: (nic, frame) => say({ type: "frame", nic, frame }, [frame.buffer as ArrayBuffer]),
+	lost: (reason) => say({ type: "lost", reason }),
 });
 
-const say = (type: string, extra: Record<string, unknown> = {}) => port.postMessage({ type, ...extra });
-
-let booted = false;
 try {
-	const vm = await createKernel({
-		distro,
-		net: nic,
-		memoryMiB,
-		log: (m) => say("log", { line: m }),
-	});
-
-	port.on("message", (m: { type: string; frame?: ArrayBufferLike }) => {
-		if (m.type === "frame" && m.frame) nic.deliver(new Uint8Array(m.frame as ArrayBuffer));
-		else if (m.type === "stop") vm.stop?.({ code: 0, reason: "stopped" });
-	});
-
-	const r = await execAsRoot(
-		vm,
-		setupScript({ hostname: name, ip, prefixBits, hosts: hosts ?? [], dhcp: false, promptToken: "0123456789abcdef" }),
+	const vm = await createKernel({ distro: data.distro, net: nics.eth0, memoryMiB: 256, log: () => {} });
+	const running = vm.exited.then(
+		({ reason, code }) => say({ type: "failed", reason: reason ?? `exit ${code}` }),
+		(error: unknown) => say({ type: "failed", reason: String(error) }),
 	);
-	booted = true;
-	say("booted", { exitCode: r.exitCode, stderr: String(r.stderr ?? "") });
+	void running;
+	await nics.start(vm);
+	const setup = await execAsRoot(
+		vm,
+		setupScript({
+			hostname: data.name,
+			ip: data.ip,
+			prefixBits: 24,
+			nics: data.macs.length,
+			hosts: data.hosts,
+			dhcp: data.gateway,
+			promptToken: "0123456789abcdef",
+		}),
+	);
+	if (setup.exitCode !== 0) throw new Error(`setup: ${setup.stderr}`);
 
-	port.on("message", async (m: { type: string; id?: number; cmd?: string; root?: boolean }) => {
-		if (m.type !== "exec" || !m.cmd) return;
-		try {
-			const out = m.root ? await execAsRoot(vm, m.cmd) : await vm.exec("/bin/sh", ["-c", m.cmd]);
-			say("exec-result", {
-				id: m.id,
-				exitCode: out.exitCode,
-				stdout: String(out.stdout ?? ""),
-				stderr: String(out.stderr ?? ""),
-			});
-		} catch (e) {
-			say("exec-result", { id: m.id, exitCode: -1, stdout: "", stderr: String(e) });
+	port.on("message", (m: ToMachine) => {
+		if (m.type === "frame") {
+			nics.deliver(m.nic, m.frame);
+			return;
 		}
+		execAsRoot(vm, m.cmd).then(
+			({ exitCode, stdout, stderr }) => say({ type: "ran", id: m.id, result: { exitCode, stdout, stderr } }),
+			(error: unknown) => say({ type: "ran", id: m.id, result: { exitCode: null, stdout: "", stderr: String(error) } }),
+		);
 	});
-} catch (e) {
-	say(booted ? "error" : "boot-error", { message: e instanceof Error ? `${e.message}` : String(e) });
+	say({ type: "ready" });
+} catch (error) {
+	say({ type: "failed", reason: error instanceof Error ? error.message : String(error) });
 }

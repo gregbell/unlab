@@ -1,12 +1,22 @@
 // The capture filter. Terms separated by spaces must all match; the word `or`
 // separates alternatives. A term is a protocol, a machine name (either end),
-// an IPv4 address, a MAC address, or `port:N`, matched without regard to case.
+// one of its NICs (`node2:eth1`, by its MAC alone), an IPv4 address, a MAC address, or `port:N`, matched without regard to case.
 //
 // It compiles to predicates over raw bytes and port numbers, because capture
 // tests every frame the switch handles: no decoding and no strings per frame.
 
 import { ETH_ARP, ETH_HDR, ETH_IPV4, ETH_IPV6, IP_ICMP, IP_TCP, IP_UDP } from "./frames.ts";
-import { type NodeName, nodeIp, nodeMac, nodeOfIp, nodeOfMac, parseNodeName } from "./identity.ts";
+import {
+	NICS,
+	type NicNo,
+	type NodeName,
+	nicOfMac,
+	nodeIp,
+	nodeMac,
+	nodeOfIp,
+	parseNicName,
+	parseNodeName,
+} from "./identity.ts";
 
 export interface CaptureFilter {
 	/** As typed. */
@@ -15,10 +25,10 @@ export interface CaptureFilter {
 	matchesFrame(frame: Uint8Array, from: number, to: number): boolean;
 	/**
 	 * A link event row is context, so protocol terms never hide it. Port,
-	 * machine, address and MAC terms keep only the rows about that port or
-	 * machine.
+	 * machine, NIC, address and MAC terms keep only the rows about that port,
+	 * machine or NIC.
 	 */
-	matchesLink(port: number, machine: NodeName): boolean;
+	matchesLink(port: number, machine: NodeName, nic: NicNo): boolean;
 }
 
 export interface FilterError {
@@ -34,7 +44,7 @@ export type FilterResult =
 	| { readonly ok: false; readonly error: FilterError };
 
 type FramePredicate = (f: Uint8Array, from: number, to: number) => boolean;
-type LinkPredicate = (port: number, machine: NodeName) => boolean;
+type LinkPredicate = (port: number, machine: NodeName, nic: NicNo) => boolean;
 interface Term {
 	readonly frame: FramePredicate;
 	readonly link: LinkPredicate;
@@ -98,12 +108,19 @@ function parseTerm(word: string): Term | null {
 		return { frame: (_f, from, to) => from === p || (to & mask) !== 0, link: (q) => q === p };
 	}
 
-	const n = parseNodeName(word);
+	const colon = word.indexOf(":");
+	const n = parseNodeName(colon < 0 ? word : word.slice(0, colon));
 	if (n !== null) {
-		const mac = nodeMac(n);
-		const ip = nodeIp(n);
 		const name: NodeName = `node${n}`;
-		return { frame: (f) => hasMac(f, mac) || hasIp(f, ip), link: (_p, m) => m === name };
+		if (colon < 0) {
+			const macs = NICS.map((nic) => nodeMac(n, nic));
+			const ip = nodeIp(n);
+			return { frame: (f) => macs.some((mac) => hasMac(f, mac)) || hasIp(f, ip), link: (_p, m) => m === name };
+		}
+		const nic = parseNicName(word.slice(colon + 1));
+		if (nic === null) return null;
+		const mac = nodeMac(n, nic);
+		return { frame: (f) => hasMac(f, mac), link: (_p, m, k) => m === name && k === nic };
 	}
 
 	const quad = IPV4.exec(word);
@@ -112,13 +129,13 @@ function parseTerm(word: string): Term | null {
 		if (octets.some((o) => o > 255)) return null;
 		const ip = octets.reduce((a, o) => a * 256 + o, 0);
 		const name = nodeOfIp(ip);
-		return { frame: (f) => hasIp(f, ip), link: (_p, m) => m === name };
+		return { frame: (f) => hasIp(f, ip), link: (_p, m, k) => m === name && k === 0 };
 	}
 
 	if (MAC.test(word)) {
 		const mac = Uint8Array.from(word.split(/[:-]/), (h) => Number.parseInt(h, 16));
-		const name = nodeOfMac(mac, 0);
-		return { frame: (f) => hasMac(f, mac), link: (_p, m) => m === name };
+		const at = nicOfMac(mac, 0);
+		return { frame: (f) => hasMac(f, mac), link: (_p, m, k) => m === at?.node && k === at.nic };
 	}
 
 	return null;
@@ -171,9 +188,9 @@ function filterOf(source: string, groups: readonly (readonly Term[])[]): Capture
 			}
 			return false;
 		},
-		matchesLink(port, machine) {
+		matchesLink(port, machine, nic) {
 			if (links.length === 0) return true;
-			return links.some((group) => group.every((test) => test(port, machine)));
+			return links.some((group) => group.every((test) => test(port, machine, nic)));
 		},
 	};
 }

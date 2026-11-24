@@ -30,6 +30,8 @@ export interface SetupOptions {
 	/** This machine's lab address and prefix length, e.g. 10.88.0.11 and 24. */
 	ip: string;
 	prefixBits: number;
+	/** How many NICs the machine has. eth1 and up come up with no address. */
+	nics: number;
 	/** The other machines, written into /etc/hosts so names work with no DNS. */
 	hosts: readonly HostEntry[];
 	/** The image runs DHCP at boot when the package gateway is attached. */
@@ -103,7 +105,9 @@ export function setupScript(o: SetupOptions): string {
 		// Let the unprivileged console shell use ICMP sockets, so `ping node2`
 		// works without sudo. Harmless: it only widens who may send echoes.
 		`sysctl -w net.ipv4.ping_group_range='0 2147483647' >/dev/null 2>&1 || true`,
-		`ip link set eth0 up`,
+		// Every NIC is on the one switch, and Linux would answer on all of them for an address that only one has.
+		...(o.nics > 1 ? [`sysctl -w net.ipv4.conf.all.arp_ignore=1 net.ipv4.conf.all.arp_announce=2 >/dev/null`] : []),
+		...Array.from({ length: o.nics }, (_, nic) => `ip link set eth${nic} up`),
 		// The image's DHCP script flushes eth0 before installing its lease.
 		// Wait for it before adding the lab address (Debian runs DHCP in the background).
 		o.dhcp ? `/usr/lib/kw/net wait` : `:`,

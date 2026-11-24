@@ -16,7 +16,7 @@ describe("boot", () => {
 			data: null,
 		});
 		expect(lab.store.state.machines.node3?.life).toMatchObject({ phase: "booting", attempt: 2 });
-		expect(lab.events).toContainEqual({ type: "cmd/boot-again", machine: "node3", port: 3, at: 0 });
+		expect(lab.events).toContainEqual({ type: "cmd/boot-again", machine: "node3", ports: [3], at: 0 });
 	});
 
 	it("wants a failed machine, and has no agent tool", async () => {

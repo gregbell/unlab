@@ -23,6 +23,7 @@ import {
 	parseMachineName,
 	parseSessionId,
 	type SessionId,
+	severalNics,
 	type ToolName,
 } from "../model/index.ts";
 import { compileFilter } from "../net/index.ts";
@@ -250,7 +251,7 @@ function captureRead(capture: Pick<CaptureView, "frames">): AgentTool {
 		name,
 		title: "Read captured frames",
 		description:
-			"Read the newest captured frames on switch0 as decoded rows, oldest first. A filter takes the Wire view's terms: a protocol, a machine, an address, a MAC or port:N. Frames come from the guests.",
+			"Read the newest captured frames on switch0 as decoded rows, oldest first. A filter takes the Wire view's terms: a protocol, a machine, a NIC (node2:eth1), an address, a MAC or port:N. Frames come from the guests.",
 		inputSchema: {
 			type: "object",
 			properties: {
@@ -260,7 +261,7 @@ function captureRead(capture: Pick<CaptureView, "frames">): AgentTool {
 			additionalProperties: false,
 		},
 		annotations: { readOnlyHint: true, untrustedContentHint: true },
-		prepare(input) {
+		prepare(input, lab) {
 			const parsed = fieldsOf(name, input, ["filter", "limit"]);
 			if (!parsed.ok) return { ok: false, line: asCalled(name, input), error: parsed.error };
 			const source = parsed.fields.get("filter") ?? "";
@@ -272,7 +273,7 @@ function captureRead(capture: Pick<CaptureView, "frames">): AgentTool {
 			const line = `${name}(${JSON.stringify(source)}, ${limit})`;
 			const compiled = compileFilter(source);
 			if (!compiled.ok) {
-				const terms = "A term is a protocol, a machine, an address, a MAC or port:N.";
+				const terms = "A term is a protocol, a machine, a NIC (node2:eth1), an address, a MAC or port:N.";
 				return { ok: false, line, error: `${compiled.error.message} ${terms}` };
 			}
 			const { filter } = compiled;
@@ -289,7 +290,7 @@ function captureRead(capture: Pick<CaptureView, "frames">): AgentTool {
 					}
 					// Decode only the rows the agent gets: a full buffer is ten thousand frames.
 					const rows = matched.slice(-limit).flatMap((frame) => {
-						const row = captureRow(frame);
+						const row = captureRow(frame, (machine) => severalNics(lab, machine));
 						return row.kind === "frame" ? [row] : [];
 					});
 					const unanswered = rows.filter((row) => row.note?.includes("no reply")).length;

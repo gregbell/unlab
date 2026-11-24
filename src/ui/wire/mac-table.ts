@@ -1,6 +1,7 @@
 import "./mac-table.css";
 import { html, nothing, type TemplateResult } from "lit";
-import { nodeOfMac, parseMac } from "../../net/index.ts";
+import { severalNics } from "../../model/index.ts";
+import { nicOfMac, nodeNicLabel, parseMac } from "../../net/index.ts";
 import { Select, UnlabElement } from "../base/index.ts";
 import { FollowCapture } from "../capture/follow.ts";
 
@@ -35,8 +36,10 @@ export class UnlabMacTable extends UnlabElement {
 					</thead>
 					<tbody>
 						${entries.map((e) => {
-							const name = nodeOfMac(parseMac(e.mac), 0);
-							const hue = name ? this.#machines.value[name]?.hue : undefined;
+							const at = nicOfMac(parseMac(e.mac), 0);
+							const machines = this.#machines.value;
+							const hue = at ? machines[at.node]?.hue : undefined;
+							const name = at && nodeNicLabel(at, severalNics({ machines }, at.node));
 							return html`<tr data-flushed=${e.flushed}>
 								<td class="mac">${e.mac}</td>
 								<td>${e.port}</td>

@@ -16,6 +16,7 @@ import {
 	restoreWorkspace,
 	type Store,
 	saveWorkspace,
+	severalNics,
 } from "./model/index.ts";
 import { compileFilter } from "./net/index.ts";
 import { createRuntime, type DistroManifest, deleteMachineDisk, type Engine } from "./runtime/index.ts";
@@ -71,7 +72,11 @@ async function main(): Promise<void> {
 	const schedule = frameScheduler();
 
 	const app = document.createElement("unlab-app");
-	const capture = createCaptureLog({ schedule, now });
+	const capture = createCaptureLog({
+		schedule,
+		now,
+		severalNics: (machine) => severalNics(store.state, machine),
+	});
 	let runtime: Engine | undefined;
 	const key = "unlab.workspace.v1";
 	const restored = restoreWorkspace(

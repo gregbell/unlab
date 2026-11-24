@@ -6,8 +6,8 @@ import { Select, UnlabElement } from "../base/index.ts";
 /** What a click on a port column runs. Empty, booting and removing ports do nothing. */
 function clickLine(port: PortView): string | null {
 	if (!port.machine) return null;
-	if (port.state === "up") return `link down ${port.machine.name}`;
-	if (port.state === "cut") return `link up ${port.machine.name}`;
+	if (port.state === "up") return `link down ${port.machine.label}`;
+	if (port.state === "cut") return `link up ${port.machine.label}`;
 	return null;
 }
 
@@ -46,7 +46,9 @@ export class UnlabSwitch extends UnlabElement {
 	#column(port: PortView): TemplateResult {
 		const socket = html`<span class="socket">${port.machine ? html`<span class="light"></span>` : nothing}${port.port}</span>`;
 		if (!port.machine) return html`<div class="port" data-port=${port.port} data-state="empty">${socket}</div>`;
-		const parts = html`<span class="name">${port.machine.name}</span><span class="cable"></span>${socket}<span class="word"
+		const parts = html`<span class="name">${port.machine.name}</span><span class="cable"></span>${
+			port.machine.nic === null ? nothing : html`<span class="nic">${port.machine.nic}</span>`
+		}${socket}<span class="word"
 				>${port.word}</span
 			>`;
 		const line = clickLine(port);

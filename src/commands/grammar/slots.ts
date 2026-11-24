@@ -1,4 +1,16 @@
-import type { LabState, Machine, MachineName, Phase, SessionId } from "../../model/index.ts";
+import {
+	type LabState,
+	type Machine,
+	type MachineName,
+	machineLink,
+	type NicRef,
+	type NicSpec,
+	nicsOf,
+	type Phase,
+	plugsOf,
+	type SessionId,
+} from "../../model/index.ts";
+import { NICS, type NicNo, nicName, parseNicName } from "../../net/index.ts";
 import type { JsonSchema, Suggestion } from "../types.ts";
 import { globMatch } from "./glob.ts";
 
@@ -75,6 +87,15 @@ export interface Selection {
 	readonly written: string;
 }
 
+/** Cables as typed, expanded to the NICs they are plugged into. */
+export interface CableSelection {
+	readonly nics: readonly NicRef[];
+	readonly skipped: Selection["skipped"];
+	readonly written: string;
+}
+
+const NETWORKS: readonly NicSpec["net"][] = ["switch0", "none"];
+
 const PHASE_WORDS: Readonly<Record<Phase, { readonly skipped: string; readonly sentence: string }>> = {
 	booting: { skipped: "still booting", sentence: "is still booting" },
 	ready: { skipped: "already running", sentence: "is already running" },
@@ -109,9 +130,22 @@ function phaseNoun(phases: readonly Phase[]): string {
 }
 
 function linkWord(m: Machine): string {
-	if (m.life.phase !== "ready") return m.life.phase;
-	if (m.life.plug.kind === "none") return "no cable";
-	return m.life.plug.link === "up" ? "up" : "down";
+	switch (machineLink(m)) {
+		case null:
+			return m.life.phase;
+		case "unplugged":
+			return "no cable";
+		case "up":
+			return "up";
+		case "cut":
+			return "down";
+	}
+}
+
+function plugDetail(m: Machine, nic: NicNo): string {
+	const plug = plugsOf(m.life)[nic];
+	if (plug?.kind !== "port") return "no cable";
+	return `port ${plug.port} · ${plug.link === "up" ? "up" : "down"}`;
 }
 
 function machineSuggestion(m: Machine, insert: string = m.name): Suggestion {
@@ -244,6 +278,34 @@ export function target(): Value<MachineName | SessionId> {
 	};
 }
 
+/** The machines one part of a comma list names: `node2`, `node*` or `all`. */
+function matchMachines(lab: LabState, part: string, span: Miss["part"]): readonly Machine[] | Miss {
+	const all = machinesOf(lab);
+	if (part === "all") return all;
+	if (part.includes("*")) {
+		const matched = all.filter((m) => globMatch(part, m.name));
+		return matched.length > 0 ? matched : new Miss(`No machine matches ${part}. ${youHave(lab)}`, span);
+	}
+	const m = findMachine(lab, part);
+	return m ? [m] : new Miss(noMachine(lab, part), span);
+}
+
+function nothingToActOn(ctx: ReadContext, skipped: Selection["skipped"]): Miss {
+	const why =
+		skipped.length === 0 ? youHave(ctx.lab) : `Skipped ${skipped.map((s) => `${s.name}: ${s.reason}`).join("; ")}.`;
+	return new Miss(`${ctx.verb} has no machine to act on. ${why}`, undefined, false);
+}
+
+/** Each part of a comma list, with where it sits in the token. */
+function listParts(text: string): readonly { readonly part: string; readonly start: number; readonly end: number }[] {
+	let start = 0;
+	return text.split(",").map((part) => {
+		const at = { part, start, end: start + part.length };
+		start = at.end + 1;
+		return at;
+	});
+}
+
 /**
  * `node2`, `node1,node3`, `node*` or `all`. Expands to the machines in the
  * verb's phases and records the rest as skipped, so `link down all` acts on
@@ -257,23 +319,10 @@ export function machines(): Value<Selection> {
 		read(text, ctx) {
 			const picked: MachineName[] = [];
 			const skipped: { name: MachineName; reason: string }[] = [];
-			let start = 0;
-			for (const part of text.split(",")) {
-				const span = { start, end: start + part.length };
-				start = span.end + 1;
+			for (const { part, ...span } of listParts(text)) {
 				if (part === "") return new Miss(undefined, span);
-				const all = machinesOf(ctx.lab);
-				let matched: readonly Machine[];
-				if (part === "all") {
-					matched = all;
-				} else if (part.includes("*")) {
-					matched = all.filter((m) => globMatch(part, m.name));
-					if (matched.length === 0) return new Miss(`No machine matches ${part}. ${youHave(ctx.lab)}`, span);
-				} else {
-					const m = findMachine(ctx.lab, part);
-					if (!m) return new Miss(noMachine(ctx.lab, part), span);
-					matched = [m];
-				}
+				const matched = matchMachines(ctx.lab, part, span);
+				if (matched instanceof Miss) return matched;
 				for (const m of matched) {
 					if (allowed(m, ctx)) {
 						if (!picked.includes(m.name)) picked.push(m.name);
@@ -282,13 +331,7 @@ export function machines(): Value<Selection> {
 					}
 				}
 			}
-			if (picked.length === 0) {
-				const why =
-					skipped.length === 0
-						? youHave(ctx.lab)
-						: `Skipped ${skipped.map((s) => `${s.name}: ${s.reason}`).join("; ")}.`;
-				return new Miss(`${ctx.verb} has no machine to act on. ${why}`, undefined, false);
-			}
+			if (picked.length === 0) return nothingToActOn(ctx, skipped);
 			return { machines: picked, skipped, written: text };
 		},
 		suggest(typed, ctx) {
@@ -306,6 +349,112 @@ export function machines(): Value<Selection> {
 		schema: {
 			type: "string",
 			description: "One machine (node2), a comma list (node1,node3), a glob (node*) or all.",
+		},
+	};
+}
+
+/**
+ * Cables, named by the machine or by one of its NICs: `node2`, `node2:eth1`,
+ * and the lists, globs and `all` that `machines` takes. A machine alone is
+ * every NIC it has.
+ */
+export function cables(): Value<CableSelection> {
+	return {
+		kind: "positional",
+		label: "machines",
+		noun: "machines",
+		read(text, ctx) {
+			const picked = new Map<string, NicRef>();
+			const skipped: { name: MachineName; reason: string }[] = [];
+			const skip = (name: MachineName, reason: string) => {
+				if (!skipped.some((s) => s.name === name)) skipped.push({ name, reason });
+			};
+			for (const { part, start, end } of listParts(text)) {
+				const colon = part.indexOf(":");
+				const named = colon < 0 ? part : part.slice(0, colon);
+				const asked = colon < 0 ? null : part.slice(colon + 1);
+				if (named === "" || asked === "") return new Miss(undefined, { start, end });
+				const matched = matchMachines(ctx.lab, named, { start, end: start + named.length });
+				if (matched instanceof Miss) return matched;
+				const nic = asked === null ? null : parseNicName(asked);
+				if (asked !== null && nic === null && named !== matched[0]?.name) {
+					return new Miss(
+						`No NIC is called ${asked}. A machine has ${list(NICS.map(nicName), "or")}.`,
+						{ start, end },
+						false,
+					);
+				}
+				for (const m of matched) {
+					const has = nicsOf(ctx.lab, m.name);
+					const refs = asked === null ? has : has.filter((ref) => ref.nic === nic);
+					if (!allowed(m, ctx)) {
+						skip(m.name, PHASE_WORDS[m.life.phase].skipped);
+					} else if (refs.length > 0) {
+						for (const ref of refs) picked.set(`${ref.machine}:${ref.nic}`, ref);
+					} else if (named === m.name) {
+						const names = list(
+							has.map((ref) => nicName(ref.nic)),
+							"and",
+						);
+						return new Miss(`${m.name} has no NIC called ${asked}. It has ${names}.`, { start, end }, false);
+					} else {
+						skip(m.name, `no ${asked}`);
+					}
+				}
+			}
+			if (picked.size === 0) return nothingToActOn(ctx, skipped);
+			return { nics: [...picked.values()], skipped, written: text };
+		},
+		suggest(typed, ctx) {
+			const comma = typed.lastIndexOf(",");
+			const head = comma < 0 ? "" : typed.slice(0, comma + 1);
+			const listed = head.split(",");
+			const names = machinesOf(ctx.lab)
+				.filter((m) => allowed(m, ctx) && !listed.includes(m.name))
+				.flatMap((m) => {
+					const nics = nicsOf(ctx.lab, m.name);
+					return [
+						machineSuggestion(m, head + m.name),
+						...(nics.length > 1 ? nics : []).map(({ nic }): Suggestion => {
+							const label = `${m.name}:${nicName(nic)}`;
+							return { insert: head + label, label, detail: plugDetail(m, nic), hue: m.hue };
+						}),
+					];
+				});
+			return head === ""
+				? [...names, { insert: "all", label: "all", detail: "every machine that can take it" }]
+				: names;
+		},
+		format: (s) => s.written,
+		schema: {
+			type: "string",
+			description:
+				"One machine (node2) for all its cables, one NIC (node2:eth1), a comma list (node1,node3:eth1), a glob (node*) or all.",
+		},
+	};
+}
+
+/** What each NIC is plugged into: one answer for all of them, or a comma list with one for each. */
+export function networks(): Value<string> {
+	return {
+		kind: "positional",
+		label: "network,...",
+		noun: "switch0 or none",
+		read(text) {
+			for (const { part, ...span } of listParts(text)) {
+				if (NETWORKS.every((network) => network !== part)) return new Miss(undefined, span);
+			}
+			return text;
+		},
+		suggest(typed) {
+			const head = typed.slice(0, typed.lastIndexOf(",") + 1);
+			return NETWORKS.map((network) => ({ insert: head + network, label: network }));
+		},
+		format: (written) => written,
+		schema: {
+			type: "string",
+			description:
+				"switch0 or none for every NIC, or a comma list with one for each, eth0 first, such as switch0,none. A NIC with none boots unplugged.",
 		},
 	};
 }

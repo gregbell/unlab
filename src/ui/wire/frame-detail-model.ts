@@ -19,11 +19,19 @@ import {
 	ipAddrs,
 	isGroupMac,
 	macStr,
+	nicOfMac,
+	nodeNicLabel,
 	nodeOfIp,
 	nodeOfMac,
 } from "../../net/index.ts";
 
-export type Who = { readonly kind: "machine"; readonly name: MachineName } | { readonly kind: "everyone" } | null;
+/** A machine, and how to write it: its name, or `node2:eth1` where the name alone does not say which NIC. */
+export interface Named {
+	readonly machine: MachineName;
+	readonly label: string;
+}
+
+export type Who = ({ readonly kind: "machine" } & Named) | { readonly kind: "everyone" } | null;
 
 export interface DetailField {
 	readonly label: string;
@@ -38,7 +46,7 @@ export interface DetailGroup {
 }
 
 /** A sentence whose machine names are painted in their hues. */
-export type Words = readonly (string | { readonly machine: MachineName })[];
+export type Words = readonly (string | Named)[];
 
 export interface DumpRun {
 	/** Space-separated hex bytes. */
@@ -63,8 +71,12 @@ export interface FrameDetail {
 	readonly dump: readonly DumpRow[];
 }
 
-/** Which machine holds a port now, if any. */
-export type PortHolder = (port: PortNo) => MachineName | null;
+/** The lab as it is now, for naming what a frame's bytes point at. */
+export interface LabNames {
+	/** Which machine holds a port, if any. */
+	holder(port: PortNo): Named | null;
+	severalNics(machine: MachineName): boolean;
+}
 
 const ICMP_TYPES: Readonly<Record<number, string>> = {
 	0: "echo reply",
@@ -94,9 +106,19 @@ const field = (label: string, value: string | number, who: Who = null): DetailFi
 	value: String(value),
 	who,
 });
-const machine = (name: MachineName | null): Who => (name ? { kind: "machine", name } : null);
-const macWho = (f: Uint8Array, off: number): Who =>
-	macStr(f, off) === BROADCAST_MAC ? { kind: "everyone" } : machine(nodeOfMac(f, off));
+const named = (machine: MachineName): Named => ({ machine, label: machine });
+const machine = (name: MachineName | null): Who => (name ? { kind: "machine", ...named(name) } : null);
+
+function macNamed(f: Uint8Array, off: number, names: LabNames): Named | null {
+	const at = nicOfMac(f, off);
+	return at && { machine: at.node, label: nodeNicLabel(at, names.severalNics(at.node)) };
+}
+
+function macWho(f: Uint8Array, off: number, names: LabNames): Who {
+	if (macStr(f, off) === BROADCAST_MAC) return { kind: "everyone" };
+	const at = macNamed(f, off, names);
+	return at && { kind: "machine", ...at };
+}
 
 /** Byte ranges that are a machine's MAC or IPv4 address, by where the protocol puts them. */
 function addressSpans(f: Uint8Array): { readonly start: number; readonly end: number; readonly name: MachineName }[] {
@@ -143,14 +165,14 @@ function dump(f: Uint8Array): DumpRow[] {
 	return rows;
 }
 
-function groups(f: Uint8Array): DetailGroup[] {
+function groups(f: Uint8Array, names: LabNames): DetailGroup[] {
 	const type = ethertype(f);
 	const out: DetailGroup[] = [
 		{
 			title: "ethernet II",
 			fields: [
-				field("destination", macStr(f, 0), isGroupMac(f) ? { kind: "everyone" } : macWho(f, 0)),
-				field("source", macStr(f, 6), macWho(f, 6)),
+				field("destination", macStr(f, 0), isGroupMac(f) ? { kind: "everyone" } : macWho(f, 0, names)),
+				field("source", macStr(f, 6), macWho(f, 6, names)),
 				field("type", `0x${hex(Math.max(type, 0), 4)}${ETHERTYPES[type] ? ` ${ETHERTYPES[type]}` : ""}`),
 			],
 		},
@@ -161,9 +183,9 @@ function groups(f: Uint8Array): DetailGroup[] {
 		out.push({
 			title: arp.op === 1 ? "arp request" : arp.op === 2 ? "arp reply" : `arp opcode ${arp.op}`,
 			fields: [
-				field("sender mac", macStr(f, 22), macWho(f, 22)),
+				field("sender mac", macStr(f, 22), macWho(f, 22, names)),
 				field("sender ip", ip4str(arp.spa), machine(nodeOfIp(arp.spa))),
-				field("target mac", macStr(f, 32), macWho(f, 32)),
+				field("target mac", macStr(f, 32), macWho(f, 32, names)),
 				field("target ip", ip4str(arp.tpa), machine(nodeOfIp(arp.tpa))),
 			],
 		});
@@ -220,7 +242,7 @@ function list(items: readonly Words[]): Words {
 
 /** Joins adjacent strings, so a sentence compares and renders as few pieces as it has. */
 function sentence(...parts: Words): Words {
-	const out: (string | { readonly machine: MachineName })[] = [];
+	const out: (string | Named)[] = [];
 	for (const part of parts) {
 		const last = out[out.length - 1];
 		if (typeof part === "string" && typeof last === "string") out[out.length - 1] = last + part;
@@ -229,21 +251,21 @@ function sentence(...parts: Words): Words {
 	return out;
 }
 
-const atPort = (port: PortNo, holder: PortHolder): Words => {
-	const name = holder(port);
-	return name ? [{ machine: name }, ` on port ${port}`] : [`port ${port}`];
+const atPort = (port: PortNo, names: LabNames): Words => {
+	const holder = names.holder(port);
+	return holder ? [holder, ` on port ${port}`] : [`port ${port}`];
 };
 
 /** The destination by name if the lab can name it, else its raw MAC. */
-function destination(f: Uint8Array): Words {
+function destination(f: Uint8Array, names: LabNames): Words {
 	const ip = ipAddrs(f);
-	const name = nodeOfMac(f, 0) ?? (ip ? nodeOfIp(ip.dst) : null);
-	return [name ? { machine: name } : macStr(f, 0)];
+	const byIp = ip ? nodeOfIp(ip.dst) : null;
+	return [macNamed(f, 0, names) ?? (byIp ? named(byIp) : macStr(f, 0))];
 }
 
-function did(e: FrameEntry, holder: PortHolder): Words[] {
+function did(e: FrameEntry, names: LabNames): Words[] {
 	const delivered = PORTS.filter((p) => e.to & (1 << (p - 1)));
-	const reached = list(delivered.map((p) => atPort(p, holder)));
+	const reached = list(delivered.map((p) => atPort(p, names)));
 	const f = e.bytes;
 
 	if (e.flood === null) {
@@ -252,7 +274,7 @@ function did(e: FrameEntry, holder: PortHolder): Words[] {
 			return [
 				sentence(
 					`${SWITCH_NAME} did not deliver it: the address it learned for `,
-					...destination(f),
+					...destination(f, names),
 					` leads back to port ${e.from} or to a port that is down.`,
 				),
 			];
@@ -260,7 +282,7 @@ function did(e: FrameEntry, holder: PortHolder): Words[] {
 		return [
 			sentence(
 				`${SWITCH_NAME} had learned `,
-				...destination(f),
+				...destination(f, names),
 				` on port ${only}, so it forwarded the frame there only.`,
 			),
 		];
@@ -274,14 +296,14 @@ function did(e: FrameEntry, holder: PortHolder): Words[] {
 				)
 			: sentence(
 					`${SWITCH_NAME} did not know where `,
-					...destination(f),
+					...destination(f, names),
 					" is, so it flooded the frame",
 					...(delivered.length ? [": delivered to ", ...reached, "."] : [", but no other port was up."]),
 				);
 
 	const missed = PORTS.filter((p) => p !== e.from && !delivered.includes(p)).flatMap((p) => {
-		const name = holder(p);
-		return name ? [{ port: p, name }] : [];
+		const holder = names.holder(p);
+		return holder ? [{ port: p, holder }] : [];
 	});
 	if (missed.length === 0) return [first];
 	const portWords = missed.map((m) => [String(m.port)]);
@@ -289,18 +311,18 @@ function did(e: FrameEntry, holder: PortHolder): Words[] {
 		missed.length === 1 ? "Port " : "Ports ",
 		...list(portWords),
 		missed.length === 1 ? " was down, so " : " were down, so ",
-		...list(missed.map((m) => [{ machine: m.name }])),
+		...list(missed.map((m) => [m.holder])),
 		" never saw it.",
 	);
 	return [first, second];
 }
 
-export function frameDetail(e: FrameEntry, holder: PortHolder): FrameDetail {
+export function frameDetail(e: FrameEntry, names: LabNames): FrameDetail {
 	return {
 		title: `frame ${e.seq}`,
 		summary: `${e.bytes.length} bytes · ${(e.t / 1000).toFixed(2)} s · in on port ${e.from}`,
-		groups: groups(e.bytes),
-		did: did(e, holder),
+		groups: groups(e.bytes, names),
+		did: did(e, names),
 		dump: dump(e.bytes),
 	};
 }

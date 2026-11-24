@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { createKernel, fetchDistro, type KernelInstance } from "unkernel/node";
 import { test } from "vitest";
-import { labMac, Subnet } from "../../src/net/index.ts";
+import { macStr, nodeMac } from "../../src/net/index.ts";
 import { execAsRoot, hostsScript, setupScript } from "../../src/runtime/guest.ts";
 import { LabNic } from "../../src/runtime/nic.ts";
 import { createShellTracker, type ShellEvent } from "../../src/runtime/shell-tracker.ts";
@@ -13,6 +13,7 @@ const SETUP = setupScript({
 	hostname: "node1",
 	ip: "10.88.0.11",
 	prefixBits: 24,
+	nics: 1,
 	hosts: [],
 	dhcp: false,
 	promptToken: TOKEN,
@@ -72,7 +73,7 @@ function tracked() {
 
 test("setup gives every shell a prompt that reports exit codes, and running it again changes nothing", async () => {
 	const distro = await fetchDistro("alpine");
-	const nic = new LabNic({ mac: labMac(11), lab: new Subnet("10.88.0.0/24"), toSwitch: () => {} });
+	const nic = new LabNic({ mac: macStr(nodeMac(1)), toSwitch: () => {} });
 	let vm: KernelInstance | undefined;
 	try {
 		vm = await createKernel({ distro, net: nic, memoryMiB: 256, consoleSize: { cols: 100, rows: 30 } });

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { arpReply, arpRequest, BROADCAST, eth, ipv4Packet, mac, ping } from "../../test/support/frames.ts";
+import { arpReply, arpRequest, BROADCAST, eth, ipv4Packet, mac, ping, routedPing } from "../../test/support/frames.ts";
 import type { PortNo } from "../model/index.ts";
 import { type CaptureFilter, compileFilter, type Flood } from "../net/index.ts";
 import { type CaptureLog, createCaptureLog } from "./log.ts";
@@ -73,9 +73,9 @@ describe("rows", () => {
 	test("link rows say which port changed and who did it", () => {
 		const { log, at } = setup();
 		at(2000);
-		log.appendLink({ port: 3, machine: "node3", up: false, cause: "agent" });
-		log.appendLink({ port: 3, machine: "node3", up: true, cause: "bar" });
-		log.appendLink({ port: 5, machine: "node5", up: false, cause: "runtime" });
+		log.appendLink({ port: 3, machine: "node3", nic: 0, up: false, cause: "agent" });
+		log.appendLink({ port: 3, machine: "node3", nic: 0, up: true, cause: "bar" });
+		log.appendLink({ port: 5, machine: "node5", nic: 0, up: false, cause: "runtime" });
 		expect(log.tail(3)).toEqual([
 			{
 				kind: "link",
@@ -108,9 +108,53 @@ describe("rows", () => {
 	});
 });
 
+describe("a machine with several NICs", () => {
+	const named = () => {
+		const log = createCaptureLog({ schedule: (fn) => fn(), now: () => 0, severalNics: (name) => name === "node2" });
+		const route = (bytes: Uint8Array) => {
+			log.appendFrame({ from: 1, to: 0, flood: null, frame: bytes });
+			const row = log.tail(1)[0];
+			return row.kind === "frame" ? [row.from, row.to] : [];
+		};
+		return { log, route };
+	};
+
+	test("is named with its NIC at each hop, and a machine with one is not", () => {
+		const { route } = named();
+		expect(route(routedPing(mac(1), mac(2), 1, 3))).toEqual([
+			{ kind: "machine", name: "node1" },
+			{ kind: "machine", name: "node2", nic: "eth0" },
+		]);
+		expect(route(routedPing(mac(2, 1), mac(3), 1, 3))).toEqual([
+			{ kind: "machine", name: "node2", nic: "eth1" },
+			{ kind: "machine", name: "node3" },
+		]);
+	});
+
+	test("that is gone still names every NIC past eth0", () => {
+		const { route } = named();
+		expect(route(routedPing(mac(4, 1), mac(4), 4, 4))).toEqual([
+			{ kind: "machine", name: "node4", nic: "eth1" },
+			{ kind: "machine", name: "node4" },
+		]);
+	});
+
+	test("has its NIC in its link rows", () => {
+		const { log } = named();
+		log.appendLink({ port: 2, machine: "node2", nic: 0, up: false, cause: "bar" });
+		log.appendLink({ port: 3, machine: "node2", nic: 1, up: true, cause: "agent" });
+		log.appendLink({ port: 1, machine: "node1", nic: 0, up: false, cause: "bar" });
+		expect(log.tail(3).map((row) => (row.kind === "link" ? row.cause : ""))).toEqual([
+			"Cable to node2:eth0 cut by you.",
+			"Cable to node2:eth1 reconnected by the agent.",
+			"Cable to node1 cut by you.",
+		]);
+	});
+});
+
 test("a link the lab raises is a machine plugging in at boot, not a reconnect", () => {
 	const { log } = setup();
-	log.appendLink({ port: 1, machine: "node1", up: true, cause: "runtime" });
+	log.appendLink({ port: 1, machine: "node1", nic: 0, up: true, cause: "runtime" });
 	expect(log.tail(1)[0]).toMatchObject({ text: "port 1 link up", cause: "Cable to node1 plugged in by the lab." });
 });
 
@@ -204,7 +248,7 @@ describe("pause and clear", () => {
 		frame(ping(1, 2), 1, bit(2));
 		log.setPaused(true);
 		frame(ping(1, 2), 1, bit(2));
-		log.appendLink({ port: 2, machine: "node2", up: false, cause: "button" });
+		log.appendLink({ port: 2, machine: "node2", nic: 0, up: false, cause: "button" });
 		expect(log.size).toBe(1);
 		expect(log.counters).toEqual({ in: 2, delivered: 2, flooded: 0 });
 		log.setPaused(false);
@@ -239,7 +283,7 @@ describe("filter", () => {
 		const { log, frame } = setup();
 		frame(arpRequest(1, 2), 1, bit(2), "group");
 		frame(ping(1, 2), 1, bit(2));
-		log.appendLink({ port: 3, machine: "node3", up: false, cause: "agent" });
+		log.appendLink({ port: 3, machine: "node3", nic: 0, up: false, cause: "agent" });
 		frame(ping(2, 1, 1, 0), 2, bit(1));
 		log.setFilter(filter("icmp"));
 		expect([log.matchCount, log.matchedFrames, log.frameCount, log.size]).toEqual([3, 2, 3, 4]);
@@ -276,7 +320,7 @@ describe("the ring", () => {
 	test("frames() ignores the filter and skips link rows", () => {
 		const { log, frame } = setup();
 		frame(arpRequest(1, 2), 1, bit(2), "group");
-		log.appendLink({ port: 2, machine: "node2", up: false, cause: "bar" });
+		log.appendLink({ port: 2, machine: "node2", nic: 0, up: false, cause: "bar" });
 		frame(ping(1, 2), 1, bit(2));
 		log.setFilter(filter("icmp"));
 		expect(Array.from(log.frames(), (e) => e.seq)).toEqual([1, 3]);
@@ -294,7 +338,7 @@ describe("notification", () => {
 		expect(calls).toBe(1);
 		flush();
 		expect(calls).toBe(1);
-		log.appendLink({ port: 1, machine: "node1", up: false, cause: "bar" });
+		log.appendLink({ port: 1, machine: "node1", nic: 0, up: false, cause: "bar" });
 		flush();
 		expect(calls).toBe(2);
 		off();

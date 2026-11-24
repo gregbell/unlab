@@ -3,6 +3,7 @@
 // machine must never be able to stall another one or the page.
 
 import type { HostEntry } from "../model/index.ts";
+import type { NicNo } from "../net/index.ts";
 
 export interface VmConfig {
 	id: string;
@@ -10,8 +11,8 @@ export interface VmConfig {
 	/** This machine's address on the lab segment. */
 	ip: string;
 	prefixBits: number;
-	mac: string;
-	labCidr: string;
+	/** One MAC for each NIC, eth0 first. */
+	macs: readonly string[];
 	/** The distro image bytes, shared with every machine using the same image. */
 	image: ArrayBufferLike;
 	/** Which image that is, for display. */
@@ -37,7 +38,7 @@ export interface PtySpec {
 
 export type ToVm =
 	| { type: "boot"; cfg: VmConfig }
-	| { type: "frame"; frame: Uint8Array }
+	| { type: "frame"; nic: NicNo; frame: Uint8Array }
 	| { type: "input"; data: string }
 	| { type: "resize"; cols: number; rows: number }
 	| {
@@ -56,7 +57,7 @@ export type FromVm =
 	| { type: "stage"; stage: string; detail?: string }
 	| { type: "booted"; ms: number }
 	| { type: "ready"; ms: number }
-	| { type: "frame"; frame: Uint8Array }
+	| { type: "frame"; nic: NicNo; frame: Uint8Array }
 	| { type: "console"; bytes: Uint8Array }
 	| { type: "exited"; code: number; reason: string }
 	| { type: "pty-ready"; sid: number; pid: number; pts: number }
