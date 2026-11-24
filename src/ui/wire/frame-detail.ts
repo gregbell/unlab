@@ -1,6 +1,7 @@
 import "./frame-detail.css";
 import { html, nothing, type TemplateResult } from "lit";
-import { type MachineName, selectPorts, severalNics } from "../../model/index.ts";
+import { selectPorts, severalNics } from "../../model/index.ts";
+import { EVERYONE } from "../../net/index.ts";
 import { Select, UnlabElement } from "../base/index.ts";
 import { FollowCapture } from "../capture/follow.ts";
 import { type DetailField, frameDetail, type Words } from "./frame-detail-model.ts";
@@ -36,7 +37,7 @@ export class UnlabFrameDetail extends UnlabElement {
 		const d = frameDetail(entry, {
 			holder(port) {
 				const machine = ports[port - 1]?.machine;
-				return machine ? { machine: machine.name, label: machine.label } : null;
+				return machine ? { n: machine.n, label: machine.label } : null;
 			},
 			severalNics: (name) => severalNics({ machines }, name),
 		});
@@ -61,7 +62,7 @@ export class UnlabFrameDetail extends UnlabElement {
 				<pre class="dump">${d.dump.map(
 					(row) =>
 						html`<span class="line"><span class="offset">${row.offset}</span>  ${row.runs.map(
-							(run, i) => html`${i > 0 ? " " : ""}${this.#name(run.machine, run.text)}`,
+							(run, i) => html`${i > 0 ? " " : ""}${this.#name(run.n, run.text)}`,
 						)}</span>`,
 				)}</pre>
 			</section>`;
@@ -72,18 +73,18 @@ export class UnlabFrameDetail extends UnlabElement {
 			f.who === null
 				? nothing
 				: f.who.kind === "everyone"
-					? html` <span class="everyone">everyone</span>`
-					: html` ${this.#name(f.who.machine, f.who.label)}`;
+					? html` <span class="everyone">${EVERYONE}</span>`
+					: html` ${this.#name(f.who.n, f.who.label)}`;
 		return html`<div class="pair"><dt>${f.label}</dt><dd>${f.value}${who}</dd></div>`;
 	}
 
 	#words(words: Words): TemplateResult {
-		return html`${words.map((w) => (typeof w === "string" ? w : this.#name(w.machine, w.label)))}`;
+		return html`${words.map((w) => (typeof w === "string" ? w : this.#name(w.n, w.label)))}`;
 	}
 
-	/** `text` in `name`'s hue while that machine exists; plain otherwise. */
-	#name(name: MachineName | null, text: string): TemplateResult | string {
-		const hue = name ? this.#machines.value[name]?.hue : undefined;
+	/** `text` in machine n's hue while it exists; plain otherwise. */
+	#name(n: number | null, text: string): TemplateResult | string {
+		const hue = Object.values(this.#machines.value).find((machine) => machine?.n === n)?.hue;
 		return hue === undefined ? text : html`<span class="machine" data-hue=${hue}>${text}</span>`;
 	}
 }

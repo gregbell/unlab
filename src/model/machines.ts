@@ -1,9 +1,10 @@
 import {
-	type AddressBook,
 	defaultAddress,
+	defaultName,
 	GATEWAY_SUBNETS,
 	ip4str,
 	MAX_NODE,
+	type NameBook,
 	NICS,
 	type NicNo,
 	type NodeNic,
@@ -116,13 +117,19 @@ function addressed(spec: MachineSpec): readonly { readonly nic: NicNo; readonly 
 	});
 }
 
-/** Whose NIC each address the lab set is on. */
-export function addressBook(state: Pick<LabState, "machines" | "rail">): AddressBook {
-	const book = new Map<number, NodeNic>();
-	for (const { name, spec } of machineList(state)) {
-		for (const { nic, address } of addressed(spec)) book.set(address.ip, { node: name, nic });
+/** Who is who in the lab now. A machine that is gone keeps its name until another takes it. */
+export function nameBook(state: Pick<LabState, "machines" | "rail" | "departed">): NameBook {
+	const holders = new Map<MachineName, number>();
+	for (const name of Object.keys(state.departed) as MachineName[]) {
+		const gone = state.departed[name];
+		if (gone) holders.set(name, gone.n);
 	}
-	return book;
+	const addresses = new Map<number, NodeNic>();
+	for (const { n, name, spec } of machineList(state)) {
+		holders.set(name, n);
+		for (const { nic, address } of addressed(spec)) addresses.set(address.ip, { n, nic });
+	}
+	return { addresses, names: new Map([...holders].map(([name, n]) => [n, name])) };
 }
 
 export function isPlanError(plan: object | null): plan is PlanError {
@@ -130,38 +137,46 @@ export function isPlanError(plan: object | null): plan is PlanError {
 }
 
 /**
- * What a spawn of `count` machines will be. Names come from the counter, hues
- * are the first free ones, ports the lowest free ones in machine and NIC
- * order. The reducer applies this plan and no other.
+ * What a spawn of `count` machines will be. Numbers come from the counter,
+ * names from the request or the numbers, hues are the first free ones, ports
+ * the lowest free ones in machine and NIC order. The reducer applies this plan
+ * and no other.
  */
 export function planSpawn(state: LabState, count: number, request: SpawnRequest): SpawnPlan | PlanError {
 	if (!state.images.some((image) => image.name === request.image))
 		return { kind: "unknown-image", image: request.image };
-	const held = state.rail.length;
-	const room = Math.max(0, Math.min(MAX_MACHINES - held, HUES.length - held, MAX_NODE + 1 - state.nextN));
+	const used = state.rail.length;
+	const room = Math.max(0, Math.min(MAX_MACHINES - used, HUES.length - used, MAX_NODE + 1 - state.nextN));
 	if (count > room) return { kind: "no-room", free: room, wanted: count };
+	const names = Array.from({ length: count }, (_, i) => request.name ?? defaultName(state.nextN + i));
+	const taken = names.find((name, i) => state.machines[name] || names.indexOf(name) < i);
+	if (taken) return { kind: "name-taken", name: taken };
 	const plugged = pluggedNics(request.nics);
 	const ports = claimPorts(state, count * plugged);
 	if (isPlanError(ports)) return ports;
 	const machines = firstFreeHues(state, count).map((hue, i): SpawnPlan["machines"][number] => ({
-		identity: identity(state.nextN + i),
+		identity: identity(state.nextN + i, names[i]),
 		hue,
 		ports: nicPorts(request.nics, ports.slice(i * plugged)),
 		spec: specFor(request, state.nextN + i),
 	}));
-	const book = new Map(addressBook(state));
+	const held = new Map<number, NicRef>();
+	const hold = (machine: MachineName, spec: MachineSpec) => {
+		for (const { nic, address } of addressed(spec)) held.set(address.ip, { machine, nic });
+	};
+	for (const { name, spec } of machineList(state)) hold(name, spec);
 	for (const { identity: id, spec } of machines) {
-		const clash = addressClash(spec, book);
+		const clash = addressClash(spec, held);
 		if (clash) return clash;
-		for (const { nic, address } of addressed(spec)) book.set(address.ip, { node: id.name, nic });
+		hold(id.name, spec);
 	}
 	return { machines, request };
 }
 
-function specFor(request: SpawnRequest, n: number): MachineSpec {
+function specFor({ name: _, ...hardware }: SpawnRequest, n: number): MachineSpec {
 	return {
-		...request,
-		nics: request.nics.map(({ net, address }) => ({
+		...hardware,
+		nics: hardware.nics.map(({ net, address }) => ({
 			net,
 			address: address === "default" ? defaultAddress(n) : address,
 		})),
@@ -169,11 +184,11 @@ function specFor(request: SpawnRequest, n: number): MachineSpec {
 }
 
 /** Why the machine cannot have the addresses it asks for, or null when it can. */
-function addressClash(spec: MachineSpec, book: AddressBook): PlanError | null {
+function addressClash(spec: MachineSpec, held: ReadonlyMap<number, NicRef>): PlanError | null {
 	const own = addressed(spec);
 	for (const [i, { nic, address }] of own.entries()) {
-		const holder = book.get(address.ip);
-		if (holder) return { kind: "address-taken", address, by: { machine: holder.node, nic: holder.nic } };
+		const by = held.get(address.ip);
+		if (by) return { kind: "address-taken", address, by };
 		const subnet = spec.gateway ? GATEWAY_SUBNETS.find((kept) => subnetsOverlap(kept, address)) : undefined;
 		if (subnet) return { kind: "address-gateway", address, subnet };
 		const other = own.slice(i + 1).find((later) => subnetsOverlap(later.address, address));
@@ -293,14 +308,14 @@ function linksDown({ name, life }: Machine, cause: Cause): Effect[] {
 }
 
 /** The ports go on the switch before the kernel boots, so its first frame has somewhere to go. */
-function bootEffects(machine: Machine, attempt: number, state: LabState): Effect[] {
-	const { n, name, mac, spec } = machine;
+function bootEffects(machine: Machine, state: LabState): Effect[] {
+	const { n, name, mac, spec, life } = machine;
 	return [
 		...cablesOf(machine.life).map(({ port, nic }): Effect => ({ type: "port/attach", port, machine: name, nic })),
 		{
 			type: "vm/boot",
 			machine: name,
-			attempt,
+			attempt: life.attempt,
 			config: { identity: { n, name, mac }, spec, hosts: hostsFor(state) },
 		},
 	];
@@ -333,12 +348,13 @@ export function bootMachines(state: LabState, nodes: readonly BootNode[], nextN:
 	const added: Machine[] = [];
 	for (const { identity: id, hue, spec, plugs, failure } of nodes) {
 		const tab: SessionId = `${id.name}:console`;
+		const attempt = (state.departed[id.name]?.attempt ?? 0) + 1;
 		const machine: Machine = {
 			...id,
 			life:
 				failure === undefined
-					? { phase: "booting", attempt: 1, since: at, stage: "", plugs }
-					: { phase: "failed", attempt: 1, reason: failure },
+					? { phase: "booting", attempt, since: at, stage: "", plugs }
+					: { phase: "failed", attempt, reason: failure },
 			hue,
 			spec,
 			sessions: [tab],
@@ -359,7 +375,7 @@ export function bootMachines(state: LabState, nodes: readonly BootNode[], nextN:
 	};
 	const effects = added.flatMap((machine): Effect[] => [
 		{ type: "screen/create", session: machine.activeSession },
-		...(machine.life.phase === "booting" ? bootEffects(machine, 1, next) : []),
+		...(machine.life.phase === "booting" ? bootEffects(machine, next) : []),
 	]);
 	return step(next, effects);
 }
@@ -452,12 +468,17 @@ export function gone(state: LabState, name: MachineName, attempt: number): Step 
 	const next: LabState = {
 		...state,
 		machines: without(state.machines, name),
+		departed: { ...state.departed, [name]: { n: machine.n, attempt } },
 		rail: state.rail.filter((other) => other !== name),
 		sessions,
 	};
 	const effects = portsOf(machine.life).map((port): Effect => ({ type: "port/detach", port }));
 	for (const session of machine.sessions) effects.push({ type: "screen/dispose", session });
-	effects.push({ type: "hosts/publish", hosts: hostsFor(next) }, { type: "announce", text: `${name} removed` });
+	effects.push(
+		{ type: "disk/delete", n: machine.n },
+		{ type: "hosts/publish", hosts: hostsFor(next) },
+		{ type: "announce", text: `${name} removed` },
+	);
 	return step(next, effects);
 }
 
@@ -470,7 +491,7 @@ export function bootAgain(state: LabState, name: MachineName, ports: NicPorts, a
 	const plugs = plugInto(ports);
 	const booting: Machine = { ...machine, life: { phase: "booting", attempt, since: at, stage: "", plugs } };
 	const next = put({ ...state, now: later(state.now, at) }, booting);
-	return step(next, bootEffects(booting, attempt, next));
+	return step(next, bootEffects(booting, next));
 }
 
 export function link(state: LabState, changes: readonly LinkChange[], cause: Cause): Step {

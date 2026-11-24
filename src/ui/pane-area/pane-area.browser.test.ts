@@ -3,7 +3,7 @@ import axe from "axe-core";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import type { LabState, MachineName } from "../../model/index.ts";
-import { focus, lab, mount, park, ready, spawn, unmountAll } from "../base/testing.ts";
+import { focus, lab, mount, named, park, ready, spawn, spawnNamed, unmountAll } from "../base/testing.ts";
 import type { UnlabPane } from "../pane/pane.ts";
 import { fakeTerminals } from "../terminal/testing.ts";
 
@@ -322,5 +322,22 @@ describe("<unlab-pane-area> keyboard", () => {
 		store.dispatchRuntime({ type: "vm/ready", machine: "node2", attempt: 1, bootMs: 3582 });
 		await settle();
 		expect(document.activeElement).toBe(booting.input);
+	});
+});
+
+describe("<unlab-pane-area> when a name is used again", () => {
+	it("gives the new machine a pane of its own, even when the old one was never rendered away", async () => {
+		const web = named("web");
+		const { store, settle, terminals } = await mountArea(lab(spawnNamed(web), ready()));
+		const old = paneOf(web);
+		const host = terminals.host(`${web}:console`);
+		expect(host.mounts).toHaveLength(1);
+		store.dispatchCommand({ type: "cmd/remove", machines: [web], cause: "bar" });
+		store.dispatchRuntime({ type: "vm/stopped", machine: web, attempt: 1 });
+		for (const event of spawnNamed(web)(store.state)) store.dispatchCommand(event);
+		await settle();
+		expect(paneOf(web)).not.toBe(old);
+		expect(old.isConnected).toBe(false);
+		expect(host.mounts).toHaveLength(2);
 	});
 });

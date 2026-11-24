@@ -194,6 +194,7 @@ describe("the artboards, replayed", () => {
 				"[--mem MiB]",
 				"[--cpus CPUs]",
 				"[--disk 4 | 8 | 16 | 32 | 64]",
+				"[--name name]",
 				"[--nics NICs]",
 				"[--net network,... | --no-net]",
 				"[--addr address,...]",

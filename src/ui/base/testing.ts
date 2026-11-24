@@ -9,18 +9,22 @@ import { completeLine, createRegistry, parseLine, type Registry, VERBS } from ".
 import {
 	type AgentCall,
 	type AgentEvent,
+	type CommandEvent,
 	createStore,
 	DEFAULT_POLICIES,
 	type Effect,
 	initialState,
+	isNameFault,
 	isPlanError,
 	type LabEvent,
 	type LabState,
+	MAX_NAME,
 	type MachineName,
 	type NicRef,
 	type NicRequest,
 	type NicSpec,
 	type PortNo,
+	parseChosenName,
 	planLink,
 	planSpawn,
 	type Source,
@@ -75,6 +79,25 @@ export const spawnAt =
 		});
 		const plan = planSpawn(state, 1, { image: "alpine", memMiB: 256, gateway: true, nics });
 		if (isPlanError(plan)) throw new Error(`cannot spawn: ${plan.kind}`);
+		return [{ type: "cmd/spawn", plan, at: state.now }];
+	};
+
+/** As long as a name can be. */
+export const LONG_NAME = named(`a-very-long-name-${"x".repeat(MAX_NAME - 19)}-z`);
+
+export function named(text: string): MachineName {
+	const name = parseChosenName(text);
+	if (isNameFault(name)) throw new Error(`${text}: ${name.kind}`);
+	return name;
+}
+
+/** One machine with the name, plugged in. */
+export const spawnNamed =
+	(name: MachineName) =>
+	(state: LabState): readonly CommandEvent[] => {
+		const nics: NicRequest[] = [{ net: "switch0", address: "default" }];
+		const plan = planSpawn(state, 1, { image: "alpine", memMiB: 256, gateway: true, nics, name });
+		if (isPlanError(plan)) throw new Error(`cannot spawn ${name}: ${plan.kind}`);
 		return [{ type: "cmd/spawn", plan, at: state.now }];
 	};
 

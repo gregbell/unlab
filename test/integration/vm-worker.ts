@@ -9,6 +9,7 @@ import { alpinePackageSetup, packageBackend } from "../../src/runtime/package-re
 
 export interface MachineData {
 	readonly name: string;
+	readonly namedPrompt: boolean;
 	readonly addresses: readonly (Address | null)[];
 	readonly image: "alpine" | "debian";
 	readonly macs: readonly string[];
@@ -20,7 +21,8 @@ export interface MachineData {
 
 export type ToMachine =
 	| { readonly type: "frame"; readonly nic: NicNo; readonly frame: Uint8Array }
-	| { readonly type: "exec"; readonly id: number; readonly cmd: string };
+	| { readonly type: "exec"; readonly id: number; readonly cmd: string }
+	| { readonly type: "input"; readonly data: string };
 
 export interface ExecDone {
 	readonly exitCode: number | null;
@@ -33,6 +35,8 @@ export type FromMachine =
 	| { readonly type: "ready" }
 	| { readonly type: "failed"; readonly reason: string }
 	| { readonly type: "lost"; readonly reason: string }
+	/** The console's output. */
+	| { readonly type: "console"; readonly text: string }
 	| { readonly type: "ran"; readonly id: number; readonly result: ExecDone };
 
 const port = parentPort;
@@ -56,9 +60,11 @@ try {
 		(error: unknown) => say({ type: "failed", reason: String(error) }),
 	);
 	void running;
+	vm.onOutput((bytes) => say({ type: "console", text: Buffer.from(bytes).toString() }));
 	await nics.start(vm);
 	const script = setupScript({
 		hostname: data.name,
+		namedPrompt: data.namedPrompt,
 		addresses: data.addresses,
 		hosts: data.hosts,
 		gateway: data.gateway !== false,
@@ -71,6 +77,10 @@ try {
 	port.on("message", (m: ToMachine) => {
 		if (m.type === "frame") {
 			nics.deliver(m.nic, m.frame);
+			return;
+		}
+		if (m.type === "input") {
+			vm.write(m.data);
 			return;
 		}
 		execAsRoot(vm, m.cmd).then(

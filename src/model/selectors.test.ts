@@ -228,21 +228,21 @@ describe("the switch faceplate", () => {
 			{
 				port: 1,
 				state: "up",
-				machine: { name: "node1", hue: 1, label: "node1", nic: null },
+				machine: { n: 1, name: "node1", hue: 1, label: "node1", nic: null },
 				word: "up",
 				actionLabel: "Cut the cable from node1 to port 1",
 			},
 			{
 				port: 2,
 				state: "cut",
-				machine: { name: "node2", hue: 2, label: "node2", nic: null },
+				machine: { n: 2, name: "node2", hue: 2, label: "node2", nic: null },
 				word: "cut",
 				actionLabel: "Reconnect the cable from node2 to port 2",
 			},
 			{
 				port: 3,
 				state: "booting",
-				machine: { name: "node4", hue: 4, label: "node4", nic: null },
+				machine: { n: 4, name: "node4", hue: 4, label: "node4", nic: null },
 				word: "boot",
 				actionLabel: null,
 			},
@@ -250,7 +250,7 @@ describe("the switch faceplate", () => {
 			{
 				port: 5,
 				state: "removing",
-				machine: { name: "node6", hue: 6, label: "node6", nic: null },
+				machine: { n: 6, name: "node6", hue: 6, label: "node6", nic: null },
 				word: "down",
 				actionLabel: null,
 			},
@@ -302,7 +302,7 @@ describe("a machine with several NICs", () => {
 
 	test("each cable is its own port on the faceplate and its own link in the count", () => {
 		const s = run(three(), linkEvent(three(), false, { machine: "node1", nic: 1 }));
-		const holder = (nic: string) => ({ name: "node1", hue: 1, label: `node1:${nic}`, nic });
+		const holder = (nic: string) => ({ n: 1, name: "node1", hue: 1, label: `node1:${nic}`, nic });
 		expect(selectPorts(s).slice(0, 3)).toEqual([
 			{
 				port: 1,

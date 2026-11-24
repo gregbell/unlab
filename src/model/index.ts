@@ -6,9 +6,12 @@
 
 export {
 	identity,
-	nameForMac,
+	isNameFault,
+	MAX_NAME,
+	type NameFault,
 	nicLabel,
 	nicMac,
+	parseChosenName,
 	parseMachineName,
 	parseSessionId,
 	type SessionAddress,
@@ -17,7 +20,6 @@ export {
 export {
 	ACCEPTS,
 	type Accepts,
-	addressBook,
 	addressOf,
 	type BootAgainPlan,
 	firstFreeHues,
@@ -25,6 +27,7 @@ export {
 	isPlanError,
 	lowestFreePorts,
 	machineList,
+	nameBook,
 	nicPortsOf,
 	nicsOf,
 	planBootAgain,

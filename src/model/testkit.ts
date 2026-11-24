@@ -1,6 +1,7 @@
 // Shared by the model's tests. Every fixture is built through `update`, the way the app builds state.
 
 import { isAddressFault, parseAddress } from "../net/index.ts";
+import { isNameFault, parseChosenName } from "./identity.ts";
 import { isPlanError, planBootAgain, planLink, planSpawn } from "./machines.ts";
 import type {
 	Address,
@@ -53,6 +54,7 @@ export interface SpawnOptions {
 	/** Each NIC's address, or null for none. The lab chooses when it is left out. */
 	readonly addr?: readonly (string | null)[];
 	readonly gateway?: boolean;
+	readonly name?: string;
 	readonly image?: string;
 	readonly memMiB?: number;
 	readonly at?: number;
@@ -64,11 +66,18 @@ export function address(text: string): Address {
 	return read;
 }
 
+export function named(text: string): MachineName {
+	const name = parseChosenName(text);
+	if (isNameFault(name)) throw new Error(`${text}: ${name.kind}`);
+	return name;
+}
+
 export function spawnRequest(options: SpawnOptions = {}): SpawnRequest {
 	const { addr, image = "alpine", memMiB = 256 } = options;
 	const nets = [options.net ?? "switch0"].flat();
 	return {
 		image,
+		...(options.name === undefined ? {} : { name: named(options.name) }),
 		memMiB,
 		gateway: options.gateway ?? nets[0] === "switch0",
 		nics: nets.map((net, nic) => {

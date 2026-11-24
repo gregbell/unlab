@@ -9,7 +9,7 @@ describe("VERBS", () => {
 		expect(registry.commands.map((c) => [c.name, c.signature.join(" "), c.about])).toEqual([
 			[
 				"spawn",
-				"<count> <image> [--mem MiB] [--cpus CPUs] [--disk 4 | 8 | 16 | 32 | 64] [--nics NICs] [--net network,... | --no-net] [--addr address,...] [--no-gateway]",
+				"<count> <image> [--mem MiB] [--cpus CPUs] [--disk 4 | 8 | 16 | 32 | 64] [--name name] [--nics NICs] [--net network,... | --no-net] [--addr address,...] [--no-gateway]",
 				"boot machines",
 			],
 			["rm", "<machines>", "remove machines and their disks"],

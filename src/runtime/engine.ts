@@ -12,7 +12,16 @@
 
 import type { CaptureLog } from "../capture/index.ts";
 import type { ExecOutcome, ExecPort } from "../commands/index.ts";
-import type { Effect, HostEntry, MachineName, NicRef, PortNo, RuntimeEvent, SessionId } from "../model/index.ts";
+import {
+	type Effect,
+	type HostEntry,
+	type MachineName,
+	type NicRef,
+	type PortNo,
+	parseSessionId,
+	type RuntimeEvent,
+	type SessionId,
+} from "../model/index.ts";
 import type { LineMark, Screen, Screens } from "./screens.ts";
 import type { ShellEvent } from "./shell-tracker.ts";
 import type { LabSwitch, MacEntry, PortCounters } from "./switch.ts";
@@ -54,6 +63,8 @@ export interface EngineDeps {
 	readonly startVm: StartVm;
 	/** Image bytes by manifest name, fetched once however many machines ask. Rejects, never throws. */
 	readonly image: (name: string) => Promise<ArrayBufferLike>;
+	/** Delete machine n's disk. */
+	readonly deleteDisk: (n: number) => void;
 	/** The page's one polite live region. */
 	readonly announce: (text: string) => void;
 	/** Run fn every ms until the returned function is called. */
@@ -99,16 +110,6 @@ interface SessionEntry {
 
 /** A shell that has a typed-ahead line echoes it within milliseconds of its prompt. */
 const QUIET_MS = 1000;
-
-const isMachineName = (s: string): s is MachineName => /^node\d+$/.test(s);
-
-function parseSession(id: SessionId): { machine: MachineName; tty: Tty } | null {
-	const colon = id.indexOf(":");
-	const machine = id.slice(0, colon);
-	const tab = id.slice(colon + 1);
-	if (!isMachineName(machine)) return null;
-	return { machine, tty: tab === "console" ? "console" : Number(tab.slice(2)) };
-}
 
 /** What a terminal sends on its own to answer the guest: cursor, status and device reports, focus, colours. */
 function isTerminalReply(data: string): boolean {
@@ -255,12 +256,13 @@ export function createEngine(deps: EngineDeps): Engine {
 	};
 
 	const createSession = (id: SessionId) => {
-		const parsed = parseSession(id);
+		const parsed = parseSessionId(id);
 		if (!parsed || sessions.has(id)) return;
 		const s: SessionEntry = {
 			id,
-			...parsed,
-			state: parsed.tty === "console" ? "open" : "closed",
+			machine: parsed.machine,
+			tty: parsed.shell ?? "console",
+			state: parsed.shell === null ? "open" : "closed",
 			injection: null,
 			drafting: false,
 			quietSince: null,
@@ -344,6 +346,9 @@ export function createEngine(deps: EngineDeps): Engine {
 				});
 				return;
 			}
+			case "disk/delete":
+				deps.deleteDisk(effect.n);
+				return;
 			case "port/attach": {
 				const { port, machine, nic } = effect;
 				const held = ports.get(port);

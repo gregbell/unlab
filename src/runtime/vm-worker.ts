@@ -9,6 +9,7 @@
 // vm.spawn(), so a machine can have several independent shells.
 
 import { createKernel, type KernelInstance, NetStack, type Pty } from "unkernel";
+import { defaultName } from "../net/index.ts";
 import { diskName } from "./disk-name.ts";
 import { execAsRoot, hostsScript, setupScript } from "./guest.ts";
 import { MemoryDisk } from "./image.ts";
@@ -168,7 +169,7 @@ async function boot(c: VmConfig): Promise<void> {
 		post({ type: "stage", stage: "download" });
 		vm = await createKernel({
 			distro: new MemoryDisk(c.image),
-			disks: [{ kind: "data", template: "bundled", name: diskName(c.id), size: (c.diskGiB ?? 4) * 2 ** 30 }],
+			disks: [{ kind: "data", template: "bundled", name: diskName(c.n), size: (c.diskGiB ?? 4) * 2 ** 30 }],
 			onDiskError: (_, error) => fail(`Saving ${c.name} failed: ${error}`, true),
 			net: nics.eth0,
 			memoryMiB: c.memoryMiB,
@@ -212,6 +213,7 @@ async function boot(c: VmConfig): Promise<void> {
 		await nics.start(vm);
 		const setup = setupScript({
 			hostname: c.name,
+			namedPrompt: c.name !== defaultName(c.n),
 			addresses: c.addresses,
 			hosts: c.hosts,
 			gateway: c.gateway,

@@ -1,12 +1,13 @@
 import { describe, expect, test } from "vitest";
+import { nameOf } from "../net/index.ts";
 import { identity } from "./identity.ts";
 import {
 	ACCEPTS,
-	addressBook,
 	firstFreeHues,
 	hostsFor,
 	isPlanError,
 	lowestFreePorts,
+	nameBook,
 	planBootAgain,
 	planLink,
 	planSpawn,
@@ -20,15 +21,18 @@ import {
 	emptyLab,
 	hasFailed,
 	hasStopped,
+	IMAGES,
 	isReady,
 	labWith,
 	linkEvent,
 	machine,
+	named,
 	remove,
 	run,
 	type SpawnOptions,
 	spawnEvent,
 	spawnRequest,
+	WIDE,
 } from "./testkit.ts";
 import {
 	BOOT_TIMEOUT_MS,
@@ -40,7 +44,8 @@ import {
 	type Phase,
 	type RuntimeEvent,
 } from "./types.ts";
-import { update } from "./update.ts";
+import { initialState, update } from "./update.ts";
+import { restoreWorkspace, saveWorkspace } from "./workspace.ts";
 
 const ALPINE = spawnRequest();
 const UNPLUGGED = spawnRequest({ net: "none" });
@@ -621,18 +626,98 @@ describe("addresses", () => {
 		},
 	);
 
-	test("the address book holds every NIC's and follows the lab", () => {
+	test("the name book holds every NIC's address and follows the lab", () => {
 		let s = emptyLab();
 		s = run(s, spawnEvent(s, 1, { net: ["switch0", "switch0"], addr: ["10.1.0.1/24", "10.2.0.1/24"] }));
 		s = run(s, spawnEvent(s, 1, { addr: [null] }));
-		expect(addressBook(s)).toEqual(
+		expect(nameBook(s).addresses).toEqual(
 			new Map([
-				[address("10.1.0.1/24").ip, { node: "node1", nic: 0 }],
-				[address("10.2.0.1/24").ip, { node: "node1", nic: 1 }],
+				[address("10.1.0.1/24").ip, { n: 1, nic: 0 }],
+				[address("10.2.0.1/24").ip, { n: 1, nic: 1 }],
 			]),
 		);
 		s = run(s, remove("node1"), hasStopped("node1"));
-		expect(addressBook(s).size).toBe(0);
+		expect(nameBook(s).addresses.size).toBe(0);
+	});
+});
+
+describe("a machine's name", () => {
+	const web = named("web");
+	const spawnWeb = (s: LabState) => run(s, spawnEvent(s, 1, { name: "web" }));
+	const gone = (s: LabState, name: MachineName) =>
+		run(s, remove(name), hasStopped(name, machine(s, name).life.attempt));
+
+	test("is what it is keyed by, and its number still gives its MAC, address, hue and port", () => {
+		const s = spawnWeb(labWith(1));
+		expect(machine(s, web)).toMatchObject({
+			n: 2,
+			name: "web",
+			mac: "52:54:00:88:00:0c",
+			hue: 2,
+			sessions: ["web:console"],
+			life: { plugs: [{ port: 2 }] },
+		});
+		expect(addressText(machine(s, web))).toBe("10.88.0.12");
+		expect(hostsFor(s)).toEqual([
+			{ ip: "10.88.0.11", name: "node1" },
+			{ ip: "10.88.0.12", name: "web" },
+		]);
+	});
+
+	test("is taken until its machine is gone", () => {
+		const plan = (s: LabState) => planSpawn(s, 1, spawnRequest({ name: "web" }));
+		let s = spawnWeb(emptyLab());
+		expect(plan(s)).toEqual({ kind: "name-taken", name: "web" });
+		s = run(s, hasFailed(web));
+		expect(plan(s)).toEqual({ kind: "name-taken", name: "web" });
+		s = run(s, remove(web));
+		expect(plan(s)).toEqual({ kind: "name-taken", name: "web" });
+		s = run(s, hasStopped(web));
+		expect(isPlanError(plan(s))).toBe(false);
+		expect(planSpawn(s, 2, spawnRequest({ name: "web" }))).toEqual({ kind: "name-taken", name: "web" });
+	});
+
+	test("nothing late from one machine reaches the next of that name", () => {
+		let s = run(spawnWeb(emptyLab()), hasFailed(web, 1));
+		s = run(s, bootAgainEvent(s, web), isReady(web, 2));
+		s = spawnWeb(gone(s, web));
+		expect(machine(s, web)).toMatchObject({ n: 2, life: { phase: "booting", attempt: 3 } });
+		for (const attempt of [1, 2]) {
+			for (const late of [
+				{ type: "vm/stage", machine: web, attempt, stage: "late" } as const,
+				isReady(web, attempt),
+				hasFailed(web, attempt),
+				hasStopped(web, attempt),
+			]) {
+				expect(update(s, late), late.type).toEqual({ state: s, effects: [] });
+			}
+		}
+		s = run(s, remove(web));
+		expect(update(s, hasStopped(web, 2))).toEqual({ state: s, effects: [] });
+		expect(update(s, hasStopped(web, 3)).effects).toContainEqual({ type: "disk/delete", n: 2 });
+	});
+
+	test("a lab that is restored has no one late to ignore", () => {
+		const s = spawnWeb(gone(spawnWeb(emptyLab()), web));
+		const { state } = restoreWorkspace(initialState(IMAGES, WIDE), saveWorkspace(s));
+		expect(machine(state, web)).toMatchObject({ n: 2, life: { attempt: 1 } });
+	});
+
+	test("the name book keeps a removed machine's until another takes it", () => {
+		let s = spawnWeb(labWith(1));
+		expect(nameBook(s).names).toEqual(
+			new Map([
+				[1, "node1"],
+				[2, "web"],
+			]),
+		);
+		s = gone(s, web);
+		expect(nameOf(nameBook(s), 2)).toBe("web");
+		s = spawnWeb(s);
+		expect(nameOf(nameBook(s), 3)).toBe("web");
+		expect(nameOf(nameBook(s), 2)).toBe("node2");
+		s = gone(s, web);
+		expect(nameOf(nameBook(s), 3)).toBe("web");
 	});
 });
 

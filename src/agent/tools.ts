@@ -20,9 +20,10 @@ import {
 	DEFAULT_POLICIES,
 	type LabState,
 	type MachineName,
-	parseMachineName,
+	machineList,
 	parseSessionId,
 	type SessionId,
+	selectNames,
 	severalNics,
 	type ToolName,
 } from "../model/index.ts";
@@ -185,8 +186,7 @@ function wholeNumber(
 function sessionOf(target: MachineName | SessionId, lab: LabState): SessionId | undefined {
 	const address = parseSessionId(target);
 	if (address) return address.session;
-	const machine = parseMachineName(target);
-	return machine ? lab.machines[machine]?.activeSession : undefined;
+	return machineList(lab).find((machine) => machine.name === target)?.activeSession;
 }
 
 const SHELL_LINES = 20;
@@ -271,7 +271,7 @@ function captureRead(capture: Pick<CaptureView, "frames">): AgentTool {
 			const limit = wholeNumber(name, "limit", parsed.fields.get("limit"), CAPTURE_LIMIT, CAPTURE_MAX);
 			if (typeof limit !== "number") return { ok: false, line: asCalled(name, input), error: limit.error };
 			const line = `${name}(${JSON.stringify(source)}, ${limit})`;
-			const compiled = compileFilter(source);
+			const compiled = compileFilter(source, selectNames(lab));
 			if (!compiled.ok) {
 				const terms = "A term is a protocol, a machine, a NIC (node2:eth1), an address, a MAC or port:N.";
 				return { ok: false, line, error: `${compiled.error.message} ${terms}` };

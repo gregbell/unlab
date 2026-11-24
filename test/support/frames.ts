@@ -8,9 +8,10 @@ export const mac = (n: number, nic = 0): Uint8Array => Uint8Array.of(0x52, 0x54,
 export const ip = (n: number): number => (0x0a580000 + 10 + n) >>> 0;
 
 /** The lab with node1 to node8 at the addresses they get when no one chooses. */
-export const ADDRESSES: ReadonlyMap<number, { readonly node: `node${number}`; readonly nic: 0 }> = new Map(
-	[1, 2, 3, 4, 5, 6, 7, 8].map((n) => [ip(n), { node: `node${n}` as const, nic: 0 }]),
-);
+export const NAMES = {
+	addresses: new Map([1, 2, 3, 4, 5, 6, 7, 8].map((n) => [ip(n), { n, nic: 0 as const }])),
+	names: new Map([1, 2, 3, 4, 5, 6, 7, 8].map((n) => [n, `node${n}` as const])),
+};
 
 function u16(v: number): number[] {
 	return [(v >>> 8) & 255, v & 255];

@@ -129,11 +129,13 @@ describe("re-entrant dispatch", () => {
 			"told: node2",
 			"port/detach",
 			"screen/dispose",
+			"disk/delete",
 			"hosts/publish",
 			"announce",
 			"told: empty",
 			"port/detach",
 			"screen/dispose",
+			"disk/delete",
 			"hosts/publish",
 			"announce",
 		]);

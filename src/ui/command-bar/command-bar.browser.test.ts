@@ -214,7 +214,7 @@ describe("<unlab-command-bar> CmdComplete: completing", () => {
 		await typeLine("spawn 2 alp");
 		expect(text(".hint")).toBe("tab → alpine");
 		expect(text(".signature")).toBe(
-			"spawn <count> <image> [--mem MiB] [--cpus CPUs] [--disk 4 | 8 | 16 | 32 | 64] [--nics NICs] [--net network,... | --no-net] [--addr address,...] [--no-gateway]",
+			"spawn <count> <image> [--mem MiB] [--cpus CPUs] [--disk 4 | 8 | 16 | 32 | 64] [--name name] [--nics NICs] [--net network,... | --no-net] [--addr address,...] [--no-gateway]",
 		);
 		expect(text(".signature .current")).toBe("<image>");
 		expect(style(".signature .current").textDecorationLine).toBe("underline");

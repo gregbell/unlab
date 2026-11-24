@@ -1,17 +1,17 @@
 import { describe, expect, test } from "vitest";
 import {
-	ADDRESSES,
 	arpReply,
 	arpRequest,
 	BROADCAST,
 	eth,
 	ipv4Packet,
 	mac,
+	NAMES,
 	ping,
 	routedPing,
 } from "../../test/support/frames.ts";
-import type { PortNo } from "../model/index.ts";
-import { type AddressBook, type CaptureFilter, compileFilter, type Flood } from "../net/index.ts";
+import type { MachineName, PortNo } from "../model/index.ts";
+import { type CaptureFilter, compileFilter, type Flood, type NameBook, type NicNo, NO_NAMES } from "../net/index.ts";
 import { type CaptureLog, createCaptureLog } from "./log.ts";
 import { formatCounters } from "./rows.ts";
 
@@ -24,7 +24,7 @@ function setup(limit = 10_000) {
 		limit,
 		now: () => clock,
 		schedule: (fn) => queue.push(fn),
-		addresses: () => ADDRESSES,
+		names: () => NAMES,
 	});
 	const frame = (bytes: Uint8Array, from: PortNo, to: number, flood: Flood | null = null) =>
 		log.appendFrame({ from, to, flood, frame: bytes });
@@ -38,7 +38,7 @@ function setup(limit = 10_000) {
 }
 
 const filter = (source: string): CaptureFilter => {
-	const r = compileFilter(source);
+	const r = compileFilter(source, NAMES);
 	if (!r.ok) throw new Error(r.error.message);
 	return r.filter;
 };
@@ -56,8 +56,8 @@ describe("rows", () => {
 				seq: 1,
 				time: "1.23",
 				proto: "ICMP",
-				from: { kind: "machine", name: "node1" },
-				to: { kind: "machine", name: "node2" },
+				from: { kind: "machine", n: 1, name: "node1" },
+				to: { kind: "machine", n: 2, name: "node2" },
 				len: 98,
 				info: "echo request seq 1, 64 bytes",
 				note: null,
@@ -71,7 +71,7 @@ describe("rows", () => {
 		const outsider = Uint8Array.of(0x02, 0, 0, 0, 0, 9);
 		frame(eth(BROADCAST, outsider, 0x0800, ipv4Packet(0x0a000202, 0xffffffff, 17, [0, 68, 0, 67, 0, 8, 0, 0])), 4, 0);
 		const [arp, dhcp] = log.tail(2);
-		expect(arp).toMatchObject({ from: { kind: "machine", name: "node1" }, to: { kind: "everyone" } });
+		expect(arp).toMatchObject({ from: { kind: "machine", n: 1, name: "node1" }, to: { kind: "everyone" } });
 		expect(dhcp).toMatchObject({ from: { kind: "raw", text: "10.0.2.2:68" }, to: { kind: "everyone" } });
 	});
 
@@ -80,27 +80,54 @@ describe("rows", () => {
 		const outsider = Uint8Array.of(0x02, 0, 0, 0, 0, 9);
 		frame(eth(mac(2), outsider, 0x0800, ipv4Packet(0x0a58000d, 0x0a58000c, 1, [8, 0, 0, 0, 0, 1, 0, 1])), 5, bit(2));
 		expect(log.tail(1)[0]).toMatchObject({
-			from: { kind: "machine", name: "node3" },
-			to: { kind: "machine", name: "node2" },
+			from: { kind: "machine", n: 3, name: "node3" },
+			to: { kind: "machine", n: 2, name: "node2" },
 		});
+	});
+
+	test("a row keeps the name its machine had when a newer one is called that", () => {
+		const called = (n: number): NameBook => ({ ...NO_NAMES, names: new Map([[n, "web" as MachineName]]) });
+		let names = called(2);
+		const log = createCaptureLog({ schedule: (fn) => fn(), now: () => 0, names: () => names });
+		const append = () => {
+			log.appendFrame({ from: 1, to: bit(2), flood: null, frame: ping(1, 2) });
+			log.appendFrame({ from: 1, to: bit(5), flood: null, frame: ping(1, 5) });
+		};
+		append();
+		names = called(5);
+		append();
+		const shown = () => log.tail(10).map((row) => row.kind === "frame" && row.to);
+		const first = [
+			{ kind: "machine", n: 2, name: "web" },
+			{ kind: "machine", n: 5, name: "node5" },
+		];
+		const then = [
+			{ kind: "machine", n: 2, name: "node2" },
+			{ kind: "machine", n: 5, name: "web" },
+		];
+		expect(shown()).toEqual([...first, ...then]);
+		const compiled = compileFilter("web", names);
+		if (compiled.ok) log.setFilter(compiled.filter);
+		expect(shown()).toEqual([first[0], then[1]]);
 	});
 
 	test("a row keeps the name it had when a newer machine is given the address", () => {
 		const address = 0x0a010001;
-		let names: AddressBook = new Map([[address, { node: "node1", nic: 0 }]]);
-		const log = createCaptureLog({ schedule: (fn) => fn(), now: () => 0, addresses: () => names });
+		const at = (n: number, nic: NicNo): NameBook => ({ ...NO_NAMES, addresses: new Map([[address, { n, nic }]]) });
+		let names = at(1, 0);
+		const log = createCaptureLog({ schedule: (fn) => fn(), now: () => 0, names: () => names });
 		const outsider = Uint8Array.of(0x02, 0, 0, 0, 0, 9);
 		const frame = eth(mac(7), outsider, 0x0800, ipv4Packet(address, 0x08080808, 1, [8, 0, 0, 0, 0, 1, 0, 1]));
 		const append = () => log.appendFrame({ from: 5, to: 0, flood: null, frame });
 		append();
-		names = new Map();
+		names = NO_NAMES;
 		append();
-		names = new Map([[address, { node: "node4", nic: 1 }]]);
+		names = at(4, 1);
 		append();
 		expect(log.tail(3).map((row) => row.kind === "frame" && row.from)).toEqual([
-			{ kind: "machine", name: "node1" },
+			{ kind: "machine", n: 1, name: "node1" },
 			{ kind: "raw", text: "10.1.0.1" },
-			{ kind: "machine", name: "node4" },
+			{ kind: "machine", n: 4, name: "node4" },
 		]);
 		for (const [term, matching] of [
 			["node1", [1]],
@@ -164,20 +191,20 @@ describe("a machine with several NICs", () => {
 	test("is named with its NIC at each hop, and a machine with one is not", () => {
 		const { route } = named();
 		expect(route(routedPing(mac(1), mac(2), 1, 3))).toEqual([
-			{ kind: "machine", name: "node1" },
-			{ kind: "machine", name: "node2", nic: "eth0" },
+			{ kind: "machine", n: 1, name: "node1" },
+			{ kind: "machine", n: 2, name: "node2", nic: "eth0" },
 		]);
 		expect(route(routedPing(mac(2, 1), mac(3), 1, 3))).toEqual([
-			{ kind: "machine", name: "node2", nic: "eth1" },
-			{ kind: "machine", name: "node3" },
+			{ kind: "machine", n: 2, name: "node2", nic: "eth1" },
+			{ kind: "machine", n: 3, name: "node3" },
 		]);
 	});
 
 	test("that is gone still names every NIC past eth0", () => {
 		const { route } = named();
 		expect(route(routedPing(mac(4, 1), mac(4), 4, 4))).toEqual([
-			{ kind: "machine", name: "node4", nic: "eth1" },
-			{ kind: "machine", name: "node4" },
+			{ kind: "machine", n: 4, name: "node4", nic: "eth1" },
+			{ kind: "machine", n: 4, name: "node4" },
 		]);
 	});
 

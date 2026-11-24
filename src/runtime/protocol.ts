@@ -6,7 +6,9 @@ import type { Address, HostEntry } from "../model/index.ts";
 import type { NicNo } from "../net/index.ts";
 
 export interface VmConfig {
-	id: string;
+	/** The machine's number, which its disk is kept under. */
+	n: number;
+	/** Its hostname. */
 	name: string;
 	/** One MAC for each NIC, eth0 first. */
 	macs: readonly string[];

@@ -73,7 +73,7 @@ test("a lab saved before machines had several NICs restores with one each, on th
 		["10.88.0.12", true],
 		["10.88.0.13", false],
 	]);
-	expect(JSON.parse(saveWorkspace(state))).toMatchObject({ version: 3 });
+	expect(JSON.parse(saveWorkspace(state))).toMatchObject({ version: 4 });
 });
 
 test("a lab saved before machines chose addresses restores with the ones they had", () => {
@@ -92,11 +92,43 @@ test("a lab saved before machines chose addresses restores with the ones they ha
 	});
 });
 
+test("a machine comes back with its name, and the pane layout with it", () => {
+	let s = labWith(1);
+	s = run(s, spawnEvent(s, 1, { name: "web-1" }));
+	const web = s.rail[1];
+	s = run(s, isReady(web), { type: "ui/park", machine: "node1" }, { type: "ui/maximise", machine: web });
+	const { state, effects } = restoreWorkspace(initialState(IMAGES, WIDE), saveWorkspace(s));
+	expect(state.rail).toEqual(["node1", "web-1"]);
+	expect(machine(state, web)).toMatchObject({ n: 2, mac: "52:54:00:88:00:0c", sessions: ["web-1:console"] });
+	expect(state.keyboard).toEqual({ kind: "pane", machine: "web-1" });
+	expect(state.panes.maximised).toMatchObject({ machine: "web-1", before: { node1: "user" } });
+	expect(effects.flatMap((e) => (e.type === "vm/boot" ? [e.config.identity.name] : []))).toEqual(state.rail);
+	expect(spawnEvent(state, 1)).toMatchObject({ plan: { machines: [{ identity: { name: "node3" } }] } });
+});
+
+test("a lab saved before machines had names restores each as node and its number", () => {
+	const nics = [{ net: "switch0", port: 4, cut: false, address: "10.1.0.9/24" }];
+	const saved = { ...VERSION_1, version: 3, nodes: [{ ...VERSION_1.nodes[1], gateway: false, nics }] };
+	const { state } = restoreWorkspace(initialState(IMAGES, WIDE), JSON.stringify(saved));
+	expect(state.rail).toEqual(["node2"]);
+	expect(machine(state, "node2").spec).toMatchObject({ gateway: false, nics: [{ address: address("10.1.0.9/24") }] });
+});
+
+test.each([["node2"], ["Web"], ["node01"], [""], [7], [undefined], ["twin", "twin"]])(
+	"a saved machine called %j is refused",
+	(...names) => {
+		const nodes = names.map((name, i) => ({ ...VERSION_1.nodes[i === 0 ? 0 : 2], name, gateway: false, nics: [] }));
+		const nics = [{ net: "none", port: null, cut: false, address: null }];
+		const saved = { ...VERSION_1, version: 4, nodes: nodes.map((node) => ({ ...node, nics })) };
+		expect(() => restoreWorkspace(initialState(IMAGES, WIDE), JSON.stringify(saved))).toThrow("could not be read");
+	},
+);
+
 test.each(["10.1.0.1", "10.1.0.0/24", "10.1.0.1/33", "", 7, undefined])(
 	"a saved machine with the address %j is refused",
 	(bad) => {
 		const nics = [{ net: "switch0", port: 4, cut: false, address: bad }];
-		const saved = { ...VERSION_1, version: 3, nodes: [{ ...VERSION_1.nodes[0], gateway: true, nics }] };
+		const saved = { ...VERSION_1, version: 4, nodes: [{ ...VERSION_1.nodes[0], name: "node1", gateway: true, nics }] };
 		expect(() => restoreWorkspace(initialState(IMAGES, WIDE), JSON.stringify(saved))).toThrow("could not be read");
 	},
 );

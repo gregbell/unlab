@@ -13,6 +13,7 @@ import { imagePath } from "../support/images.ts";
 const TOKEN = "0123456789abcdef";
 const SETUP = setupScript({
 	hostname: "node1",
+	namedPrompt: false,
 	addresses: [defaultAddress(1)],
 	hosts: [],
 	gateway: false,

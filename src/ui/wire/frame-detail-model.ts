@@ -19,14 +19,14 @@ import {
 	ipAddrs,
 	isGroupMac,
 	macStr,
+	nameOf,
+	nicLabel,
 	nicOfMac,
-	nodeNicLabel,
-	nodeOfMac,
 } from "../../net/index.ts";
 
-/** A machine, and how to write it: its name, or `node2:eth1` where the name alone does not say which NIC. */
+/** Machine n, and how to write it: its name, or `node2:eth1` where the name alone does not say which NIC. */
 export interface Named {
-	readonly machine: MachineName;
+	readonly n: number;
 	readonly label: string;
 }
 
@@ -50,7 +50,8 @@ export type Words = readonly (string | Named)[];
 export interface DumpRun {
 	/** Space-separated hex bytes. */
 	readonly text: string;
-	readonly machine: MachineName | null;
+	/** Whose the bytes are. */
+	readonly n: number | null;
 }
 
 export interface DumpRow {
@@ -105,36 +106,38 @@ const field = (label: string, value: string | number, who: Who = null): DetailFi
 	value: String(value),
 	who,
 });
-const named = (machine: MachineName): Named => ({ machine, label: machine });
+const named = (n: number, { names }: FrameEntry): Named => ({ n, label: nameOf(names, n) });
 
 /** Which machine had the address when the frame was captured. */
-function ipWho(ip: number, { names }: FrameEntry): Who {
-	const name = names.get(ip)?.node;
-	return name ? { kind: "machine", ...named(name) } : null;
+function ipWho(ip: number, e: FrameEntry): Who {
+	const at = e.names.addresses.get(ip);
+	return at ? { kind: "machine", ...named(at.n, e) } : null;
 }
 
-function macNamed(f: Uint8Array, off: number, names: LabNames): Named | null {
-	const at = nicOfMac(f, off);
-	return at && { machine: at.node, label: nodeNicLabel(at, names.severalNics(at.node)) };
+function macNamed(e: FrameEntry, off: number, names: LabNames): Named | null {
+	const at = nicOfMac(e.bytes, off);
+	if (!at) return null;
+	const name = nameOf(e.names, at.n);
+	return { n: at.n, label: nicLabel(name, at.nic, names.severalNics(name)) };
 }
 
-function macWho(f: Uint8Array, off: number, names: LabNames): Who {
-	if (macStr(f, off) === BROADCAST_MAC) return { kind: "everyone" };
-	const at = macNamed(f, off, names);
+function macWho(e: FrameEntry, off: number, names: LabNames): Who {
+	if (macStr(e.bytes, off) === BROADCAST_MAC) return { kind: "everyone" };
+	const at = macNamed(e, off, names);
 	return at && { kind: "machine", ...at };
 }
 
 /** Byte ranges that are a machine's MAC or IPv4 address, by where the protocol puts them. */
-function addressSpans(e: FrameEntry): { readonly start: number; readonly end: number; readonly name: MachineName }[] {
+function addressSpans(e: FrameEntry): { readonly start: number; readonly end: number; readonly n: number }[] {
 	const f = e.bytes;
-	const spans: { start: number; end: number; name: MachineName }[] = [];
+	const spans: { start: number; end: number; n: number }[] = [];
 	const mac = (off: number) => {
-		const name = f.length >= off + 6 ? nodeOfMac(f, off) : null;
-		if (name) spans.push({ start: off, end: off + 6, name });
+		const at = nicOfMac(f, off);
+		if (at) spans.push({ start: off, end: off + 6, n: at.n });
 	};
 	const ip = (off: number) => {
-		const name = e.names.get(u32(f, off))?.node;
-		if (name) spans.push({ start: off, end: off + 4, name });
+		const at = e.names.addresses.get(u32(f, off));
+		if (at) spans.push({ start: off, end: off + 4, n: at.n });
 	};
 	mac(0);
 	mac(6);
@@ -152,19 +155,19 @@ function addressSpans(e: FrameEntry): { readonly start: number; readonly end: nu
 
 function dump(e: FrameEntry): DumpRow[] {
 	const f = e.bytes;
-	const owner: (MachineName | null)[] = new Array(f.length).fill(null);
+	const owner: (number | null)[] = new Array(f.length).fill(null);
 	const starts = new Set<number>();
-	for (const { start, end, name } of addressSpans(e)) {
-		owner.fill(name, start, end);
+	for (const { start, end, n } of addressSpans(e)) {
+		owner.fill(n, start, end);
 		starts.add(start);
 	}
 	const rows: DumpRow[] = [];
 	for (let row = 0; row < f.length; row += 16) {
-		const runs: { text: string; machine: MachineName | null }[] = [];
+		const runs: { text: string; n: number | null }[] = [];
 		for (let i = row; i < Math.min(row + 16, f.length); i++) {
 			const last = runs[runs.length - 1];
-			if (last && last.machine === owner[i] && !starts.has(i)) last.text += ` ${hex(f[i], 2)}`;
-			else runs.push({ text: hex(f[i], 2), machine: owner[i] });
+			if (last && last.n === owner[i] && !starts.has(i)) last.text += ` ${hex(f[i], 2)}`;
+			else runs.push({ text: hex(f[i], 2), n: owner[i] });
 		}
 		rows.push({ offset: hex(row, 4), runs });
 	}
@@ -178,8 +181,8 @@ function groups(e: FrameEntry, names: LabNames): DetailGroup[] {
 		{
 			title: "ethernet II",
 			fields: [
-				field("destination", macStr(f, 0), isGroupMac(f) ? { kind: "everyone" } : macWho(f, 0, names)),
-				field("source", macStr(f, 6), macWho(f, 6, names)),
+				field("destination", macStr(f, 0), isGroupMac(f) ? { kind: "everyone" } : macWho(e, 0, names)),
+				field("source", macStr(f, 6), macWho(e, 6, names)),
 				field("type", `0x${hex(Math.max(type, 0), 4)}${ETHERTYPES[type] ? ` ${ETHERTYPES[type]}` : ""}`),
 			],
 		},
@@ -190,9 +193,9 @@ function groups(e: FrameEntry, names: LabNames): DetailGroup[] {
 		out.push({
 			title: arp.op === 1 ? "arp request" : arp.op === 2 ? "arp reply" : `arp opcode ${arp.op}`,
 			fields: [
-				field("sender mac", macStr(f, 22), macWho(f, 22, names)),
+				field("sender mac", macStr(f, 22), macWho(e, 22, names)),
 				field("sender ip", ip4str(arp.spa), ipWho(arp.spa, e)),
-				field("target mac", macStr(f, 32), macWho(f, 32, names)),
+				field("target mac", macStr(f, 32), macWho(e, 32, names)),
 				field("target ip", ip4str(arp.tpa), ipWho(arp.tpa, e)),
 			],
 		});
@@ -267,8 +270,8 @@ const atPort = (port: PortNo, names: LabNames): Words => {
 function destination(e: FrameEntry, names: LabNames): Words {
 	const f = e.bytes;
 	const ip = ipAddrs(f);
-	const byIp = ip ? e.names.get(ip.dst)?.node : undefined;
-	return [macNamed(f, 0, names) ?? (byIp ? named(byIp) : macStr(f, 0))];
+	const byIp = ip ? e.names.addresses.get(ip.dst) : undefined;
+	return [macNamed(e, 0, names) ?? (byIp ? named(byIp.n, e) : macStr(f, 0))];
 }
 
 function did(e: FrameEntry, names: LabNames): Words[] {

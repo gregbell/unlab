@@ -10,6 +10,8 @@ import type { ExecDone, FromMachine, MachineData, ToMachine } from "./vm-worker.
 
 export interface MachineSetup {
 	readonly n: number;
+	/** A name someone chose. Left out, node<n>. */
+	readonly name?: string;
 	/** The port each NIC is plugged into, eth0 first. Null leaves it unplugged. */
 	readonly ports: readonly (PortNo | null)[];
 	/** Each NIC's address, or null for none. Left out, the lab's own choice. */
@@ -28,6 +30,10 @@ export interface TestMachine {
 	exec(cmd: string): Promise<ExecDone>;
 	/** Run one that must succeed, and return what it printed. */
 	run(cmd: string): Promise<string>;
+	/** Type into the console. */
+	type(data: string): void;
+	/** What the console has printed, without escape sequences. */
+	console(): string;
 	/** What the machine said when a NIC went away. */
 	readonly lost: readonly string[];
 	/** Put a frame on one of its NICs, as the switch would. */
@@ -54,14 +60,16 @@ export async function bootLab(setups: readonly MachineSetup[]): Promise<TestLab>
 		(addr ?? ports.map((_, nic) => (nic === 0 ? addressStr(defaultAddress(n)) : null))).map((text) =>
 			text === null ? null : address(text),
 		);
+	const nameOf = ({ n, name = `node${n}` }: MachineSetup) => name;
 	const hosts = setups.flatMap((setup) => {
 		const first = addressesOf(setup).find((a) => a !== null);
-		return first ? [{ ip: ip4str(first.ip), name: `node${setup.n}` }] : [];
+		return first ? [{ ip: ip4str(first.ip), name: nameOf(setup) }] : [];
 	});
 
 	const boot = async (setup: MachineSetup): Promise<TestMachine> => {
 		const data: MachineData = {
-			name: `node${setup.n}`,
+			name: nameOf(setup),
+			namedPrompt: setup.name !== undefined,
 			addresses: addressesOf(setup),
 			macs: NICS.slice(0, setup.ports.length).map((nic) => macStr(nodeMac(setup.n, nic))),
 			image: setup.distro ?? "alpine",
@@ -85,6 +93,7 @@ export async function bootLab(setups: readonly MachineSetup[]): Promise<TestLab>
 		const startedAt = performance.now();
 		const pending = new Map<number, (result: ExecDone) => void>();
 		const lost: string[] = [];
+		let printed = "";
 		await new Promise<void>((resolve, reject) => {
 			worker.on("error", reject);
 			worker.on("message", (m: FromMachine) => {
@@ -97,6 +106,9 @@ export async function bootLab(setups: readonly MachineSetup[]): Promise<TestLab>
 						return;
 					case "lost":
 						lost.push(m.reason);
+						return;
+					case "console":
+						printed += m.text;
 						return;
 					case "ran":
 						pending.get(m.id)?.(m.result);
@@ -131,6 +143,9 @@ export async function bootLab(setups: readonly MachineSetup[]): Promise<TestLab>
 				}
 				return done.stdout;
 			},
+			type: (data) => post({ type: "input", data }),
+			// biome-ignore lint/suspicious/noControlCharactersInRegex: escape sequences start with one.
+			console: () => printed.replace(/\x1b(?:\][^\x07]*\x07|\[[\d;?]*[a-zA-Z])/g, ""),
 			lost,
 			deliver,
 		};

@@ -16,11 +16,11 @@ import {
 	restoreWorkspace,
 	type Store,
 	saveWorkspace,
-	selectAddresses,
+	selectNames,
 	severalNics,
 } from "./model/index.ts";
 import { compileFilter } from "./net/index.ts";
-import { createRuntime, type DistroManifest, deleteMachineDisk, type Engine } from "./runtime/index.ts";
+import { createRuntime, type DistroManifest, type Engine } from "./runtime/index.ts";
 import type { AppServices, TerminalHost } from "./ui/services.ts";
 
 interface Manifest extends DistroManifest {
@@ -76,7 +76,7 @@ async function main(): Promise<void> {
 	const capture = createCaptureLog({
 		schedule,
 		now,
-		addresses: () => selectAddresses(store.state),
+		names: () => selectNames(store.state),
 		severalNics: (machine) => severalNics(store.state, machine),
 	});
 	let runtime: Engine | undefined;
@@ -106,13 +106,7 @@ async function main(): Promise<void> {
 	};
 	store.subscribe(save);
 	runtime = createRuntime({
-		store: {
-			dispatchRuntime(event) {
-				if (event.type === "vm/stopped" && store.state.machines[event.machine]?.life.phase === "removing")
-					deleteMachineDisk(event.machine);
-				store.dispatchRuntime(event);
-			},
-		},
+		store,
 		capture,
 		manifest,
 		announce: (text) => app.announce(text),
@@ -123,14 +117,20 @@ async function main(): Promise<void> {
 	runtime.run({ type: "clock", hz: clockHz(store.state) });
 
 	let filter = store.state.capture.filter;
+	let filtered = true;
+	let names = selectNames(store.state);
 	let paused = store.state.capture.paused;
 	store.subscribe(() => {
 		const next = store.state.capture;
-		if (next.filter !== filter) {
+		const known = selectNames(store.state);
+		// A word that named no machine when it was typed can name one later.
+		if (next.filter !== filter || (!filtered && known !== names)) {
 			filter = next.filter;
-			const compiled = compileFilter(filter);
+			const compiled = compileFilter(filter, known);
+			filtered = compiled.ok;
 			if (compiled.ok) capture.setFilter(compiled.filter);
 		}
+		names = known;
 		if (next.paused !== paused) {
 			paused = next.paused;
 			capture.setPaused(paused);

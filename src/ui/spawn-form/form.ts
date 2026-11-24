@@ -33,7 +33,8 @@ export interface SpawnChoice {
 	/** The form gives every machine one NIC. The bar's `--nics` gives more. */
 	readonly nics: 1;
 	readonly net: NicSpec["net"];
-	/** The form leaves both to the lab. The bar's `--addr` and `--no-gateway` choose. */
+	/** The form leaves these to the lab. The bar's `--name`, `--addr` and `--no-gateway` choose. */
+	readonly name: null;
 	readonly addr: null;
 	readonly gateway: "on";
 }
@@ -71,6 +72,7 @@ export function defaultChoice(lab: LabState): SpawnChoice {
 		disk: "4",
 		nics: 1,
 		net: SWITCH_NAME,
+		name: null,
 		addr: null,
 		gateway: "on",
 	};

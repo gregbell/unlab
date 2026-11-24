@@ -7,14 +7,14 @@
 
 import type { Cause, MachineName, PortNo } from "../model/index.ts";
 import {
-	type AddressBook,
 	arpAddrs,
 	type CaptureFilter,
 	ETH_ARP,
 	type Flood,
 	MATCH_ALL,
+	type NameBook,
 	type NicNo,
-	NO_ADDRESSES,
+	NO_NAMES,
 } from "../net/index.ts";
 import { type CaptureRow, captureRow, type HasSeveralNics } from "./rows.ts";
 
@@ -29,8 +29,8 @@ export interface FrameEntry {
 	readonly flood: Flood | null;
 	/** The switch's snapshot. Never mutated. */
 	readonly bytes: Uint8Array;
-	/** Whose addresses were whose when it was captured. A later machine can be given one of them. */
-	readonly names: AddressBook;
+	/** Who was who when it was captured. A later machine can be given the same address or name. */
+	readonly names: NameBook;
 	/** An ARP request that went a second unanswered. */
 	readonly noReply: boolean;
 }
@@ -44,7 +44,7 @@ export interface LinkEntry {
 	readonly nic: NicNo;
 	readonly up: boolean;
 	readonly cause: Cause;
-	readonly names: AddressBook;
+	readonly names: NameBook;
 }
 
 export type CaptureEntry = FrameEntry | LinkEntry;
@@ -119,8 +119,8 @@ export interface CaptureOptions {
 	readonly schedule: (fn: () => void) => void;
 	/** ms since the lab started. */
 	readonly now: () => number;
-	/** The addresses the lab has set, as they are now. Default none. */
-	readonly addresses?: () => AddressBook;
+	/** Who is who in the lab now. Default no one. */
+	readonly names?: () => NameBook;
 	/** Rows name a NIC of these machines, and of any other machine's only past eth0. Default none. */
 	readonly severalNics?: HasSeveralNics;
 }
@@ -140,7 +140,7 @@ const arpKey = (asker: number, asked: number): string => `${asker}>${asked}`;
 
 export function createCaptureLog(opts: CaptureOptions): CaptureLog {
 	const limit = opts.limit ?? 10_000;
-	const { schedule, now, severalNics, addresses = () => NO_ADDRESSES } = opts;
+	const { schedule, now, severalNics, names = () => NO_NAMES } = opts;
 
 	const ring: (Stored | undefined)[] = new Array(limit);
 	let first = 1;
@@ -296,7 +296,7 @@ export function createCaptureLog(opts: CaptureOptions): CaptureLog {
 				to,
 				flood,
 				bytes: frame,
-				names: addresses(),
+				names: names(),
 				noReply: false,
 			};
 			if (addrs?.op === 1 && addrs.spa !== addrs.tpa) {
@@ -308,7 +308,7 @@ export function createCaptureLog(opts: CaptureOptions): CaptureLog {
 
 		appendLink({ port, machine, nic, up, cause }) {
 			if (paused) return;
-			push({ kind: "link", seq: next, t: now(), port, machine, nic, up, cause, names: addresses() });
+			push({ kind: "link", seq: next, t: now(), port, machine, nic, up, cause, names: names() });
 			changed();
 		},
 

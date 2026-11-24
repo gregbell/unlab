@@ -1,6 +1,8 @@
 // The capture filter. Terms separated by spaces must all match; the word `or`
 // separates alternatives. A term is a protocol, a machine name (either end, by
-// any of its MACs or the addresses the lab set), one of its NICs (`node2:eth1`, by its MAC alone), an IPv4 address, a MAC address, or `port:N`, matched without regard to case.
+// any of its MACs or the addresses the lab set), one of its NICs (`node2:eth1`,
+// by its MAC alone), an IPv4 address, a MAC address, or `port:N`, matched
+// without regard to case.
 //
 // It compiles to predicates over raw bytes and port numbers, because capture
 // tests every frame the switch handles: no decoding and no strings per frame.
@@ -8,14 +10,14 @@
 import { parseIp4 } from "./address.ts";
 import { ETH_ARP, ETH_HDR, ETH_IPV4, ETH_IPV6, IP_ICMP, IP_TCP, IP_UDP } from "./frames.ts";
 import {
-	type AddressBook,
-	NICS,
+	type MachineName,
+	type NameBook,
 	type NicNo,
-	type NodeName,
+	type NodeNic,
+	nameOf,
 	nicOfMac,
-	nodeMac,
+	parseDefaultName,
 	parseNicName,
-	parseNodeName,
 } from "./identity.ts";
 
 export interface CaptureFilter {
@@ -23,15 +25,15 @@ export interface CaptureFilter {
 	readonly source: string;
 	/**
 	 * `to` is the egress port mask: bit p-1 is set when the frame went out of
-	 * port p. `names` is whose addresses were whose when the frame was captured.
+	 * port p. `names` is who was who when the frame was captured.
 	 */
-	matchesFrame(frame: Uint8Array, from: number, to: number, names: AddressBook): boolean;
+	matchesFrame(frame: Uint8Array, from: number, to: number, names: NameBook): boolean;
 	/**
 	 * A link event row is context, so protocol terms never hide it. Port,
 	 * machine, NIC, address and MAC terms keep only the rows about that port,
 	 * machine or NIC.
 	 */
-	matchesLink(port: number, machine: NodeName, nic: NicNo, names: AddressBook): boolean;
+	matchesLink(port: number, machine: MachineName, nic: NicNo, names: NameBook): boolean;
 }
 
 export interface FilterError {
@@ -46,8 +48,8 @@ export type FilterResult =
 	| { readonly ok: true; readonly filter: CaptureFilter }
 	| { readonly ok: false; readonly error: FilterError };
 
-type FramePredicate = (f: Uint8Array, from: number, to: number, names: AddressBook) => boolean;
-type LinkPredicate = (port: number, machine: NodeName, nic: NicNo, names: AddressBook) => boolean;
+type FramePredicate = (f: Uint8Array, from: number, to: number, names: NameBook) => boolean;
+type LinkPredicate = (port: number, machine: MachineName, nic: NicNo, names: NameBook) => boolean;
 interface Term {
 	readonly frame: FramePredicate;
 	readonly link: LinkPredicate;
@@ -82,26 +84,46 @@ function macAt(f: Uint8Array, off: number, mac: Uint8Array): boolean {
 }
 const hasMac = (f: Uint8Array, mac: Uint8Array): boolean => f.length >= 12 && (macAt(f, 0, mac) || macAt(f, 6, mac));
 
+/** Whether the NIC at either end passes. */
+function someNic(f: Uint8Array, test: (at: NodeNic) => boolean): boolean {
+	const to = nicOfMac(f, 0);
+	if (to && test(to)) return true;
+	const from = nicOfMac(f, 6);
+	return from !== null && test(from);
+}
+
 const always: LinkPredicate = () => true;
 const ipv4: FramePredicate = isIpv4;
 
-const PROTOCOLS: Readonly<Record<string, FramePredicate>> = {
-	arp: (f) => ethertype(f) === ETH_ARP,
-	ip: ipv4,
-	ipv4,
-	ipv6: (f) => ethertype(f) === ETH_IPV6,
-	icmp: (f) => ipProto(f) === IP_ICMP,
-	tcp: (f) => ipProto(f) === IP_TCP,
-	udp: (f) => ipProto(f) === IP_UDP,
-	dhcp: (f) => l4Uses(f, IP_UDP, 67, 68),
-	dns: (f) => l4Uses(f, IP_UDP, 53) || l4Uses(f, IP_TCP, 53),
-};
+const PROTOCOLS: ReadonlyMap<string, FramePredicate> = new Map([
+	["arp", (f) => ethertype(f) === ETH_ARP],
+	["ip", ipv4],
+	["ipv4", ipv4],
+	["ipv6", (f) => ethertype(f) === ETH_IPV6],
+	["icmp", (f) => ipProto(f) === IP_ICMP],
+	["tcp", (f) => ipProto(f) === IP_TCP],
+	["udp", (f) => ipProto(f) === IP_UDP],
+	["dhcp", (f) => l4Uses(f, IP_UDP, 67, 68)],
+	["dns", (f) => l4Uses(f, IP_UDP, 53) || l4Uses(f, IP_TCP, 53)],
+]);
 
+const OR = "or";
+const PORT_WORD = "port";
 const MAC = /^[0-9a-f]{2}([:-][0-9a-f]{2}){5}$/;
-const PORT = /^port:([1-8])$/;
+const PORT = new RegExp(`^${PORT_WORD}:([1-8])$`);
 
-function parseTerm(word: string): Term | null {
-	const protocol = PROTOCOLS[word];
+/** The words a filter reads as something other than a machine. */
+export const FILTER_WORDS: readonly string[] = [...PROTOCOLS.keys(), OR, PORT_WORD];
+
+/** `node<n>` is the lab's whether or not machine n has been there. */
+function isMachine(word: string, { names }: NameBook): boolean {
+	if (parseDefaultName(word) !== null) return true;
+	for (const name of names.values()) if (name === word) return true;
+	return false;
+}
+
+function parseTerm(word: string, known: NameBook): Term | null {
+	const protocol = PROTOCOLS.get(word);
 	if (protocol) return { frame: protocol, link: always };
 
 	const port = PORT.exec(word);
@@ -112,21 +134,24 @@ function parseTerm(word: string): Term | null {
 	}
 
 	const colon = word.indexOf(":");
-	const n = parseNodeName(colon < 0 ? word : word.slice(0, colon));
-	if (n !== null) {
-		const name: NodeName = `node${n}`;
+	const name = colon < 0 ? word : word.slice(0, colon);
+	if (isMachine(name, known)) {
 		if (colon < 0) {
-			const macs = NICS.map((nic) => nodeMac(n, nic));
 			return {
-				frame: (f, _from, _to, names) =>
-					macs.some((mac) => hasMac(f, mac)) || someIp(f, (ip) => names.get(ip)?.node === name),
+				frame(f, _from, _to, names) {
+					const isNamed = (at: NodeNic | undefined) => at !== undefined && nameOf(names, at.n) === name;
+					return someNic(f, isNamed) || someIp(f, (ip) => isNamed(names.addresses.get(ip)));
+				},
 				link: (_p, m) => m === name,
 			};
 		}
 		const nic = parseNicName(word.slice(colon + 1));
-		if (nic === null) return null;
-		const mac = nodeMac(n, nic);
-		return { frame: (f) => hasMac(f, mac), link: (_p, m, k) => m === name && k === nic };
+		if (nic !== null) {
+			return {
+				frame: (f, _from, _to, names) => someNic(f, (at) => at.nic === nic && nameOf(names, at.n) === name),
+				link: (_p, m, k) => m === name && k === nic,
+			};
+		}
 	}
 
 	const ip = parseIp4(word);
@@ -134,8 +159,8 @@ function parseTerm(word: string): Term | null {
 		return {
 			frame: (f) => someIp(f, (other) => other === ip),
 			link(_p, m, k, names) {
-				const at = names.get(ip);
-				return m === at?.node && k === at.nic;
+				const at = names.addresses.get(ip);
+				return at !== undefined && m === nameOf(names, at.n) && k === at.nic;
 			},
 		};
 	}
@@ -143,13 +168,17 @@ function parseTerm(word: string): Term | null {
 	if (MAC.test(word)) {
 		const mac = Uint8Array.from(word.split(/[:-]/), (h) => Number.parseInt(h, 16));
 		const at = nicOfMac(mac, 0);
-		return { frame: (f) => hasMac(f, mac), link: (_p, m, k) => m === at?.node && k === at.nic };
+		return {
+			frame: (f) => hasMac(f, mac),
+			link: (_p, m, k, names) => at !== null && m === nameOf(names, at.n) && k === at.nic,
+		};
 	}
 
 	return null;
 }
 
-export function compileFilter(source: string): FilterResult {
+/** `known` is who is who now, so that a word that names no machine is not taken for one. */
+export function compileFilter(source: string, known: NameBook): FilterResult {
 	const groups: Term[][] = [[]];
 	let lastOr: { token: string; start: number } | null = null;
 	const orError = (token: string, start: number): FilterResult => ({
@@ -162,13 +191,13 @@ export function compileFilter(source: string): FilterResult {
 		const start = m.index;
 		const word = token.toLowerCase();
 		const group = groups[groups.length - 1];
-		if (word === "or") {
+		if (word === OR) {
 			if (group.length === 0) return orError(token, start);
 			groups.push([]);
 			lastOr = { token, start };
 			continue;
 		}
-		const term = parseTerm(word);
+		const term = parseTerm(word, known);
 		if (!term) {
 			return {
 				ok: false,

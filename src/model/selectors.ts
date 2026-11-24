@@ -2,18 +2,9 @@
 // it returns the same object until one of them changes and a subscriber can
 // compare with Object.is.
 
-import { type AddressBook, addressStr, ip4str, LAB_SUBNET, NICS, nicName, subnetStr } from "../net/index.ts";
+import { addressStr, ip4str, LAB_SUBNET, type NameBook, NICS, nicName, subnetStr } from "../net/index.ts";
 import { nicLabel, nicMac, sessionLabel } from "./identity.ts";
-import {
-	ACCEPTS,
-	type Accepts,
-	addressBook,
-	addressOf,
-	machineList,
-	nicPortsOf,
-	plugsOf,
-	portsOf,
-} from "./machines.ts";
+import { ACCEPTS, type Accepts, addressOf, machineList, nameBook, nicPortsOf, plugsOf, portsOf } from "./machines.ts";
 import { keyboardHolder, parkedPanes, visiblePanes } from "./panes.ts";
 import { type Tiling, tile } from "./tiling.ts";
 import {
@@ -79,10 +70,10 @@ export function addressText(machine: Pick<Machine, "spec">): string {
 	return address ? ip4str(address.ip) : "no address";
 }
 
-/** Whose NIC each address the lab set is on, for naming what a frame's bytes point at. */
-export const selectAddresses: (state: LabState) => AddressBook = memo(
-	(s) => [s.machines, s.rail],
-	(machines, rail) => addressBook({ machines, rail }),
+/** Who is who in the lab now, for naming what a frame's bytes point at. */
+export const selectNames: (state: LabState) => NameBook = memo(
+	(s) => [s.machines, s.rail, s.departed],
+	(machines, rail, departed) => nameBook({ machines, rail, departed }),
 );
 
 /** The subnet the lab's addresses are in, or how many there are. A lab that has none yet starts in this one. */
@@ -255,6 +246,7 @@ export const selectDetails: (state: LabState) => MachineDetails | null = memo(
 );
 
 export interface PortHolder {
+	readonly n: number;
 	readonly name: MachineName;
 	readonly hue: HueNo;
 	/** What `link up` and `link down` call the cable: `node2`, or `node2:eth1` when the machine has more than one NIC. */
@@ -276,10 +268,10 @@ export interface PortView {
 
 function portView(port: PortNo, machine: Machine | undefined): PortView {
 	if (!machine) return { port, state: "empty", machine: null, word: null, actionLabel: null };
-	const { name, hue, life } = machine;
+	const { n, name, hue, life } = machine;
 	const nic = NICS.find((k) => nicPortsOf(life)[k] === port) ?? 0;
 	const label = nicLabel(machine, nic);
-	const holder = { name, hue, label, nic: machine.spec.nics.length > 1 ? nicName(nic) : null };
+	const holder = { n, name, hue, label, nic: machine.spec.nics.length > 1 ? nicName(nic) : null };
 	if (life.phase === "removing") return { port, state: "removing", machine: holder, word: "down", actionLabel: null };
 	const plug = plugsOf(life)[nic];
 	if (life.phase === "booting" || !plug)
