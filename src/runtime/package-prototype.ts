@@ -26,6 +26,8 @@ export function packageBackend() {
 
 // fetchRoutes speaks HTTP inside the guest. The browser uses HTTPS outside it.
 // A bind mount changes apk's stock URL for this boot without editing its disk.
-export const alpinePackageSetup = `set -e
-sed 's|https://dl-cdn\\.alpinelinux\\.org/alpine/|http://dl-cdn.alpinelinux.org/alpine/|g' /etc/apk/repositories > /run/unlab-apk-repositories
+export const alpinePackageSetup = String.raw`set -e
+sed -e 's|https://dl-cdn\.alpinelinux\.org/alpine/|http://dl-cdn.alpinelinux.org/alpine/|g' \
+    -e 's|^\(http://dl-cdn\.alpinelinux\.org/alpine/v[0-9.]*\)/main$|\1 main community|' \
+    /etc/apk/repositories > /run/unlab-apk-repositories
 mount --bind /run/unlab-apk-repositories /etc/apk/repositories`;

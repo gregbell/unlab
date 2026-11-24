@@ -100,6 +100,9 @@ The guest package managers verify the distribution signatures as usual.
 Unlab only handles requests for those repository paths. This uses no Wisp
 relay and needs no hosted Unlab service.
 
+Alpine boots with both `main` and `community` enabled. To try a community
+package, run `sudo apk add vim`, then `vim --version`.
+
 Package access is selected at boot. `spawn 1 alpine --no-net` skips it.
 The switch's cable controls affect traffic between lab machines independently.
 Installs require the selected mirror to be reachable and to allow browser
