@@ -22,7 +22,7 @@ function originTrials(): Plugin {
 			tokens.map((content) => ({
 				tag: "meta",
 				attrs: { "http-equiv": "origin-trial", content },
-				injectTo: "head-prepend",
+				injectTo: "head",
 			})),
 	};
 }

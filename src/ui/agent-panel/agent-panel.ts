@@ -47,10 +47,13 @@ function resultText(call: AgentCall): string {
 const FLAG = "chrome://flags/#enable-webmcp-testing";
 const GUIDE = "https://github.com/gregbell/unlab#use-the-lab-with-an-ai-agent";
 
+const guideLink = html`<a href=${GUIDE} target="_blank" rel="noopener noreferrer">connect an agent</a>`;
+
 function about({ webmcp, paused, calls }: LabState["agent"]): TemplateResult | string {
 	if (webmcp.kind === "absent") {
 		return html`This tab has no WebMCP, so no agent can call these yet. In Chrome or Edge 150 or later, open
-			<span class="address">${FLAG}</span>, choose Enabled and relaunch.`;
+			<span class="address">${FLAG}</span>, choose Enabled and relaunch. Or let an agent
+			open the lab in its own Chrome: ${guideLink}.`;
 	}
 	if (webmcp.kind === "refused") {
 		return `This browser refused the tools, so an agent may not be able to call them. It said: ${webmcp.message}`;
@@ -59,7 +62,7 @@ function about({ webmcp, paused, calls }: LabState["agent"]): TemplateResult | s
 	const ready =
 		"An agent in this browser gets the same verbs as the command bar. You decide which ones run without asking.";
 	if (calls.length > 0) return ready;
-	return html`${ready} To start, <a href=${GUIDE} target="_blank" rel="noopener noreferrer">connect an agent</a>.`;
+	return html`${ready} To start, ${guideLink}.`;
 }
 
 /**
