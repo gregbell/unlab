@@ -86,6 +86,8 @@ export class UnlabAgentPanel extends UnlabElement {
 	readonly #since = new Select(this, (s) => firstCallText(s.agent.firstCallAt, s.now));
 	#waitingIds = "";
 	#armed = true;
+	/** The waiting calls changed: bring the newest into view once it is drawn. */
+	#show = false;
 	#arming: ReturnType<typeof setTimeout> | undefined;
 	/** What the last press of the setup button came to. */
 	#said = "";
@@ -102,6 +104,7 @@ export class UnlabAgentPanel extends UnlabElement {
 		if (ids === this.#waitingIds) return;
 		this.#waitingIds = ids;
 		this.#armed = false;
+		this.#show = waiting.length > 0;
 		clearTimeout(this.#arming);
 		this.#arming = setTimeout(() => {
 			this.#armed = true;
@@ -136,10 +139,21 @@ export class UnlabAgentPanel extends UnlabElement {
 	}
 
 	override updated(): void {
+		if (this.#show) {
+			this.#show = false;
+			// In a narrow window the panel is under everything else.
+			void this.#showNewest();
+		}
 		if (!this.#tried || this.querySelector(".try")) return;
 		this.#tried = false;
 		// The button under the keyboard went when its call was logged.
 		if (document.activeElement === document.body) this.querySelector<HTMLElement>(".calls-head")?.focus();
+	}
+
+	async #showNewest(): Promise<void> {
+		const newest = [...this.querySelectorAll("unlab-confirm")].at(-1);
+		await newest?.updateComplete;
+		newest?.scrollIntoView({ block: "nearest" });
 	}
 
 	#setup({ webmcp, paused, calls, policies }: LabState["agent"]): TemplateResult | typeof nothing {

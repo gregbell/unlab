@@ -180,3 +180,33 @@ test("try a call makes a person's first call through the browser", async ({ page
 	await expect(panel.getByRole("button", { name: "try a call" })).toHaveCount(0);
 	await expect(page.getByRole("contentinfo").getByRole("button", { name: /agent active/ })).toBeVisible();
 });
+
+for (const [where, width, height] of [
+	["beside the form", 1440, 900],
+	["beside a form taller than the window", 1100, 600],
+	["under the form in a narrow window", 700, 700],
+] as const) {
+	test(`an agent's first boot asks in view on the empty lab: ${where}`, async ({ page }) => {
+		await page.setViewportSize({ width, height });
+		await page.goto("/");
+		await expect(page.getByRole("heading", { name: "Your Linux lab in a tab." })).toBeVisible();
+		await expect.poll(() => registered(page)).toHaveLength(7);
+
+		await start(page, "spawn", "machines_spawn", { count: 1, image: "alpine" });
+		const boot = page.locator("unlab-agent-panel").getByRole("button", { name: "Boot node1", exact: true });
+		await expect(boot).toBeInViewport({ ratio: 1 });
+		await boot.click();
+		expect(await finish(page, "spawn")).toMatchObject({ data: { names: ["node1"] } });
+		await expect(page.getByText("1 of 1 machine ready")).toBeVisible({ timeout: 60_000 });
+	});
+}
+
+test("an approval stays in view below a long list of calls", async ({ page }) => {
+	await page.setViewportSize({ width: 1440, height: 500 });
+	await openWithTwoMachines(page);
+	for (let i = 0; i < 12; i++) await call(page, "machines_list", {});
+	await start(page, "remove", "machines_remove", { names: "node2" });
+	await expect(
+		page.locator("unlab-agent-panel").getByRole("button", { name: "Remove node2", exact: true }),
+	).toBeInViewport({ ratio: 1 });
+});
