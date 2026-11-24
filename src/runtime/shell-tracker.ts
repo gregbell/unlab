@@ -31,6 +31,14 @@ export interface ShellTracker {
 	/** A line was sent to the session. It only counts while the shell is at a prompt. */
 	submitted(): readonly ShellEvent[];
 	/**
+	 * A prompt is showing that a typed-ahead line should follow, and the line's
+	 * Enter has not been echoed. A shell that has the line echoes it at once, so
+	 * a session that stays quiet like this is really waiting at its prompt.
+	 */
+	readonly expectsTypedAhead: boolean;
+	/** The session stayed quiet: the typed-ahead lines were read by a program, and the shell is at its prompt. */
+	settle(): readonly ShellEvent[];
+	/**
 	 * From now on, believe only marks carrying `unlab=<token>`: a new boot's
 	 * prompt. Any program can print `ESC]133;D;0`, but none can know this.
 	 * Starts over at unknown, because a new boot is a new shell.
@@ -59,10 +67,12 @@ export function createShellTracker(): ShellTracker {
 	/**
 	 * Lines submitted while a command ran. The shell runs each as soon as the
 	 * prompt before it appears, so that prompt starts a command, not a wait.
-	 * When a program read the line itself, this overcounts by one, and the
-	 * shell reads as running until its next prompt: the safe side.
+	 * When a program read the line itself, this overcounts, and the shell reads
+	 * as running until `settle`: the safe side.
 	 */
 	let queued = 0;
+	/** The command that is running is a typed-ahead line, if there was one. */
+	let typedAhead = false;
 	let token: string | null = null;
 	let state: ScanState = "ground";
 	const body = new Uint8Array(KEPT);
@@ -88,11 +98,14 @@ export function createShellTracker(): ShellTracker {
 			if (queued > 0) {
 				queued--;
 				echoed = false;
+				typedAhead = true;
 				return;
 			}
 		}
 		enter("prompt");
 	};
+
+	const expectsTypedAhead = () => phase === "running" && typedAhead && !echoed;
 
 	const sequenceEnded = (at: number) => {
 		state = "ground";
@@ -120,6 +133,17 @@ export function createShellTracker(): ShellTracker {
 	return {
 		get phase() {
 			return phase;
+		},
+
+		get expectsTypedAhead() {
+			return expectsTypedAhead();
+		},
+
+		settle() {
+			if (!expectsTypedAhead()) return NONE;
+			phase = "prompt";
+			queued = 0;
+			return [{ kind: "phase", phase: "prompt" }];
 		},
 
 		scan(bytes) {
@@ -172,6 +196,7 @@ export function createShellTracker(): ShellTracker {
 			phase = "unknown";
 			echoed = false;
 			queued = 0;
+			typedAhead = false;
 		},
 
 		submitted() {
@@ -179,6 +204,7 @@ export function createShellTracker(): ShellTracker {
 			if (phase !== "prompt") return NONE;
 			phase = "running";
 			echoed = false;
+			typedAhead = false;
 			return [{ kind: "phase", phase: "running" }];
 		},
 	};

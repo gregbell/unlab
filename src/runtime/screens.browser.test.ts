@@ -252,7 +252,7 @@ describe("line marks", () => {
 
 	/** Type a command at the prompt as exec does, and let it print. */
 	function run(s: Screen, command: string, output: string, exit: number, source: "bar" | "agent" = "bar") {
-		const mark = s.beginMark(source);
+		const mark = s.beginMark(source, command);
 		s.submitted();
 		s.write(bytes(`${command}\r\n${output}`));
 		s.write(bytes(prompt(exit)));
@@ -277,7 +277,7 @@ describe("line marks", () => {
 
 	test("an open mark grows with the output and closes at the command's end, not the next prompt", async () => {
 		const { s, el } = await ready();
-		const mark = s.beginMark("agent");
+		const mark = s.beginMark("agent", "ping -c2 node2");
 		s.submitted();
 		s.write(bytes("ping -c2 node2\r\nreply 1\r\n"));
 		await frames(2);
@@ -348,7 +348,7 @@ describe("line marks", () => {
 
 	test("a command still printing once its start is gone keeps its mark and reads to its end", async () => {
 		const { s } = await ready();
-		const mark = s.beginMark("agent");
+		const mark = s.beginMark("agent", "seq 1 20000");
 		s.submitted();
 		s.write(bytes("seq 1 20000\r\n"));
 		for (let from = 1; from <= 20000; from += 4000) {
@@ -391,9 +391,44 @@ describe("line marks", () => {
 		expect(mark.output()).toEqual({ text: `${"b".repeat(s.size.cols + 5)}\nend`, truncated: false });
 	});
 
+	/** Echo as busybox does: its line editor ends every full row with a line feed of its own. */
+	function hardWrapped(s: Screen, command: string): string {
+		const first = s.size.cols - "node1:~$ ".length;
+		const rows = [command.slice(0, first)];
+		for (let i = first; i < command.length; i += s.size.cols) rows.push(command.slice(i, i + s.size.cols));
+		return rows.join("\r\n");
+	}
+
+	test.each([
+		["over two rows", (cols: number) => `echo ${"a".repeat(cols)}`],
+		["over four rows", (cols: number) => `echo ${"a".repeat(cols * 3)}`],
+		["at a space", (cols: number) => `echo ${"a".repeat(cols - "node1:~$ echo ".length - 1)} ${"b".repeat(9)}`],
+	])("a command line the shell wraps itself is all echo: %s", async (_, line) => {
+		const { s } = await ready();
+		const command = line(s.size.cols);
+		const mark = s.beginMark("agent", command);
+		s.submitted();
+		s.write(bytes(`${hardWrapped(s, command)}\r\n`));
+		s.write(bytes(`out\r\nend\r\n${prompt(0)}`));
+		expect(mark.output()).toEqual({ text: "out\nend", truncated: false });
+	});
+
+	test("output that repeats the command is output", async () => {
+		const { s } = await ready();
+		expect(run(s, "cat f", "cat f\r\ncat f\r\n", 0).output().text).toBe("cat f\ncat f");
+	});
+
+	test("an echo that is not the line typed loses its first row only", async () => {
+		const { s } = await ready();
+		const mark = s.beginMark("agent", "one that was redrawn");
+		s.submitted();
+		s.write(bytes(`one\r\nout\r\n${prompt(0)}`));
+		expect(mark.output().text).toBe("out");
+	});
+
 	test("ending a mark by hand closes it at the cursor", async () => {
 		const { s } = await ready();
-		const mark = s.beginMark("bar");
+		const mark = s.beginMark("bar", "sleep 100");
 		s.write(bytes("sleep 100\r\nstill here\r\n"));
 		mark.end();
 		s.write(bytes("after the mark\r\n"));
@@ -421,7 +456,7 @@ describe("line marks", () => {
 
 	test("a mark begun before the mount draws nothing and reads as empty", () => {
 		const s = screen();
-		const mark = s.beginMark("bar");
+		const mark = s.beginMark("bar", "echo hi");
 		s.write(bytes(`echo hi\r\nhi\r\n${prompt(0)}`));
 		mark.end();
 		expect(mark.output()).toEqual({ text: "", truncated: false });

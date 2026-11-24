@@ -67,6 +67,45 @@ describe("typeahead", () => {
 		t.scan(bytes(promptAfter(2)));
 		expect(t.phase).toBe("prompt");
 	});
+
+	it("expects a typed-ahead line from its prompt until the line's Enter is echoed", () => {
+		const t = running();
+		expect(t.expectsTypedAhead).toBe(false);
+		t.submitted();
+		expect(t.expectsTypedAhead).toBe(false);
+		t.scan(bytes(promptAfter(0)));
+		expect(t.expectsTypedAhead).toBe(true);
+		t.scan(bytes("make test"));
+		expect(t.expectsTypedAhead).toBe(true);
+		t.scan(bytes("\r\n"));
+		expect(t.expectsTypedAhead).toBe(false);
+		expect(t.settle()).toEqual([]);
+		expect(t.phase).toBe("running");
+	});
+
+	it("a line the program read itself never comes: settling says the shell is at its prompt", () => {
+		const t = running();
+		for (let i = 0; i < 5; i++) t.submitted();
+		t.scan(bytes(`read by the program\r\n${promptAfter(0)}`));
+		expect(t.phase).toBe("running");
+
+		expect(t.settle()).toEqual([{ kind: "phase", phase: "prompt" }]);
+		expect(t.phase).toBe("prompt");
+		expect(t.settle()).toEqual([]);
+
+		// None of the five is owed any more: the next line is one command.
+		t.submitted();
+		t.scan(bytes(`true\r\n${promptAfter(0)}`));
+		expect(t.phase).toBe("prompt");
+	});
+
+	it("a command waiting for its own echo is not settled", () => {
+		const t = atPrompt();
+		t.submitted();
+		expect(t.expectsTypedAhead).toBe(false);
+		expect(t.settle()).toEqual([]);
+		expect(t.phase).toBe("running");
+	});
 });
 
 describe("createShellTracker", () => {

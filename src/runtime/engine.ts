@@ -93,7 +93,12 @@ interface SessionEntry {
 	injection: Injection | null;
 	/** The person has typed at this prompt and not yet run or cancelled it. */
 	drafting: boolean;
+	/** The tick since which the shell has owed a typed-ahead line and nothing has come in or gone out. */
+	quietSince: number | null;
 }
+
+/** A shell that has a typed-ahead line echoes it within milliseconds of its prompt. */
+const QUIET_MS = 1000;
 
 const isMachineName = (s: string): s is MachineName => /^node\d+$/.test(s);
 
@@ -149,17 +154,24 @@ export function createEngine(deps: EngineDeps): Engine {
 			if (e.kind === "phase") {
 				if (e.phase === "prompt") s.drafting = false;
 				dispatch({ type: "session/shell", session: s.id, shell: e.phase });
-			} else s.injection?.finish(e.exitCode);
+			} else {
+				// What was typed until now went to the command.
+				s.drafting = false;
+				s.injection?.finish(e.exitCode);
+			}
 		}
 	};
 
 	const output = (session: SessionId, bytes: Uint8Array) => {
 		const s = sessions.get(session);
-		if (s) shellEvents(s, s.screen.write(bytes));
+		if (!s) return;
+		s.quietSince = null;
+		shellEvents(s, s.screen.write(bytes));
 	};
 
 	/** Send to the guest what was typed, pasted or answered by the terminal. */
 	const send = (s: SessionEntry, vm: Vm, data: string) => {
+		s.quietSince = null;
 		vm.write(s.tty, data);
 		if (data.includes("\r")) shellEvents(s, s.screen.submitted());
 	};
@@ -251,6 +263,7 @@ export function createEngine(deps: EngineDeps): Engine {
 			state: parsed.tty === "console" ? "open" : "closed",
 			injection: null,
 			drafting: false,
+			quietSince: null,
 			screen: screens.create(id, {
 				input(data) {
 					const vm = readyVm(s.machine);
@@ -269,9 +282,27 @@ export function createEngine(deps: EngineDeps): Engine {
 		if (booted) s.screen.expectPromptToken(booted.promptToken);
 	};
 
+	/** A program can read a line typed ahead for the shell. Then no echo comes, and the shell is at its prompt. */
+	const settleQuiet = (now: number) => {
+		for (const s of sessions.values()) {
+			if (!s.screen.expectsTypedAhead) {
+				s.quietSince = null;
+				continue;
+			}
+			s.quietSince ??= now;
+			if (now - s.quietSince < QUIET_MS) continue;
+			s.quietSince = null;
+			// Anything typed since the prompt is still on the line, unlike at a fresh prompt.
+			const { drafting } = s;
+			shellEvents(s, s.screen.settle());
+			s.drafting = drafting;
+		}
+	};
+
 	const tick = () => {
 		const now = deps.now();
 		capture.sweep(now);
+		settleQuiet(now);
 		dispatch({ type: "tick", now });
 	};
 
@@ -442,7 +473,7 @@ export function createEngine(deps: EngineDeps): Engine {
 						return;
 					}
 					s.injection = injection;
-					mark = s.screen.beginMark(source === "agent" ? "agent" : "bar");
+					mark = s.screen.beginMark(source === "agent" ? "agent" : "bar", line);
 					if (source === "agent") dispatch({ type: "session/marked", session, source: "agent" });
 					send(s, vm, `${line}\r`);
 				};
