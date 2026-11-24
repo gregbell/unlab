@@ -140,6 +140,11 @@
 			flex-direction: column;
 			gap: 8px;
 			margin: 0 var(--gutter) var(--gutter);
+			/* The panel is as tall as the page, which can be taller than the window. */
+			position: sticky;
+			bottom: var(--gutter);
+			max-height: calc(100vh - 2 * var(--gutter));
+			overflow-y: auto;
 		}
 	}
 

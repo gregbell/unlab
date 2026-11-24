@@ -794,6 +794,20 @@ describe("agent calls", () => {
 			{ type: "announce", text: "Agent call waiting for you: rm node3" },
 		]);
 		expect(effectsOf(emptyLab(), { type: "agent/call", call: agentCall(1, 1000, { status: "running" }) })).toEqual([]);
+		expect(run(emptyLab(), { type: "agent/call", call: waiting }).agentPanel).toBe(true);
+		expect(run(emptyLab(), { type: "agent/call", call: agentCall(1, 1000) }).agentPanel).toBe(false);
+	});
+
+	test("a panel closed over a waiting call opens again only for another one", () => {
+		let s = run(
+			emptyLab(),
+			{ type: "agent/call", call: agentCall(1, 1000, { status: "waiting" }) },
+			{ type: "ui/agent-panel", open: false },
+			{ type: "agent/call", call: agentCall(2, 2000) },
+		);
+		expect(s.agentPanel).toBe(false);
+		s = run(s, { type: "agent/call", call: agentCall(3, 3000, { status: "waiting" }) });
+		expect(s.agentPanel).toBe(true);
 	});
 
 	test("a call settles once", () => {

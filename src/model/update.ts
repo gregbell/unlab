@@ -300,6 +300,7 @@ function bounded(calls: readonly AgentCall[]): readonly AgentCall[] {
 	});
 }
 
+/** A call that waits opens the agent panel: that is where it is answered, and the agent is stuck until it is. */
 function agentCalled(state: LabState, call: AgentCall): Step {
 	const { calls, firstCallAt, lastCallAt } = state.agent;
 	if (calls.some((known) => known.id === call.id)) return step(state);
@@ -312,7 +313,10 @@ function agentCalled(state: LabState, call: AgentCall): Step {
 		},
 	);
 	const waiting = call.status === "waiting";
-	return step(next, waiting ? [{ type: "announce", text: `Agent call waiting for you: ${call.line}` }] : []);
+	if (!waiting) return step(next);
+	return step(patch(next, { agentPanel: true }), [
+		{ type: "announce", text: `Agent call waiting for you: ${call.line}` },
+	]);
 }
 
 /** A call settles once. Before that it may go from waiting to running, never back. */

@@ -79,9 +79,8 @@ You also need Node.js 22.12 or later.
    > Open https://gregbell.github.io/unlab/ and use its WebMCP tools to boot two
    > Alpine machines and check that they can ping each other.
 
-3. A Chrome window opens on the lab. Click **webmcp** at the bottom right to
-   open the agent panel. When the agent asks to boot the machines, click
-   **Boot node1 and node2**.
+3. A Chrome window opens on the lab. When the agent asks to boot the machines, the
+   agent panel opens. Click **Boot node1 and node2**.
 
 The window has its own profile, so its lab is separate from the one in your
 everyday browser.
