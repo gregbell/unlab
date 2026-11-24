@@ -183,6 +183,15 @@ export interface ExecData {
 /** The most characters of a run's output that `data` carries: an agent reads all of it. */
 const OUTPUT_MAX = 16_000;
 
+/** The last whole lines that fit: part of a line reads as a different one, `7334` for `17334`. */
+function tail(output: string): string {
+	if (output.length <= OUTPUT_MAX) return output;
+	const kept = output.slice(-OUTPUT_MAX);
+	if (output.at(-OUTPUT_MAX - 1) === "\n") return kept;
+	const lineEnd = kept.indexOf("\n");
+	return lineEnd === -1 ? kept : kept.slice(lineEnd + 1);
+}
+
 export const exec = defineVerb({
 	name: "exec",
 	about: "run a shell command in each console",
@@ -220,7 +229,7 @@ export const exec = defineVerb({
 			ran.push({
 				session: t.session,
 				exitCode,
-				output: output.slice(-OUTPUT_MAX),
+				output: tail(output),
 				truncated: truncated || output.length > OUTPUT_MAX,
 				ms,
 			});

@@ -80,16 +80,17 @@ describe("exec", () => {
 		]);
 	});
 
-	it("keeps the end of a long output and flags it, as it does one the terminal already cut", async () => {
+	it("keeps the last whole lines of a long output and flags it, as it does one the terminal already cut", async () => {
 		const { lab, calls } = await threeReady();
 		const pending = lab.run("exec all -- seq 1 20000");
-		const long = `${"x".repeat(16_000)}\nlast`;
-		calls[0].resolve({ exitCode: 0, output: long, truncated: false, lastLine: "last", ms: 1 });
+		const numbers = Array.from({ length: 20_000 }, (_, i) => String(i + 1));
+		const long = numbers.join("\n");
+		calls[0].resolve({ exitCode: 0, output: long, truncated: false, lastLine: "20000", ms: 1 });
 		calls[1].resolve({ exitCode: 0, output: "last", truncated: true, lastLine: "last", ms: 1 });
 		calls[2].resolve({ exitCode: 0, output: "y".repeat(16_000), truncated: false, lastLine: "y", ms: 1 });
 		expect(report(await pending).data).toMatchObject({
 			ran: [
-				{ output: `${"x".repeat(15_995)}\nlast`, truncated: true },
+				{ output: numbers.slice(-2666).join("\n"), truncated: true },
 				{ output: "last", truncated: true },
 				{ output: "y".repeat(16_000), truncated: false },
 			],

@@ -166,7 +166,7 @@ test("output longer than the terminal keeps comes back as its end, flagged", asy
 	await openWithTwoMachines(page);
 	const reply = await call(page, "shell_exec", { targets: "node1", command: "seq 1 20000" });
 	expect(reply).toMatchObject({
-		data: { ran: [{ exitCode: 0, truncated: true, output: expect.stringMatching(/\n19999\n20000$/) }] },
+		data: { ran: [{ exitCode: 0, truncated: true, output: expect.stringMatching(/^1\d{4}\n[\d\n]*\n20000$/) }] },
 	});
 });
 
