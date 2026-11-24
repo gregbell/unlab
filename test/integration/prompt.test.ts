@@ -1,12 +1,14 @@
 // Proves the guest half of exec: after setup, every shell in a real kernel
 // prints OSC 133 marks that the shell tracker reads as prompts and exit codes.
+
 import assert from "node:assert/strict";
-import { createKernel, fetchDistro, type KernelInstance } from "unkernel/node";
+import { createKernel, type KernelInstance } from "unkernel/node";
 import { test } from "vitest";
 import { macStr, nodeMac } from "../../src/net/index.ts";
 import { execAsRoot, hostsScript, setupScript } from "../../src/runtime/guest.ts";
 import { LabNic } from "../../src/runtime/nic.ts";
 import { createShellTracker, type ShellEvent } from "../../src/runtime/shell-tracker.ts";
+import { imagePath } from "../support/images.ts";
 
 const TOKEN = "0123456789abcdef";
 const SETUP = setupScript({
@@ -72,7 +74,7 @@ function tracked() {
 }
 
 test("setup gives every shell a prompt that reports exit codes, and running it again changes nothing", async () => {
-	const distro = await fetchDistro("alpine");
+	const distro = imagePath("alpine");
 	const nic = new LabNic({ mac: macStr(nodeMac(1)), toSwitch: () => {} });
 	let vm: KernelInstance | undefined;
 	try {

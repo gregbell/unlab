@@ -1,9 +1,10 @@
 // Machines on a switch, each in its own thread, for tests on real kernels in Node.
+
 import { Worker } from "node:worker_threads";
-import { fetchDistro } from "unkernel/node";
 import type { PortNo } from "../../src/model/types.ts";
 import { ip4str, macStr, NICS, type NicNo, nodeIp, nodeMac } from "../../src/net/index.ts";
 import { LabSwitch, type TapEvent } from "../../src/runtime/switch.ts";
+import { imagePath } from "../support/images.ts";
 import type { ExecDone, FromMachine, MachineData, ToMachine } from "./vm-worker.ts";
 
 export interface MachineSetup {
@@ -51,7 +52,7 @@ export async function bootLab(setups: readonly MachineSetup[]): Promise<TestLab>
 			name: `node${setup.n}`,
 			ip: ip4str(nodeIp(setup.n)),
 			macs: NICS.slice(0, setup.ports.length).map((nic) => macStr(nodeMac(setup.n, nic))),
-			distro: await fetchDistro(setup.distro ?? "alpine"),
+			distro: imagePath(setup.distro ?? "alpine"),
 			hosts,
 			gateway: setup.gateway ?? false,
 		};
