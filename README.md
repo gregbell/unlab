@@ -1,102 +1,123 @@
 # unlab
 
-A Linux network lab that runs entirely in a browser tab. Every machine is a real Linux kernel (the same [unkernel](https://github.com/pithings/unkernel) build that unkernel.dev runs), and they are all cabled to one virtual layer-2 switch, so you can ping, route, serve and break things between them.
+A Linux network lab in one browser tab, built on
+[pithings/unkernel](https://github.com/pithings/unkernel). Pooya Parsa and the
+unkernel contributors made it possible to boot a real Linux kernel in
+WebAssembly. `unlab` connects those machines to a virtual Ethernet switch so you
+play with networking between linux boxes right in a tab. Send a ping, pull a
+cable, and see what happens to the packets.
 
-```
-~ ⇒ ping -c 1 10.88.0.12
-64 bytes from 10.88.0.12: seq=0 ttl=64 time=1.4 ms
-```
+**[Open the live lab](https://gregbell.github.io/unlab/)** ·
+[Run locally](#run-locally) · [Contribute](#contribute)
 
-That reply came out of a second Linux kernel, running in another thread, in the same tab.
+![Two Alpine consoles above a live packet capture and an eight-port switch. node1 receives three ping replies from node2 at 10.88.0.12.](docs/images/first-ping.png)
 
-Try it at https://gregbell.github.io/unlab/.
+## Follow your first ping
 
-## Running it
+1. Open the live lab and select **Boot 2 machines**. When both Alpine guests are
+   ready, their addresses appear beside their names.
+2. Select **Ping node2**. The replies appear in the `node1` console. In the
+   capture below it, the first ARP request asks who has `10.88.0.12`. The ICMP
+   echo requests and replies follow.
+3. Select **expand** in the capture to open the Wire view. Select a frame to
+   inspect its headers, or choose **save .pcap** to download a capture you can
+   open in Wireshark.
+
+To see what a broken link looks like, press `Esc` to return to the consoles and
+click the cable above port 2. Ping again, then click the cable to reconnect it.
+
+## Lab commands
+
+Open the command bar with `⌘K` on macOS or `Ctrl+/` elsewhere. It completes
+commands as you type and previews their effects. Run Linux commands directly in
+a guest console, or use `exec` in the bar to address a guest by name.
+
+| Command bar example                          | What it does                                                                                                           |
+| -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `ls`                                         | List machines, addresses, and link states.                                                                             |
+| `spawn 2 alpine --mem 512 --cpus 2 --disk 8` | Add two Alpine machines with 512 MiB of RAM, two CPUs, and an 8 GiB disk each. Use `--no-net` to leave them unplugged. |
+| `exec node1 -- ping -c 1 10.88.0.12`         | Send one ping from node1 and read the exit code from its shell.                                                        |
+| `link down node2`                            | Cut node2's cable. Reconnect it with `link up node2`.                                                                  |
+| `capture arp or node2`                       | Open the Wire view with a filter for ARP or traffic involving node2.                                                   |
+| `sh node2`                                   | Open another shell on node2.                                                                                           |
+| `focus node2 --max`                          | Maximise or restore its pane. Use `--main` to promote it to the main pane.                                             |
+| `boot node2`                                 | Retry a failed boot.                                                                                                   |
+| `rm node2`                                   | Remove the machine and delete its disk after confirmation.                                                             |
+
+Commands that accept multiple machines can take a list (`node1,node3`), a glob
+(`node*`), or `all`. Globs and `all` select ready machines.
+
+In browsers with WebMCP, an agent can use the lab commands too. The agent panel
+lets you allow a tool, require approval, or turn it off.
+[WebMCP API documentation](https://developer.chrome.com/docs/ai/webmcp/imperative-api)
+
+## Network and storage
+
+- The switch has eight ports and supports up to eight machines. Each guest has
+  one network interface. The lab carries IPv4 traffic between guests and has no
+  internet uplink.
+- Each guest defaults to 256 MiB of RAM, a sparse 4 GiB disk, and two CPUs, or
+  one CPU if the browser lacks multicore support. The disk uses browser storage
+  as the guest writes to it.
+- Reloading the page boots each machine from its own IndexedDB-backed ext4 disk.
+  Switch ports and cable connections survive a reload. Shell processes and
+  packet captures start fresh. One tab at a time owns the lab.
+
+## Run locally
+
+With Node.js 24 and npm installed, clone the repository and start the dev
+server.
 
 ```sh
-npm install
-npm run distros alpine debian
+git clone https://github.com/gregbell/unlab.git
+cd unlab
+npm ci
+npm run distros -- alpine debian
 npm run dev
 ```
 
-Open the printed URL and choose **Boot 2 machines** to start a pair of Alpine guests on the shared switch. When both are ready, choose **Ping node2** to see replies in the terminal and packets in the network dock. Use **+ Machines** to extend the lab.
+Open the URL printed by Vite. The distro download checks each root image's size
+and SHA-256 against the unkernel release that matches the pinned npm package.
+The kernel comes directly from that package's `unkernel.wasm`. The
+[image manifest](public/distros/distros.json) records the upstream build IDs and
+checksums.
 
-## Using it
+## How it works
 
-Everything the lab can do is a command, and every surface runs the same commands:
+Each guest runs in its own worker. When Linux sends an Ethernet frame, the
+[virtual switch](src/runtime/switch.ts) forwards it and the
+[capture](src/capture/) records it. The Wire view decodes those same bytes.
+Terminal output goes straight to the terminal, so the UI can update the capture
+once per animation frame.
 
-- **Buttons** in the rail, pane headers and switch faceplate.
-- **The command bar**: ⌘K on macOS, Ctrl+/ elsewhere. It completes as you type, says what a line will do before it runs, and asks before it removes anything.
-- **An agent** in the same browser, through [WebMCP](https://developer.chrome.com/docs/ai/webmcp/imperative-api). The agent panel sets which tools run at once, which ask you first, and which are off.
+The [command registry](src/commands/verbs/) serves the buttons, command bar, and
+agent tools. The [model](src/model/) turns events into state changes and
+effects. The [runtime](src/runtime/) carries them out. For the reasoning behind
+those boundaries, read the [architecture notes](.audit/arch/synthesis.md).
 
-| Command                                                       | Does                                                                     |
-| ------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| `spawn 2 alpine [--mem 512] [--cpus 2] [--disk 8] [--no-net]` | Boots machines, plugged into switch0 unless told otherwise               |
-| `rm node3`                                                    | Removes a machine and its disk, after you confirm                        |
-| `ls`                                                          | Lists machines, addresses and link states                                |
-| `exec all -- ping -c 1 10.88.0.12`                            | Types the command into each machine's console and reports each exit code |
-| `sh node2`                                                    | Opens another shell on a machine                                         |
-| `link down node2`                                             | Cuts a cable; `link up` reconnects it                                    |
-| `capture arp or node2`                                        | Filters the capture and opens the Wire view                              |
-| `focus node2 [--main \| --max]`                               | Moves the keyboard, and optionally promotes or maximises the pane        |
-| `boot node4`                                                  | Boots a failed machine again                                             |
+## Contribute
 
-Targets can be one machine, a list (`node1,node3`), a glob (`node*`) or `all`. Globs and `all` take ready machines only.
+For a bug report, include the browser, guest distribution, and commands that
+reproduce it. For a change, describe what someone can do or observe in the lab.
+[Open an issue](https://github.com/gregbell/unlab/issues) ·
+[Open a pull request](https://github.com/gregbell/unlab/compare)
 
-The dock under the terminals shows the switch and the frames crossing it. **expand** opens the Wire view: the MAC address table, the whole capture with a filter, each frame decoded, and **save .pcap**.
+After local setup, run the checks that cover your change.
 
-## How it is built
+| Command                    | Coverage                                                                     |
+| -------------------------- | ---------------------------------------------------------------------------- |
+| `npm run check`            | Type checking, lint, import boundaries, unit tests, and the production build |
+| `npm run test:integration` | Two Linux guests exchanging traffic across the switch in Node.js             |
+| `npm run test:browser`     | UI components and guest workers in Chromium                                  |
+| `npm run test:e2e`         | The built app, including the first boot, ping, and reload                    |
 
-Vanilla TypeScript and custom elements (Lit, light DOM), one store, one command registry.
+For the browser and end-to-end suites, install Chromium with
+`npx playwright install chromium` or set `CHROMIUM_PATH` to a Chromium
+executable.
 
-```
-src/
-  main.ts      the composition root: the only module that sees every layer
-  net/         pure packet code: frames, decode, capture filter, pcap
-  model/       the lab as plain data: one reducer, plans, panes, selectors, the store
-  capture/     the capture ring that thousands of frames a second flow into
-  commands/    the grammar engine and the verbs; every button, bar line and tool runs one
-  agent/       WebMCP tool registration, policies and approvals
-  runtime/     workers, kernels, the switch, terminal screens; it executes effects
-  ui/          the elements, the shared styles and the design tokens
-```
+## Licence and acknowledgements
 
-The parts that matter most:
-
-- **State changes in one place.** `update(state, event)` in `src/model/` is the only function that changes the lab. It returns the new state and a list of effects, plain data such as `vm/boot` or `link/set`, which the runtime executes and answers with events. The rules (lifecycle, names, hues, ports, pane parking) are pure and tested without a browser.
-- **Fast data stays out of the store.** Frames go into a ring buffer with an incremental filter index, and terminal bytes go straight to their terminal. Elements hear about new frames at most once per animation frame.
-- **One way to run anything.** A button runs a command line through the same parser as the bar, and an agent tool turns its input into a bar line too. Previews, error sentences and confirmations come from the verb, so the three surfaces cannot drift.
-- **Exit codes are real.** Guest setup installs a prompt that emits OSC 133 marks, so `exec` reads each command's exit status from the console itself, and refuses a shell that is still running something.
-- **Layers are enforced.** `scripts/check-imports.ts` fails the build when a layer imports one it may not, or reaches past another layer's `index.ts`.
-
-The design decisions, with the alternatives that lost, are in `.audit/arch/synthesis.md`. `.audit/decisions.tsv` logs every decision made during the rewrite.
-
-## Checking it
-
-```sh
-npm run check              # typecheck, lint, import layers, unit tests, build
-npm run test:browser       # elements in real Chromium; boots real kernels in workers
-npm run test:integration   # two real kernels in Node, pinging across the switch
-npm run test:e2e           # the built app with real kernels, driven like a person would
-```
-
-The browser and e2e suites need Chromium. Playwright's own download is used when it runs on your machine; otherwise they fall back to `chromium` on your `PATH`, or `CHROMIUM_PATH`.
-
-## The exact same builds
-
-Nothing here is rebuilt or repacked. The kernel is `unkernel.wasm` from the pinned `unkernel` npm package. The root images are the `.erofs` assets from the GitHub release matching that package version; `npm run distros` reads the release's `distros.json`, downloads each image and checks its size and SHA-256 before writing it. `public/distros/distros.json` records what was mirrored, down to the upstream build id.
-
-The Add machines form sizes each guest independently of its peers. Each machine defaults to two CPUs (one when the browser cannot run multiple CPUs), 256 MiB of RAM and a sparse 4 GiB disk. The disk consumes browser storage as the guest writes to it. For example, `spawn 2 alpine --mem 512 --cpus 2 --disk 8` boots a pair with two CPUs, 512 MiB of RAM and an 8 GiB disk apiece.
-
-## Limits
-
-- **Eight machines.** One per switch port and one per machine hue.
-- **IPv4 only.** The switch discards IPv6.
-- **One NIC per machine.** Routers between separate segments need address aliases rather than a second interface.
-- **The lab has no internet uplink.** Machines reach each other, not the outside world.
-- **Machines and disks are saved in this browser.** Reloading cold-boots each node with its own IndexedDB-backed ext4 disk and restores its switch port and cable state. Shell processes and capture history start fresh. Removing a machine deletes its disk. One tab at a time owns the lab.
-- **WebMCP is an origin trial.** In a browser without it the agent panel still shows the tools and policies, and says no agent can call them yet.
-
-## Licence
-
-unkernel is MIT AND GPL-2.0-only; the kernel and root images are its own. The code here is MIT. The desktop background is adapted from the Big Moon wallpaper in [NOS](https://github.com/gregbell/nos).
+unlab's code is available under the [MIT licence](LICENSE). Thank you to Pooya
+Parsa and the [unkernel contributors](https://github.com/pithings/unkernel) for
+the kernel, JavaScript SDK, and distro builds that power every machine in this
+lab.
