@@ -7,7 +7,6 @@ import { join } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
 import type { Asking } from "../../src/streams/index.ts";
-import { LINK_PORT } from "../../src/streams/index.ts";
 import { Core, NotRunning, proxy, request, type Status, watch } from "./core.ts";
 import { configDir } from "./keys.ts";
 import { lineOf, type Options, readOptions, USAGE, UsageError } from "./options.ts";
@@ -45,7 +44,7 @@ function openBrowser(url: string): void {
 	child.unref();
 }
 
-const labUrl = ({ origin, port }: Options) => `${origin}/#cli${port === LINK_PORT ? "" : `=${port}`}`;
+const labUrl = ({ origin, port }: Options) => `${origin}/#cli=${port}`;
 
 /** The CLI that runs, or this one once it does. Null for one that was running. */
 async function start(options: Options): Promise<Core | null> {

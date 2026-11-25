@@ -78,6 +78,8 @@ export class LinkServer {
 	#token = "";
 	#linked = false;
 	#refusal: string | null = null;
+	/** The last refusal that was told. A lab that is refused comes again each second. */
+	#told: string | null = null;
 	#machines: readonly LinkedMachine[] = [];
 	readonly #channels = new Map<string, Machine>();
 	readonly #running = new Map<number, Running>();
@@ -270,7 +272,8 @@ export class LinkServer {
 			this.#say({ type: "refused", message }, ws);
 			ws.close();
 			this.#refusal = message;
-			this.#options.on.refused(message);
+			if (message !== this.#told) this.#options.on.refused(message);
+			this.#told = message;
 			this.#changed();
 		};
 		ws.once("message", (data) => {
@@ -289,6 +292,7 @@ export class LinkServer {
 				return;
 			}
 			this.#lab = ws;
+			this.#told = null;
 			this.#token = randomBytes(16).toString("hex");
 			this.#say({ type: "hello", protocol: PROTOCOL, token: this.#token });
 			ws.on("message", (more) => this.#labSaid(JSON.parse(String(more)) as FromLab));
@@ -297,6 +301,7 @@ export class LinkServer {
 
 	#labLeft(): void {
 		this.#lab = undefined;
+		this.#told = null;
 		this.#token = "";
 		this.#machines = [];
 		for (const { socket } of this.#channels.values()) socket.terminate();

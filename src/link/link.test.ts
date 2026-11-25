@@ -122,9 +122,9 @@ test("a lab that was never asked to link dials nothing and keeps no clock", asyn
 });
 
 test("one that has linked before dials by itself, again each second until the CLI is there", async () => {
-	const { sockets, second, cli, targets, linked } = rig({ on: true, port: 47122 });
+	const { sockets, second, cli, targets, linked } = rig({ on: true, port: 27122 });
 	await vi.waitFor(() => expect(sockets).toHaveLength(1));
-	expect(sockets[0].url).toBe("ws://127.0.0.1:47122/lab");
+	expect(sockets[0].url).toBe("ws://127.0.0.1:27122/lab");
 	expect(cli()).toEqual({ kind: "waiting" });
 	sockets[0].onclose?.();
 	await second();
@@ -132,7 +132,7 @@ test("one that has linked before dials by itself, again each second until the CL
 	const socket = await linked();
 	expect(socket.said[0]).toEqual({ type: "hello", protocol: 1 });
 	expect(cli()).toEqual({ kind: "linked" });
-	expect(targets).toEqual([{ url: "ws://127.0.0.1:47122", token: "secret" }]);
+	expect(targets).toEqual([{ url: "ws://127.0.0.1:27122", token: "secret" }]);
 	expect(socket.last("machines")).toEqual({ type: "machines", machines: [] });
 
 	// It does not dial over a link it has.
@@ -147,18 +147,18 @@ test("turned off, it hangs up, stops trying and is remembered as off", async () 
 	const { link, sockets, ticks, cli, state, linked, targets } = rig();
 	link.set(true);
 	const socket = await linked();
-	expect(state.memory).toEqual({ on: true, port: 47122 });
+	expect(state.memory).toEqual({ on: true, port: 27122 });
 	link.set(false);
 	expect(socket.closed).toBe(true);
 	expect(ticks.size).toBe(0);
 	expect(cli()).toEqual({ kind: "off" });
 	expect(targets.at(-1)).toBeNull();
-	expect(state.memory).toEqual({ on: false, port: 47122 });
+	expect(state.memory).toEqual({ on: false, port: 27122 });
 	expect(sockets).toHaveLength(1);
 });
 
 test("a CLI elsewhere is dialled there, instead of the one before", async () => {
-	const { link, sockets, linked } = rig({ on: true, port: 47122 });
+	const { link, sockets, linked } = rig({ on: true, port: 27122 });
 	const first = await linked();
 	link.set(true, 5000);
 	expect(first.closed).toBe(true);
@@ -283,6 +283,7 @@ describe("a line from the CLI", () => {
 });
 
 test.each([
+	["#cli=27122", { port: 27122 }],
 	["#cli", { port: 47122 }],
 	["#cli=5000", { port: 5000 }],
 	["#cli=0", null],

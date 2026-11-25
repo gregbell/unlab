@@ -105,46 +105,49 @@ async function echoes(cli: TestCli, n: number): Promise<number[]> {
 	return took;
 }
 
+let cleanUp = async () => {};
+test.afterEach(() => cleanUp());
+
 test("a lab behind other windows answers the CLI and SSH as one in front does", async () => {
 	test.setTimeout((MINUTES + 3) * 60_000);
 	await buildCli();
 	const cli = new TestCli(await freePort(), { origin: ORIGIN });
 	const session = cli.start();
 	const browser = new Browser(`${ORIGIN}/#cli=${cli.port}`);
-	try {
-		await session.shows("Linked to the lab", 30_000);
-		session.type("spawn 1 alpine");
-		await session.shows("node1 is ready.", 60_000);
-		expect((await cli.ssh("node1.unlab", "true")).code).toBe(0);
-		expect(await browser.visibility()).toBe("visible");
-		await browser.hide();
-		await expect.poll(() => browser.visibility()).toBe("hidden");
-		await new Promise((resolve) => setTimeout(resolve, MINUTES > 0 ? MINUTES * 60_000 : 30_000));
-		expect(await browser.visibility()).toBe("hidden");
-
-		const commands: number[] = [];
-		for (let i = 0; i < 5; i++) {
-			const t0 = performance.now();
-			expect(await cli.once("exec", "node1", "--", "echo here")).toMatchObject({ code: 0, stdout: "here\n" });
-			commands.push(performance.now() - t0);
-		}
-		const keys = await echoes(cli, 30);
-		const worst = (all: number[]) => Math.max(...all).toFixed(0);
-		console.log(`hidden: a command took at most ${worst(commands)} ms, a key at most ${worst(keys)} ms`);
-		expect(Math.max(...commands)).toBeLessThan(1000);
-		expect(Math.max(...keys)).toBeLessThan(100);
-
-		// A CLI that starts while the lab is hidden is found too.
-		session.child.kill("SIGTERM");
-		await session.exited;
-		const t0 = performance.now();
-		const again = cli.start();
-		await again.shows("Linked to the lab: node1 (alpine)");
-		console.log(`hidden: a new CLI was linked in ${(performance.now() - t0).toFixed(0)} ms`);
-		expect(performance.now() - t0).toBeLessThan(3000);
-		expect(await browser.visibility()).toBe("hidden");
-	} finally {
+	// A test that takes too long is stopped before its own end, and the browser would stay.
+	cleanUp = async () => {
 		await browser.close();
 		cli.close();
+	};
+	await session.shows("Linked to the lab", 30_000);
+	session.type("spawn 1 alpine");
+	await session.shows("node1 is ready.", 60_000);
+	expect((await cli.ssh("node1.unlab", "true")).code).toBe(0);
+	expect(await browser.visibility()).toBe("visible");
+	await browser.hide();
+	await expect.poll(() => browser.visibility()).toBe("hidden");
+	await new Promise((resolve) => setTimeout(resolve, MINUTES > 0 ? MINUTES * 60_000 : 30_000));
+	expect(await browser.visibility()).toBe("hidden");
+
+	const commands: number[] = [];
+	for (let i = 0; i < 5; i++) {
+		const t0 = performance.now();
+		expect(await cli.once("exec", "node1", "--", "echo here")).toMatchObject({ code: 0, stdout: "here\n" });
+		commands.push(performance.now() - t0);
 	}
+	const keys = await echoes(cli, 30);
+	const worst = (all: number[]) => Math.max(...all).toFixed(0);
+	console.log(`hidden: a command took at most ${worst(commands)} ms, a key at most ${worst(keys)} ms`);
+	expect(Math.max(...commands)).toBeLessThan(1000);
+	expect(Math.max(...keys)).toBeLessThan(100);
+
+	// A CLI that starts while the lab is hidden is found too.
+	session.child.kill("SIGTERM");
+	await session.exited;
+	const t0 = performance.now();
+	const again = cli.start();
+	await again.shows("Linked to the lab: node1 (alpine)");
+	console.log(`hidden: a new CLI was linked in ${(performance.now() - t0).toFixed(0)} ms`);
+	expect(performance.now() - t0).toBeLessThan(3000);
+	expect(await browser.visibility()).toBe("hidden");
 });
