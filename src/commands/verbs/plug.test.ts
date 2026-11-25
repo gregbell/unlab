@@ -122,6 +122,22 @@ describe("plug", () => {
 		expect(await only.run("plug node3 switch0")).toMatchObject({ data: { port: 6 } });
 	});
 
+	it("suggests only the switches that have a free port", async () => {
+		const lab = await wired();
+		await lab.run("mkswitch wan");
+		await spawned(lab, "spawn 2 alpine --nics 4 --net lan");
+		await spawned(lab, "spawn 2 alpine --nics 4 --net wan");
+		const suggested = () => [refused(lab, "plug node1 lan"), refused(lab, "plug node1 lan:7")];
+		expect(suggested()).toEqual([
+			"lan has no free port, so use switch0, or free a port with unplug. Nothing was changed.",
+			"lan:7 is taken by node5:eth2 and lan has no free port, so use switch0, or free a port with unplug. Nothing was changed.",
+		]);
+		await lab.run("unplug node7:eth3");
+		expect(suggested()[0]).toBe(
+			"lan has no free port, so use switch0 or wan, or free a port with unplug. Nothing was changed.",
+		);
+	});
+
 	it("is refused when the lab has changed since the line was read", async () => {
 		const lab = await wired();
 		const line = lab.parsed("plug node1 lan:1");
