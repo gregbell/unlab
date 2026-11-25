@@ -57,10 +57,13 @@ test("a console whose program read Enter takes commands again, and a line typed 
 	};
 
 	await console1.click();
-	for (const line of ["cat", "read by cat", ""]) {
-		await page.keyboard.type(line);
-		await page.keyboard.press("Enter");
-	}
+	await page.keyboard.type("cat\n");
+	// busybox's shell reads what is typed at its prompt sixteen bytes at a time, and would take cat's lines with it.
+	await expect(console1).toContainText("⇒ cat");
+	await page.waitForTimeout(500);
+	await page.keyboard.type("read by cat\n");
+	await expect(console1).toContainText(/read by cat\s+read by cat/);
+	await page.keyboard.press("Enter");
 	await page.keyboard.press("Control+d");
 	await page.waitForTimeout(3000);
 	await exec("echo back-$((40+2))");

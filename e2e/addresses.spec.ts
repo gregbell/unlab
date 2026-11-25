@@ -87,6 +87,7 @@ test("chosen addresses are on the NICs, in ls and in the details, and are applie
 	await expect(rail.getByRole("button", { name: /^node3\b/ })).toContainText("10.2.0.9");
 	await rail.getByRole("button", { name: /^node3\b/ }).click();
 	const details = page.locator("unlab-machine-details");
+	await expect(details.getByRole("heading", { name: "node3" })).toBeVisible();
 	await expect(details.locator(".fact", { hasText: "address" })).toContainText("10.2.0.9/24");
 	await expect(details.locator(".fact", { hasText: "gateway" })).toContainText("off");
 	await expect(page.locator("unlab-switch[compact] .subnet")).toHaveText("L2 · 3 subnets");
