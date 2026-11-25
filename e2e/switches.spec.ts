@@ -109,7 +109,7 @@ test("a broadcast stays on its switch, and each switch has its own MAC table and
 	expect(await reaches(page, 1, "node3")).toBe(false);
 
 	// The same addresses, by eye: each switch's own ports, counters and MAC table.
-	const names = () => panel(page).locator(".port .name").allTextContents();
+	const names = panel(page).locator(".port .name");
 	const counters = async () =>
 		(
 			/^(\d+) in · (\d+) delivered · (\d+) flooded$/.exec(
@@ -124,14 +124,14 @@ test("a broadcast stays on its switch, and each switch has its own MAC table and
 	};
 	await page.getByRole("button", { name: "Maximise switches" }).click();
 	await expect(chooser(page)).toHaveValue("switch0");
-	expect(await names()).toEqual(["node1", "node2"]);
+	await expect(names).toHaveText(["node1", "node2"]);
 	await expect(page.locator("unlab-mac-table tbody .machine")).toHaveText(["node1", "node2"]);
 	await expect(async () => expect((await counters())[0]).toBe(await captured("switch0"))).toPass({ timeout: 15_000 });
 
 	await chooser(page).focus();
 	await page.keyboard.press("ArrowDown");
 	await expect(chooser(page)).toHaveValue("lan");
-	expect(await names()).toEqual(["node3", "node4"]);
+	await expect(names).toHaveText(["node3", "node4"]);
 	await expect(page.locator("unlab-mac-table tbody .machine")).toHaveText(["node3", "node4"]);
 	await expect(page.locator("unlab-mac-table").getByRole("heading")).toHaveText("lan mac address table");
 	await expect(async () => expect((await counters())[0]).toBe(await captured("lan"))).toPass({ timeout: 15_000 });
@@ -308,16 +308,20 @@ test("a switch asks before it goes, unplugs what is in it, and leaves the machin
 	await page.getByRole("button", { name: "Maximise switches" }).click();
 	await expect(page.locator("unlab-mac-table")).toContainText("Nothing learned yet.");
 	await page.keyboard.press("Escape");
+	await typed(page, "rmswitch lan");
+	await page.keyboard.press("Enter");
+	await expect(chooser(page)).toHaveCount(0);
 
 	await page.reload();
 	await ready(page, "2 of 2 ready");
-	expect(await wiring(page)).toEqual(["switch0: 1 node2:eth1 up", "lan: "]);
+	expect(await wiring(page)).toEqual(["switch0: 1 node2:eth1 up"]);
 	expect(await reaches(page, 1, "node2")).toBe(false);
 
-	expect(await call(page, "link_set", { link: "up", machines: "node1,node2:eth0" })).toMatchObject({
+	expect(await call(page, "link_set", { link: "up", machines: "node1,node2:eth0" })).toEqual({
+		result: "node1 up, node2:eth0 up",
 		data: [
-			{ machine: "node1", nic: "eth0", switch: "switch0", port: 2, link: "up" },
-			{ machine: "node2", nic: "eth0", switch: "switch0", port: 3, link: "up" },
+			{ machine: "node1", nic: "eth0", port: 2, link: "up" },
+			{ machine: "node2", nic: "eth0", port: 3, link: "up" },
 		],
 	});
 	expect(await reaches(page, 1, "node2")).toBe(true);
