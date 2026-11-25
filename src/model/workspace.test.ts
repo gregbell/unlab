@@ -223,3 +223,21 @@ test.each([
 	const saved = { ...VERSION_1, version: 2, nodes: [{ ...VERSION_1.nodes[0], nics }] };
 	expect(() => restoreWorkspace(initialState(IMAGES, WIDE), JSON.stringify(saved))).toThrow("could not be read");
 });
+
+test("the open panels come back, and none maximised", () => {
+	const s = run(
+		labWith(1),
+		{ type: "ui/panel-toggled", panel: "capture" },
+		{ type: "ui/panel-maximised", panel: "switch0" },
+	);
+	const { state } = restoreWorkspace(initialState(IMAGES, WIDE), saveWorkspace(s));
+	expect(state.panels).toEqual({ open: ["switch0"], maximised: null, putAway: [] });
+});
+
+test.each([
+	["open", ["capture", "switch0"]],
+	["collapsed", []],
+])("a lab saved with its one dock %s restores with the same panels", (dock, open) => {
+	const { state } = restoreWorkspace(initialState(IMAGES, WIDE), JSON.stringify({ ...VERSION_1, dock }));
+	expect(state.panels.open).toEqual(open);
+});

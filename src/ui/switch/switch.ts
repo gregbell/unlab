@@ -1,7 +1,8 @@
 import "./switch.css";
+import "./mac-table.ts";
 import { html, nothing, type TemplateResult } from "lit";
 import { type PortView, SWITCH_NAME, selectLinks, selectPorts, selectSubnets } from "../../model/index.ts";
-import { Select, UnlabElement } from "../base/index.ts";
+import { Select, UnlabElement, windowButtons } from "../base/index.ts";
 
 /** What a click on a port column runs. Empty ports, and those of a machine on its way somewhere, do nothing. */
 function clickLine(port: PortView): string | null {
@@ -13,8 +14,8 @@ function clickLine(port: PortView): string | null {
 
 /**
  * The switch faceplate: a header, then eight equal port columns. `compact`
- * is the dock's size, with a footer note; without it, Wire's, with the way
- * back to the lab in the header. A column whose click does something is one
+ * is the dock's size; without it, the maximised panel's, with the MAC table
+ * beside the ports. A column whose click does something is one
  * button named by that action, which says the state its face draws; cutting
  * and reconnecting need no confirmation.
  */
@@ -34,14 +35,22 @@ export class UnlabSwitch extends UnlabElement {
 	override render(): TemplateResult {
 		const links = this.#links.value;
 		return html`<div class="header">
-				${this.compact ? nothing : html`<a class="back" href="#lab" @click=${this.#back}>← lab</a>`}
 				<span class="title">${SWITCH_NAME}</span>
 				<span class="subnet">L2 · ${this.#subnets.value}</span>
 				<span class="spacer"></span>
 				<span class="links" data-cut=${links.cut > 0}>${links.up} of ${links.total} links up</span>
+				<span class="window">${windowButtons(SWITCH_NAME, !this.compact, {
+					maximise: () => this.app.store.dispatchUi({ type: "ui/panel-maximised", panel: "switch0" }),
+					park: () => this.app.store.dispatchUi({ type: "ui/panel-parked", panel: "switch0" }),
+				})}</span>
 			</div>
-			<div class="ports">${this.#ports.value.map((port) => this.#column(port))}</div>
-			${this.compact ? html`<p class="note">Click a cable to cut or reconnect it.</p>` : nothing}`;
+			<div class="body">
+				<div class="faceplate">
+					<div class="ports">${this.#ports.value.map((port) => this.#column(port))}</div>
+					<p class="note">Click a cable to cut or reconnect it.</p>
+				</div>
+				${this.compact ? nothing : html`<unlab-mac-table></unlab-mac-table>`}
+			</div>`;
 	}
 
 	#column(port: PortView): TemplateResult {
@@ -65,11 +74,6 @@ export class UnlabSwitch extends UnlabElement {
 			}
 		</div>`;
 	}
-
-	readonly #back = (event: Event): void => {
-		event.preventDefault();
-		this.app.store.dispatchUi({ type: "ui/view", view: "lab" });
-	};
 }
 
 customElements.define("unlab-switch", UnlabSwitch);

@@ -51,7 +51,7 @@ async function openAddressed(page: Page): Promise<void> {
 	await typed(page, "spawn 1 alpine --addr 10.2.0.9/24 --no-gateway");
 	await expect(page.locator("unlab-pane")).toHaveCount(3);
 	await typed(page, "spawn 1 alpine");
-	await expect(page.getByText("4 of 4 machines ready")).toBeVisible({ timeout: 60_000 });
+	await expect(page.getByText("4 of 4 ready")).toBeVisible({ timeout: 60_000 });
 }
 
 const GATEWAY_LEASE = "eth0 10.0.2.15/24";
@@ -95,7 +95,7 @@ test("chosen addresses are on the NICs, in ls and in the details, and are applie
 
 	await root(page, 1, "ip addr flush dev eth0 && ip addr flush dev eth1 && ip addr add 10.7.7.7/24 dev eth1");
 	await page.reload();
-	await expect(page.getByText("4 of 4 machines ready")).toBeVisible({ timeout: 90_000 });
+	await expect(page.getByText("4 of 4 ready")).toBeVisible({ timeout: 90_000 });
 	await setAsChosen();
 	await listed();
 
@@ -103,7 +103,7 @@ test("chosen addresses are on the NICs, in ls and in the details, and are applie
 	await crash(page, 1);
 	await expect(rail.getByRole("button", { name: /^node1\b/ })).toContainText("failed", { timeout: 60_000 });
 	await typed(page, "boot node1");
-	await expect(page.getByText("4 of 4 machines ready")).toBeVisible({ timeout: 60_000 });
+	await expect(page.getByText("4 of 4 ready")).toBeVisible({ timeout: 60_000 });
 	expect(await held(page, 1)).toEqual(NODE1);
 	expect(await shell(page, 3, "ping -c 1 -W 2 10.2.0.1")).toMatchObject({ exitCode: 0 });
 
@@ -152,7 +152,7 @@ test("the capture names the machine at each end in any subnet, and a reused addr
 		.first()
 		.click();
 	await expect(page.locator("unlab-frame-detail .pair", { hasText: "target ip" })).toContainText(/10\.1\.0\.1\s+node1/);
-	if (shots) await page.screenshot({ path: `${shots}/wire-addresses.png` });
+	if (shots) await page.screenshot({ path: `${shots}/capture-addresses.png` });
 	await page.keyboard.press("Escape");
 
 	const before = await seqs(page, "arp 10.1.0.9");
@@ -163,7 +163,7 @@ test("the capture names the machine at each end in any subnet, and a reused addr
 	await expect(page.locator("unlab-pane[machine=node2]")).toHaveCount(0);
 	await typed(page, "spawn 1 alpine --addr 10.1.0.9/24");
 	await expect(page.locator("unlab-pane[machine=node5]")).toBeVisible();
-	await expect(page.getByText("4 of 4 machines ready")).toBeVisible({ timeout: 60_000 });
+	await expect(page.getByText("4 of 4 ready")).toBeVisible({ timeout: 60_000 });
 	expect(await shell(page, 5, "ping -c 1 -W 2 10.1.0.1")).toMatchObject({ exitCode: 0 });
 
 	expect(await seqs(page, "arp node2")).toEqual(expect.arrayContaining(before));
@@ -191,7 +191,7 @@ test("an address the machine could not use is refused in a sentence, and nothing
 	await expect(page.locator("unlab-pane")).toHaveCount(2);
 
 	await typed(page, "spawn 1 alpine --addr 10.0.2.9/24 --no-gateway");
-	await expect(page.getByText("3 of 3 machines ready")).toBeVisible({ timeout: 60_000 });
+	await expect(page.getByText("3 of 3 ready")).toBeVisible({ timeout: 60_000 });
 	expect(await held(page, 3)).toEqual(["eth0 10.0.2.9/24"]);
 });
 
@@ -200,7 +200,7 @@ test("a machine left with no address says so, and the others' host tables have t
 }) => {
 	await openAddressed(page);
 	await typed(page, "spawn 1 alpine --addr none --no-gateway");
-	await expect(page.getByText("5 of 5 machines ready")).toBeVisible({ timeout: 60_000 });
+	await expect(page.getByText("5 of 5 ready")).toBeVisible({ timeout: 60_000 });
 	expect(await held(page, 5)).toEqual([]);
 	expect(await root(page, 5, "ip -o link show eth0")).toContain("UP,LOWER_UP");
 	const rail = page.getByRole("complementary", { name: "Machines" });

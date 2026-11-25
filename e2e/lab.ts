@@ -9,7 +9,7 @@ export async function openWithTwoMachines(page: Page): Promise<void> {
 	await expect(page.getByRole("combobox", { name: "Command" })).toBeFocused();
 	await page.keyboard.type("spawn 2 alpine");
 	await page.keyboard.press("Enter");
-	await expect(page.getByText("2 of 2 machines ready")).toBeVisible({ timeout: 60_000 });
+	await expect(page.getByText("2 of 2 ready")).toBeVisible({ timeout: 60_000 });
 }
 
 /** A line run from the command bar, as a person would. */

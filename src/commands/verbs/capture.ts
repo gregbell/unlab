@@ -17,10 +17,11 @@ export const capture = defineVerb({
 			"filter",
 		);
 	},
-	describe: (plan) => (plan.filter === "" ? "show every frame in Wire" : `show frames matching ${plan.filter} in Wire`),
+	describe: (plan) =>
+		plan.filter === "" ? "show every captured frame" : `show captured frames matching ${plan.filter}`,
 	async execute(plan, ctx, deps) {
 		deps.dispatch({ type: "cmd/capture", filter: plan.filter });
-		await deps.until((s) => s.view === "wire" && s.capture.filter === plan.filter, ctx.signal);
+		await deps.until((s) => s.capture.filter === plan.filter, ctx.signal);
 		const text = plan.filter === "" ? "showing every frame" : `showing frames matching ${plan.filter}`;
 		return { kind: "visible", text, data: null };
 	},

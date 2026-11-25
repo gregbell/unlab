@@ -2,13 +2,12 @@
 @layer tokens, base, components;
 
 @layer components {
-	@scope (unlab-statusline) {
+	@scope (unlab-statusline) to (unlab-panel-bar) {
 		:scope {
 			display: flex;
 			flex-wrap: wrap;
 			align-items: center;
-			justify-content: space-between;
-			gap: 4px 20px;
+			gap: 4px var(--panel-gap);
 			min-height: 26px;
 			font-size: var(--fs-status);
 			line-height: var(--lh-status);
@@ -21,6 +20,15 @@
 			flex-wrap: wrap;
 			align-items: center;
 			gap: 2px 16px;
+		}
+
+		/* As wide as the rail above, so the panel bar starts where the panels do. */
+		.counts {
+			min-width: 232px;
+		}
+
+		.end {
+			margin-inline-start: auto;
 		}
 
 		.agent-toggle {

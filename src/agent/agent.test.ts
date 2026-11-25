@@ -674,7 +674,7 @@ describe("capture_read", () => {
 		});
 	});
 
-	it("refuses a filter Wire would refuse", async () => {
+	it("refuses a filter the capture panel would refuse", async () => {
 		const { call } = await setup();
 		await expect(call("capture_read", { filter: "arp or" })).resolves.toEqual(refusal("A term is a protocol"));
 	});

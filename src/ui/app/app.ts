@@ -7,14 +7,13 @@ import "../rail/rail.ts";
 import "../statusline/statusline.ts";
 import "../capture/capture.ts";
 import "../switch/switch.ts";
-import "../wire/wire.ts";
 import "../spawn-form/spawn-form.ts";
 import { ContextProvider } from "@lit/context";
 import { html, LitElement, nothing, type PropertyValues, type TemplateResult } from "lit";
-import { type Dock, selectTiling, type UiEvent } from "../../model/index.ts";
+import { type PanelName, selectTiling, type UiEvent, visiblePanels } from "../../model/index.ts";
 import { AGENT_PANEL_ID } from "../agent-panel/agent-panel.ts";
 import { plusIcon, Select, servicesContext } from "../base/index.ts";
-import { DOCK_ID } from "../capture/capture.ts";
+import { DOCK_ID } from "../panel-bar/panel-bar.ts";
 import type { AppServices } from "../services.ts";
 
 const ANNOUNCER = "unlab-announcer";
@@ -34,11 +33,10 @@ export class UnlabApp extends LitElement {
 	readonly #view = new Select(this, (state) => state.view);
 	readonly #agentPanel = new Select(this, (state) => state.agentPanel);
 	readonly #empty = new Select(this, (state) => state.rail.length === 0);
-	readonly #dock = new Select(this, (state) => state.dock);
+	readonly #panels = new Select(this, (state) => state.panels);
 	readonly #tiling = new Select(this, selectTiling);
-	readonly #paused = new Select(this, (state) => state.capture.paused);
-	#shownDock: Dock | null = null;
-	#refocusDock = false;
+	/** The panel that had the focus before this render, which may park it. */
+	#focusedPanel: PanelName | null = null;
 
 	get app(): AppServices {
 		if (!this.services) throw new Error("<unlab-app> needs its services before it connects");
@@ -70,17 +68,17 @@ export class UnlabApp extends LitElement {
 	protected override willUpdate(changed: PropertyValues<this>): void {
 		super.willUpdate(changed);
 		if (changed.has("services") && this.services) this.#provider.setValue(this.services);
-		const dock = this.#dock.value;
-		if (this.#shownDock !== null && dock !== this.#shownDock)
-			this.#refocusDock = this.querySelector(`#${DOCK_ID}`)?.contains(document.activeElement) ?? false;
-		this.#shownDock = dock;
+		const focused = document.activeElement?.closest(`#${DOCK_ID} > unlab-capture, #${DOCK_ID} > unlab-switch`);
+		this.#focusedPanel = focused ? (focused.localName === "unlab-capture" ? "capture" : "switch0") : null;
 	}
 
 	protected override updated(changed: PropertyValues<this>): void {
 		super.updated(changed);
-		if (!this.#refocusDock) return;
-		this.#refocusDock = false;
-		void this.#focusDockToggle();
+		const panel = this.#focusedPanel;
+		this.#focusedPanel = null;
+		// Its button went with it, so its name in the bar takes the focus: that is the way back.
+		if (panel && !visiblePanels(this.#panels.value).includes(panel))
+			this.querySelector<HTMLElement>(`unlab-panel-bar [data-panel="${panel}"]`)?.focus();
 	}
 
 	override render(): TemplateResult {
@@ -89,6 +87,8 @@ export class UnlabApp extends LitElement {
 		const empty = this.#empty.value;
 		const creating = view === "spawn" || (empty && view === "lab");
 		const { columns, dockDivider } = this.#tiling.value;
+		const { maximised } = this.#panels.value;
+		const panels = visiblePanels(this.#panels.value);
 		return html`<header class="top-bar">
 				<button type="button" class="wordmark" aria-label="unLAB, back to the lab" @click=${() => this.#ui({ type: "ui/view", view: "lab" })}>
 					un<span>LAB</span>
@@ -103,19 +103,17 @@ export class UnlabApp extends LitElement {
 				<div class="lab" ?hidden=${view !== "lab" || empty}>
 					<unlab-rail role="complementary" aria-label="Machines"></unlab-rail>
 					<main class="centre">
-						<unlab-pane-area ?hidden=${empty}></unlab-pane-area>
-						<unlab-parked-strip></unlab-parked-strip>
-						<div id=${DOCK_ID} class="dock" ?hidden=${empty}
+						<div class="panes" ?hidden=${empty || maximised !== null}>
+							<unlab-pane-area></unlab-pane-area>
+							<unlab-parked-strip></unlab-parked-strip>
+						</div>
+						<div id=${DOCK_ID} class="dock" ?data-maximised=${maximised !== null} ?hidden=${empty || panels.length === 0}
 							style=${dockDivider ? `--dock-columns: ${columns}; --dock-divider: ${dockDivider}` : nothing}>
-							${
-								this.#dock.value === "open"
-									? html`<unlab-capture mode="dock"></unlab-capture><unlab-switch compact></unlab-switch>`
-									: this.#dockStrip()
-							}
+							${panels.includes("capture") ? html`<unlab-capture mode=${maximised ? "full" : "dock"}></unlab-capture>` : nothing}
+							${panels.includes("switch0") ? html`<unlab-switch ?compact=${!maximised}></unlab-switch>` : nothing}
 						</div>
 					</main>
 				</div>
-				<main class="wire-view" ?hidden=${view !== "wire"}>${view === "wire" ? html`<unlab-wire></unlab-wire>` : nothing}</main>
 				<div id=${AGENT_PANEL_ID} class="agent-panel" role="complementary" aria-label="Agent" ?hidden=${!agentPanel}>
 					${agentPanel ? html`<unlab-agent-panel></unlab-agent-panel>` : nothing}
 				</div>
@@ -124,42 +122,17 @@ export class UnlabApp extends LitElement {
 			<div id=${ANNOUNCER} class="visually-hidden" role="status"></div>`;
 	}
 
-	/** The collapsed dock: whether the capture runs, and the way back. The status line already counts the links. */
-	#dockStrip(): TemplateResult {
-		const paused = this.#paused.value;
-		return html`<div class="dock-strip">
-			<span class="title">network</span>
-			<span class="status" data-paused=${paused}>${paused ? "paused" : "live"}</span>
-			<span class="spacer"></span>
-			<button
-				type="button"
-				class="button"
-				aria-expanded="false"
-				aria-controls=${DOCK_ID}
-				@click=${() => this.#ui({ type: "ui/dock", dock: "open" })}
-			>
-				show
-			</button>
-		</div>`;
-	}
-
-	/** The button that toggled the dock is gone; its counterpart takes the focus, once the capture has drawn its own. */
-	async #focusDockToggle(): Promise<void> {
-		const dock = this.querySelector(`#${DOCK_ID}`);
-		await dock?.querySelector("unlab-capture")?.updateComplete;
-		dock?.querySelector<HTMLElement>(`button[aria-controls="${DOCK_ID}"]`)?.focus();
-	}
-
 	#ui(event: UiEvent): void {
 		this.app.store.dispatchUi(event);
 	}
 
-	/** Esc leaves another view, then closes the agent panel. A terminal keeps its own Esc. */
+	/** Esc leaves another view, then restores a maximised panel, then closes the agent panel. A terminal keeps its own Esc. */
 	readonly #onKeydown = (event: KeyboardEvent): void => {
 		if (event.key !== "Escape" || event.defaultPrevented) return;
 		if (event.target instanceof Node && this.querySelector("unlab-pane-area")?.contains(event.target)) return;
-		const { view, agentPanel } = this.app.store.state;
+		const { view, agentPanel, panels } = this.app.store.state;
 		if (view !== "lab") this.#ui({ type: "ui/view", view: "lab" });
+		else if (panels.maximised) this.#ui({ type: "ui/panel-maximised", panel: panels.maximised });
 		else if (agentPanel) this.#ui({ type: "ui/agent-panel", open: false });
 		else return;
 		event.preventDefault();

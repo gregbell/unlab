@@ -133,7 +133,7 @@ describe("machines that stop", () => {
 	});
 
 	test("are counted in the status line", () => {
-		expect(selectStatus(stopping()).left[0].text).toBe("0 of 4 machines ready, 2 stopping, 2 off");
+		expect(selectStatus(stopping()).left[0].text).toBe("0 of 4 ready, 2 stopping, 2 off");
 		expect(selectStatus(stopping()).left[0].tone).toBe("quiet");
 	});
 
@@ -460,16 +460,15 @@ describe("the status line", () => {
 
 	test("words its segments as the handoff does", () => {
 		expect(texts(busy())).toEqual({
-			left: ["3 of 4 machines ready, 1 booting", "5 open sessions", "switch0: 2 of 3 links up"],
+			left: ["3 of 4 ready, 1 booting", "5 sessions"],
 			right: ["webmcp: 14 tools, agent active"],
 		});
 	});
 
 	test("a segment is quiet when all is well", () => {
 		const s = run(labWith(3), { type: "agent/call", call: agentCall(1, 0) });
-		expect(texts(s).left).toEqual(["3 of 3 machines ready", "3 open sessions", "switch0: 3 of 3 links up"]);
+		expect(texts(s).left).toEqual(["3 of 3 ready", "3 sessions"]);
 		expect([...selectStatus(s).left, ...selectStatus(s).right].map((segment) => segment.tone)).toEqual([
-			"quiet",
 			"quiet",
 			"quiet",
 			"quiet",
@@ -478,7 +477,7 @@ describe("the status line", () => {
 
 	test("the machines segment turns down while any machine has failed", () => {
 		const s = run(labWith(4), hasFailed("node4"));
-		expect(texts(s).left[0]).toBe("3 of 4 machines ready, 1 failed");
+		expect(texts(s).left[0]).toBe("3 of 4 ready, 1 failed");
 		expect(tone(s, "machines")).toBe("down");
 		expect(tone(busy(), "machines")).toBe("quiet");
 	});
@@ -486,12 +485,7 @@ describe("the status line", () => {
 	test("booting and failed are both counted", () => {
 		let s = run(labWith(2), hasFailed("node2"));
 		s = run(s, spawnEvent(s, 2));
-		expect(texts(s).left[0]).toBe("1 of 4 machines ready, 2 booting, 1 failed");
-	});
-
-	test("the links segment turns down while any cable is cut", () => {
-		expect(tone(busy(), "links")).toBe("down");
-		expect(tone(labWith(2), "links")).toBe("quiet");
+		expect(texts(s).left[0]).toBe("1 of 4 ready, 2 booting, 1 failed");
 	});
 
 	test("the WebMCP segment turns warn while a call waits for approval", () => {
@@ -536,14 +530,14 @@ describe("the status line", () => {
 
 	test("an empty lab", () => {
 		expect(texts(emptyLab())).toEqual({
-			left: ["0 machines", "0 open sessions"],
+			left: ["0 machines", "0 sessions"],
 			right: ["webmcp: 14 tools registered"],
 		});
 	});
 
 	test("a machine being removed is no longer counted", () => {
 		const s = run(labWith(4), remove("node4"));
-		expect(texts(s).left).toEqual(["3 of 3 machines ready", "3 open sessions", "switch0: 3 of 3 links up"]);
+		expect(texts(s).left).toEqual(["3 of 3 ready", "3 sessions"]);
 	});
 
 	test("one of anything is singular", () => {
@@ -553,24 +547,24 @@ describe("the status line", () => {
 			s = run(s, { type: "ui/policy", tool, policy: "off" });
 		}
 		expect(texts(s)).toEqual({
-			left: ["1 of 1 machine ready", "1 open session", "switch0: 1 of 1 link up"],
+			left: ["1 of 1 ready", "1 session"],
 			right: ["webmcp: 1 tool registered"],
 		});
 	});
 
 	test("a shell still opening and a failed machine's console are not open sessions", () => {
 		let s = run(labWith(2), shell("node1"));
-		expect(texts(s).left[1]).toBe("2 open sessions");
+		expect(texts(s).left[1]).toBe("2 sessions");
 		s = run(s, { type: "session/opened", session: "node1:sh1" });
-		expect(texts(s).left[1]).toBe("3 open sessions");
+		expect(texts(s).left[1]).toBe("3 sessions");
 		s = run(s, hasFailed("node1"));
-		expect(texts(s).left[1]).toBe("1 open session");
+		expect(texts(s).left[1]).toBe("1 session");
 	});
 
 	test("machines without a cable leave the links segment out", () => {
 		let s = emptyLab();
 		s = run(s, spawnEvent(s, 2, { net: "none" }));
-		expect(texts(s).left).toEqual(["0 of 2 machines ready, 2 booting", "2 open sessions"]);
+		expect(texts(s).left).toEqual(["0 of 2 ready, 2 booting", "2 sessions"]);
 	});
 });
 
@@ -619,7 +613,7 @@ describe("recent and history", () => {
 describe("memoisation", () => {
 	test("a selector returns the same object until something it reads changes", () => {
 		const s = labWith(3);
-		const elsewhere = run(s, tick(s.now + 1000), { type: "ui/view", view: "wire" }, logged("ls", "bar", s.now + 1000));
+		const elsewhere = run(s, tick(s.now + 1000), { type: "ui/view", view: "spawn" }, logged("ls", "bar", s.now + 1000));
 		expect(elsewhere).not.toBe(s);
 		for (const select of [
 			selectRail,

@@ -139,6 +139,40 @@
 		font-size: var(--fs-input);
 	}
 
+	/* Square and borderless: the window buttons. */
+	.icon {
+		display: inline-flex;
+		flex: 0 0 auto;
+		align-items: center;
+		justify-content: center;
+		width: 26px;
+		height: 26px;
+		padding: 0;
+		border: 0;
+		border-radius: var(--r-control);
+		background: transparent;
+		color: var(--text-3);
+		cursor: pointer;
+	}
+
+	.icon:hover {
+		background: var(--line);
+	}
+
+	.icon[aria-pressed="true"] {
+		color: var(--text);
+	}
+
+	.icon:focus-visible {
+		outline-offset: -2px;
+	}
+
+	.line-icon {
+		fill: none;
+		stroke: currentcolor;
+		stroke-width: 1.25;
+	}
+
 	/* Destructive: only the text turns red. */
 	.button.danger:not(:disabled) {
 		color: var(--down);

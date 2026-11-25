@@ -21,6 +21,8 @@ import {
 	type Identity,
 	type LabState,
 	type NicSpec,
+	PANELS,
+	type PanelName,
 	type Plug,
 	PORTS,
 	type Step,
@@ -62,7 +64,7 @@ export function saveWorkspace(state: LabState): string {
 		version: VERSION,
 		nextN: state.nextN,
 		nodes,
-		dock: state.dock,
+		panels: state.panels.open,
 		order: state.panes.order,
 		parked: state.panes.order.filter((n) => (state.panes.maximised?.before ?? state.panes.parked)[n] === "user"),
 		maximised: state.panes.maximised?.machine,
@@ -166,6 +168,13 @@ function readIdentity(n: number, saved: unknown): Identity {
 	return [n, null].includes(parseDefaultName(name)) ? identity(n, name) : invalid();
 }
 
+/** Before panels parked one at a time, one `dock` was open or collapsed. */
+function readPanels(saved: Record<string, unknown>): readonly PanelName[] {
+	const { panels, dock } = saved;
+	if (Array.isArray(panels)) return PANELS.filter((name) => panels.includes(name));
+	return dock === "collapsed" ? [] : PANELS;
+}
+
 export function restoreWorkspace(base: LabState, raw: string | null): Step {
 	if (raw === null) return { state: base, effects: [] };
 	const saved: unknown = JSON.parse(raw);
@@ -246,7 +255,7 @@ export function restoreWorkspace(base: LabState, raw: string | null): Step {
 			...state,
 			panes,
 			keyboard: focus ? { kind: "pane", machine: focus } : { kind: "none" },
-			dock: saved.dock === "collapsed" ? "collapsed" : "open",
+			panels: { ...base.panels, open: readPanels(saved) },
 			agent: { ...base.agent, policies, paused: saved.paused === true },
 		},
 	};

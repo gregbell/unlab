@@ -16,7 +16,7 @@ test("reload restores distinct sized machines, private files and a cut cable", a
 	await page.getByRole("button", { name: "512 MiB" }).click();
 	await page.getByRole("button", { name: "8 GiB" }).click();
 	await page.getByRole("button", { name: "Boot 2 machines" }).click();
-	await expect(page.getByText("2 of 2 machines ready")).toBeVisible({ timeout: 90000 });
+	await expect(page.getByText("2 of 2 ready")).toBeVisible({ timeout: 90000 });
 	for (const n of [1, 2]) {
 		await shell(
 			page,
@@ -27,7 +27,7 @@ test("reload restores distinct sized machines, private files and a cut cable", a
 	}
 	await page.getByRole("button", { name: "Cut the cable from node2 to port 2" }).click();
 	await page.reload();
-	await expect(page.getByText("2 of 2 machines ready")).toBeVisible({ timeout: 90000 });
+	await expect(page.getByText("2 of 2 ready")).toBeVisible({ timeout: 90000 });
 	await expect(page.getByRole("button", { name: "Reconnect the cable from node2 to port 2" })).toBeVisible();
 	for (const n of [1, 2]) {
 		await shell(

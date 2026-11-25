@@ -21,7 +21,7 @@ test("a lab machine with no network has the tools, and keeps a disk that it part
 }) => {
 	await openLab(page);
 	await typed(page, "spawn 1 lab --no-net --no-gateway --extra-disk 1");
-	await ready(page, "1 of 1 machine ready");
+	await ready(page, "1 of 1 ready");
 
 	expect(await root(page, 1, "ip -V")).toContain("iproute2");
 	expect((await root(page, 1, `command -v ${PROGRAMS.replaceAll(" ", "; command -v ")}`)).split("\n")).toHaveLength(10);
@@ -30,7 +30,7 @@ test("a lab machine with no network has the tools, and keeps a disk that it part
 	await root(page, 1, "mount /dev/wdc1 /mnt && echo filed > /mnt/note && sync");
 	await page.waitForTimeout(4000);
 	await page.reload();
-	await ready(page, "1 of 1 machine ready");
+	await ready(page, "1 of 1 ready");
 	// The kernel says that it mounted it, on the console that the command runs in.
 	await root(page, 1, "mount /dev/wdc1 /mnt");
 	expect(await root(page, 1, "cat /mnt/note")).toBe("filed");
@@ -39,7 +39,7 @@ test("a lab machine with no network has the tools, and keeps a disk that it part
 test("packages install on a lab machine that has the gateway", async ({ page }) => {
 	await openLab(page);
 	await typed(page, "spawn 1 lab");
-	await ready(page, "1 of 1 machine ready");
+	await ready(page, "1 of 1 ready");
 	await root(page, 1, "apk add --quiet tree && tree --version");
 });
 
