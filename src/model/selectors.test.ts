@@ -461,7 +461,7 @@ describe("the status line", () => {
 	test("words its segments as the handoff does", () => {
 		expect(texts(busy())).toEqual({
 			left: ["3 of 4 machines ready, 1 booting", "5 open sessions", "switch0: 2 of 3 links up"],
-			right: ["webmcp: 13 tools, agent active"],
+			right: ["webmcp: 14 tools, agent active"],
 		});
 	});
 
@@ -502,7 +502,7 @@ describe("the status line", () => {
 		expect(texts(s).right[0]).toBe("webmcp: 2 calls waiting for you");
 		s = run(s, { type: "agent/settled", id: 2, status: "denied", result: "Denied by the user." });
 		s = run(s, { type: "agent/settled", id: 3, status: "aborted", result: null });
-		expect(texts(s).right[0]).toBe("webmcp: 13 tools, agent active");
+		expect(texts(s).right[0]).toBe("webmcp: 14 tools, agent active");
 		expect(tone(s, "webmcp")).toBe("quiet");
 	});
 
@@ -529,15 +529,15 @@ describe("the status line", () => {
 
 	test("a tool switched off is not counted, and an idle agent is called idle", () => {
 		let s = run(busy(), { type: "ui/policy", tool: "shell_exec", policy: "off" });
-		expect(texts(s).right[0]).toBe("webmcp: 12 tools, agent active");
+		expect(texts(s).right[0]).toBe("webmcp: 13 tools, agent active");
 		s = run(s, tick(s.now + AGENT_IDLE_MS));
-		expect(texts(s).right[0]).toBe("webmcp: 12 tools, agent idle");
+		expect(texts(s).right[0]).toBe("webmcp: 13 tools, agent idle");
 	});
 
 	test("an empty lab", () => {
 		expect(texts(emptyLab())).toEqual({
 			left: ["0 machines", "0 open sessions"],
-			right: ["webmcp: 13 tools registered"],
+			right: ["webmcp: 14 tools registered"],
 		});
 	});
 

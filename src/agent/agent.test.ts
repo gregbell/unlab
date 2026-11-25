@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { arpReply, arpRequest, mac, ping, routedPing } from "../../test/support/frames.ts";
 import { createCaptureLog } from "../capture/index.ts";
-import { createRegistry, isLineError, parseLine, VERBS } from "../commands/index.ts";
+import { createRegistry, type FilePort, type GuestFile, isLineError, parseLine, VERBS } from "../commands/index.ts";
 import {
 	type AgentCall,
 	createStore,
@@ -16,7 +16,7 @@ import {
 import { detectModelContext, type ModelContextLike, startAgent, type WebMcpTool } from "./index.ts";
 
 /** The real store and every verb; the runtime stand-in answers vm/stop so removals finish. */
-function storeLab() {
+function storeLab(files: FilePort = { write: () => Promise.reject(new Error("This test has no file port.")) }) {
 	const store = createStore(
 		initialState([{ name: "alpine", label: "alpine 3.24" }], { width: 1300, height: 500 }),
 		(effect) => {
@@ -38,6 +38,7 @@ function storeLab() {
 			until: store.until,
 			now: () => store.state.now,
 			exec: { inject: () => Promise.reject(new Error("This test has no exec port.")) },
+			files,
 		},
 		VERBS,
 	);
@@ -83,6 +84,7 @@ const ALL_TOOLS: readonly ToolName[] = [
 	"checkpoint_remove",
 	"shell_exec",
 	"shell_read",
+	"file_write",
 	"link_set",
 	"capture_read",
 ];
@@ -95,8 +97,8 @@ function start(modelContext: ModelContextLike | null) {
 	return { agent, store };
 }
 
-async function setup(machines = 2, screens: Partial<Record<SessionId, string>> = {}) {
-	const lab = storeLab();
+async function setup(machines = 2, screens: Partial<Record<SessionId, string>> = {}, files?: FilePort) {
+	const lab = storeLab(files);
 	await lab.lab(machines);
 	const capture = createCaptureLog({ schedule: (fn) => fn(), now: () => 0 });
 	const context = fakeModelContext();
@@ -183,6 +185,7 @@ describe("registration", () => {
 			"Restore a checkpoint",
 			"Run a shell command",
 			"Save a checkpoint",
+			"Write a file",
 		]);
 		const long = [...context.tools.values()].flatMap(({ name, description, inputSchema }) => [
 			...(name.length > 30 ? [name] : []),
@@ -532,6 +535,66 @@ describe("a tool set to ask", () => {
 		agent.answer(id, true);
 		await expect(removing).resolves.toEqual(refusal("node2 is already gone."));
 		expect(lastCall()).toMatchObject({ id, status: "failed" });
+	});
+});
+
+describe("file_write", () => {
+	const text = "one\n  two\n\nnode1 four\n";
+	const input = { machine: "node1", path: "/etc/motd", text };
+	const writing = async () => {
+		const written: GuestFile[] = [];
+		const t = await setup(
+			1,
+			{},
+			{
+				async write(_, file) {
+					written.push(file);
+					return { kind: "written", path: file.path, owner: "root:root", mode: "644" };
+				},
+			},
+		);
+		return { ...t, written };
+	};
+
+	it("runs at once, and the panel and the log leave a text of several lines out", async () => {
+		const { call, lastCall, store, written } = await writing();
+		expect(await call("file_write", input)).toEqual({
+			result: "wrote /etc/motd on node1 · 4 lines, 22 bytes · root:root 644",
+			data: { machine: "node1", path: "/etc/motd", bytes: 22, owner: "root:root", mode: "644" },
+		});
+		expect(written).toEqual([{ path: "/etc/motd", text, owner: null, mode: null }]);
+		expect(lastCall()).toMatchObject({
+			line: "write node1 /etc/motd",
+			status: "done",
+			result: "wrote /etc/motd on node1 · 4 lines, 22 bytes · root:root 644",
+		});
+		expect(store.state.log.at(-1)).toMatchObject({ line: "write node1 /etc/motd", source: "agent" });
+		await call("file_write", { ...input, machine: "node9" });
+		expect(lastCall()).toMatchObject({ line: "write node9 /etc/motd", status: "failed" });
+	});
+
+	it("shows the text to the person who is asked, and how much more there is of a long one", async () => {
+		const { agent, call, policy, waiting, written } = await writing();
+		policy("file_write", "ask");
+		const reply = call("file_write", { ...input, mode: "600" });
+		expect(waiting()).toMatchObject([
+			{
+				line: "write node1 /etc/motd --mode 600",
+				preview: `Will write /etc/motd on node1 · 4 lines, 22 bytes · mode 600.\n${text}`,
+				actionLabel: "Write /etc/motd on node1",
+			},
+		]);
+		expect(written).toEqual([]);
+		agent.answer(waiting()[0].id, true);
+		await reply;
+		expect(written).toMatchObject([{ text }]);
+		void call("file_write", { ...input, text: "x".repeat(10_005) });
+		expect(waiting()[0].preview).toMatch(/\.\nx{10000}…\n\(5 more characters are not shown\)$/);
+		void call("file_write", { ...input, text: "short" });
+		expect(waiting()[1]).toMatchObject({
+			line: "write node1 /etc/motd -- short",
+			preview: "Will write /etc/motd on node1 · 1 line, 5 bytes.",
+		});
 	});
 });
 

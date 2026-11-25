@@ -238,6 +238,7 @@ export async function mount<K extends keyof HTMLElementTagNameMap>(
 			until: (predicate, signal) => store.until(predicate, signal),
 			now: () => store.state.now,
 			exec: { inject: () => Promise.reject(new Error("This fixture has no runtime.")) },
+			files: { write: () => Promise.reject(new Error("This fixture has no runtime.")) },
 		},
 		VERBS,
 	);

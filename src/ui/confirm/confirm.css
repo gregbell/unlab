@@ -39,6 +39,8 @@
 
 		.detail {
 			color: var(--text-2);
+			/* A text that is to be written is shown with its line ends. */
+			white-space: pre-wrap;
 		}
 
 		.machine {

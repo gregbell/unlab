@@ -41,6 +41,7 @@ function boot(attempt = 1, config = NODE3, released: Promise<unknown> = Promise.
 		ready: record("ready"),
 		failed: record("failed"),
 		halted: record("halted"),
+		wrote: record("wrote"),
 		copied: record("copied"),
 		nicLost: record("nicLost"),
 		frame: record("frame"),
@@ -165,6 +166,7 @@ describe("boot", () => {
 		t.from({ type: "pty-output", sid: 2, bytes });
 		t.from({ type: "pty-exit", sid: 2, code: 0, reason: "", lost: false });
 		t.from({ type: "copy", report: { kind: "done", bytes: 4096 } });
+		t.from({ type: "wrote", id: 4, outcome: { kind: "refused", reason: "No." } });
 		t.from({ type: "ready", ms: 900 });
 
 		const at = { machine: "node3", attempt: 4 };
@@ -177,6 +179,7 @@ describe("boot", () => {
 			["ptyBytes", at, 2, bytes],
 			["ptyExited", at, 2, false],
 			["copied", at, { kind: "done", bytes: 4096 }],
+			["wrote", at, 4, { kind: "refused", reason: "No." }],
 			["ready", at, 0],
 		]);
 	});

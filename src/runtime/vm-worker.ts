@@ -22,6 +22,7 @@ import { nextOf, saveDisks, shutDown, syncGuest } from "./power.ts";
 import type { FromVm, PtySpec, ToVm, VmConfig } from "./protocol.ts";
 import { createShellTracker } from "./shell-tracker.ts";
 import { copyFailure, memoryShortage, storageFailure } from "./shortage.ts";
+import { writeFile } from "./write-file.ts";
 
 function post(m: FromVm, transfer: Transferable[] = []): void {
 	self.postMessage(m, transfer);
@@ -50,8 +51,8 @@ const ptys = new Map<number, Pty>();
 /** Messages that arrive while the kernel is still booting. */
 const queued: Queued[] = [];
 let booting = true;
-// Each host-table update rewrites the same guest file. Apply them in publication order.
-let hostUpdate = Promise.resolve();
+/** Host tables and files, in the order they came: two of them can be for the same file. */
+let filesWritten = Promise.resolve();
 
 self.addEventListener("message", (ev: MessageEvent<ToVm>) => {
 	const m = ev.data;
@@ -96,12 +97,20 @@ function handle(m: Queued): void {
 			vm.resize(m.cols, m.rows);
 			return;
 		case "reconfigure":
-			hostUpdate = hostUpdate
+			filesWritten = filesWritten
 				.then(() => reconfigure(m))
 				.catch((error: unknown) => {
 					fail(`reconfigure: ${error instanceof Error ? error.message : String(error)}`, false);
 				});
 			return;
+		case "write": {
+			const guest = vm;
+			const { id, name, file } = m;
+			filesWritten = filesWritten.then(async () => {
+				post({ type: "wrote", id, outcome: await writeFile(guest, name, file) });
+			});
+			return;
+		}
 		case "pty-open":
 			void openPty(m.spec);
 			return;

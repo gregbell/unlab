@@ -1,6 +1,7 @@
 import { describe, expect, test, vi } from "vitest";
 import { arpRequest, mac, ping, routedPing } from "../../test/support/frames.ts";
 import { createCaptureLog } from "../capture/index.ts";
+import type { FileOutcome, GuestFile } from "../commands/index.ts";
 import {
 	type BootConfig,
 	type DiskCopy,
@@ -178,6 +179,7 @@ function fakeVms() {
 			closePty: (pty) => sent.push(["closePty", pty]),
 			reconfigure: (hosts) => sent.push(["reconfigure", hosts]),
 			checkpoint: (copy) => sent.push(["checkpoint", copy]),
+			writeFile: (id, file) => sent.push(["writeFile", id, file]),
 			deliver: (nic, frame) => sent.push(["deliver", nic, frame]),
 			stop(how) {
 				vm.stops.push(how);
@@ -290,6 +292,8 @@ function setup() {
 }
 
 const never = new AbortController().signal;
+
+type Setup = ReturnType<typeof setup>;
 
 describe("a name used again", () => {
 	const web = parseMachineName("web") as MachineName;
@@ -1293,6 +1297,71 @@ describe("exec", () => {
 		const exited = t.engine.exec.inject("node3:sh1", "exit", "bar", never);
 		other.sink.ptyExited(other.ref, 1, false);
 		await expect(exited).rejects.toThrow("node3:sh1 closed before the command returned.");
+	});
+});
+
+describe("files", () => {
+	const FILE: GuestFile = { path: "/etc/motd", text: "hello\n", owner: null, mode: null };
+	const WRITTEN: FileOutcome = { kind: "written", path: "/etc/motd", owner: "root:root", mode: "644" };
+	const none = () => new AbortController().signal;
+
+	test("a ready machine writes each file it is given, and nothing is typed", async () => {
+		const t = setup();
+		const vm = t.ready(1);
+		const first = t.engine.files.write("node1", FILE, none());
+		const second = t.engine.files.write("node1", { ...FILE, path: "/etc/issue" }, none());
+		expect(vm.sent).toEqual([
+			["writeFile", 1, FILE],
+			["writeFile", 2, { ...FILE, path: "/etc/issue" }],
+		]);
+		vm.sink.wrote(vm.ref, 2, { kind: "refused", reason: "No." });
+		vm.sink.wrote(vm.ref, 1, WRITTEN);
+		expect(await first).toEqual(WRITTEN);
+		expect(await second).toEqual({ kind: "refused", reason: "No." });
+		expect(t.events.filter((e) => e.type.startsWith("session/"))).toEqual([]);
+	});
+
+	test("a machine that is not ready is given nothing", async () => {
+		const t = setup();
+		const vm = t.boot(1);
+		const refused = { kind: "refused", reason: "node1 is not ready." };
+		expect(await t.engine.files.write("node1", FILE, none())).toEqual(refused);
+		expect(await t.engine.files.write("node2", FILE, none())).toMatchObject({ kind: "refused" });
+		vm.sink.ready(vm.ref, 1);
+		t.run({ type: "vm/stop", machine: "node1", attempt: 1, how: "off" });
+		expect(await t.engine.files.write("node1", FILE, none())).toEqual(refused);
+		expect(vm.sent).toEqual([]);
+	});
+
+	test.each([
+		["rebooted", (t: Setup) => t.run({ type: "vm/stop", machine: "node1", attempt: 1, how: "reboot" })],
+		["powered off", (_: Setup, vm: FakeVm) => vm.sink.halted(vm.ref, "off")],
+		["stopped", (t: Setup) => t.run({ type: "vm/stop", machine: "node1", attempt: 1, how: "drop" })],
+		["stopped", (_: Setup, vm: FakeVm) => vm.sink.failed(vm.ref, "It panicked.")],
+		["stopped", (t: Setup) => t.run({ type: "vm/boot", machine: "node1", attempt: 2, config: config(1) })],
+		["stopped", (t: Setup) => t.engine.dispose()],
+	])("a machine that %s leaves a file it was given in doubt, and what it says later is not heard", async (why, end) => {
+		const t = setup();
+		const vm = t.ready(1);
+		const write = t.engine.files.write("node1", FILE, none());
+		end(t, vm);
+		vm.sink.wrote(vm.ref, 1, WRITTEN);
+		expect(await write).toEqual({
+			kind: "unsure",
+			reason: `node1 ${why} while /etc/motd was being written, so check whether it was.`,
+		});
+	});
+
+	test("an abort stops the wait, and one that came first sends nothing", async () => {
+		const t = setup();
+		const vm = t.ready(1);
+		const abort = new AbortController();
+		const write = t.engine.files.write("node1", FILE, abort.signal);
+		abort.abort(new Error("Stopped by you."));
+		await expect(write).rejects.toThrow("Stopped by you.");
+		vm.sink.wrote(vm.ref, 1, WRITTEN);
+		await expect(t.engine.files.write("node1", FILE, abort.signal)).rejects.toThrow("Stopped by you.");
+		expect(vm.sent).toHaveLength(1);
 	});
 });
 

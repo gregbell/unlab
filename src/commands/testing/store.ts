@@ -7,17 +7,17 @@ import {
 	type RuntimeEvent,
 	type SessionId,
 } from "../../model/index.ts";
-import type { CommandDeps, ExecOutcome, ExecPort, ParsedLine } from "../define.ts";
+import type { CommandDeps, ExecOutcome, ExecPort, FilePort, ParsedLine } from "../define.ts";
 import { createRegistry, parseLine } from "../index.ts";
 import { isLineError, type LineError } from "../types.ts";
 import { VERBS } from "../verbs/index.ts";
-import { IMAGES, NO_EXEC } from "./lab.ts";
+import { IMAGES, NO_EXEC, NO_FILES } from "./lab.ts";
 
 /**
  * The real store with every verb registered. The runtime is a recording
  * stand-in that answers `vm/stop` with `vm/stopped`, so removals finish.
  */
-export function storeLab(exec: ExecPort = NO_EXEC) {
+export function storeLab(exec: ExecPort = NO_EXEC, files: FilePort = NO_FILES) {
 	const effects: Effect[] = [];
 	const events: CommandEvent[] = [];
 	let clock = 0;
@@ -37,6 +37,7 @@ export function storeLab(exec: ExecPort = NO_EXEC) {
 		until: store.until,
 		now: () => clock,
 		exec,
+		files,
 	};
 	const registry = createRegistry(deps, VERBS);
 	const signal = new AbortController().signal;
