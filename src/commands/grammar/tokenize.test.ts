@@ -27,7 +27,27 @@ describe("tokenize", () => {
 
 	it("gives an empty passthrough for a line that ends at --", () => {
 		expect(tokenize("exec all --").passthrough).toBe("");
-		expect(tokenize("exec all --  ").passthrough).toBe("");
+		expect(tokenize("exec all -- ").passthrough).toBe("");
+	});
+
+	it("takes one space from what follows --, and no more", () => {
+		expect(tokenize("write node1 /a --  two\n").passthrough).toBe(" two\n");
+		expect(tokenize("write node1 /a -- \uFEFFbom").passthrough).toBe("\uFEFFbom");
+	});
+
+	it("keeps a space after a backslash in its word, unless the backslash has one before it", () => {
+		expect(tokenize(String.raw`write node1 /a\ b --mode`).tokens.map((t) => t.text)).toEqual([
+			"write",
+			"node1",
+			String.raw`/a\ b`,
+			"--mode",
+		]);
+		expect(tokenize(String.raw`write node1 /a\\ --mode`).tokens.map((t) => t.text)).toEqual([
+			"write",
+			"node1",
+			String.raw`/a\\`,
+			"--mode",
+		]);
 	});
 
 	it("treats -- inside a token as an ordinary token", () => {
