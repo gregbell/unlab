@@ -202,12 +202,12 @@ As a person who never runs the CLI, I find the lab as it is today.
 As a person, I can find out how to use the CLI and trust what I run.
 
 - [ ] `npx unlab.run` installs from npm a package that CI built from this repository and published with provenance.
-- [ ] It runs on Node.js 22.12 or later, on Linux and macOS.
+- [x] It runs on Node.js 22.12 or later, on Linux and macOS.
 - [x] The README has a section for it in its own voice: start it, open a shell, copy a file, reach the internet, and what to do when it does not link.
 - [x] What's new has an entry.
 
 Not ticked: nothing is published. The workflow is `.github/workflows/cli.yml`, and npm needs an account's token in the
-repository first. The workflow's matrix is what runs Node.js 22.12 on both systems.
+repository first.
 
 ## Build order
 
@@ -293,3 +293,5 @@ have the one.
 | 5.2 | `ls` and the details; `status`; `--log` | `src/commands/verbs/ls.test.ts`: says which machines reach the internet while a CLI is linked; `src/model/selectors.test.ts`: its uplink is what the gateway reaches now; `test/integration/cli-relay.test.ts`: status and --log say what is open, by machine |
 | 5.3 | All boxes | `cli/src/relay.test.ts`; `test/integration/cli-relay.test.ts`: it ends within five seconds of the CLI quitting, and a link from another CLI brings it back; `cli/src/relay.test.ts`: with --lan a machine reaches this computer, and still not the CLI's own port; `test/integration/cli-link.test.ts`: a machine's channel needs the token |
 | 6.1 | Never linked; saved labs; WebMCP beside it | `e2e/cli.spec.ts`: a lab that has never linked…; an agent uses the lab's tools while a CLI is linked; `e2e/saved-labs.spec.ts` |
+| 6.2 | Node.js 22.12, on Linux and macOS | the matrix of `.github/workflows/cli.yml`, which passed on both: the link's rules, not SSH into a machine, which ran on Linux with Node.js 24 |
+| 6.1 | The existing suites pass | CI on pull request 27 |
