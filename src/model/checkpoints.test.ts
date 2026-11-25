@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, test } from "vitest";
 import { port0 } from "../../test/support/ports.ts";
 import { disksOf } from "./disks.ts";
@@ -274,9 +275,8 @@ describe("a reload", () => {
 	});
 
 	test("of a lab saved before there were checkpoints finds each machine's disks where they were", () => {
-		const saved = JSON.parse(saveWorkspace(labWith(1)));
-		delete saved.nodes[0].sets;
-		const { state } = restoreWorkspace(initialState(IMAGES, WIDE), JSON.stringify({ ...saved, version: 5 }));
+		const saved = readFileSync(new URL("../../test/fixtures/saved-labs/version-5.json", import.meta.url), "utf8");
+		const { state } = restoreWorkspace(initialState(IMAGES, WIDE), saved);
 		expect(machine(state, "node1").sets).toEqual({ live: 0, next: 1, checkpoints: [] });
 	});
 });

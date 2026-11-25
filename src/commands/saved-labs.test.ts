@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, test } from "vitest";
-import { createStore, initialState, restoreWorkspace, saveWorkspace } from "../model/index.ts";
+import { createStore, initialState, machineList, portsOf, restoreWorkspace, saveWorkspace } from "../model/index.ts";
 import { createRegistry, isLineError, parseLine, VERBS } from "./index.ts";
 import { IMAGES, NO_EXEC, NO_FILES } from "./testing/lab.ts";
 import type { ListedMachine } from "./verbs/index.ts";
@@ -66,15 +66,22 @@ describe("a lab saved by an earlier version", () => {
 		[4, [...FIRST, cut("switch1"), ROUTER, LOOSE]],
 		[5, [...OFF, cut("switch1"), ROUTER, LOOSE]],
 		[6, [...OFF, cut("switch1"), ROUTER, LOOSE]],
-	])("version %i opens with its machines, ports, cuts and names as they were", async (version, cables) => {
-		const { state, booted, cables: opened } = await open(savedBy(version));
-		expect(opened).toEqual(cables);
-		expect(booted).toEqual(state.rail.filter((name) => version < 5 || name !== "node3"));
-		expect(state.panes.parked).toEqual({ node3: "user" });
-		expect(state.agent.policies.link_set).toBe("ask");
+	])(
+		"version %i opens as one switch0, with its machines, ports, cuts and names as they were",
+		async (version, cables) => {
+			const { state, booted, cables: opened } = await open(savedBy(version));
+			expect(opened).toEqual(cables);
+			expect(state.switches).toEqual(["switch0"]);
+			expect(new Set(machineList(state).flatMap(({ life }) => portsOf(life).map((port) => port.switch)))).toEqual(
+				new Set(["switch0"]),
+			);
+			expect(booted).toEqual(state.rail.filter((name) => version < 5 || name !== "node3"));
+			expect(state.panes.parked).toEqual({ node3: "user" });
+			expect(state.agent.policies.link_set).toBe("ask");
 
-		const again = await open(saveWorkspace(state));
-		expect(again.cables).toEqual(cables);
-		expect(again.booted).toEqual(booted);
-	});
+			const again = await open(saveWorkspace(state));
+			expect(again.cables).toEqual(cables);
+			expect(again.booted).toEqual(booted);
+		},
+	);
 });

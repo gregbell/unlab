@@ -18,6 +18,7 @@ import {
 	type Machine,
 	type MachineName,
 	type SessionId,
+	type SwitchName,
 } from "./types.ts";
 
 /** A number is never reused, so a lab runs out of MACs after MAX_NODE. `planSpawn` checks before it asks. */
@@ -89,6 +90,12 @@ export function parseChosenName(text: string): MachineName | NameFault {
 
 export function isNameFault(read: MachineName | NameFault): read is NameFault {
 	return typeof read !== "string";
+}
+
+/** A switch's name is beside machines' names, and beside `none` where a NIC's network is named. */
+export function parseSwitchName(text: string): SwitchName | null {
+	if (text === DEFAULT_SWITCH) return text;
+	return isNameFault(parseChosenName(text)) || text === "none" ? null : (text as string as SwitchName);
 }
 
 export interface SessionAddress {

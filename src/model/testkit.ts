@@ -2,7 +2,7 @@
 
 import { isAddressFault, parseAddress } from "../net/index.ts";
 import { parseGiB } from "./disks.ts";
-import { isNameFault, parseCheckpointName, parseChosenName } from "./identity.ts";
+import { isNameFault, parseCheckpointName, parseChosenName, parseSwitchName } from "./identity.ts";
 import { isPlanError, planBoot, planLink, planRestore, planSpawn } from "./machines.ts";
 import {
 	type Address,
@@ -24,6 +24,7 @@ import {
 	type SessionId,
 	type Source,
 	type SpawnRequest,
+	type SwitchName,
 } from "./types.ts";
 import { initialState, update } from "./update.ts";
 
@@ -84,6 +85,17 @@ export function named(text: string): MachineName {
 	const name = parseChosenName(text);
 	if (isNameFault(name)) throw new Error(`${text}: ${name.kind}`);
 	return name;
+}
+
+export function switchNamed(text: string): SwitchName {
+	const name = parseSwitchName(text);
+	if (!name) throw new Error(`${text} is no switch's name`);
+	return name;
+}
+
+/** The lab with these switches beside the default one. */
+export function withSwitches(state: LabState, ...names: readonly SwitchName[]): LabState {
+	return { ...state, switches: [DEFAULT_SWITCH, ...names] };
 }
 
 export function spawnRequest(options: SpawnOptions = {}): SpawnRequest {

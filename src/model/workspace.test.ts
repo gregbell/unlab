@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { describe, expect, test } from "vitest";
 import { port0 } from "../../test/support/ports.ts";
 import { addressText } from "./selectors.ts";
 import {
@@ -13,8 +13,11 @@ import {
 	power,
 	run,
 	spawnEvent,
+	switchNamed,
 	WIDE,
+	withSwitches,
 } from "./testkit.ts";
+import { DEFAULT_SWITCH } from "./types.ts";
 import { initialState } from "./update.ts";
 import { restoreWorkspace, saveWorkspace } from "./workspace.ts";
 
@@ -110,7 +113,7 @@ test("a lab saved before machines had several NICs restores with one each, on th
 		["10.88.0.12", true],
 		["10.88.0.13", false],
 	]);
-	expect(JSON.parse(saveWorkspace(state))).toMatchObject({ version: 6 });
+	expect(JSON.parse(saveWorkspace(state))).toMatchObject({ version: 7, switches: ["switch0"] });
 });
 
 test("a lab saved before machines chose addresses restores with the ones they had", () => {
@@ -175,7 +178,7 @@ test("a lab saved before machines had extra disks restores with the root disk it
 	const { state } = restoreWorkspace(initialState(IMAGES, WIDE), JSON.stringify(VERSION_4));
 	expect(machine(state, state.rail[0])).toMatchObject({ name: "web", spec: { disks: { root: "16", extra: [] } } });
 	expect(JSON.parse(saveWorkspace(state))).toMatchObject({
-		version: 6,
+		version: 7,
 		nodes: [{ disks: { root: "16", extra: [] } }],
 	});
 });
@@ -227,6 +230,68 @@ test.each([
 ])("a saved machine with %s is refused", (_why, nics) => {
 	const saved = { ...VERSION_1, version: 2, nodes: [{ ...VERSION_1.nodes[0], nics }] };
 	expect(() => restoreWorkspace(initialState(IMAGES, WIDE), JSON.stringify(saved))).toThrow("could not be read");
+});
+
+describe("a lab with several switches", () => {
+	const lan = switchNamed("lan");
+	const saved = () => {
+		let s = withSwitches(emptyLab(), lan, switchNamed("switch2"));
+		s = run(s, spawnEvent(s, 1, { net: [lan, DEFAULT_SWITCH, lan] }), isReady("node1"));
+		return run(s, linkEvent(s, false, { machine: "node1", nic: 2 }));
+	};
+	const reopened = (change: (lab: Record<string, unknown> & { nodes: Record<string, unknown>[] }) => void) => {
+		const lab = JSON.parse(saveWorkspace(saved()));
+		change(lab);
+		return restoreWorkspace(initialState(IMAGES, WIDE), JSON.stringify(lab));
+	};
+
+	test("comes back with each of them, and each cable on the one it was plugged into", () => {
+		const { state, effects } = reopened(() => {});
+		expect(state.switches).toEqual(["switch0", "lan", "switch2"]);
+		expect(machine(state, "node1").spec.nics.map(({ net }) => net)).toEqual(["lan", "switch0", "lan"]);
+		expect(machine(state, "node1").life).toMatchObject({
+			plugs: [
+				{ kind: "port", port: { switch: "lan", port: 1 }, link: "up" },
+				{ kind: "port", port: port0(1), link: "up" },
+				{ kind: "port", port: { switch: "lan", port: 2 }, link: "cut" },
+			],
+		});
+		expect(effects.flatMap((e) => (e.type === "port/attach" ? [e.port] : []))).toEqual([
+			{ switch: "lan", port: 1 },
+			port0(1),
+			{ switch: "lan", port: 2 },
+		]);
+	});
+
+	test.each<[string, unknown]>([
+		["none of them", undefined],
+		["no default switch", ["lan", "switch2"]],
+		["two of one name", ["switch0", "lan", "lan"]],
+		["a name that is no hostname", ["switch0", "lan", "The LAN"]],
+		["a name that means something else", ["switch0", "lan", "none"]],
+		["a name that the lab gives machines", ["switch0", "lan", "node7"]],
+		["a name that is no text", ["switch0", "lan", 2]],
+		["the name of one of its machines", ["switch0", "lan", "web"]],
+		["none of the name that a NIC is on", ["switch0", "switch2"]],
+	])("is refused with %s", (_why, switches) => {
+		const change = (lab: Record<string, unknown> & { nodes: Record<string, unknown>[] }) => {
+			lab.nodes[0].name = "web";
+			lab.switches = switches;
+		};
+		expect(() => reopened(change)).toThrow("could not be read");
+	});
+
+	test.each<[string, unknown]>([
+		["a switch there is not", { switch: "switch1", port: 1 }],
+		["a port there is not", { switch: "lan", port: 9 }],
+		["another NIC's port", { switch: "lan", port: 1 }],
+		["a number", 3],
+	])("is refused with a cable in %s", (_why, port) => {
+		const change = ({ nodes: [node] }: { nodes: Record<string, unknown>[] }) => {
+			node.nics = (node.nics as object[]).map((nic, i) => (i === 2 ? { ...nic, port } : nic));
+		};
+		expect(() => reopened(change)).toThrow("could not be read");
+	});
 });
 
 test("the open panels come back, and none maximised", () => {
