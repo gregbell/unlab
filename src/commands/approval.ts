@@ -3,8 +3,8 @@ import type { ConfirmText } from "./types.ts";
 /**
  * A person said yes to one line, for what they read of it. The private field makes the type nominal and
  * the class is never exported as a value, so `grantApproval` is the only way
- * to make one. index.ts does not re-export it: only the bar and the agent
- * module, which own the two confirmation surfaces, import this file.
+ * to make one. index.ts does not re-export it: only the bar, the agent module
+ * and the link, which own the confirmation surfaces, import this file.
  */
 class ApprovalToken {
 	readonly #line: string;

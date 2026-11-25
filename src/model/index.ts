@@ -1,6 +1,6 @@
 // The pure lab. Every other layer imports the model from here and nowhere deeper.
 //
-// One function changes state: `update`, reached only through a store's four
+// One function changes state: `update`, reached only through a store's five
 // dispatchers. The pane functions that `update` calls are not exported, so
 // nothing else can rearrange panes.
 

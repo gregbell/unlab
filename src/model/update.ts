@@ -49,6 +49,7 @@ import {
 	type AgentCall,
 	type AgentState,
 	type CaptureUi,
+	type CliLink,
 	DEFAULT_SWITCH,
 	type ImageInfo,
 	type Keyboard,
@@ -124,6 +125,7 @@ export function initialState(
 			firstCallAt: null,
 			lastCallAt: null,
 		},
+		cli: { kind: "off" },
 		log: [],
 		nextLogId: 1,
 		images,
@@ -266,6 +268,9 @@ function reduce(state: LabState, event: LabEvent): Step {
 			return agentCalled(state, event.call);
 		case "agent/settled":
 			return agentSettled(state, event.id, event.status, event.result);
+
+		case "cli/link":
+			return sameCliLink(state.cli, event.cli) ? step(state) : step(patch(state, { cli: event.cli }));
 	}
 }
 
@@ -368,6 +373,10 @@ function capture(state: LabState, fields: Partial<CaptureUi>): LabState {
 
 function agent(state: LabState, fields: Partial<AgentState>): LabState {
 	return patch(state, { agent: patch(state.agent, fields) });
+}
+
+function sameCliLink(a: CliLink, b: CliLink): boolean {
+	return a.kind === b.kind && (a.kind !== "refused" || b.kind !== "refused" || a.message === b.message);
 }
 
 function sameWebMcp(a: WebMcp, b: WebMcp): boolean {

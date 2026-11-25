@@ -7,6 +7,7 @@ import "./ui/app/app.ts";
 import { detectModelContext, startAgent } from "./agent/index.ts";
 import { createCaptureLog } from "./capture/index.ts";
 import { createCommandService, createRegistry, VERBS } from "./commands/index.ts";
+import { browserDeps, linkAsked, startLink } from "./link/index.ts";
 import {
 	clockHz,
 	createStore,
@@ -75,6 +76,9 @@ async function loadManifest(): Promise<Manifest> {
 	if (!res.ok) throw new Error("No mirrored images. Run: npm run distros alpine");
 	return (await res.json()) as Manifest;
 }
+
+/** A lab the CLI opened says so to the one that is open already. */
+const HAND_OVER = "unlab.cli";
 
 async function main(): Promise<void> {
 	const manifest = await loadManifest();
@@ -182,6 +186,23 @@ async function main(): Promise<void> {
 		modelContext: detectModelContext(document, navigator),
 	});
 
+	const link = startLink({
+		...browserDeps,
+		store,
+		registry,
+		machines: (target) => engine.link(target && { ...target, programs: new URL("ssh/", document.baseURI).href }),
+	});
+	const takeHash = () => {
+		const asked = linkAsked(location.hash);
+		if (!asked) return;
+		history.replaceState(null, "", location.pathname + location.search);
+		link.set(true, asked.port);
+	};
+	takeHash();
+	window.addEventListener("hashchange", takeHash);
+	const handOver = new BroadcastChannel(HAND_OVER);
+	handOver.addEventListener("message", (event: MessageEvent<{ port: number }>) => link.set(true, event.data.port));
+
 	const services: AppServices = {
 		store,
 		commands,
@@ -202,12 +223,15 @@ async function main(): Promise<void> {
 			},
 		},
 		agent,
+		link: { set: (on) => link.set(on) },
 	};
 	app.services = services;
 	document.body.append(app);
 	window.addEventListener("pagehide", () => {
 		save();
 		agent.dispose();
+		link.dispose();
+		handOver.close();
 		engine.dispose();
 	});
 }
@@ -230,7 +254,14 @@ async function openWorkspace(): Promise<void> {
 		}
 	}
 	await navigator.locks.request("unlab.workspace.v1", { ifAvailable: true }, async (lock) => {
-		if (!lock) throw new Error("This lab is open in another tab. Close that tab and reload to open it here.");
+		if (!lock) {
+			const asked = linkAsked(location.hash);
+			if (!asked) throw new Error("This lab is open in another tab. Close that tab and reload to open it here.");
+			new BroadcastChannel(HAND_OVER).postMessage(asked);
+			throw new Error(
+				"This lab is open in another tab, and the CLI links to it there. Go to that tab if your browser asks for permission. You can close this one.",
+			);
+		}
 		await main();
 		await new Promise<void>((resolve) => window.addEventListener("pagehide", () => resolve(), { once: true }));
 	});

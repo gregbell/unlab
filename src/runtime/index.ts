@@ -6,6 +6,7 @@ export { sweepDisks } from "./disk-stores.ts";
 export type { Engine, EngineDeps, ExecOutcome, ExecPort, RuntimeReads, RuntimeStore } from "./engine.ts";
 export { createEngine, ExecRefused } from "./engine.ts";
 export type { DistroManifest } from "./image.ts";
+export type { LinkTarget } from "./machine-link.ts";
 export type { RuntimeOptions } from "./runtime.ts";
 export { createRuntime } from "./runtime.ts";
 export type { LineMark, MarkSource, Screen, ScreenIo, Screens, VisibleMark } from "./screens.ts";

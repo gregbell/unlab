@@ -36,9 +36,12 @@ export function packageBackend() {
 
 // fetchRoutes speaks HTTP inside the guest. The browser uses HTTPS outside it.
 // Migrate only stock HTTPS entries. Subsequent edits to the configured repos survive reboot.
+// Each is a line of its own, which the image's installer of missing commands reads. The lab used to write both in one,
+// which only apk reads.
 export const alpinePackageSetup = String.raw`set -e
 repos=/etc/apk/repositories
-if [ -f "$repos" ] && grep -q '^https://dl-cdn\.alpinelinux\.org/alpine/' "$repos"; then
-  sed -i -e 's|^https://dl-cdn\.alpinelinux\.org/alpine/\(v[0-9.]*\)/main$|http://dl-cdn.alpinelinux.org/alpine/\1 main community|' \
+if [ -f "$repos" ] && grep -qE '^(https://dl-cdn\.alpinelinux\.org/alpine/|http://dl-cdn\.alpinelinux\.org/alpine/v[0-9.]* main community$)' "$repos"; then
+  sed -i -e 's|^https://dl-cdn\.alpinelinux\.org/alpine/\(v[0-9.]*\)/main$|http://dl-cdn.alpinelinux.org/alpine/\1/main\nhttp://dl-cdn.alpinelinux.org/alpine/\1/community|' \
+         -e 's|^http://dl-cdn\.alpinelinux\.org/alpine/\(v[0-9.]*\) main community$|http://dl-cdn.alpinelinux.org/alpine/\1/main\nhttp://dl-cdn.alpinelinux.org/alpine/\1/community|' \
          -e 's|^https://dl-cdn\.alpinelinux\.org/alpine/|http://dl-cdn.alpinelinux.org/alpine/|' "$(readlink -f "$repos")"
 fi`;

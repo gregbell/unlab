@@ -20,7 +20,7 @@ function ago(at: number, now: number): string {
 export function rowContent(row: BarRow, lab: LabState): TemplateResult {
 	switch (row.kind) {
 		case "recent": {
-			const who = row.source === "agent" ? "agent" : "you";
+			const who = row.source === "agent" || row.source === "cli" ? row.source : "you";
 			return html`<span class="line">${hued(row.line, lab.machines)}</span>
 				<span class="who">${who} · ${ago(row.at, lab.now)}</span>`;
 		}

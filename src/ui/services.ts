@@ -17,6 +17,13 @@ export interface AppServices {
 	readonly switch: SwitchReadout;
 	readonly terminals: TerminalService;
 	readonly agent: AgentService;
+	readonly link: LinkService;
+}
+
+/** The link with the CLI. The store says how it goes. */
+export interface LinkService {
+	/** Whether the lab looks for one. */
+	set(on: boolean): void;
 }
 
 /** The WebMCP side the agent panel needs beyond the store: the tool list, the person's answer to a waiting call, and a call of their own. */

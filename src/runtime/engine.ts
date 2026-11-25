@@ -27,6 +27,7 @@ import {
 	type StopHow,
 	type SwitchName,
 } from "../model/index.ts";
+import type { LinkTarget } from "./machine-link.ts";
 import type { CopyJob, CopyReport } from "./protocol.ts";
 import type { LineMark, Screen, Screens } from "./screens.ts";
 import type { ShellEvent } from "./shell-tracker.ts";
@@ -60,6 +61,8 @@ export interface Engine {
 	readonly screens: Screens;
 	readonly capture: CaptureLog;
 	readonly reads: RuntimeReads;
+	/** Link every machine with a CLI, those that boot later too, or unlink them. */
+	link(target: LinkTarget | null): void;
 	/** Stop every machine and the clock. Reports nothing. */
 	dispose(): void;
 }
@@ -474,6 +477,8 @@ export function createEngine(deps: EngineDeps): Engine {
 		}
 	};
 
+	let linkTarget: LinkTarget | null = null;
+
 	const tick = () => {
 		const now = deps.now();
 		capture.sweep(now);
@@ -502,6 +507,7 @@ export function createEngine(deps: EngineDeps): Engine {
 					{ machine, attempt, config, cols: size.cols, rows: size.rows, image, released, promptToken },
 					sink,
 				);
+				if (linkTarget) vm.link(linkTarget);
 				const { hosts } = config;
 				vms.set(machine, {
 					attempt,
@@ -687,6 +693,9 @@ export function createEngine(deps: EngineDeps): Engine {
 					},
 				};
 				function aborted() {
+					const vm = s && readyVm(s.machine);
+					// Ctrl-C in the person's terminal is Ctrl-C in the machine's. An agent that gives up leaves what it started.
+					if (s && vm && mark && source === "cli") send(s, vm, "\x03");
 					injection.fail(signal.reason);
 				}
 				const type = () => {
@@ -755,6 +764,10 @@ export function createEngine(deps: EngineDeps): Engine {
 			macTable: (of) => switches.get(of)?.sw.macTable() ?? [],
 			counters: ({ switch: of, port }) => switches.get(of)?.sw.counters(port),
 			totals: (of) => switches.get(of)?.sw.total ?? { in: 0, delivered: 0, flooded: 0 },
+		},
+		link(target) {
+			linkTarget = target;
+			for (const { vm } of vms.values()) vm.link(target);
 		},
 		dispose() {
 			clock?.stop();

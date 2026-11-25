@@ -77,7 +77,7 @@ describe("<unlab-machine-details>", () => {
 			["memory", "256 MiB"],
 			["address", "10.88.0.12/24"],
 			["mac", "52:54:00:88:00:0c"],
-			["uplink", "lab only"],
+			["uplink", "package repositories"],
 			["link", "connected on port 2"],
 			["frames", "90 in · 91 out"],
 			["shells", "console"],
@@ -170,7 +170,7 @@ describe("<unlab-machine-details>", () => {
 			],
 		});
 		expect(facts().slice(5)).toEqual([
-			["uplink", "lab only"],
+			["uplink", "package repositories"],
 			["eth0", "connected on port 1"],
 			["address", "10.88.0.11/24"],
 			["mac", "52:54:00:88:00:0b"],

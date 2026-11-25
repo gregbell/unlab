@@ -17,6 +17,8 @@
 		"check": "npm run typecheck && npm run lint && npm run check:imports && npm test && npm run build",
 		"distros": "node scripts/fetch-distros.ts",
 		"nic-helper": "node scripts/build-nic-helper.ts",
+		"ssh-server": "node scripts/build-ssh-server.ts",
+		"cli": "vite build --config cli/vite.config.ts",
 		"check:imports": "node scripts/check-imports.ts"
 	},
 	"keywords": [],
@@ -37,6 +39,7 @@
 		"@biomejs/biome": "^2.6.8",
 		"@playwright/test": "^1.65.1",
 		"@types/node": "^26.6.6",
+		"@types/ws": "^8.18.2",
 		"@vitest/browser-playwright": "^5.1.1",
 		"@vitest/coverage-v8": "^5.1.1",
 		"axe-core": "^4.14.1",
@@ -44,6 +47,7 @@
 		"playwright": "^1.65.1",
 		"typescript": "^7.0.2",
 		"vite": "^8.3.8",
-		"vitest": "^5.1.1"
+		"vitest": "^5.1.1",
+		"ws": "^8.23.0"
 	}
 }
