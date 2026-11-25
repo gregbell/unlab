@@ -154,8 +154,9 @@ export function readNetwork(text: string, lab: LabState): NicSpec["net"] | null 
 	return networksOf(lab).find((network) => network === text) ?? null;
 }
 
-export function noNetwork({ verb, lab }: Pick<ReadContext, "verb" | "lab">, text: string): string {
-	return `${verb} wants ${list(networksOf(lab), "or")} after --net, not ${text}.`;
+/** `part` is the one that is not there, whatever else the list names. */
+export function noNetwork({ verb, lab }: Pick<ReadContext, "verb" | "lab">, part: string): string {
+	return `${verb} wants ${list(networksOf(lab), "or")} after --net, not ${part || "nothing"}.`;
 }
 
 /** The state a machine is in, as a reason to leave it out. */
@@ -736,7 +737,7 @@ export function networks(): Value<string> {
 		about: `A switch or none for every NIC, or a comma list with one for each, eth0 first, such as ${DEFAULT_SWITCH},none. A NIC with none boots unplugged.`,
 		read(text, ctx) {
 			for (const { part, ...span } of listParts(text)) {
-				if (readNetwork(part, ctx.lab) === null) return new Miss(noNetwork(ctx, text), span);
+				if (readNetwork(part, ctx.lab) === null) return new Miss(noNetwork(ctx, part), span);
 			}
 			return text;
 		},

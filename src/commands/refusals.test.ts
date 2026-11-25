@@ -275,6 +275,8 @@ const ROWS: readonly Row[] = [
 		"No switch is called lan, and switch0, the only one, cannot be removed.",
 		["switch_remove", { switch: "lan" }],
 	],
+	spawnOption("--net", "net", "switch0,wan", "spawn wants switch0 or none after --net, not wan."),
+	spawnOption("--net", "net", "switch0,", "spawn wants switch0 or none after --net, not nothing."),
 	spawnOption("--net", "net", "none,none", "--net names 2 NICs, so add --nics 2."),
 	spawnOption(
 		"--addr",

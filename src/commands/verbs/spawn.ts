@@ -132,7 +132,8 @@ export const spawn = defineVerb({
 		const written = a.net.split(",");
 		const read = written.flatMap((net) => slots.readNetwork(net, lab) ?? []);
 		// One may have gone since the line was read.
-		if (read.length < written.length) return refuse(slots.noNetwork(ctx, a.net), "net");
+		const gone = written.find((net) => slots.readNetwork(net, lab) === null);
+		if (gone !== undefined) return refuse(slots.noNetwork(ctx, gone), "net");
 		const nets = networks(a.nics, read);
 		if (nets === null) {
 			const named = written.length;
