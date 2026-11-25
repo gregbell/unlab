@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import { port0 } from "../../test/support/ports.ts";
 import { ACCEPTS } from "./machines.ts";
 import {
 	selectAgentIndicator,
@@ -97,7 +98,7 @@ describe("machines that stop", () => {
 	});
 
 	test("say so on their ports, and an off machine's cable can be cut or plugged in", () => {
-		expect(selectPorts(stopping()).map((p) => [p.state, p.word, p.actionLabel])).toEqual([
+		expect(selectPorts("switch0")(stopping()).map((p) => [p.state, p.word, p.actionLabel])).toEqual([
 			["stopping", "stop", null],
 			["stopping", "stop", null],
 			["off", "off", "Cut the cable from node3 to port 3"],
@@ -107,7 +108,7 @@ describe("machines that stop", () => {
 			["empty", null, null],
 			["empty", null, null],
 		]);
-		expect(selectLinks(stopping())).toEqual({ up: 0, total: 4, cut: 0 });
+		expect(selectLinks("switch0")(stopping())).toEqual({ up: 0, total: 4, cut: 0 });
 	});
 
 	test("say so in the details, and an off machine that had to be cut short says that", () => {
@@ -223,7 +224,7 @@ describe("machine details", () => {
 			name: "node2",
 			hue: 2,
 			phase: "ready",
-			ports: [2],
+			ports: [port0(2)],
 			cables: [{ label: "node2", nic: null, link: "up" }],
 			reason: null,
 			accepts: ACCEPTS.ready,
@@ -260,7 +261,7 @@ describe("machine details", () => {
 		expect(value(run(s, focus("node1")), "link")).toBe("connected on port 1");
 		expect(value(run(s, focus("node2")), "link")).toBe("cable cut on port 2");
 		expect(value(run(s, focus("node3")), "link")).toBe("unplugged");
-		expect(selectDetails(run(s, focus("node2")))).toMatchObject({ cables: [{ link: "cut" }], ports: [2] });
+		expect(selectDetails(run(s, focus("node2")))).toMatchObject({ cables: [{ link: "cut" }], ports: [port0(2)] });
 		expect(selectDetails(run(s, focus("node3")))).toMatchObject({ cables: [{ link: "unplugged" }], ports: [] });
 	});
 
@@ -279,7 +280,7 @@ describe("machine details", () => {
 		expect(selectDetails(run(s, focus("node4")))).toMatchObject({
 			phase: "booting",
 			cables: [],
-			ports: [3],
+			ports: [port0(3)],
 			accepts: { commands: false, boot: false, cables: false, remove: true },
 		});
 		expect(value(run(s, focus("node4")), "link")).toBe("port 3 reserved");
@@ -309,7 +310,7 @@ describe("machine details", () => {
 
 describe("the switch faceplate", () => {
 	test("has eight ports, each in the state the handoff draws", () => {
-		expect(selectPorts(oneOfEach())).toEqual([
+		expect(selectPorts("switch0")(oneOfEach())).toEqual([
 			{
 				port: 1,
 				state: "up",
@@ -346,9 +347,9 @@ describe("the switch faceplate", () => {
 	});
 
 	test("counts the links for the header", () => {
-		expect(selectLinks(oneOfEach())).toEqual({ up: 1, total: 3, cut: 1 });
-		expect(selectLinks(labWith(3))).toEqual({ up: 3, total: 3, cut: 0 });
-		expect(selectLinks(emptyLab())).toEqual({ up: 0, total: 0, cut: 0 });
+		expect(selectLinks("switch0")(oneOfEach())).toEqual({ up: 1, total: 3, cut: 1 });
+		expect(selectLinks("switch0")(labWith(3))).toEqual({ up: 3, total: 3, cut: 0 });
+		expect(selectLinks("switch0")(emptyLab())).toEqual({ up: 0, total: 0, cut: 0 });
 	});
 });
 
@@ -376,7 +377,7 @@ describe("a machine with several NICs", () => {
 			{ label: "shells", value: "console" },
 		]);
 		expect(details).toMatchObject({
-			ports: [1, 2],
+			ports: [port0(1), port0(2)],
 			cables: [
 				{ label: "node1:eth0", nic: "eth0", link: "up" },
 				{ label: "node1:eth1", nic: "eth1", link: "cut" },
@@ -388,7 +389,7 @@ describe("a machine with several NICs", () => {
 	test("each cable is its own port on the faceplate and its own link in the count", () => {
 		const s = run(three(), linkEvent(three(), false, { machine: "node1", nic: 1 }));
 		const holder = (nic: string) => ({ n: 1, name: "node1", hue: 1, label: `node1:${nic}`, nic });
-		expect(selectPorts(s).slice(0, 3)).toEqual([
+		expect(selectPorts("switch0")(s).slice(0, 3)).toEqual([
 			{
 				port: 1,
 				state: "up",
@@ -405,7 +406,7 @@ describe("a machine with several NICs", () => {
 			},
 			{ port: 3, state: "empty", machine: null, word: null, actionLabel: null },
 		]);
-		expect(selectLinks(s)).toEqual({ up: 1, total: 2, cut: 1 });
+		expect(selectLinks("switch0")(s)).toEqual({ up: 1, total: 2, cut: 1 });
 	});
 
 	test("the rail says cut while any cable is, up while any is up, and unplugged when none is there", () => {
@@ -419,7 +420,11 @@ describe("a machine with several NICs", () => {
 
 	test("keeps its cables apart while it is being removed", () => {
 		const s = run(three(), remove("node1"));
-		expect(selectPorts(s)[1]).toMatchObject({ state: "removing", machine: { label: "node1:eth1" }, word: "down" });
+		expect(selectPorts("switch0")(s)[1]).toMatchObject({
+			state: "removing",
+			machine: { label: "node1:eth1" },
+			word: "down",
+		});
 		expect(
 			selectDetails(s)
 				?.rows.filter((r) => r.label.startsWith("eth"))
@@ -617,8 +622,8 @@ describe("memoisation", () => {
 		expect(elsewhere).not.toBe(s);
 		for (const select of [
 			selectRail,
-			selectPorts,
-			selectLinks,
+			selectPorts("switch0"),
+			selectLinks("switch0"),
 			selectTiling,
 			selectParkedChips,
 			selectStatus,
@@ -628,7 +633,7 @@ describe("memoisation", () => {
 		}
 		expect(selectRecent(elsewhere)).not.toBe(selectRecent(s));
 		const cut = run(elsewhere, linkEvent(elsewhere, false, "node2"));
-		for (const select of [selectRail, selectPorts, selectLinks, selectStatus]) {
+		for (const select of [selectRail, selectPorts("switch0"), selectLinks("switch0"), selectStatus]) {
 			expect(select(cut)).not.toBe(select(elsewhere));
 		}
 		expect(selectTiling(cut)).toBe(selectTiling(elsewhere));

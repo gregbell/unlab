@@ -133,9 +133,9 @@ function linkRow(e: LinkEntry, several: HasSeveralNics): LinkRow {
 		kind: "link",
 		seq: e.seq,
 		time: seconds(e.t),
-		port: e.port,
+		port: e.port.port,
 		up: e.up,
-		text: `port ${e.port} link ${e.up ? "up" : "down"}`,
+		text: `port ${e.port.port} link ${e.up ? "up" : "down"}`,
 		cause:
 			e.cause === "power"
 				? `${e.machine} ${e.up ? "booted" : "stopped"}.`

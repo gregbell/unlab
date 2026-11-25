@@ -1,4 +1,5 @@
 import { expect, test } from "vitest";
+import { port0 } from "../../test/support/ports.ts";
 import { addressText } from "./selectors.ts";
 import {
 	address,
@@ -39,7 +40,11 @@ test("each NIC comes back on its own port, cut or unplugged as it was", () => {
 		spec: { gateway: true, nics: [{ net: "switch0" }, { net: "none" }, { net: "switch0" }] },
 		life: {
 			phase: "booting",
-			plugs: [{ kind: "port", port: 2, link: "up" }, { kind: "none" }, { kind: "port", port: 3, link: "cut" }],
+			plugs: [
+				{ kind: "port", port: port0(2), link: "up" },
+				{ kind: "none" },
+				{ kind: "port", port: port0(3), link: "cut" },
+			],
 		},
 	});
 	expect(machine(state, "node1").spec.nics).toEqual([{ net: "switch0", address: address("10.88.0.11/24") }]);
@@ -51,12 +56,12 @@ test("a machine that is off, or was stopping to be, comes back off with its cabl
 	s = run(s, power("off", "node2"), power("reboot", "node3"));
 	const { state, effects } = restoreWorkspace(initialState(IMAGES, WIDE), saveWorkspace(s));
 	expect(state.rail.map((name) => machine(state, name).life)).toMatchObject([
-		{ phase: "off", plugs: [{ kind: "port", port: 1, link: "cut" }] },
-		{ phase: "off", plugs: [{ kind: "port", port: 2, link: "up" }] },
-		{ phase: "booting", plugs: [{ kind: "port", port: 3, link: "up" }] },
+		{ phase: "off", plugs: [{ kind: "port", port: port0(1), link: "cut" }] },
+		{ phase: "off", plugs: [{ kind: "port", port: port0(2), link: "up" }] },
+		{ phase: "booting", plugs: [{ kind: "port", port: port0(3), link: "up" }] },
 	]);
 	expect(effects.flatMap((e) => (e.type === "vm/boot" ? [e.machine] : []))).toEqual(["node3"]);
-	expect(effects.flatMap((e) => (e.type === "port/attach" ? [e.port] : []))).toEqual([1, 2, 3]);
+	expect(effects.flatMap((e) => (e.type === "port/attach" ? [e.port] : []))).toEqual([port0(1), port0(2), port0(3)]);
 });
 
 test("a machine comes back with the addresses and the gateway it was given", () => {
@@ -90,8 +95,8 @@ const VERSION_1 = {
 test("a lab saved before machines had several NICs restores with one each, on the ports they had", () => {
 	const { state } = restoreWorkspace(initialState(IMAGES, WIDE), JSON.stringify(VERSION_1));
 	expect(state.rail.map((name) => [name, machine(state, name).spec.nics, machine(state, name).life])).toMatchObject([
-		["node1", [{ net: "switch0" }], { phase: "booting", plugs: [{ kind: "port", port: 1, link: "up" }] }],
-		["node2", [{ net: "switch0" }], { phase: "booting", plugs: [{ kind: "port", port: 3, link: "cut" }] }],
+		["node1", [{ net: "switch0" }], { phase: "booting", plugs: [{ kind: "port", port: port0(1), link: "up" }] }],
+		["node2", [{ net: "switch0" }], { phase: "booting", plugs: [{ kind: "port", port: port0(3), link: "cut" }] }],
 		["node3", [{ net: "none" }], { phase: "booting", plugs: [{ kind: "none" }] }],
 	]);
 	expect(machine(state, "node2").spec).toMatchObject({

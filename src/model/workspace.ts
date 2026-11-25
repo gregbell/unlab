@@ -44,7 +44,7 @@ export function saveWorkspace(state: LabState): string {
 					return {
 						net: nic.net,
 						address: nic.address ? addressStr(nic.address) : null,
-						port: plug?.kind === "port" ? plug.port : null,
+						port: plug?.kind === "port" ? plug.port.port : null,
 						cut: plug?.kind === "port" && plug.link === "cut",
 					};
 				}),
@@ -91,7 +91,9 @@ function readNic(saved: unknown): SavedNic {
 		return invalid();
 	return {
 		spec: { net: saved.net, address: readAddress(saved.address) },
-		plug: port ? { kind: "port", port, link: saved.cut ? "cut" : "up" } : { kind: "none" },
+		plug: port
+			? { kind: "port", port: { switch: DEFAULT_SWITCH, port }, link: saved.cut ? "cut" : "up" }
+			: { kind: "none" },
 	};
 }
 
@@ -217,8 +219,8 @@ export function restoreWorkspace(base: LabState, raw: string | null): Step {
 		const nics = readNics(m.nics);
 		for (const { plug } of nics) {
 			if (plug.kind === "none") continue;
-			if (taken.has(plug.port)) return invalid();
-			taken.add(plug.port);
+			if (taken.has(plug.port.port)) return invalid();
+			taken.add(plug.port.port);
 		}
 		const disks = readDisks(m.disks);
 		const sets = readSets(m.sets);

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { port0 } from "../../test/support/ports.ts";
 import type { LabState } from "../model/index.ts";
 import { createRegistry, defineVerb, type Grammar, type ParsedLine, parseLine, slots } from "./index.ts";
 import { fakeDeps, labWith } from "./testing/lab.ts";
@@ -75,7 +76,11 @@ describe("run", () => {
 		const result = await line.run({ source: "agent", signal });
 		expect(result).toMatchObject({ kind: "visible" });
 		expect(events).toEqual([
-			{ type: "cmd/link", changes: [{ machine: "node1", nic: 0, up: false, port: 1, newPort: false }], cause: "agent" },
+			{
+				type: "cmd/link",
+				changes: [{ machine: "node1", nic: 0, up: false, port: port0(1), newPort: false }],
+				cause: "agent",
+			},
 			{ type: "cmd/logged", line: "link down node1", source: "agent", at: expect.any(Number), outcome: "ok" },
 		]);
 	});

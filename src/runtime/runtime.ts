@@ -27,7 +27,7 @@ export function createRuntime(options: RuntimeOptions): Engine {
 	return createEngine({
 		store: options.store,
 		capture: options.capture,
-		sw: new LabSwitch({ now }),
+		newSwitch: () => new LabSwitch({ now }),
 		screens: createScreens(),
 		startVm: (boot, sink) =>
 			startVm(boot, sink, {

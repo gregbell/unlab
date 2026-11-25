@@ -1,6 +1,6 @@
 import type { CaptureView } from "../capture/index.ts";
 import type { CommandService } from "../commands/index.ts";
-import type { PortNo, ReadStore, SessionId, ToolName, UiEvent } from "../model/index.ts";
+import type { PortNo, PortRef, ReadStore, SessionId, SwitchName, ToolName, UiEvent } from "../model/index.ts";
 
 export type { CommandService };
 
@@ -29,10 +29,10 @@ export interface AgentService {
 	readonly tryCall: (() => Promise<void>) | null;
 }
 
-/** Live figures the switch owns; read on render, never copied into state. */
+/** Live figures the switches own; read on render, never copied into state. */
 export interface SwitchReadout {
-	counters(port: PortNo): { readonly rxFrames: number; readonly txFrames: number } | undefined;
-	macTable(): readonly {
+	counters(port: PortRef): { readonly rxFrames: number; readonly txFrames: number } | undefined;
+	macTable(of: SwitchName): readonly {
 		readonly mac: string;
 		readonly port: PortNo;
 		readonly seen: number;

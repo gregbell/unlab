@@ -15,7 +15,7 @@ import {
 import { addressStr, MAX_NICS, NICS, nicName } from "../../net/index.ts";
 import { defineVerb, refuse } from "../define.ts";
 import * as slots from "../grammar/slots.ts";
-import { andList, count, imageLabel, planErrorSentence, ports } from "./words.ts";
+import { andList, count, imageLabel, planErrorSentence, pluggedInto } from "./words.ts";
 
 function multiCpuBlocker(): string | undefined {
 	if (globalThis.crossOriginIsolated === false || typeof SharedArrayBuffer !== "function")
@@ -182,7 +182,7 @@ export const spawn = defineVerb({
 			`${spec.disks.root} GiB disk`,
 			...extraDisks(spec.disks, many),
 			...(spec.nics.length === 1 ? [] : [`${spec.nics.length} NICs${many ? " each" : ""}`]),
-			plugged.length === 0 ? "unplugged" : `plugged into switch0 on ${ports(plugged)}`,
+			pluggedInto(plugged),
 			...(plugged.length === 0 || loose.length === 0 ? [] : [`${andList(loose)} unplugged`]),
 			...addressParts(spec.nics),
 			...(spec.gateway || spec.nics[0].net === "none" ? [] : ["no package gateway"]),

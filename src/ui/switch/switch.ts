@@ -23,8 +23,8 @@ export class UnlabSwitch extends UnlabElement {
 	static override properties = { compact: { type: Boolean, reflect: true } };
 	declare compact: boolean;
 
-	readonly #ports = new Select(this, selectPorts);
-	readonly #links = new Select(this, selectLinks);
+	readonly #ports = new Select(this, selectPorts(DEFAULT_SWITCH));
+	readonly #links = new Select(this, selectLinks(DEFAULT_SWITCH));
 	readonly #subnets = new Select(this, selectSubnets);
 
 	constructor() {

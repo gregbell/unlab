@@ -181,7 +181,7 @@ export interface Mounted<E extends HTMLElement> {
 	readonly confirms: string[];
 	/** Every answer given through `services.agent.answer`, in order. */
 	readonly answers: { readonly call: number; readonly allow: boolean }[];
-	/** What `services.switch.counters(port)` answers. */
+	/** What `services.switch.counters` answers for the default switch's ports. */
 	readonly counters: Map<PortNo, Counters>;
 	/** Resolves once every element in the tree has rendered. */
 	settle(): Promise<void>;
@@ -190,7 +190,7 @@ export interface Mounted<E extends HTMLElement> {
 export interface MountOptions<E extends HTMLElement> {
 	/** The state to start from. Defaults to an empty lab with room for three columns and two rows. */
 	readonly state?: LabState;
-	/** What `services.switch.counters(port)` answers from the start. */
+	/** What `services.switch.counters` answers for the default switch's ports from the start. */
 	readonly counters?: Iterable<readonly [PortNo, Counters]>;
 	/** Receives every effect the store emits, as the runtime would. */
 	readonly onEffect?: (effect: Effect) => void;
@@ -258,7 +258,12 @@ export async function mount<K extends keyof HTMLElementTagNameMap>(
 			},
 		},
 		capture: options.capture ?? EMPTY_CAPTURE,
-		switch: { macTable: () => [], now: () => 0, ...options.switch, counters: (port) => counters.get(port) },
+		switch: {
+			macTable: () => [],
+			now: () => 0,
+			...options.switch,
+			counters: ({ switch: on, port }) => (on === DEFAULT_SWITCH ? counters.get(port) : undefined),
+		},
 		terminals: options.terminals ?? { host: () => null },
 		agent: {
 			tools: toolRows(registry),

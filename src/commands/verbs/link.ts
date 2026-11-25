@@ -13,6 +13,7 @@ import {
 	type PortNo,
 	planLink,
 	plugsOf,
+	samePort,
 } from "../../model/index.ts";
 import { nicName } from "../../net/index.ts";
 import { defineVerb, machineNow, Refusal, refuse } from "../define.ts";
@@ -41,7 +42,7 @@ export function cableLink(life: Lifecycle, nic: NicNo): CableLink | null {
 function cable(lab: LabState, { machine, nic }: NicRef): CableState | null {
 	const life = lab.machines[machine]?.life;
 	const link = life ? cableLink(life, nic) : null;
-	return life && link ? { machine, nic: nicName(nic), port: nicPortsOf(life)[nic] ?? null, link } : null;
+	return life && link ? { machine, nic: nicName(nic), port: nicPortsOf(life)[nic]?.port ?? null, link } : null;
 }
 
 /** The cable as a person names it: `node2`, or `node2:eth1` when the machine has more than one. */
@@ -51,8 +52,9 @@ function label(lab: LabState, { machine, nic }: NicRef): string {
 }
 
 function applied(lab: LabState, change: LinkChange): boolean {
-	const now = cable(lab, change);
-	return now !== null && now.port === change.port && (now.link !== "cut") === change.up;
+	const life = lab.machines[change.machine]?.life;
+	const plug = life && ACCEPTS[life.phase].cables ? plugsOf(life)[change.nic] : undefined;
+	return plug?.kind === "port" && samePort(plug.port, change.port) && (plug.link === "up") === change.up;
 }
 
 const same = (a: NicRef, b: NicRef): boolean => a.machine === b.machine && a.nic === b.nic;
@@ -97,7 +99,7 @@ export const link = defineVerb({
 		const parts = KINDS.flatMap((kind) => {
 			const group = plan.changes.filter((c) => kindOf(c) === kind);
 			if (group.length === 0) return [];
-			return [PHRASE[kind](names(group), ports(group.map((c) => c.port)), group.length > 1)];
+			return [PHRASE[kind](names(group), ports(group.map((c) => c.port.port)), group.length > 1)];
 		});
 		if (plan.unchanged.length > 0) {
 			const are = plan.unchanged.length === 1 ? "is" : "are";

@@ -32,6 +32,12 @@ export interface Identity {
 	readonly mac: string;
 }
 
+/** One port of one switch. */
+export interface PortRef {
+	readonly switch: SwitchName;
+	readonly port: PortNo;
+}
+
 /** One NIC of one machine. NIC 0 is eth0. */
 export interface NicRef {
 	readonly machine: MachineName;
@@ -46,10 +52,10 @@ export type Cause = Source | "runtime" | "power";
 
 export type Plug =
 	| { readonly kind: "none" }
-	| { readonly kind: "port"; readonly port: PortNo; readonly link: "up" | "cut" };
+	| { readonly kind: "port"; readonly port: PortRef; readonly link: "up" | "cut" };
 
 /** A port for each NIC, eth0 first, or null for one that is not plugged in. */
-export type NicPorts = readonly (PortNo | null)[];
+export type NicPorts = readonly (PortRef | null)[];
 
 export interface ImageInfo {
 	/** The manifest name, used in the grammar: `alpine`. */
@@ -397,16 +403,16 @@ export interface RestorePlan extends BootPlan {
 
 export interface LinkChange extends NicRef {
 	readonly up: boolean;
-	readonly port: PortNo;
-	/** `link up` on an unplugged NIC takes the lowest free port. */
+	readonly port: PortRef;
+	/** `link up` on an unplugged NIC takes the default switch's lowest free port. */
 	readonly newPort: boolean;
 }
 
 export type PlanError =
-	| { readonly kind: "no-ports"; readonly free: number; readonly wanted: number }
+	| { readonly kind: "no-ports"; readonly switch: SwitchName; readonly free: number; readonly wanted: number }
 	| { readonly kind: "no-room"; readonly free: number; readonly wanted: number }
 	| { readonly kind: "unknown-image"; readonly image: string }
-	| { readonly kind: "name-taken"; readonly name: MachineName }
+	| { readonly kind: "name-taken"; readonly name: MachineName; readonly by: "machine" | "switch" }
 	| { readonly kind: "address-taken"; readonly address: Address; readonly by: NicRef }
 	/** Two of one machine's NICs would be in overlapping subnets. */
 	| { readonly kind: "address-overlap"; readonly nics: readonly [NicNo, NicNo] }
@@ -580,12 +586,12 @@ export type Effect =
 	| { readonly type: "checkpoint/save"; readonly copy: DiskCopy }
 	/** Once the worker is gone. Reports checkpoint/restored, or vm/failed with the live disks as they were. */
 	| { readonly type: "checkpoint/restore"; readonly copy: DiskCopy }
-	| { readonly type: "port/attach"; readonly port: PortNo; readonly machine: MachineName; readonly nic: NicNo }
-	| { readonly type: "port/detach"; readonly port: PortNo }
+	| { readonly type: "port/attach"; readonly port: PortRef; readonly machine: MachineName; readonly nic: NicNo }
+	| { readonly type: "port/detach"; readonly port: PortRef }
 	/** Changes the switch link and writes the capture event row, in that order. */
 	| {
 			readonly type: "link/set";
-			readonly port: PortNo;
+			readonly port: PortRef;
 			readonly machine: MachineName;
 			readonly nic: NicNo;
 			readonly up: boolean;

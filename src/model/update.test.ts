@@ -1,5 +1,6 @@
 import fc from "fast-check";
 import { describe, expect, test } from "vitest";
+import { port0 } from "../../test/support/ports.ts";
 import { identity } from "./identity.ts";
 import { isPlanError, lowestFreePorts, planBoot, planLink, takenPorts } from "./machines.ts";
 import { parkedPanels, visiblePanels } from "./panels.ts";
@@ -36,7 +37,8 @@ import {
 	type NicNo,
 	type NicSpec,
 	type PanelName,
-	type PortNo,
+	PORTS,
+	type PortRef,
 	type SessionId,
 } from "./types.ts";
 import { clockHz, initialState, update } from "./update.ts";
@@ -112,7 +114,13 @@ describe("spawn", () => {
 		expect(state.now).toBe(1000);
 		expect(state.machines.node1).toEqual({
 			...identity(1),
-			life: { phase: "booting", attempt: 1, since: 1000, stage: "", plugs: [{ kind: "port", port: 1, link: "up" }] },
+			life: {
+				phase: "booting",
+				attempt: 1,
+				since: 1000,
+				stage: "",
+				plugs: [{ kind: "port", port: port0(1), link: "up" }],
+			},
 			hue: 1,
 			spec: ALPINE,
 			sessions: ["node1:console"],
@@ -122,7 +130,7 @@ describe("spawn", () => {
 			sets: { live: 0, next: 1, checkpoints: [] },
 			unsaved: null,
 		});
-		expect(state.machines.node2?.life).toMatchObject({ phase: "booting", plugs: [{ port: 2 }] });
+		expect(state.machines.node2?.life).toMatchObject({ phase: "booting", plugs: [{ port: port0(2) }] });
 		expect(state.sessions).toEqual({
 			"node1:console": {
 				id: "node1:console",
@@ -146,10 +154,10 @@ describe("spawn", () => {
 
 		expect(effects).toEqual([
 			{ type: "screen/create", session: "node1:console" },
-			{ type: "port/attach", port: 1, machine: "node1", nic: 0 },
+			{ type: "port/attach", port: port0(1), machine: "node1", nic: 0 },
 			{ type: "vm/boot", machine: "node1", attempt: 1, config: { identity: identity(1), spec: ALPINE, set: 0, hosts } },
 			{ type: "screen/create", session: "node2:console" },
-			{ type: "port/attach", port: 2, machine: "node2", nic: 0 },
+			{ type: "port/attach", port: port0(2), machine: "node2", nic: 0 },
 			{
 				type: "vm/boot",
 				machine: "node2",
@@ -217,11 +225,11 @@ describe("ready", () => {
 			phase: "ready",
 			attempt: 1,
 			bootMs: 3582,
-			plugs: [{ kind: "port", port: 1, link: "up" }],
+			plugs: [{ kind: "port", port: port0(1), link: "up" }],
 		});
 		expect(effects).toEqual([
 			{ type: "announce", text: "node1 ready" },
-			{ type: "link/set", port: 1, machine: "node1", nic: 0, up: true, cause: "runtime" },
+			{ type: "link/set", port: port0(1), machine: "node1", nic: 0, up: true, cause: "runtime" },
 			{
 				type: "hosts/publish",
 				hosts: [
@@ -247,7 +255,7 @@ describe("failure", () => {
 		expect(machine(state, "node1").life).toEqual({ phase: "failed", attempt: 1, reason: "Out of memory." });
 		expect(effects).toEqual([
 			{ type: "vm/stop", machine: "node1", attempt: 1, how: "save" },
-			{ type: "port/detach", port: 1 },
+			{ type: "port/detach", port: port0(1) },
 			{ type: "announce", text: "node1 failed. Out of memory." },
 			{ type: "clock", hz: 1 },
 		]);
@@ -258,9 +266,9 @@ describe("failure", () => {
 		s = run(s, { type: "session/shell", session: "node1:console", shell: "prompt" });
 		const { state, effects } = update(s, hasFailed("node1", 1, "The guest powered off."));
 		expect(effects).toEqual([
-			{ type: "link/set", port: 1, machine: "node1", nic: 0, up: false, cause: "runtime" },
+			{ type: "link/set", port: port0(1), machine: "node1", nic: 0, up: false, cause: "runtime" },
 			{ type: "vm/stop", machine: "node1", attempt: 1, how: "save" },
-			{ type: "port/detach", port: 1 },
+			{ type: "port/detach", port: port0(1) },
 			{ type: "screen/dispose", session: "node1:sh1" },
 			{ type: "screen/dispose", session: "node1:sh2" },
 			{ type: "announce", text: "node1 failed. The guest powered off." },
@@ -297,7 +305,7 @@ describe("the boot timeout", () => {
 		expect(machine(state, "node1").life).toEqual({ phase: "failed", attempt: 1, reason: "No prompt after 120 s." });
 		expect(effects).toEqual([
 			{ type: "vm/stop", machine: "node1", attempt: 1, how: "save" },
-			{ type: "port/detach", port: 1 },
+			{ type: "port/detach", port: port0(1) },
 			{ type: "announce", text: "node1 failed. No prompt after 120 s." },
 			{ type: "clock", hz: 1 },
 		]);
@@ -333,23 +341,23 @@ describe("power", () => {
 			{ type: "announce", text: "node1 powering off. sh1 closed with it." },
 		]);
 		expect(machine(asked.state, "node1")).toMatchObject({
-			life: { phase: "stopping", next: "off", plugs: [{ kind: "port", port: 1, link: "up" }] },
+			life: { phase: "stopping", next: "off", plugs: [{ kind: "port", port: port0(1), link: "up" }] },
 			sessions: ["node1:console"],
 			activeSession: "node1:console",
 		});
 
 		const off = update(asked.state, hasStopped("node1"));
 		expect(off.effects).toEqual([
-			{ type: "link/set", port: 1, machine: "node1", nic: 0, up: false, cause: "power" },
+			{ type: "link/set", port: port0(1), machine: "node1", nic: 0, up: false, cause: "power" },
 			{ type: "screen/note", session: "node1:console", text: "node1 is off. sh1 closed with it." },
 			{ type: "announce", text: "node1 off" },
 		]);
 		expect(machine(off.state, "node1").life).toEqual({
 			phase: "off",
 			attempt: 1,
-			plugs: [{ kind: "port", port: 1, link: "up" }],
+			plugs: [{ kind: "port", port: port0(1), link: "up" }],
 		});
-		expect([...takenPorts(off.state)]).toEqual([1, 2]);
+		expect([...takenPorts(off.state, "switch0")]).toEqual([1, 2]);
 	});
 
 	test("a reboot boots the next attempt once the last one has let go of its disks, with its cables as they were", () => {
@@ -370,12 +378,12 @@ describe("power", () => {
 			since: 5000,
 			stage: "",
 			plugs: [
-				{ kind: "port", port: 1, link: "up" },
-				{ kind: "port", port: 2, link: "cut" },
+				{ kind: "port", port: port0(1), link: "up" },
+				{ kind: "port", port: port0(2), link: "cut" },
 			],
 		});
 		expect(links(effectsOf(state, isReady("node1", 2)))).toEqual([
-			{ type: "link/set", port: 1, machine: "node1", nic: 0, up: true, cause: "power" },
+			{ type: "link/set", port: port0(1), machine: "node1", nic: 0, up: true, cause: "power" },
 		]);
 		expect(machine(run(state, tick(125_000)), "node1").life).toMatchObject({ phase: "failed", attempt: 2 });
 	});
@@ -424,19 +432,19 @@ describe("power", () => {
 		const s = run(labWith(1), power("reboot", "node1"));
 		const failed = update(s, hasFailed("node1", 1, "Browser storage is full."));
 		expect(machine(failed.state, "node1").life).toMatchObject({ phase: "failed", reason: "Browser storage is full." });
-		expect(links(failed.effects)).toMatchObject([{ port: 1, up: false }]);
+		expect(links(failed.effects)).toMatchObject([{ port: port0(1), up: false }]);
 		expect(update(failed.state, hasStopped("node1")).effects).toEqual([]);
 	});
 
 	test("a machine that stops, or is off, can be removed, and a stop it waited for is hurried", () => {
 		const s = run(labWith(2), power("off", "node1", "node2"), hasStopped("node2"));
 		expect(effectsOf(s, remove("node1"))).toEqual([
-			{ type: "link/set", port: 1, machine: "node1", nic: 0, up: false, cause: "bar" },
+			{ type: "link/set", port: port0(1), machine: "node1", nic: 0, up: false, cause: "bar" },
 			{ type: "vm/stop", machine: "node1", attempt: 1, how: "drop" },
 		]);
 		const gone = run(s, remove("node1", "node2"), hasStopped("node1"), hasStopped("node2"));
 		expect(gone.rail).toEqual([]);
-		expect([...takenPorts(gone)]).toEqual([]);
+		expect([...takenPorts(gone, "switch0")]).toEqual([]);
 	});
 });
 
@@ -450,10 +458,10 @@ describe("boot again", () => {
 			attempt: 2,
 			since: 5000,
 			stage: "",
-			plugs: [{ kind: "port", port: 1, link: "up" }],
+			plugs: [{ kind: "port", port: port0(1), link: "up" }],
 		});
 		expect(effects).toEqual([
-			{ type: "port/attach", port: 1, machine: "node1", nic: 0 },
+			{ type: "port/attach", port: port0(1), machine: "node1", nic: 0 },
 			{
 				type: "vm/boot",
 				machine: "node1",
@@ -478,9 +486,9 @@ describe("rm", () => {
 		const s = labWith(2);
 		const event: LabEvent = { type: "cmd/remove", machines: ["node1"], cause: "agent" };
 		const { state, effects } = update(s, event);
-		expect(machine(state, "node1").life).toEqual({ phase: "removing", attempt: 1, ports: [1] });
+		expect(machine(state, "node1").life).toEqual({ phase: "removing", attempt: 1, ports: [port0(1)] });
 		expect(effects).toEqual([
-			{ type: "link/set", port: 1, machine: "node1", nic: 0, up: false, cause: "agent" },
+			{ type: "link/set", port: port0(1), machine: "node1", nic: 0, up: false, cause: "agent" },
 			{ type: "vm/stop", machine: "node1", attempt: 1, how: "drop" },
 		]);
 	});
@@ -489,7 +497,7 @@ describe("rm", () => {
 		let s = run(labWith(2), shell("node1"), remove("node1"));
 		const { state, effects } = update(s, hasStopped("node1"));
 		expect(effects).toEqual([
-			{ type: "port/detach", port: 1 },
+			{ type: "port/detach", port: port0(1) },
 			{ type: "screen/dispose", session: "node1:console" },
 			{ type: "screen/dispose", session: "node1:sh1" },
 			{ type: "disks/delete", n: 1, sets: [0] },
@@ -546,9 +554,9 @@ describe("link", () => {
 	test("a cut takes effect at once and keeps the port", () => {
 		const s = labWith(2);
 		const { state, effects } = update(s, linkEvent(s, false, "node2"));
-		expect(machine(state, "node2").life).toMatchObject({ plugs: [{ kind: "port", port: 2, link: "cut" }] });
+		expect(machine(state, "node2").life).toMatchObject({ plugs: [{ kind: "port", port: port0(2), link: "cut" }] });
 		expect(effects).toEqual([
-			{ type: "link/set", port: 2, machine: "node2", nic: 0, up: false, cause: "bar" },
+			{ type: "link/set", port: port0(2), machine: "node2", nic: 0, up: false, cause: "bar" },
 			{ type: "announce", text: "node2 link down" },
 		]);
 	});
@@ -557,7 +565,7 @@ describe("link", () => {
 		let s = labWith(2);
 		s = run(s, linkEvent(s, false, "node2"));
 		expect(effectsOf(s, linkEvent(s, true, "node2"))).toEqual([
-			{ type: "link/set", port: 2, machine: "node2", nic: 0, up: true, cause: "bar" },
+			{ type: "link/set", port: port0(2), machine: "node2", nic: 0, up: true, cause: "bar" },
 			{ type: "announce", text: "node2 link up" },
 		]);
 	});
@@ -566,10 +574,10 @@ describe("link", () => {
 		let s = emptyLab();
 		s = run(s, spawnEvent(s, 1, { net: "none" }), isReady("node1"));
 		const { state, effects } = update(s, linkEvent(s, true, "node1"));
-		expect(machine(state, "node1").life).toMatchObject({ plugs: [{ kind: "port", port: 1, link: "up" }] });
+		expect(machine(state, "node1").life).toMatchObject({ plugs: [{ kind: "port", port: port0(1), link: "up" }] });
 		expect(effects).toEqual([
-			{ type: "port/attach", port: 1, machine: "node1", nic: 0 },
-			{ type: "link/set", port: 1, machine: "node1", nic: 0, up: true, cause: "bar" },
+			{ type: "port/attach", port: port0(1), machine: "node1", nic: 0 },
+			{ type: "link/set", port: port0(1), machine: "node1", nic: 0, up: true, cause: "bar" },
 			{ type: "announce", text: "node1 link up" },
 		]);
 	});
@@ -578,17 +586,17 @@ describe("link", () => {
 		const s = labWith(2);
 		const wrongPort: LabEvent = {
 			type: "cmd/link",
-			changes: [{ machine: "node1", nic: 0, up: false, port: 2, newPort: false }],
+			changes: [{ machine: "node1", nic: 0, up: false, port: port0(2), newPort: false }],
 			cause: "bar",
 		};
 		const alreadyUp: LabEvent = {
 			type: "cmd/link",
-			changes: [{ machine: "node1", nic: 0, up: true, port: 1, newPort: false }],
+			changes: [{ machine: "node1", nic: 0, up: true, port: port0(1), newPort: false }],
 			cause: "bar",
 		};
 		const notUnplugged: LabEvent = {
 			type: "cmd/link",
-			changes: [{ machine: "node1", nic: 0, up: true, port: 3, newPort: true }],
+			changes: [{ machine: "node1", nic: 0, up: true, port: port0(3), newPort: true }],
 			cause: "bar",
 		};
 		for (const event of [wrongPort, alreadyUp, notUnplugged])
@@ -603,12 +611,14 @@ describe("link", () => {
 		s = run(s, spawnEvent(s, 1, { net: "none" }), isReady("node3"));
 		const onto = (port: 2 | 3 | 4): LabEvent => ({
 			type: "cmd/link",
-			changes: [{ machine: "node3", nic: 0, up: true, port, newPort: true }],
+			changes: [{ machine: "node3", nic: 0, up: true, port: port0(port), newPort: true }],
 			cause: "bar",
 		});
 		expect(update(s, onto(2))).toEqual({ state: s, effects: [] });
 		expect(update(s, onto(4))).toEqual({ state: s, effects: [] });
-		expect(machine(run(s, onto(3)), "node3").life).toMatchObject({ plugs: [{ kind: "port", port: 3, link: "up" }] });
+		expect(machine(run(s, onto(3)), "node3").life).toMatchObject({
+			plugs: [{ kind: "port", port: port0(3), link: "up" }],
+		});
 	});
 });
 
@@ -1080,7 +1090,7 @@ function eventOf(intent: Intent, s: LabState): LabEvent | null {
 		case "spawn": {
 			const count = Math.min(intent.count, MAX_MACHINES - s.rail.length);
 			const wanted = count * intent.nets.filter((net) => net === "switch0").length;
-			if (count === 0 || lowestFreePorts(s, wanted).length < wanted) return null;
+			if (count === 0 || lowestFreePorts(s, "switch0", wanted).length < wanted) return null;
 			return spawnEvent(s, count, { net: intent.nets });
 		}
 		case "stage":
@@ -1115,7 +1125,7 @@ function eventOf(intent: Intent, s: LabState): LabEvent | null {
 			const name = named(intent.pick);
 			const planned = planBoot(s, [name, named(intent.pick + 1)]);
 			const wanted = isPlanError(planned) ? [] : planned;
-			const stale = [{ machine: name, ports: [PORT_NUMBERS[intent.port] ?? null] }];
+			const stale = [{ machine: name, ports: [PORT_REFS[intent.port]] }];
 			return { type: "cmd/boot", machines: intent.port === 0 ? wanted : stale, at: s.now };
 		}
 		case "link": {
@@ -1127,7 +1137,7 @@ function eventOf(intent: Intent, s: LabState): LabEvent | null {
 			}
 			return {
 				type: "cmd/link",
-				changes: [{ machine: name, nic: intent.nic ?? 0, up: intent.up, port: 3, newPort: intent.up }],
+				changes: [{ machine: name, nic: intent.nic ?? 0, up: intent.up, port: port0(3), newPort: intent.up }],
 				cause: "button",
 			};
 		}
@@ -1150,11 +1160,12 @@ function eventOf(intent: Intent, s: LabState): LabEvent | null {
 	}
 }
 
-const PORT_NUMBERS: readonly (PortNo | undefined)[] = [undefined, 1, 2, 3, 4, 5, 6, 7, 8];
+const PORT_REFS: readonly (PortRef | null)[] = [null, ...PORTS.map(port0)];
+const portKey = (ref: PortRef) => `${ref.switch}:${ref.port}`;
 
 /** A stand-in for the runtime: it does what the effects say and complains when they make no sense. */
 class World {
-	readonly ports = new Map<PortNo, { machine: MachineName; nic: NicNo; up: boolean }>();
+	readonly ports = new Map<string, { machine: MachineName; nic: NicNo; up: boolean }>();
 	readonly screens = new Set<SessionId>();
 	readonly kernels = new Map<MachineName, number>();
 	hz: 1 | 10 = 1;
@@ -1170,18 +1181,21 @@ class World {
 				if (this.kernels.get(effect.machine) === effect.attempt) this.kernels.delete(effect.machine);
 				return;
 			case "port/attach":
-				expect(this.ports.has(effect.port), `port ${effect.port} attached twice`).toBe(false);
-				this.ports.set(effect.port, { machine: effect.machine, nic: effect.nic, up: false });
+				expect(this.ports.has(portKey(effect.port)), `${portKey(effect.port)} attached twice`).toBe(false);
+				this.ports.set(portKey(effect.port), { machine: effect.machine, nic: effect.nic, up: false });
 				return;
 			case "port/detach":
-				expect(this.ports.get(effect.port)?.up, `port ${effect.port} detached while up or absent`).toBe(false);
-				this.ports.delete(effect.port);
+				expect(this.ports.get(portKey(effect.port))?.up, `${portKey(effect.port)} detached while up or absent`).toBe(
+					false,
+				);
+				this.ports.delete(portKey(effect.port));
 				return;
 			case "link/set": {
-				const port = this.ports.get(effect.port);
-				expect([port?.machine, port?.nic], `link set on port ${effect.port}`).toEqual([effect.machine, effect.nic]);
-				expect(port?.up, `port ${effect.port} link set to what it was`).toBe(!effect.up);
-				this.ports.set(effect.port, { machine: effect.machine, nic: effect.nic, up: effect.up });
+				const key = portKey(effect.port);
+				const port = this.ports.get(key);
+				expect([port?.machine, port?.nic], `link set on ${key}`).toEqual([effect.machine, effect.nic]);
+				expect(port?.up, `${key} link set to what it was`).toBe(!effect.up);
+				this.ports.set(key, { machine: effect.machine, nic: effect.nic, up: effect.up });
 				return;
 			}
 			case "screen/create":
@@ -1241,9 +1255,9 @@ function checkLab(s: LabState, world: World): void {
 			return [{ machine: m.name, nic, port: plug.port, up: live && plug.link === "up" }];
 		});
 	});
-	expect(new Set(plugged.map((p) => p.port)).size).toBe(plugged.length);
-	expect([...takenPorts(s)].sort()).toEqual(plugged.map((p) => p.port).sort());
-	expect(lowestFreePorts(s, 8)).toHaveLength(8 - plugged.length);
+	expect(new Set(plugged.map((p) => portKey(p.port))).size).toBe(plugged.length);
+	expect([...takenPorts(s, "switch0")].sort()).toEqual(plugged.map((p) => p.port.port).sort());
+	expect(lowestFreePorts(s, "switch0", 8)).toHaveLength(8 - plugged.length);
 
 	expect([...s.panes.order].sort()).toEqual([...s.rail].sort());
 	const visible = visiblePanes(s.panes);
@@ -1255,7 +1269,7 @@ function checkLab(s: LabState, world: World): void {
 	expect(s.log.length).toBeLessThanOrEqual(LOG_LIMIT);
 
 	expect(Object.fromEntries(world.ports)).toEqual(
-		Object.fromEntries(plugged.map((p) => [p.port, { machine: p.machine, nic: p.nic, up: p.up }])),
+		Object.fromEntries(plugged.map((p) => [portKey(p.port), { machine: p.machine, nic: p.nic, up: p.up }])),
 	);
 	expect([...world.screens].sort()).toEqual(Object.keys(s.sessions).sort());
 	const running = machines.flatMap((m) =>

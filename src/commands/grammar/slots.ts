@@ -206,7 +206,7 @@ function linkWord(m: Machine): string {
 function plugDetail(m: Machine, nic: NicNo): string {
 	const plug = plugsOf(m.life)[nic];
 	if (plug?.kind !== "port") return "no cable";
-	return `port ${plug.port} · ${plug.link === "up" ? "up" : "down"}`;
+	return `port ${plug.port.port} · ${plug.link === "up" ? "up" : "down"}`;
 }
 
 function machineSuggestion(m: Machine, insert: string = m.name): Suggestion {

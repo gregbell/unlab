@@ -39,6 +39,7 @@ export {
 	planSpawn,
 	plugsOf,
 	portsOf,
+	samePort,
 	savingOf,
 	severalNics,
 	takenPorts,

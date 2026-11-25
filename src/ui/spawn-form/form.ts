@@ -109,8 +109,8 @@ function networkNote(choice: SpawnChoice, lab: LabState): string {
 			? "It boots with no cable. Plug it in later from the switch."
 			: "They boot with no cable. Plug them in later from the switch.";
 	}
-	const left = PORTS.length - takenPorts(lab).size - choice.count;
-	return `${Math.max(0, left)} of ${PORTS.length} ports left on ${DEFAULT_SWITCH} afterwards.`;
+	const left = PORTS.length - takenPorts(lab, choice.net).size - choice.count;
+	return `${Math.max(0, left)} of ${PORTS.length} ports left on ${choice.net} afterwards.`;
 }
 
 function machinesOf(choice: SpawnChoice, lab: LabState): readonly NewMachine[] {
@@ -120,7 +120,7 @@ function machinesOf(choice: SpawnChoice, lab: LabState): readonly NewMachine[] {
 		name: identity.name,
 		hue,
 		address: spec.nics[0].address ? addressStr(spec.nics[0].address) : "no address",
-		port: port === null ? "unplugged" : `port ${port}`,
+		port: port === null ? "unplugged" : `port ${port.port}`,
 	}));
 }
 

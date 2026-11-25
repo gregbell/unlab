@@ -14,7 +14,7 @@ import {
 	type Phase,
 	type Plug,
 	PORTS,
-	type PortNo,
+	type PortRef,
 	type Session,
 	type SessionId,
 } from "../../model/index.ts";
@@ -39,11 +39,11 @@ export const IMAGES: readonly ImageInfo[] = [
 	{ name: "debian", label: "debian 13" },
 ];
 
-function portOf(n: number): PortNo {
-	return PORTS[(n - 1) % PORTS.length];
+function portOf(n: number): PortRef {
+	return { switch: DEFAULT_SWITCH, port: PORTS[(n - 1) % PORTS.length] };
 }
 
-function plugged(f: MachineFixture, port: PortNo): Plug {
+function plugged(f: MachineFixture, port: PortRef): Plug {
 	return f.link === "none" ? { kind: "none" } : { kind: "port", port, link: f.link ?? "up" };
 }
 

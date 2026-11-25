@@ -1,5 +1,6 @@
 import { describe, expect, test, vi } from "vitest";
 import { arpRequest, mac, ping, routedPing } from "../../test/support/frames.ts";
+import { port0 } from "../../test/support/ports.ts";
 import { createCaptureLog } from "../capture/index.ts";
 import type { FileOutcome, GuestFile } from "../commands/index.ts";
 import {
@@ -14,6 +15,7 @@ import {
 	type RuntimeEvent,
 	type SessionId,
 	type StopHow,
+	type SwitchName,
 } from "../model/index.ts";
 
 import { defaultAddress } from "../net/index.ts";
@@ -208,13 +210,18 @@ function setup() {
 	const imagesAsked: string[] = [];
 	const intervals: { ms: number; fn: () => void; cancelled: boolean }[] = [];
 	const sw = new LabSwitch({ now: () => clock });
+	const switches = new Map<SwitchName, LabSwitch>();
 	const capture = createCaptureLog({ now: () => clock, schedule: () => {} });
 	const vms = fakeVms();
 	const screens = fakeScreens();
 
 	const engine = createEngine({
 		store: { dispatchRuntime: (e) => events.push(e) },
-		sw,
+		newSwitch(name) {
+			const made = name === "switch0" ? sw : new LabSwitch({ now: () => clock });
+			switches.set(name, made);
+			return made;
+		},
 		capture,
 		screens: screens.screens,
 		startVm: vms.startVm,
@@ -280,6 +287,7 @@ function setup() {
 		copies,
 		imagesAsked,
 		intervals,
+		switches,
 		sw,
 		capture,
 		vms,
@@ -300,7 +308,7 @@ describe("a name used again", () => {
 	const bootWeb = (t: ReturnType<typeof setup>, n: number, attempt: number) => {
 		t.run(
 			{ type: "screen/create", session: `${web}:console` },
-			{ type: "port/attach", port: 1, machine: web, nic: 0 },
+			{ type: "port/attach", port: port0(1), machine: web, nic: 0 },
 			{ type: "vm/boot", machine: web, attempt, config: { ...config(n), identity: identity(n, web) } },
 		);
 		return t.vms.of(web, attempt);
@@ -315,7 +323,7 @@ describe("a name used again", () => {
 		old.finishStop();
 		await settle();
 		t.run(
-			{ type: "port/detach", port: 1 },
+			{ type: "port/detach", port: port0(1) },
 			{ type: "screen/dispose", session: `${web}:console` },
 			{ type: "screen/dispose", session: `${web}:sh1` },
 			{ type: "disks/delete", n: 1, sets: [0] },
@@ -458,8 +466,8 @@ describe("power", () => {
 	test("a guest that is shutting down is still heard and seen, and takes no more", () => {
 		const t = setup();
 		t.run(
-			{ type: "port/attach", port: 1, machine: "node1", nic: 0 },
-			{ type: "link/set", port: 1, machine: "node1", nic: 0, up: true, cause: "runtime" },
+			{ type: "port/attach", port: port0(1), machine: "node1", nic: 0 },
+			{ type: "link/set", port: port0(1), machine: "node1", nic: 0, up: true, cause: "runtime" },
 		);
 		const vm = t.atPrompt(1);
 		reboots(t);
@@ -560,8 +568,8 @@ describe("ports and frames", () => {
 	test("a port reserved at spawn carries nothing until its link comes up at ready", () => {
 		const t = setup();
 		t.run(
-			{ type: "port/attach", port: 1, machine: "node1", nic: 0 },
-			{ type: "port/attach", port: 2, machine: "node2", nic: 0 },
+			{ type: "port/attach", port: port0(1), machine: "node1", nic: 0 },
+			{ type: "port/attach", port: port0(2), machine: "node2", nic: 0 },
 		);
 		const a = t.ready(1);
 		const b = t.ready(2);
@@ -570,8 +578,8 @@ describe("ports and frames", () => {
 		expect(t.sw.isUp(1)).toBe(false);
 
 		t.run(
-			{ type: "link/set", port: 1, machine: "node1", nic: 0, up: true, cause: "runtime" },
-			{ type: "link/set", port: 2, machine: "node2", nic: 0, up: true, cause: "runtime" },
+			{ type: "link/set", port: port0(1), machine: "node1", nic: 0, up: true, cause: "runtime" },
+			{ type: "link/set", port: port0(2), machine: "node2", nic: 0, up: true, cause: "runtime" },
 		);
 		a.sink.frame(a.ref, 0, arpRequest(1, 2));
 		expect(b.sent).toHaveLength(1);
@@ -582,8 +590,8 @@ describe("ports and frames", () => {
 		const a = t.ready(1);
 		const b = t.ready(2);
 		t.run(
-			{ type: "port/attach", port: 1, machine: "node1", nic: 0 },
-			{ type: "port/attach", port: 2, machine: "node2", nic: 0 },
+			{ type: "port/attach", port: port0(1), machine: "node1", nic: 0 },
+			{ type: "port/attach", port: port0(2), machine: "node2", nic: 0 },
 		);
 		t.sw.setLink(1, true);
 		t.sw.setLink(2, true);
@@ -596,8 +604,8 @@ describe("ports and frames", () => {
 		expect(t.capture.tail(1)).toMatchObject([
 			{ kind: "frame", proto: "ARP", from: { kind: "machine", name: "node1" }, note: "flooded to port 2" },
 		]);
-		expect(t.engine.reads.macTable()).toMatchObject([{ mac: "52:54:00:88:00:0b", port: 1, flushed: false }]);
-		expect(t.engine.reads.counters(1)).toMatchObject({ rxFrames: 1 });
+		expect(t.engine.reads.macTable("switch0")).toMatchObject([{ mac: "52:54:00:88:00:0b", port: 1, flushed: false }]);
+		expect(t.engine.reads.counters(port0(1))).toMatchObject({ rxFrames: 1 });
 	});
 
 	test("each NIC sends and receives on its own port", () => {
@@ -605,9 +613,9 @@ describe("ports and frames", () => {
 		const a = t.ready(1);
 		const router = t.ready(2);
 		t.run(
-			{ type: "port/attach", port: 1, machine: "node1", nic: 0 },
-			{ type: "port/attach", port: 2, machine: "node2", nic: 0 },
-			{ type: "port/attach", port: 3, machine: "node2", nic: 2 },
+			{ type: "port/attach", port: port0(1), machine: "node1", nic: 0 },
+			{ type: "port/attach", port: port0(2), machine: "node2", nic: 0 },
+			{ type: "port/attach", port: port0(3), machine: "node2", nic: 2 },
 		);
 		for (const port of [1, 2, 3] as const) t.sw.setLink(port, true);
 
@@ -621,7 +629,9 @@ describe("ports and frames", () => {
 		const sent = routedPing(mac(2, 2), mac(1), 3, 1);
 		router.sink.frame(router.ref, 2, sent);
 		expect(a.sent).toEqual([["deliver", 0, sent]]);
-		expect(t.engine.reads.macTable()).toContainEqual(expect.objectContaining({ mac: "52:54:00:88:02:0c", port: 3 }));
+		expect(t.engine.reads.macTable("switch0")).toContainEqual(
+			expect.objectContaining({ mac: "52:54:00:88:02:0c", port: 3 }),
+		);
 
 		router.sink.frame(router.ref, 1, routedPing(mac(2, 1), mac(1), 3, 1));
 		expect(a.sent).toHaveLength(1);
@@ -632,12 +642,12 @@ describe("ports and frames", () => {
 		const a = t.ready(1);
 		const router = t.ready(2);
 		t.run(
-			{ type: "port/attach", port: 1, machine: "node1", nic: 0 },
-			{ type: "port/attach", port: 2, machine: "node2", nic: 0 },
-			{ type: "port/attach", port: 3, machine: "node2", nic: 1 },
+			{ type: "port/attach", port: port0(1), machine: "node1", nic: 0 },
+			{ type: "port/attach", port: port0(2), machine: "node2", nic: 0 },
+			{ type: "port/attach", port: port0(3), machine: "node2", nic: 1 },
 		);
 		for (const port of [1, 2, 3] as const) t.sw.setLink(port, true);
-		t.run({ type: "link/set", port: 3, machine: "node2", nic: 1, up: false, cause: "bar" });
+		t.run({ type: "link/set", port: port0(3), machine: "node2", nic: 1, up: false, cause: "bar" });
 		a.sink.frame(a.ref, 0, arpRequest(1, 2));
 		expect(router.sent.map((call) => call.slice(0, 2))).toEqual([["deliver", 0]]);
 		router.sink.frame(router.ref, 1, routedPing(mac(2, 1), mac(1), 3, 1));
@@ -648,8 +658,8 @@ describe("ports and frames", () => {
 	test("a port may be attached before its machine boots", () => {
 		const t = setup();
 		t.run(
-			{ type: "port/attach", port: 1, machine: "node1", nic: 0 },
-			{ type: "port/attach", port: 2, machine: "node2", nic: 0 },
+			{ type: "port/attach", port: port0(1), machine: "node1", nic: 0 },
+			{ type: "port/attach", port: port0(2), machine: "node2", nic: 0 },
 		);
 		t.sw.setLink(1, true);
 		t.sw.setLink(2, true);
@@ -663,7 +673,7 @@ describe("ports and frames", () => {
 		const t = setup();
 		const a = t.ready(1);
 		const b = t.ready(2);
-		t.run({ type: "port/attach", port: 2, machine: "node2", nic: 0 });
+		t.run({ type: "port/attach", port: port0(2), machine: "node2", nic: 0 });
 		a.sink.frame(a.ref, 0, arpRequest(1, 2));
 		expect(b.sent).toEqual([]);
 		expect(t.capture.size).toBe(0);
@@ -674,11 +684,11 @@ describe("ports and frames", () => {
 		const a = t.ready(1);
 		const b = t.ready(2);
 		t.run(
-			{ type: "port/attach", port: 1, machine: "node1", nic: 0 },
-			{ type: "port/attach", port: 1, machine: "node1", nic: 0 },
-			{ type: "port/attach", port: 2, machine: "node2", nic: 0 },
-			{ type: "port/detach", port: 2 },
-			{ type: "port/detach", port: 2 },
+			{ type: "port/attach", port: port0(1), machine: "node1", nic: 0 },
+			{ type: "port/attach", port: port0(1), machine: "node1", nic: 0 },
+			{ type: "port/attach", port: port0(2), machine: "node2", nic: 0 },
+			{ type: "port/detach", port: port0(2) },
+			{ type: "port/detach", port: port0(2) },
 		);
 		t.sw.setLink(1, true);
 		t.sw.setLink(2, true);
@@ -693,9 +703,9 @@ describe("ports and frames", () => {
 		const b = t.ready(2);
 		const c = t.ready(3);
 		t.run(
-			{ type: "port/attach", port: 1, machine: "node1", nic: 0 },
-			{ type: "port/attach", port: 2, machine: "node2", nic: 0 },
-			{ type: "port/attach", port: 2, machine: "node3", nic: 0 },
+			{ type: "port/attach", port: port0(1), machine: "node1", nic: 0 },
+			{ type: "port/attach", port: port0(2), machine: "node2", nic: 0 },
+			{ type: "port/attach", port: port0(2), machine: "node3", nic: 0 },
 		);
 		t.sw.setLink(1, true);
 		t.sw.setLink(2, true);
@@ -711,14 +721,14 @@ describe("link/set", () => {
 		t.ready(1);
 		t.ready(2);
 		t.run(
-			{ type: "port/attach", port: 1, machine: "node1", nic: 0 },
-			{ type: "port/attach", port: 2, machine: "node2", nic: 0 },
+			{ type: "port/attach", port: port0(1), machine: "node1", nic: 0 },
+			{ type: "port/attach", port: port0(2), machine: "node2", nic: 0 },
 		);
 		const setLink = vi.spyOn(t.sw, "setLink");
 		const appendLink = vi.spyOn(t.capture, "appendLink");
 		t.at(2500);
 
-		t.run({ type: "link/set", port: 2, machine: "node2", nic: 0, up: false, cause: "agent" });
+		t.run({ type: "link/set", port: port0(2), machine: "node2", nic: 0, up: false, cause: "agent" });
 
 		expect(t.sw.isUp(2)).toBe(false);
 		expect(t.capture.tail(1)).toEqual([
@@ -734,7 +744,7 @@ describe("link/set", () => {
 		]);
 		expect(setLink.mock.invocationCallOrder[0]).toBeLessThan(appendLink.mock.invocationCallOrder[0]);
 
-		t.run({ type: "link/set", port: 2, machine: "node2", nic: 0, up: true, cause: "bar" });
+		t.run({ type: "link/set", port: port0(2), machine: "node2", nic: 0, up: true, cause: "bar" });
 		expect(t.sw.isUp(2)).toBe(true);
 		expect(t.capture.tail(1)).toMatchObject([{ up: true, cause: "Cable to node2 reconnected by you." }]);
 	});
@@ -744,9 +754,9 @@ describe("link/set", () => {
 		const a = t.ready(1);
 		const b = t.ready(2);
 		t.run(
-			{ type: "port/attach", port: 1, machine: "node1", nic: 0 },
-			{ type: "port/attach", port: 2, machine: "node2", nic: 0 },
-			{ type: "link/set", port: 1, machine: "node1", nic: 0, up: false, cause: "button" },
+			{ type: "port/attach", port: port0(1), machine: "node1", nic: 0 },
+			{ type: "port/attach", port: port0(2), machine: "node2", nic: 0 },
+			{ type: "link/set", port: port0(1), machine: "node1", nic: 0, up: false, cause: "button" },
 		);
 		a.sink.frame(a.ref, 0, ping(1, 2));
 		expect(b.sent).toEqual([]);
@@ -918,7 +928,7 @@ describe("capture/clear, announce, clock", () => {
 	test("capture/clear empties the list", () => {
 		const t = setup();
 		const a = t.ready(1);
-		t.run({ type: "port/attach", port: 1, machine: "node1", nic: 0 });
+		t.run({ type: "port/attach", port: port0(1), machine: "node1", nic: 0 });
 		t.sw.setLink(1, true);
 		a.sink.frame(a.ref, 0, arpRequest(1, 2));
 		expect(t.capture.size).toBe(1);
@@ -961,7 +971,7 @@ describe("capture/clear, announce, clock", () => {
 	test("each tick sweeps the capture log, so an unanswered ARP request is marked", () => {
 		const t = setup();
 		const a = t.ready(1);
-		t.run({ type: "port/attach", port: 1, machine: "node1", nic: 0 }, { type: "clock", hz: 1 });
+		t.run({ type: "port/attach", port: port0(1), machine: "node1", nic: 0 }, { type: "clock", hz: 1 });
 		t.sw.setLink(1, true);
 		a.sink.frame(a.ref, 0, arpRequest(1, 2));
 		expect(t.capture.tail(1)[0]).toMatchObject({ note: "flooded, no other port is up" });
@@ -977,7 +987,7 @@ describe("dispose", () => {
 		const t = setup();
 		const a = t.ready(1);
 		const b = t.boot(2);
-		t.run({ type: "port/attach", port: 1, machine: "node1", nic: 0 }, { type: "clock", hz: 10 });
+		t.run({ type: "port/attach", port: port0(1), machine: "node1", nic: 0 }, { type: "clock", hz: 10 });
 		t.take();
 
 		t.engine.dispose();

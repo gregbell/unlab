@@ -1,12 +1,12 @@
 import "./mac-table.css";
 import { html, nothing, type TemplateResult } from "lit";
-import { selectNames, severalNics } from "../../model/index.ts";
+import { DEFAULT_SWITCH, selectNames, severalNics } from "../../model/index.ts";
 import { nameOf, nicLabel, nicOfMac, parseMac } from "../../net/index.ts";
 import { Select, UnlabElement } from "../base/index.ts";
 import { FollowCapture } from "../capture/follow.ts";
 
 /**
- * The addresses switch0 has learned. A flushed entry stays, struck through,
+ * The addresses the switch has learned. A flushed entry stays, struck through,
  * until its port relearns it or the machine goes. The table is the switch's,
  * read while rendering: every frame can teach it, so it renders when the
  * capture does, and on the clock tick so `seen` keeps counting.
@@ -24,7 +24,9 @@ export class UnlabMacTable extends UnlabElement {
 
 	override render(): TemplateResult {
 		const now = this.app.switch.now();
-		const entries = [...this.app.switch.macTable()].sort((a, b) => a.port - b.port || a.mac.localeCompare(b.mac));
+		const entries = [...this.app.switch.macTable(DEFAULT_SWITCH)].sort(
+			(a, b) => a.port - b.port || a.mac.localeCompare(b.mac),
+		);
 		const learned = entries.filter((e) => !e.flushed).length;
 		return html`<div class="header">
 				<h2 class="title">mac address table</h2>

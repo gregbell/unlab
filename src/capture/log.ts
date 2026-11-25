@@ -1,11 +1,11 @@
-// The capture log: every frame the switch handles, at thousands a second.
+// The capture log: every frame the switches handle, at thousands a second.
 // Frames never enter the reducer. The log is a fixed ring indexed by a
 // monotonic seq, with an incremental index of the seqs that pass the filter:
 // an append tests only the new entry, eviction trims the index's front, and a
 // filter change rebuilds it once. Subscribers hear at most once per scheduled
 // flush, whatever the frame rate.
 
-import type { Cause, MachineName, PortNo } from "../model/index.ts";
+import type { Cause, MachineName, PortNo, PortRef, SwitchName } from "../model/index.ts";
 import {
 	arpAddrs,
 	type CaptureFilter,
@@ -23,6 +23,8 @@ export interface FrameEntry {
 	readonly seq: number;
 	/** On the log's clock: ms since the lab started. */
 	readonly t: number;
+	/** The switch that carried it, whose ports `from` and `to` are. */
+	readonly switch: SwitchName;
 	readonly from: PortNo;
 	/** Delivered ports as a mask: bit p-1 for port p. */
 	readonly to: number;
@@ -39,7 +41,7 @@ export interface LinkEntry {
 	readonly kind: "link";
 	readonly seq: number;
 	readonly t: number;
-	readonly port: PortNo;
+	readonly port: PortRef;
 	readonly machine: MachineName;
 	readonly nic: NicNo;
 	readonly up: boolean;
@@ -49,8 +51,9 @@ export interface LinkEntry {
 
 export type CaptureEntry = FrameEntry | LinkEntry;
 
-/** One frame as the switch's tap reports it. */
+/** One frame as a switch's tap reports it. */
 export interface SwitchedFrame {
+	readonly switch: SwitchName;
 	readonly from: PortNo;
 	readonly to: number;
 	readonly flood: Flood | null;
@@ -58,7 +61,7 @@ export interface SwitchedFrame {
 }
 
 export interface LinkEvent {
-	readonly port: PortNo;
+	readonly port: PortRef;
 	readonly machine: MachineName;
 	readonly nic: NicNo;
 	readonly up: boolean;
@@ -183,7 +186,7 @@ export function createCaptureLog(opts: CaptureOptions): CaptureLog {
 	const passes = (e: Stored): boolean =>
 		e.kind === "frame"
 			? filter.matchesFrame(e.bytes, e.from, e.to, e.names)
-			: filter.matchesLink(e.port, e.machine, e.nic, e.names);
+			: filter.matchesLink(e.port.port, e.machine, e.nic, e.names);
 	const index = (e: Stored) => {
 		if (!passes(e)) return;
 		matches[(matchHead + matchLen) % limit] = e.seq;
@@ -274,7 +277,7 @@ export function createCaptureLog(opts: CaptureOptions): CaptureLog {
 			return () => listeners.delete(fn);
 		},
 
-		appendFrame({ from, to, flood, frame }) {
+		appendFrame({ switch: on, from, to, flood, frame }) {
 			counters.in++;
 			for (let m = to; m; m &= m - 1) counters.delivered++;
 			if (flood) counters.flooded++;
@@ -292,6 +295,7 @@ export function createCaptureLog(opts: CaptureOptions): CaptureLog {
 				kind: "frame",
 				seq: next,
 				t: now(),
+				switch: on,
 				from,
 				to,
 				flood,

@@ -19,10 +19,12 @@ import {
 	type MachineName,
 	type NicRef,
 	type PortNo,
+	type PortRef,
 	parseSessionId,
 	type RuntimeEvent,
 	type SessionId,
 	type StopHow,
+	type SwitchName,
 } from "../model/index.ts";
 import type { CopyJob, CopyReport } from "./protocol.ts";
 import type { LineMark, Screen, Screens } from "./screens.ts";
@@ -44,8 +46,8 @@ export class ExecRefused extends Error {
 
 /** Switch facts the model does not hold. Read them on a tick while they are on screen. */
 export interface RuntimeReads {
-	macTable(): readonly MacEntry[];
-	counters(port: PortNo): PortCounters | undefined;
+	macTable(of: SwitchName): readonly MacEntry[];
+	counters(port: PortRef): PortCounters | undefined;
 }
 
 export interface Engine {
@@ -61,7 +63,7 @@ export interface Engine {
 
 export interface EngineDeps {
 	readonly store: RuntimeStore;
-	readonly sw: LabSwitch;
+	readonly newSwitch: (name: SwitchName) => LabSwitch;
 	readonly capture: CaptureLog;
 	readonly screens: Screens;
 	readonly startVm: StartVm;
@@ -107,6 +109,12 @@ interface VmEntry {
 interface Write {
 	readonly path: string;
 	settle(outcome: FileOutcome): void;
+}
+
+interface SwitchEntry {
+	readonly sw: LabSwitch;
+	/** Whose cable is in each port. */
+	readonly cables: Map<PortNo, NicRef>;
 }
 
 /** A copy of disks that no guest has open, or that waits until none has. */
@@ -160,18 +168,26 @@ const STOPPED_FOR: Partial<Record<StopHow, (machine: MachineName) => string>> = 
 const lastLineOf = (output: string): string => output.split("\n").findLast((line) => line.trim() !== "") ?? "";
 
 export function createEngine(deps: EngineDeps): Engine {
-	const { sw, capture, screens } = deps;
+	const { capture, screens } = deps;
 	const dispatch = (event: RuntimeEvent) => deps.store.dispatchRuntime(event);
 
 	const vms = new Map<MachineName, VmEntry>();
 	const sessions = new Map<SessionId, SessionEntry>();
 	const jobs = new Map<MachineName, Job>();
-	const ports = new Map<PortNo, NicRef>();
+	const switches = new Map<SwitchName, SwitchEntry>();
 	let published: readonly HostEntry[] | null = null;
 	let writes = 0;
 	let clock: { readonly hz: 1 | 10; readonly stop: () => void } | null = null;
 
-	const untap = sw.onTap((e) => capture.appendFrame(e));
+	/** Made the first time a port of it is named. */
+	const switchOf = (name: SwitchName): SwitchEntry => {
+		const known = switches.get(name);
+		if (known) return known;
+		const entry: SwitchEntry = { sw: deps.newSwitch(name), cables: new Map() };
+		entry.sw.onTap((e) => capture.appendFrame({ switch: name, ...e }));
+		switches.set(name, entry);
+		return entry;
+	};
 
 	/** The vm a report came from, if it is still the one being listened to. */
 	const listening = (ref: VmRef): VmEntry | undefined => {
@@ -298,10 +314,12 @@ export function createEngine(deps: EngineDeps): Engine {
 		},
 		frame(ref, nic, frame) {
 			if (!heard(ref)) return;
-			for (const [port, plugged] of ports) {
-				if (plugged.machine !== ref.machine || plugged.nic !== nic) continue;
-				sw.receive(port, frame);
-				return;
+			for (const { sw, cables } of switches.values()) {
+				for (const [port, plugged] of cables) {
+					if (plugged.machine !== ref.machine || plugged.nic !== nic) continue;
+					sw.receive(port, frame);
+					return;
+				}
 			}
 		},
 		consoleBytes(ref, bytes) {
@@ -514,11 +532,13 @@ export function createEngine(deps: EngineDeps): Engine {
 				startJob({ copy: effect.copy, why: "restore" }, vms.get(effect.copy.machine)?.stopped ?? undefined);
 				return;
 			case "port/attach": {
-				const { port, machine, nic } = effect;
-				const held = ports.get(port);
+				const { machine, nic } = effect;
+				const { port } = effect.port;
+				const { sw, cables } = switchOf(effect.port.switch);
+				const held = cables.get(port);
 				if (held?.machine === machine && held.nic === nic) return;
 				sw.detach(port);
-				ports.set(port, { machine, nic });
+				cables.set(port, { machine, nic });
 				sw.attach(port, {
 					deliver(frame) {
 						const entry = vms.get(machine);
@@ -529,13 +549,16 @@ export function createEngine(deps: EngineDeps): Engine {
 				sw.setLink(port, false);
 				return;
 			}
-			case "port/detach":
-				ports.delete(effect.port);
-				sw.detach(effect.port);
+			case "port/detach": {
+				const { port } = effect.port;
+				const { sw, cables } = switchOf(effect.port.switch);
+				cables.delete(port);
+				sw.detach(port);
 				return;
+			}
 			case "link/set": {
 				const { port, machine, nic, up, cause } = effect;
-				sw.setLink(port, up);
+				switchOf(port.switch).sw.setLink(port.port, up);
 				capture.appendLink({ port, machine, nic, up, cause });
 				return;
 			}
@@ -700,15 +723,13 @@ export function createEngine(deps: EngineDeps): Engine {
 		screens,
 		capture,
 		reads: {
-			macTable: () => sw.macTable(),
-			counters: (port) => sw.counters(port),
+			macTable: (of) => switches.get(of)?.sw.macTable() ?? [],
+			counters: ({ switch: of, port }) => switches.get(of)?.sw.counters(port),
 		},
 		dispose() {
 			clock?.stop();
 			clock = null;
-			untap();
-			for (const port of ports.keys()) sw.detach(port);
-			ports.clear();
+			switches.clear();
 			for (const job of jobs.values()) job.drop();
 			for (const [machine, entry] of vms) {
 				endWrites(entry, `${machine} stopped`);

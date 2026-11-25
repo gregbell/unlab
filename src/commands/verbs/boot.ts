@@ -2,7 +2,7 @@ import { isPlanError, type Machine, planBoot, savingOf } from "../../model/index
 import { defineVerb, machineNow, Refusal, refuse } from "../define.ts";
 import * as slots from "../grammar/slots.ts";
 import { whenSettled } from "./power.ts";
-import { andList, imageLabel, planErrorSentence, ports, skippedPart } from "./words.ts";
+import { andList, imageLabel, planErrorSentence, pluggedInto, skippedPart } from "./words.ts";
 
 /** Same name, hue, image, memory and disks. An off machine is still plugged in; a failed one takes the lowest free ports. */
 export const boot = defineVerb({
@@ -36,7 +36,7 @@ export const boot = defineVerb({
 			`boot ${andList(machines.map((m) => m.name))}${machines.every((m) => m.life.phase === "failed") ? " again" : ""}`,
 			...same((m) => imageLabel(lab, m.spec.image)),
 			...same((m) => `${m.spec.memMiB} MiB${machines.length > 1 ? " each" : ""}`),
-			plugged.length === 0 ? "unplugged" : `plugged into switch0 on ${ports(plugged)}`,
+			pluggedInto(plugged),
 			...skippedPart(skipped),
 		].join(" · ");
 	},

@@ -6,6 +6,7 @@
 import { type CaptureLog, createCaptureLog } from "../../src/capture/index.ts";
 import {
 	type Cause,
+	DEFAULT_SWITCH,
 	type Effect,
 	type MachineName,
 	type PortNo,
@@ -43,10 +44,10 @@ export function testCapture(limit?: number): TestCapture {
 		},
 		frame(bytes, from, to = [], flood = null) {
 			const mask = to.reduce((m, p) => m | (1 << (p - 1)), 0);
-			log.appendFrame({ from, to: mask, flood, frame: bytes });
+			log.appendFrame({ switch: DEFAULT_SWITCH, from, to: mask, flood, frame: bytes });
 		},
 		link(port, machine, up, cause = "button", nic = 0) {
-			log.appendLink({ port, machine, nic, up, cause });
+			log.appendLink({ port: { switch: DEFAULT_SWITCH, port }, machine, nic, up, cause });
 		},
 		onEffect(effect) {
 			if (effect.type === "capture/clear") log.clear();

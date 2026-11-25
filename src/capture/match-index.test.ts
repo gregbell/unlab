@@ -10,7 +10,8 @@ import {
 	tcpSegment,
 	udpSegment,
 } from "../../test/support/frames.ts";
-import type { Cause, MachineName, PortNo } from "../model/index.ts";
+import { port0 } from "../../test/support/ports.ts";
+import { type Cause, DEFAULT_SWITCH, type MachineName, type PortNo } from "../model/index.ts";
 import { type CaptureFilter, compileFilter, type Flood, MATCH_ALL, NICS, type NicNo } from "../net/index.ts";
 import { createCaptureLog, type SwitchedFrame } from "./log.ts";
 
@@ -52,6 +53,7 @@ const TERMS = [
 
 const port = fc.integer({ min: 1, max: 4 }) as fc.Arbitrary<PortNo>;
 const switched: fc.Arbitrary<SwitchedFrame> = fc.record({
+	switch: fc.constant(DEFAULT_SWITCH),
 	from: port,
 	to: fc.integer({ min: 0, max: 15 }),
 	flood: fc.constantFrom<Flood | null>(null, "group", "unknown"),
@@ -123,7 +125,7 @@ test("the incremental match index agrees with filtering the whole buffer", () =>
 						if (!paused) keep({ seq: seq++, kind: "frame", frame: o.frame });
 						break;
 					case "link":
-						log.appendLink({ port: o.port, machine: node(o.n), nic: o.nic, up: o.up, cause: o.cause });
+						log.appendLink({ port: port0(o.port), machine: node(o.n), nic: o.nic, up: o.up, cause: o.cause });
 						if (!paused) keep({ seq: seq++, kind: "link", port: o.port, machine: node(o.n), nic: o.nic });
 						break;
 					case "filter":
@@ -173,7 +175,13 @@ test("100 000 appends into a full ring with a filter stay cheap and notify once 
 		names: () => NAMES,
 	});
 	log.setFilter(compile("icmp node2 or arp port:3"));
-	const frames = FRAMES.map((frame, i) => ({ from: ((i % 4) + 1) as PortNo, to: 1 << (i % 4), flood: null, frame }));
+	const frames = FRAMES.map((frame, i) => ({
+		switch: DEFAULT_SWITCH,
+		from: ((i % 4) + 1) as PortNo,
+		to: 1 << (i % 4),
+		flood: null,
+		frame,
+	}));
 	const calls = [0, 0];
 	log.subscribe(() => calls[0]++);
 	log.subscribe(() => calls[1]++);

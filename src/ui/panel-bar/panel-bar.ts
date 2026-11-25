@@ -1,13 +1,13 @@
 import "./panel-bar.css";
 import { html, nothing, type TemplateResult } from "lit";
-import { type PanelName, parkedPanels, selectLinks } from "../../model/index.ts";
+import { DEFAULT_SWITCH, type PanelName, parkedPanels, selectLinks } from "../../model/index.ts";
 import { Select, UnlabElement, upIcon } from "../base/index.ts";
 
 /** The parked panels by name, each with the one thing worth knowing while it is away. A click brings it back. */
 export class UnlabPanelBar extends UnlabElement {
 	readonly #panels = new Select(this, (s) => s.panels);
 	readonly #paused = new Select(this, (s) => s.capture.paused);
-	readonly #links = new Select(this, selectLinks);
+	readonly #links = new Select(this, selectLinks(DEFAULT_SWITCH));
 
 	override render(): TemplateResult {
 		return html`${parkedPanels(this.#panels.value).map(

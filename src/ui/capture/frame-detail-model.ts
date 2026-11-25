@@ -3,7 +3,7 @@
 // bytes that name a machine marked by machine.
 
 import type { FrameEntry } from "../../capture/index.ts";
-import { DEFAULT_SWITCH, type MachineName, PORTS, type PortNo } from "../../model/index.ts";
+import { type MachineName, PORTS, type PortNo, type PortRef } from "../../model/index.ts";
 import {
 	arpAddrs,
 	BROADCAST_MAC,
@@ -66,7 +66,7 @@ export interface FrameDetail {
 	readonly summary: string;
 	/** `ethernet II`, then the protocols it carries. */
 	readonly groups: readonly DetailGroup[];
-	/** One or two sentences on what switch0 did with it. */
+	/** One or two sentences on what the switch did with it. */
 	readonly did: readonly Words[];
 	readonly dump: readonly DumpRow[];
 }
@@ -74,7 +74,7 @@ export interface FrameDetail {
 /** The lab as it is now, for naming what a frame's bytes point at. */
 export interface LabNames {
 	/** Which machine holds a port, if any. */
-	holder(port: PortNo): Named | null;
+	holder(port: PortRef): Named | null;
 	severalNics(machine: MachineName): boolean;
 }
 
@@ -261,8 +261,8 @@ function sentence(...parts: Words): Words {
 	return out;
 }
 
-const atPort = (port: PortNo, names: LabNames): Words => {
-	const holder = names.holder(port);
+const atPort = (e: FrameEntry, port: PortNo, names: LabNames): Words => {
+	const holder = names.holder({ switch: e.switch, port });
 	return holder ? [holder, ` on port ${port}`] : [`port ${port}`];
 };
 
@@ -276,7 +276,7 @@ function destination(e: FrameEntry, names: LabNames): Words {
 
 function did(e: FrameEntry, names: LabNames): Words[] {
 	const delivered = PORTS.filter((p) => e.to & (1 << (p - 1)));
-	const reached = list(delivered.map((p) => atPort(p, names)));
+	const reached = list(delivered.map((p) => atPort(e, p, names)));
 	const f = e.bytes;
 
 	if (e.flood === null) {
@@ -284,7 +284,7 @@ function did(e: FrameEntry, names: LabNames): Words[] {
 		if (only === undefined) {
 			return [
 				sentence(
-					`${DEFAULT_SWITCH} did not deliver it: the address it learned for `,
+					`${e.switch} did not deliver it: the address it learned for `,
 					...destination(e, names),
 					` leads back to port ${e.from} or to a port that is down.`,
 				),
@@ -292,7 +292,7 @@ function did(e: FrameEntry, names: LabNames): Words[] {
 		}
 		return [
 			sentence(
-				`${DEFAULT_SWITCH} had learned `,
+				`${e.switch} had learned `,
 				...destination(e, names),
 				` on port ${only}, so it forwarded the frame there only.`,
 			),
@@ -306,14 +306,14 @@ function did(e: FrameEntry, names: LabNames): Words[] {
 					...(delivered.length ? [": delivered to ", ...reached, "."] : [", but no other port was up."]),
 				)
 			: sentence(
-					`${DEFAULT_SWITCH} did not know where `,
+					`${e.switch} did not know where `,
 					...destination(e, names),
 					" is, so it flooded the frame",
 					...(delivered.length ? [": delivered to ", ...reached, "."] : [", but no other port was up."]),
 				);
 
 	const missed = PORTS.filter((p) => p !== e.from && !delivered.includes(p)).flatMap((p) => {
-		const holder = names.holder(p);
+		const holder = names.holder({ switch: e.switch, port: p });
 		return holder ? [{ port: p, holder }] : [];
 	});
 	if (missed.length === 0) return [first];

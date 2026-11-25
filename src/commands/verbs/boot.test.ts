@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { port0 } from "../../../test/support/ports.ts";
 import { storeLab } from "../testing/store.ts";
 
 describe("boot", () => {
@@ -25,8 +26,8 @@ describe("boot", () => {
 		await lab.run("boot all");
 		expect(["node1", "node2", "node3"].map((name) => lab.store.state.machines[name as "node1"]?.life)).toMatchObject([
 			{ phase: "ready" },
-			{ phase: "booting", attempt: 2, plugs: [{ port: 2 }] },
-			{ phase: "booting", attempt: 2, plugs: [{ port: 3 }] },
+			{ phase: "booting", attempt: 2, plugs: [{ port: port0(2) }] },
+			{ phase: "booting", attempt: 2, plugs: [{ port: port0(3) }] },
 		]);
 	});
 

@@ -10,6 +10,7 @@ import {
 	ping,
 	routedPing,
 } from "../../test/support/frames.ts";
+import { port0 } from "../../test/support/ports.ts";
 import type { MachineName, PortNo } from "../model/index.ts";
 import { type CaptureFilter, compileFilter, type Flood, type NameBook, type NicNo, NO_NAMES } from "../net/index.ts";
 import { type CaptureLog, createCaptureLog } from "./log.ts";
@@ -27,7 +28,7 @@ function setup(limit = 10_000) {
 		names: () => NAMES,
 	});
 	const frame = (bytes: Uint8Array, from: PortNo, to: number, flood: Flood | null = null) =>
-		log.appendFrame({ from, to, flood, frame: bytes });
+		log.appendFrame({ switch: "switch0", from, to, flood, frame: bytes });
 	const at = (ms: number) => {
 		clock = ms;
 	};
@@ -90,8 +91,8 @@ describe("rows", () => {
 		let names = called(2);
 		const log = createCaptureLog({ schedule: (fn) => fn(), now: () => 0, names: () => names });
 		const append = () => {
-			log.appendFrame({ from: 1, to: bit(2), flood: null, frame: ping(1, 2) });
-			log.appendFrame({ from: 1, to: bit(5), flood: null, frame: ping(1, 5) });
+			log.appendFrame({ switch: "switch0", from: 1, to: bit(2), flood: null, frame: ping(1, 2) });
+			log.appendFrame({ switch: "switch0", from: 1, to: bit(5), flood: null, frame: ping(1, 5) });
 		};
 		append();
 		names = called(5);
@@ -118,7 +119,7 @@ describe("rows", () => {
 		const log = createCaptureLog({ schedule: (fn) => fn(), now: () => 0, names: () => names });
 		const outsider = Uint8Array.of(0x02, 0, 0, 0, 0, 9);
 		const frame = eth(mac(7), outsider, 0x0800, ipv4Packet(address, 0x08080808, 1, [8, 0, 0, 0, 0, 1, 0, 1]));
-		const append = () => log.appendFrame({ from: 5, to: 0, flood: null, frame });
+		const append = () => log.appendFrame({ switch: "switch0", from: 5, to: 0, flood: null, frame });
 		append();
 		names = NO_NAMES;
 		append();
@@ -142,9 +143,9 @@ describe("rows", () => {
 	test("link rows say which port changed and who did it", () => {
 		const { log, at } = setup();
 		at(2000);
-		log.appendLink({ port: 3, machine: "node3", nic: 0, up: false, cause: "agent" });
-		log.appendLink({ port: 3, machine: "node3", nic: 0, up: true, cause: "bar" });
-		log.appendLink({ port: 5, machine: "node5", nic: 0, up: false, cause: "runtime" });
+		log.appendLink({ port: port0(3), machine: "node3", nic: 0, up: false, cause: "agent" });
+		log.appendLink({ port: port0(3), machine: "node3", nic: 0, up: true, cause: "bar" });
+		log.appendLink({ port: port0(5), machine: "node5", nic: 0, up: false, cause: "runtime" });
 		expect(log.tail(3)).toEqual([
 			{
 				kind: "link",
@@ -181,7 +182,7 @@ describe("a machine with several NICs", () => {
 	const named = () => {
 		const log = createCaptureLog({ schedule: (fn) => fn(), now: () => 0, severalNics: (name) => name === "node2" });
 		const route = (bytes: Uint8Array) => {
-			log.appendFrame({ from: 1, to: 0, flood: null, frame: bytes });
+			log.appendFrame({ switch: "switch0", from: 1, to: 0, flood: null, frame: bytes });
 			const row = log.tail(1)[0];
 			return row.kind === "frame" ? [row.from, row.to] : [];
 		};
@@ -210,9 +211,9 @@ describe("a machine with several NICs", () => {
 
 	test("has its NIC in its link rows", () => {
 		const { log } = named();
-		log.appendLink({ port: 2, machine: "node2", nic: 0, up: false, cause: "bar" });
-		log.appendLink({ port: 3, machine: "node2", nic: 1, up: true, cause: "agent" });
-		log.appendLink({ port: 1, machine: "node1", nic: 0, up: false, cause: "bar" });
+		log.appendLink({ port: port0(2), machine: "node2", nic: 0, up: false, cause: "bar" });
+		log.appendLink({ port: port0(3), machine: "node2", nic: 1, up: true, cause: "agent" });
+		log.appendLink({ port: port0(1), machine: "node1", nic: 0, up: false, cause: "bar" });
 		expect(log.tail(3).map((row) => (row.kind === "link" ? row.cause : ""))).toEqual([
 			"Cable to node2:eth0 cut by you.",
 			"Cable to node2:eth1 reconnected by the agent.",
@@ -223,10 +224,10 @@ describe("a machine with several NICs", () => {
 
 test("a link the lab raises is a machine plugging in at boot, not a reconnect", () => {
 	const { log } = setup();
-	log.appendLink({ port: 1, machine: "node1", nic: 0, up: true, cause: "runtime" });
+	log.appendLink({ port: port0(1), machine: "node1", nic: 0, up: true, cause: "runtime" });
 	expect(log.tail(1)[0]).toMatchObject({ text: "port 1 link up", cause: "Cable to node1 plugged in by the lab." });
-	log.appendLink({ port: 1, machine: "node1", nic: 0, up: false, cause: "power" });
-	log.appendLink({ port: 1, machine: "node1", nic: 0, up: true, cause: "power" });
+	log.appendLink({ port: port0(1), machine: "node1", nic: 0, up: false, cause: "power" });
+	log.appendLink({ port: port0(1), machine: "node1", nic: 0, up: true, cause: "power" });
 	expect(log.tail(2)).toMatchObject([
 		{ text: "port 1 link down", cause: "node1 stopped." },
 		{ text: "port 1 link up", cause: "node1 booted." },
@@ -323,7 +324,7 @@ describe("pause and clear", () => {
 		frame(ping(1, 2), 1, bit(2));
 		log.setPaused(true);
 		frame(ping(1, 2), 1, bit(2));
-		log.appendLink({ port: 2, machine: "node2", nic: 0, up: false, cause: "button" });
+		log.appendLink({ port: port0(2), machine: "node2", nic: 0, up: false, cause: "button" });
 		expect(log.size).toBe(1);
 		expect(log.counters).toEqual({ in: 2, delivered: 2, flooded: 0 });
 		log.setPaused(false);
@@ -358,7 +359,7 @@ describe("filter", () => {
 		const { log, frame } = setup();
 		frame(arpRequest(1, 2), 1, bit(2), "group");
 		frame(ping(1, 2), 1, bit(2));
-		log.appendLink({ port: 3, machine: "node3", nic: 0, up: false, cause: "agent" });
+		log.appendLink({ port: port0(3), machine: "node3", nic: 0, up: false, cause: "agent" });
 		frame(ping(2, 1, 1, 0), 2, bit(1));
 		log.setFilter(filter("icmp"));
 		expect([log.matchCount, log.matchedFrames, log.frameCount, log.size]).toEqual([3, 2, 3, 4]);
@@ -395,7 +396,7 @@ describe("the ring", () => {
 	test("frames() ignores the filter and skips link rows", () => {
 		const { log, frame } = setup();
 		frame(arpRequest(1, 2), 1, bit(2), "group");
-		log.appendLink({ port: 2, machine: "node2", nic: 0, up: false, cause: "bar" });
+		log.appendLink({ port: port0(2), machine: "node2", nic: 0, up: false, cause: "bar" });
 		frame(ping(1, 2), 1, bit(2));
 		log.setFilter(filter("icmp"));
 		expect(Array.from(log.frames(), (e) => e.seq)).toEqual([1, 3]);
@@ -413,7 +414,7 @@ describe("notification", () => {
 		expect(calls).toBe(1);
 		flush();
 		expect(calls).toBe(1);
-		log.appendLink({ port: 1, machine: "node1", nic: 0, up: false, cause: "bar" });
+		log.appendLink({ port: port0(1), machine: "node1", nic: 0, up: false, cause: "bar" });
 		flush();
 		expect(calls).toBe(2);
 		off();

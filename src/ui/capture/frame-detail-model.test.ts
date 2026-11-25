@@ -23,6 +23,7 @@ function entry(bytes: Uint8Array, fields: Partial<Omit<FrameEntry, "kind" | "byt
 		kind: "frame",
 		seq: 189,
 		t: 1_618_520,
+		switch: "switch0",
 		from: 1,
 		to: 0,
 		flood: null,
@@ -37,7 +38,7 @@ const only = (n: number): Named => ({ n, label: `node${n}` });
 
 /** Machines with one NIC, each holding the port of its own number. */
 const machinesTo = (last: number): LabNames => ({
-	holder: (port) => (port <= last ? only(port) : null),
+	holder: ({ port }) => (port <= last ? only(port) : null),
 	severalNics: () => false,
 });
 const holder = machinesTo(3);
@@ -106,7 +107,7 @@ describe("frameDetail", () => {
 
 	it("names the NIC of a machine that has several", () => {
 		const names: LabNames = {
-			holder: (port) => (port === 3 ? { n: 2, label: "node2:eth1" } : port === 1 ? only(1) : only(2)),
+			holder: ({ port }) => (port === 3 ? { n: 2, label: "node2:eth1" } : port === 1 ? only(1) : only(2)),
 			severalNics: (machine) => machine === "node2",
 		};
 		const d = frameDetail(entry(routedPing(mac(1), mac(2), 1, 3), { from: 1, to: ports([2]) }), names);
@@ -119,7 +120,7 @@ describe("frameDetail", () => {
 		]);
 		const asked = frameDetail(entry(arpRequest(1, 3), { flood: "group", to: ports([3]) }), {
 			...names,
-			holder: (port) => (port <= 3 ? names.holder(port) : null),
+			holder: (ref) => (ref.port <= 3 ? names.holder(ref) : null),
 		});
 		expect(asked.did[0]).toContainEqual({ n: 2, label: "node2:eth1" });
 	});
