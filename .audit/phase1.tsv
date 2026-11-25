@@ -38,3 +38,6 @@ ts	phase	decision	why	evidence	result
 2026-11-25T06:39:31Z	files	policy run for file_write	same reach as shell_exec, which runs	src/model/update.ts	default, user can set ask
 2026-11-25T06:39:31Z	files	open: typing straight after starting cat on Debian showed ahalf sentence	seen before any write, cause not traced	worker report	open item
 2026-11-25T06:07:31Z	lab-image	merged PR 15	CI green	Actions run 45556494730; CI boot ms alpine 2739,2264,2349,2255 lab 2979,2374,2384,2370	merged
+2026-11-25T07:27:12Z	files	merged PR 16	CI green	Actions run 45562275744	merged
+2026-11-25T07:27:12Z	help	help, tool description and schema from one slot field; examples are tool input	they cannot drift	31 breaks red; e2e/help.spec.ts	reviewed diff
+2026-11-25T07:27:12Z	help	sh, capture, focus have no tool	they move a person's panes and keyboard; not phase 1 capabilities	stories file row 1.2	reported to user
