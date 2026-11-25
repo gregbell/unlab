@@ -2,13 +2,13 @@
 // `npx unlab.run`: links the lab in the browser with this computer.
 
 import { spawn } from "node:child_process";
-import { copyFileSync, mkdirSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
 import type { Asking } from "../../src/streams/index.ts";
 import { Core, NotRunning, proxy, request, type Status, watch } from "./core.ts";
-import { configDir } from "./keys.ts";
+import { configDir, keep } from "./keys.ts";
 import { lineOf, type Options, readOptions, USAGE, UsageError } from "./options.ts";
 import { askingText } from "./print.ts";
 import { prompt } from "./prompt.ts";
@@ -28,7 +28,7 @@ function keepProgram(): readonly string[] {
 	mkdirSync(dir, { recursive: true, mode: 0o700 });
 	const kept = join(dir, "cli.mjs");
 	const self = fileURLToPath(import.meta.url);
-	if (self !== kept) copyFileSync(self, kept);
+	if (self !== kept) keep(kept, readFileSync(self), 0o644);
 	return [process.execPath, kept];
 }
 
@@ -46,28 +46,37 @@ function openBrowser(url: string): void {
 
 const labUrl = ({ origin, port }: Options) => `${origin}/#cli=${port}`;
 
+/** How long another run of the CLI may hold the port before it answers, as it starts or as it ends. */
+const STARTING_MS = 3000;
+
 /** The CLI that runs, or this one once it does. Null for one that was running. */
 async function start(options: Options): Promise<Core | null> {
-	try {
-		await request<Status>({ type: "status" });
-		return null;
-	} catch (error) {
-		if (!(error instanceof NotRunning)) throw error;
+	const command = keepProgram();
+	for (const until = Date.now() + STARTING_MS; ; ) {
+		try {
+			await request<Status>({ type: "status" });
+			return null;
+		} catch (error) {
+			if (!(error instanceof NotRunning)) throw error;
+		}
+		const core = new Core({
+			port: options.port,
+			origins: [options.origin],
+			lan: options.lan,
+			log: options.log,
+			command,
+		});
+		try {
+			await core.start();
+			return core;
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException).code !== "EADDRINUSE") throw error;
+		}
+		if (Date.now() > until) {
+			throw new Error(`Another program has port ${options.port}. Quit it, or choose another with --port.`);
+		}
+		await new Promise((resolve) => setTimeout(resolve, 100));
 	}
-	const core = new Core({
-		port: options.port,
-		origins: [options.origin],
-		lan: options.lan,
-		log: options.log,
-		command: keepProgram(),
-	});
-	try {
-		await core.start();
-	} catch (error) {
-		if ((error as NodeJS.ErrnoException).code !== "EADDRINUSE") throw error;
-		throw new Error(`Another program has port ${options.port}. Quit it, or choose another with --port.`);
-	}
-	return core;
 }
 
 /** Rejects when the lab that came cannot be used: waiting on, or opening it again, would not change that. */
@@ -174,7 +183,11 @@ async function main(args: readonly string[]): Promise<number> {
 		});
 	}
 	try {
-		if (options.words.length > 0) return await once(options, core);
+		if (options.words.length > 0) {
+			const code = await once(options, core);
+			await core?.idle();
+			return code;
+		}
 		await interactive(options, core);
 		return 0;
 	} finally {

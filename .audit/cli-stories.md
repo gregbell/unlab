@@ -17,9 +17,9 @@ with the internet reachable from it.
 - [x] The same works on an Alpine, a Debian and a lab-image machine.
 - [x] A 10 MiB file copied in with `scp` and back out has the checksum it started with.
 - [ ] It all still works after the lab's window has been covered by the terminal for ten minutes.
-- [ ] **Live run:** an agent given only a shell and the README boots two machines with `npx unlab.run`, copies a file from one to the other over SSH, and the person's only click is the browser's permission.
+- [x] **Live run:** an agent given only a shell and the README boots two machines with `npx unlab.run`, copies a file from one to the other over SSH, and the person's only click is the browser's permission.
 
-Not ticked: the first and the live run need the published package and a person at a browser that asks.
+Not ticked: the first needs the published package and a person at a browser that asks.
 
 ## The link
 
@@ -299,3 +299,4 @@ have the one.
 | 6.2 | Node.js 22.12, on Linux and macOS | the matrix of `.github/workflows/cli.yml`, which passed on both: the link's rules, not SSH into a machine, which ran on Linux with Node.js 24 |
 | 0 | On the live lab, on each image | by hand on 2026-11-25, with `unlab.run@0.1.0` from npm and https://unlab.run in headless Chromium, given the permission beforehand: `ssh`, `curl -sI https://example.org` and 10 MiB by `scp` each way on alpine, debian and lab. A lab that had never linked dialled nothing, and one without the permission said `cli: blocked` |
 | 6.1 | The existing suites pass | CI on pull request 27 |
+| 0 | Live run | by hand on 2026-11-25: a fresh agent (Claude Opus 5.5) with only a shell, the README and the packed 0.1.1, and a headless browser that allowed the one question and did nothing else, booted two Alpine machines on https://unlab.run, made 1 MiB on node1, copied it to node2 with `scp -3`, and both gave the same SHA-256. It ran the CLI in the background. Where it guessed is in pull request 30 |
