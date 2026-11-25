@@ -51,10 +51,10 @@ export function saveWorkspace(state: LabState): string {
 					};
 				}),
 				failure: m.life.phase === "failed" ? m.life.reason : undefined,
-				// A stop that a reload cuts short ends as it was going to.
 				sets: m.sets,
 				// A restore that a reload cuts short is done again from the start, and one that is not in here never was.
 				restore: m.life.phase === "restoring" ? m.life.from.set : undefined,
+				// A stop that a reload cuts short ends as it was going to.
 				off: m.life.phase === "off" || (m.life.phase === "stopping" && m.life.next === "off") ? true : undefined,
 			};
 		});
