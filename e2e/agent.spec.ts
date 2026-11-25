@@ -27,7 +27,10 @@ test("an agent lists, asks to remove node2, and node2 goes once the person click
 	expect(await registered(page)).toEqual([
 		"capture_read",
 		"link_set",
+		"machines_boot",
 		"machines_list",
+		"machines_poweroff",
+		"machines_reboot",
 		"machines_remove",
 		"machines_spawn",
 		"shell_exec",

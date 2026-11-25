@@ -1,6 +1,6 @@
 import { expect, type Page, test } from "@playwright/test";
 import { chromiumExecutable } from "../test/support/chromium.ts";
-import { openWithTwoMachines, root, shell, typed } from "./lab.ts";
+import { crash, openWithTwoMachines, root, shell, typed } from "./lab.ts";
 import { call } from "./webmcp.ts";
 
 /** When set, the test also saves screenshots of a lab with chosen addresses there. */
@@ -99,12 +99,19 @@ test("chosen addresses are on the NICs, in ls and in the details, and are applie
 	await listed();
 
 	await root(page, 1, "ip addr flush dev eth1");
-	await shell(page, 1, "sudo poweroff -f").catch(() => {});
+	await crash(page, 1);
 	await expect(rail.getByRole("button", { name: /^node1\b/ })).toContainText("failed", { timeout: 60_000 });
 	await typed(page, "boot node1");
 	await expect(page.getByText("4 of 4 machines ready")).toBeVisible({ timeout: 60_000 });
 	expect(await held(page, 1)).toEqual(NODE1);
 	expect(await shell(page, 3, "ping -c 1 -W 2 10.2.0.1")).toMatchObject({ exitCode: 0 });
+
+	await root(page, 1, "ip addr flush dev eth1");
+	expect(await call(page, "machines_reboot", { names: "node1" })).toMatchObject({ result: "node1 ready" });
+	await setAsChosen();
+	expect(await call(page, "machines_poweroff", { names: "node1" })).toMatchObject({ result: "node1 off" });
+	expect(await call(page, "machines_boot", { names: "node1" })).toMatchObject({ result: "node1 ready" });
+	await setAsChosen();
 });
 
 test("the capture names the machine at each end in any subnet, and a reused address does not rename old rows", async ({

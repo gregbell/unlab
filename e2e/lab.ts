@@ -40,3 +40,9 @@ export async function root(page: Page, machine: number | string, script: string)
 	expect(ran, script).toMatchObject({ exitCode: 0 });
 	return ran.output;
 }
+
+/** Crashes an Alpine machine: init runs a program that ends, and a kernel with no init panics. */
+export async function crash(page: Page, machine: number | string): Promise<void> {
+	const script = "echo ::restart:/bin/false >> /etc/inittab; kill -HUP 1; sleep 1; kill -QUIT 1; sleep 9";
+	await shell(page, machine, `sudo sh -c '${script}'`);
+}
