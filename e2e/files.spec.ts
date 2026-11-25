@@ -12,7 +12,7 @@ test.use({
 });
 
 async function openLab(page: Page, line = "spawn 1 alpine", ready = "1 of 1 ready"): Promise<void> {
-	await page.goto("/");
+	await page.goto("/?layout=classic");
 	await expect(page.getByRole("heading", { name: "Your Linux lab in a tab." })).toBeVisible();
 	await typed(page, line);
 	await status(page, ready);

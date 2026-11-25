@@ -90,7 +90,7 @@ export interface CaptureView {
 	/** Since the log was created. Clear does not reset them. */
 	readonly counters: CaptureCounters;
 	/** The newest k rows of the filtered view, oldest first. */
-	tail(k: number): readonly CaptureRow[];
+	tail(k: number, on?: SwitchName): readonly CaptureRow[];
 	/** Rows [from, from + count) of the filtered view. */
 	window(from: number, count: number): readonly CaptureRow[];
 	/** The position of seq in the filtered view, or -1. */
@@ -277,7 +277,16 @@ export function createCaptureLog(opts: CaptureOptions): CaptureLog {
 		get counters() {
 			return { ...counters };
 		},
-		tail: (k) => rows(matchLen - k, k),
+		tail(k, on) {
+			if (on === undefined) return rows(matchLen - k, k);
+			const out: CaptureRow[] = [];
+			for (let i = matchLen - 1; i >= 0 && out.length < k; i--) {
+				const entry = at(matchAt(i));
+				if (entry && (entry.kind === "frame" ? entry.switch : entry.port.switch) === on)
+					out.push(captureRow(entry, rowNames));
+			}
+			return out.reverse();
+		},
 		window: rows,
 		indexOf(seq) {
 			let lo = 0;

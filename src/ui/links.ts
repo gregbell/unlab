@@ -1,3 +1,4 @@
+export const LIVE_LAB_URL = "https://unlab.run";
 export const REPO_URL = "https://github.com/gregbell/unlab";
 export const AUTHOR_URL = "https://github.com/gregbell";
 export const X_ACCOUNT = "@gregbell";

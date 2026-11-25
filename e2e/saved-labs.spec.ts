@@ -35,7 +35,7 @@ test("a lab saved before there were several switches opens on one, with a machin
 	await page.addInitScript((saved) => {
 		if (!localStorage.getItem("unlab.workspace.v1")) localStorage.setItem("unlab.workspace.v1", saved);
 	}, SAVED);
-	await page.goto("/");
+	await page.goto("/?layout=classic");
 	const ready = page.getByText("4 of 5 ready, 1 off");
 	await expect(ready).toBeVisible({ timeout: 90_000 });
 	expect(await cables(page)).toEqual(AS_SAVED);

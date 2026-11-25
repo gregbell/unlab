@@ -15,23 +15,27 @@ To open unlab in its own window, choose **Install** in Chrome’s address bar.
 The installed app shares the lab and guest disks from your browser tab. Close
 the tab before launching the app so it can open that lab.
 
-![Two Alpine consoles above a live packet capture and an eight-port switch. node1 receives three ping replies from node2 at 10.88.0.12.](docs/images/first-ping.png)
+![The Welcome window previews two Alpine machines, their addresses, and their switch ports before boot.](docs/images/desktop-welcome.jpg)
 
 ## Follow your first ping
 
-1. Open the live lab and select **Boot 2 machines**. When both Alpine guests are
-   ready, their addresses appear beside their names.
-2. Select **Ping node2**. The replies appear in the `node1` console. In the
-   capture below it, the first ARP request asks who has `10.88.0.12`. The ICMP
-   echo requests and replies follow.
-3. Maximise the capture with the square at its top right. Select a frame to
-   inspect its headers, or choose **save .pcap** to download a capture you can
-   open in Wireshark.
+1. In **Welcome to unLAB**, select **Boot 2 machines**. The preview shows the
+   names, addresses and switch ports before either guest starts. For CPU, disk
+   and network settings, select **Customize machines**.
+2. In **Rack manager**, select **node1**. When both guests are ready, select
+   **Ping node2** under **Network**. The replies appear in node1’s terminal.
+3. Beside **switch0** in the rack, select **Open capture** to follow traffic.
+   For frame headers, cable filters and a Wireshark download, open the logo menu
+   and choose **Packet capture → Packet inspector**.
+4. Select **switch0** in the rack. Cut the cable to node2, watch its port block
+   change, then reconnect it. Open **Topology** to see how the machines are wired.
 
-To see what a broken link looks like, press `Esc` to return to the consoles and
-click the cable above port 2. Ping again, then click the cable to reconnect it.
-Park a panel with the dash at its top right. Its name then waits in the bar at
-the bottom: click it to bring the panel back.
+![The running desktop with the rack, network topology and two terminals.](docs/images/desktop-lab.jpg)
+
+Drag a window by its title bar, double-click to maximize it, or minimize it to
+the bottom-left dock. Right-click a title bar, a machine, a switch or the desktop
+for its actions. Returning to the lab restores your machines and desktop layout.
+The [classic layout](https://unlab.run/?layout=classic) opens the same saved lab.
 
 ## Lab commands
 
@@ -155,7 +159,7 @@ network this way, by address or by name, unless you start the CLI with `--lan`.
 
 ### If it does not link
 
-The bottom right of the lab says how the link is. Click it to turn the link on or off. A
+Open **SSH access** in the logo menu to see the connection and turn the link on or off. A
 lab that has never linked does not look for a CLI.
 
 | Status line    | What to do                                                                            |
@@ -247,9 +251,8 @@ When you are done, turn remote debugging off.
 
 ### Connect a browser extension
 
-1. [Open the lab](https://unlab.run/) in Chrome. The bottom right
-   reads `webmcp: 20 tools registered`.
-2. To see a call without an agent, click that text, then click **try a call**. The
+1. [Open the lab](https://unlab.run/) in Chrome and open **WebMCP** from the logo menu.
+2. To see a call without an agent, click **try a call**. The
    call and its result appear in the panel.
 3. Install
    [WebMCP - Model Context Tool Inspector](https://chromewebstore.google.com/detail/webmcp-model-context-tool/gbpdfapgefenggkahomfgkhfehlcenpd).
@@ -321,8 +324,7 @@ a separate window opens when you wanted your own browser, reconnect `unlab` in
 - `lan:3` is port 3 of the switch `lan`. A cable moves as it is, so one that is cut stays
   cut until `link up`. The switch that it leaves forgets what it learned from it. A machine
   that fails boots on the switch its cable was moved to, at the lowest free port.
-- With more than one switch, the switch panel's title chooses which one it shows, with
-  its ports, frame counts and MAC table.
+- Select a switch in **Rack manager** for its ports, connected guests and cable actions.
 - Unless you choose, `eth0` starts with an address in `10.88.0.0/24` and `eth1` and
   up start without one. `--addr` sets one in any subnet. The lab applies the
   addresses it set again at every boot, and `/etc/hosts` in each machine lists

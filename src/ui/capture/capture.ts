@@ -73,7 +73,11 @@ function viaTitle(row: FrameRow): string {
  * live region: it would never stop talking.
  */
 export class UnlabCapture extends UnlabElement {
-	static override properties = { mode: { type: String, reflect: true } };
+	static override properties = {
+		mode: { type: String, reflect: true },
+		onSwitch: { type: String, attribute: "on-switch" },
+	};
+	declare onSwitch?: SwitchName;
 	declare mode: CaptureMode;
 
 	readonly #ui = new Select(this, (s) => s.capture);
@@ -102,6 +106,7 @@ export class UnlabCapture extends UnlabElement {
 	}
 
 	override render(): TemplateResult {
+		if (this.onSwitch) return this.#dockList();
 		const full = this.mode === "full";
 		const { filter, paused } = this.#ui.value;
 		const compiled = compileFilter(filter, this.#names.value);
@@ -171,9 +176,10 @@ export class UnlabCapture extends UnlabElement {
 	}
 
 	#dockList(): TemplateResult {
-		const rows = this.app.capture.tail(DOCK_ROWS);
+		const count = this.onSwitch && this.#viewport ? Math.ceil(this.#viewport / ROW) : DOCK_ROWS;
+		const rows = this.app.capture.tail(count, this.onSwitch);
 		const via = this.#showsVia(rows);
-		return html`<div class="rows" data-via=${via}>
+		return html`<div class="rows" data-via=${via} ${this.onSwitch ? ref(this.#scroller) : nothing}>
 			<div class="track" role="list" aria-label="Newest frames">
 				${repeat(
 					rows,

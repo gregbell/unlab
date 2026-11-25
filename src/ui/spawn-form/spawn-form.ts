@@ -15,6 +15,7 @@ const memoryLabel = (mib: Memory): string => (mib >= 1024 ? `${mib / 1024} GiB` 
 export class UnlabSpawnForm extends UnlabElement {
 	static override properties = { choice: { state: true }, running: { state: true } };
 	declare choice: SpawnChoice;
+	customize?: (choice: SpawnChoice) => void;
 	declare running: boolean;
 
 	// Room, ports, hues, names and the parse all read the lab, so the form follows all of it.
@@ -58,7 +59,10 @@ export class UnlabSpawnForm extends UnlabElement {
 						${lab.images.map((image) => option(image.label, choice.image === image.name, { image: image.name }))}
 					</div>
 				</div>
-				<details class="customize">
+				${
+					this.customize
+						? html`<button type="button" class="link" @click=${() => this.customize?.(choice)}>Customize machines</button>`
+						: html`<details class="customize">
 					<summary>Customize machines</summary>
 					<div class="question">
 						<div class="label" id="spawn-memory">Memory per machine</div>
@@ -90,7 +94,8 @@ export class UnlabSpawnForm extends UnlabElement {
 						</div>
 						<p class="note">${view.networkNote}</p>
 					</div>
-				</details>
+				</details>`
+				}
 			</div>
 			<div class="result-column">
 				<div class="you-get">

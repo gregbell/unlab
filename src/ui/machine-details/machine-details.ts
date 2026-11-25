@@ -5,13 +5,12 @@ import {
 	type DetailRow,
 	type LinkWord,
 	type MachineDetails,
-	type MachineName,
 	type SwitchName,
 	selectDetails,
 	selectRail,
 } from "../../model/index.ts";
-import { ip4str, subnetsOverlap } from "../../net/index.ts";
 import { Select, UnlabElement } from "../base/index.ts";
+import { peerPing } from "./peer-ping.ts";
 
 interface CableAction {
 	/** Which way it turns the link. */
@@ -33,11 +32,6 @@ const CABLE: Readonly<Record<LinkWord, CableAction>> = {
 
 /** What the action shows for a machine with no cable to act on yet. */
 const NO_CABLE: Cable = { label: "", nic: null, link: "up" };
-
-interface Peer {
-	readonly name: MachineName;
-	readonly ip: string;
-}
 
 type Fact = Omit<DetailRow, "label"> & { readonly label: DetailRow["label"] | "frames" };
 
@@ -73,7 +67,7 @@ export class UnlabMachineDetails extends UnlabElement {
 		if (!details) return nothing;
 		const { name, accepts } = details;
 		const cables = details.cables.length > 0 ? details.cables : [NO_CABLE];
-		const peers = this.#peers(name);
+		const ping = peerPing(name, this.app.store.state.machines, this.#rail.value);
 		return html`<h3 class="name" data-hue=${details.hue}>${name}</h3>
 			<dl class="facts">
 				${this.#facts(details).map(
@@ -91,10 +85,10 @@ export class UnlabMachineDetails extends UnlabElement {
 				<button
 					type="button"
 					class="button"
-					?disabled=${!accepts.commands || peers.length === 0}
-					@click=${() => this.runLine(this.#pingLine(name, peers))}
+					?disabled=${!accepts.commands || !ping.line}
+					@click=${() => ping.line && this.runLine(ping.line)}
 				>
-					${peers.length === 1 ? `Ping ${peers[0].name}` : "Ping peers"}
+					${ping.label}
 				</button>
 				${cables.map((cable) => {
 					const action = CABLE[cable.link];
@@ -146,23 +140,6 @@ export class UnlabMachineDetails extends UnlabElement {
 		if (counters.length === 0) return null;
 		const sum = (of: "txFrames" | "rxFrames") => counters.reduce((n, port) => n + port[of], 0);
 		return `${sum("txFrames")} in · ${sum("rxFrames")} out`;
-	}
-
-	/** The other ready machines that have an address to ping: one this machine shares a subnet with, if there is one. */
-	#peers(name: MachineName): readonly Peer[] {
-		const { machines } = this.app.store.state;
-		const addresses = (of: MachineName) => machines[of]?.spec.nics.flatMap((nic) => nic.address ?? []) ?? [];
-		const own = addresses(name);
-		return this.#rail.value.flatMap((row) => {
-			if (row.phase !== "ready" || row.name === name) return [];
-			const theirs = addresses(row.name);
-			const address = theirs.find((a) => own.some((mine) => subnetsOverlap(a, mine))) ?? theirs[0];
-			return address ? [{ name: row.name, ip: ip4str(address.ip) }] : [];
-		});
-	}
-
-	#pingLine(name: MachineName, peers: readonly Peer[]): string {
-		return `exec ${name} -- ${peers.map(({ ip }) => `ping -c 3 ${ip}`).join("; ")}`;
 	}
 }
 

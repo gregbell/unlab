@@ -134,7 +134,7 @@ test("a yes removes only what it was asked about: not a machine that took the na
 	page,
 }) => {
 	const changed = { error: "What this does to web has changed since it was asked, so ask again. Nothing was changed." };
-	await page.goto("/");
+	await page.goto("/?layout=classic");
 	await expect(page.getByRole("heading", { name: "Your Linux lab in a tab." })).toBeVisible();
 	const ready = expect(page.getByText("1 of 1 ready"));
 	await typed(page, "spawn 1 alpine --name web");
@@ -178,7 +178,7 @@ test("output longer than the terminal keeps comes back as its end, flagged", asy
 });
 
 test("try a call makes a person's first call through the browser", async ({ page }) => {
-	await page.goto("/");
+	await page.goto("/?layout=classic");
 	const panel = await openPanel(page);
 	await panel.getByRole("button", { name: "try a call" }).click();
 	await expect(panel.locator(".call")).toHaveCount(1);
@@ -195,7 +195,7 @@ for (const [where, width, height] of [
 ] as const) {
 	test(`an agent's first boot asks in view on the empty lab: ${where}`, async ({ page }) => {
 		await page.setViewportSize({ width, height });
-		await page.goto("/");
+		await page.goto("/?layout=classic");
 		await expect(page.getByRole("heading", { name: "Your Linux lab in a tab." })).toBeVisible();
 		await expect.poll(() => registered(page)).toHaveLength(20);
 

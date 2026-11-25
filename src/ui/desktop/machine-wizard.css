@@ -1,0 +1,321 @@
+@layer tokens, base, components;
+@layer components {
+	unlab-machine-wizard {
+		display: block;
+		height: 100%;
+		container-type: inline-size;
+		background: var(--mantle);
+	}
+	.mw-layout {
+		display: grid;
+		grid-template-columns: 148px minmax(0, 1fr);
+		grid-template-rows: minmax(0, 1fr) auto;
+		height: 100%;
+		min-height: 0;
+	}
+	.mw-steps {
+		padding: 17px 9px;
+		background: color-mix(in srgb, var(--crust) 37%, var(--mantle));
+		overflow: auto;
+	}
+	.mw-steps button {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		width: 100%;
+		padding: 10px 9px;
+		border: 0;
+		border-radius: 4px;
+		background: transparent;
+		text-align: left;
+		color: var(--text-2);
+		cursor: pointer;
+	}
+	:where(.mw-steps) button span {
+		font-size: var(--fs-status);
+		color: var(--text-3);
+	}
+	.mw-steps button[aria-current="step"] {
+		background: color-mix(in srgb, var(--agent) 10%, var(--mantle));
+		color: var(--agent);
+	}
+	.mw-body {
+		min-width: 0;
+		overflow: auto;
+		padding: 22px 22px 16px;
+	}
+	.mw-body h2 {
+		margin: 0 0 22px;
+		font-size: 17px;
+		font-weight: 550;
+		letter-spacing: -0.03em;
+	}
+	.mw-body h2:focus {
+		outline: none;
+	}
+	.mw-body h3,
+	.mw-images legend {
+		font-size: var(--fs-ui);
+		font-weight: 500;
+		margin: 0;
+	}
+	.mw-grid {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 14px;
+	}
+	.mw-field {
+		display: grid;
+		align-content: start;
+		min-width: 0;
+		gap: 6px;
+		color: var(--text-2);
+	}
+	.mw-field .field {
+		width: 100%;
+		min-width: 0;
+		height: 33px;
+	}
+	.mw-images {
+		padding: 0;
+		margin: 0 0 20px;
+		border: 0;
+		min-width: 0;
+	}
+	.mw-images legend {
+		margin-bottom: 7px;
+	}
+	.mw-images label {
+		display: flex;
+		align-items: center;
+		gap: 11px;
+		padding: 9px 5px;
+		border-bottom: 1px solid var(--line);
+		cursor: pointer;
+	}
+	.mw-body input {
+		accent-color: var(--agent);
+	}
+	.mw-note {
+		color: var(--text-3);
+		margin: 12px 0 0;
+		font-size: var(--fs-status);
+		line-height: 1.65;
+	}
+	.mw-section,
+	.mw-disk {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 12px;
+	}
+	.mw-section {
+		margin: 14px 0 10px;
+	}
+	:where(.mw-body h2) + .mw-section {
+		margin-top: 0;
+	}
+	.mw-disk {
+		margin-top: 8px;
+		align-items: end;
+	}
+	.mw-disk .mw-field {
+		flex: 1;
+	}
+	.mw-nic {
+		padding: 8px 12px 12px;
+		background: var(--base);
+		border-radius: 5px;
+		margin: 8px 0 12px;
+	}
+	.mw-nic .mw-section {
+		margin: 0 0 9px;
+	}
+	.mw-nic strong {
+		color: var(--agent);
+		font-weight: 500;
+	}
+	.mw-check {
+		display: flex;
+		gap: 8px;
+		align-items: center;
+		margin-top: 10px;
+	}
+	.mw-link {
+		padding: 3px 5px;
+		background: none;
+		border: 0;
+		color: var(--link-hover);
+		cursor: pointer;
+	}
+	.mw-review {
+		margin: 0;
+	}
+	.mw-review div {
+		display: grid;
+		grid-template-columns: 64px minmax(0, 1fr) auto;
+		align-items: baseline;
+		gap: 10px;
+		padding: 9px 0;
+		border-bottom: 1px solid var(--line);
+	}
+	.mw-review dt,
+	.mw-footer span {
+		color: var(--text-3);
+	}
+	.mw-review dd {
+		margin: 0;
+		overflow-wrap: anywhere;
+	}
+	.mw-command {
+		margin-top: 14px;
+	}
+	.mw-command summary {
+		cursor: pointer;
+		color: var(--link-hover);
+	}
+	.mw-command code {
+		display: block;
+		padding: 10px;
+		background: var(--crust);
+		overflow-wrap: anywhere;
+		user-select: all;
+	}
+	.mw-error {
+		color: var(--down);
+	}
+	.mw-footer {
+		grid-column: 1 / -1;
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		border-top: 1px solid var(--line);
+		padding: 9px 16px;
+		background: var(--mantle);
+	}
+	.mw-footer span {
+		margin-right: auto;
+		font-size: var(--fs-status);
+	}
+	.dt-terminal-icon {
+		display: inline-grid;
+		place-items: center;
+		min-width: 30px;
+		min-height: 28px;
+	}
+	.dt-config {
+		padding: 14px 18px 18px;
+	}
+	.dt-config h3 {
+		margin: 20px 0 7px;
+		font-size: var(--fs-ui);
+		color: var(--text-2);
+		font-weight: 550;
+	}
+	.dt-config dl {
+		margin: 0;
+	}
+	.dt-config dl > div {
+		display: flex;
+		justify-content: space-between;
+		align-items: baseline;
+		gap: 12px;
+		padding: 6px 0;
+		border-bottom: 1px solid var(--line);
+	}
+	.dt-config dt {
+		color: var(--text-3);
+	}
+	.dt-config dd {
+		margin: 0;
+	}
+	.dt-config .dt-link {
+		padding: 6px 0;
+	}
+	.dt-config-network {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		margin: 18px 0 6px;
+	}
+	.dt-config-network h3 {
+		margin: 0;
+	}
+	.dt-window:is([data-kind="config"], [data-kind="switch-details"]) .dt-interior {
+		scrollbar-width: thin;
+		scrollbar-color: var(--line-strong) transparent;
+	}
+	.dt-ports {
+		width: 100%;
+		border-collapse: collapse;
+		text-align: left;
+		font-size: var(--fs-status);
+		color: var(--text-2);
+	}
+	.dt-ports :is(th, td) {
+		padding: 4px 3px;
+		border-bottom: 1px solid var(--dt-divider);
+		font-weight: 400;
+	}
+	.dt-ports td:last-child {
+		text-align: right;
+	}
+	.dt-ports [data-state="up"] {
+		color: var(--ok);
+	}
+	.dt-ports [data-state="cut"] {
+		color: var(--down);
+	}
+	.dt-peer {
+		padding: 3px 0;
+		border: 0;
+		background: none;
+		color: var(--machine-hue);
+		cursor: pointer;
+		overflow-wrap: anywhere;
+	}
+	.dt-peer:hover {
+		text-decoration: underline;
+	}
+	.dt-config-tools {
+		display: flex;
+		align-items: center;
+		gap: 7px;
+		flex-wrap: wrap;
+	}
+	.dt-config-tools strong {
+		margin-right: auto;
+		color: var(--machine-hue, var(--text));
+	}
+	@container (max-width: 530px) {
+		.mw-layout {
+			grid-template-columns: minmax(0, 1fr);
+			grid-template-rows: auto minmax(0, 1fr) auto;
+		}
+		.mw-steps {
+			display: flex;
+			gap: 2px;
+			padding: 4px;
+			overflow: auto;
+		}
+		.mw-steps button {
+			width: auto;
+			flex: 1;
+			justify-content: center;
+			padding: 7px 3px;
+			font-size: var(--fs-status);
+		}
+		:where(.mw-steps) button span {
+			display: none;
+		}
+		.mw-body {
+			padding: 14px;
+		}
+	}
+	@container (max-width: 350px) {
+		.mw-grid {
+			grid-template-columns: 1fr;
+			gap: 8px;
+		}
+	}
+}

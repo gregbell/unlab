@@ -10,7 +10,7 @@ async function shell(page: Page, node: number, command: string, result: string) 
 }
 
 test("reload restores distinct sized machines, private files and a cut cable", async ({ page }) => {
-	await page.goto("/");
+	await page.goto("/?layout=classic");
 	await page.getByText("Customize machines", { exact: true }).click();
 	await page.getByLabel("CPUs each").selectOption("2");
 	await page.getByRole("button", { name: "512 MiB" }).click();

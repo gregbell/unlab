@@ -30,7 +30,7 @@ interface Row {
 async function openLab(page: Page): Promise<string[]> {
 	const errors: string[] = [];
 	page.on("pageerror", (e) => errors.push(e.message));
-	await page.goto("/");
+	await page.goto("/?layout=classic");
 	await expect(page.getByRole("heading", { name: "Your Linux lab in a tab." })).toBeVisible();
 	return errors;
 }
