@@ -122,6 +122,7 @@ export function labWith(fixtures: readonly MachineFixture[], images: readonly Im
 		rail.push(name);
 	}
 	return {
+		cli: { kind: "off" },
 		now: 0,
 		nextN: Math.max(0, ...fixtures.map((f) => f.n)) + 1,
 		machines,

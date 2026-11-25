@@ -5,6 +5,7 @@
 import type { FileOutcome, GuestFile } from "../commands/index.ts";
 import type { Address, DiskCopy, Disks, HostEntry, Next, StopHow } from "../model/index.ts";
 import type { NicNo } from "../net/index.ts";
+import type { LinkTarget } from "./machine-link.ts";
 
 export interface VmConfig {
 	/** The machine's number, which its disks are kept under. */
@@ -65,6 +66,8 @@ export type ToVm =
 	| { type: "checkpoint"; copy: DiskCopy }
 	/** Put a file in the guest. Answered with `wrote`. */
 	| { type: "write"; id: number; name: string; file: GuestFile }
+	/** Where the CLI is, or null when there is no link. Taken at once, whatever the guest is doing. */
+	| { type: "link"; target: LinkTarget | null }
 	/** Stop the kernel, for a thread that is about to be dropped. */
 	| { type: "stop" }
 	/** Save every disk, once the guest has shut down when it is asked to. Answered with `released`. */

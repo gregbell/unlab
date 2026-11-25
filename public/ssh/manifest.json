@@ -1,0 +1,32 @@
+{
+	"guestDir": "/run/unlab-ssh",
+	"programs": [
+		{
+			"name": "dropbear",
+			"file": "dropbear",
+			"size": 532056,
+			"sha256": "78bea78e33a3dca2c277f99b01346d248de556173f0d84012a86037fd3247547",
+			"version": "2026.91",
+			"source": "https://matt.ucc.asn.au/dropbear/releases/dropbear-2026.91.tar.bz2",
+			"sourceSha256": "defa924475abf6bc1e74abc00173e46bfdc804bd47caafa14f5a4ef0cc76da34"
+		},
+		{
+			"name": "sftp-server",
+			"file": "sftp-server",
+			"size": 443896,
+			"sha256": "076b336f9735e1da080985f417548760ed1a1dd93cd07064c1fb34da97ea682e",
+			"version": "10.6p2",
+			"source": "https://cdn.openbsd.org/pub/OpenBSD/OpenSSH/portable/openssh-10.6p2.tar.gz",
+			"sourceSha256": "9ae44872090cf2f06b3cf9ff147e7f16f309671340763ed2f99248398ae29d5b"
+		},
+		{
+			"name": "rsync",
+			"file": "rsync",
+			"size": 594808,
+			"sha256": "27d1c541c50ac6a23c51c63e5ffe9180fb9c1e57cf604f0170dc04f79d48a57f",
+			"version": "3.5.2",
+			"source": "https://download.samba.org/pub/rsync/src/rsync-3.5.2.tar.gz",
+			"sourceSha256": "a10d591825251e070f74c98df3daad195def4ed81b4a2de16169026aea33f6c8"
+		}
+	]
+}

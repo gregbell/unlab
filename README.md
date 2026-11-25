@@ -8,6 +8,7 @@ play with networking between linux boxes right in a tab. Send a ping, pull a
 cable, and see what happens to the packets.
 
 **[Open the live lab](https://unlab.run/)** ·
+[Reach it from your terminal](#reach-the-lab-from-your-terminal) ·
 [Run locally](#run-locally) · [Contribute](#contribute)
 
 To open unlab in its own window, choose **Install** in Chrome’s address bar.
@@ -73,6 +74,83 @@ every command, and `help spawn` explains one, with its options and an example.
 Commands that accept multiple machines can take a list (`node1,node3`), a glob
 (`node*`), or `all`. Globs and `all` select the machines that the command can act
 on, such as the ready ones for `exec` and the ones that are off or failed for `boot`.
+
+## Reach the lab from your terminal
+
+Run this on the computer your browser is on:
+
+```sh
+npx unlab.run
+```
+
+It opens the lab, or finds the one you have open. The first time, your browser asks
+whether unlab.run may reach apps on your device. Allow it, and the prompt is linked:
+
+```
+Linked to the lab: node1 (alpine), node2 (debian)
+unlab> ssh node2
+user@node2:~$ curl -sI https://example.org | head -1
+HTTP/2 200
+```
+
+You need Node.js 22.12 or later, OpenSSH, and Chrome or Chromium, on Linux or macOS. It
+has been used with Chromium 155.
+
+| At the prompt                        | What it does                                                                                          |
+| ------------------------------------ | ----------------------------------------------------------------------------------------------------- |
+| `ssh node1`                          | Open a shell in a machine. `ssh root@node1` is root's, and `ssh node1 -- uname -a` runs one command.  |
+| `forward web 8080:80`                | Make port 80 of `web` port 8080 of your computer. `forward` lists them, `forward --rm 8080` ends one. |
+| `status`                             | Say what is linked and forwarded, and which connections machines have open.                           |
+| `spawn 2 alpine`, and all the others | Run a lab command, with the lab's own completion. One that asks first asks here.                      |
+
+Any command runs from a shell too, and exits with the machine's own status:
+`npx unlab.run exec node1 -- uname -a`. Add `--json` before it for its data, and
+`--yes` for a command that asks first. `npx unlab.run --help` lists the options.
+
+### Copy files, and use your own ssh
+
+While the CLI runs, `ssh`, `scp` and `rsync` reach a machine from any terminal by its
+name and `.unlab`. Add the line that `npx unlab.run ssh-config` prints to the top of your
+`~/.ssh/config`, then:
+
+```sh
+scp ./site.tar node1.unlab:/tmp/
+rsync -a ./src/ node1.unlab:src/
+ssh -L 8080:localhost:80 node1.unlab
+```
+
+The CLI has keys of its own in `~/.config/unlab`, and reads and writes none of yours. It
+works with any image, and with machines that have no network. To reach one for the first
+time, the lab puts an SSH server (dropbear, with sftp-server and rsync) in the machine's
+memory, at `/run/unlab-ssh`. The server listens on `127.0.0.1:47022` in the machine, or
+the next free port, and takes only the CLI's key. None of it is on a disk or in a
+checkpoint, no switch carries it, and port 22 stays yours. A reboot removes it.
+
+### The internet
+
+While the CLI is linked, each machine that has a gateway reaches the internet through
+your computer: names, and TCP connections to IPv4 addresses. Package downloads take the
+same path. It starts and ends on running machines, and `ls` says which have it.
+`--no-gateway` leaves a machine out. It carries no `ping`, UDP or IPv6, and nothing on
+the internet can connect to a machine. `npx unlab.run --log` prints each connection.
+
+Sites see your computer's address. A machine cannot reach your computer or your local
+network this way, by address or by name, unless you start the CLI with `--lan`.
+
+### If it does not link
+
+The bottom right of the lab says how the link is. Click it to turn the link on or off. A
+lab that has never linked does not look for a CLI.
+
+| Status line    | What to do                                                                            |
+| -------------- | ------------------------------------------------------------------------------------- |
+| `cli: off`     | Run `npx unlab.run`, or click it and turn the link on.                                |
+| `cli: waiting` | Run `npx unlab.run`. If it runs, look for your browser's question in the lab's tab.   |
+| `cli: blocked` | Select the icon left of the address, allow access to apps on your device, and reload. |
+| `cli: refused` | Click it to read why. The lab or the CLI may be out of date: `npx unlab.run@latest`.  |
+
+Commands from the CLI do not go through the agent panel's `ask me` settings. An agent with
+a shell can use the CLI, so it can do what you can.
 
 ## Use the lab with an AI agent
 
@@ -234,6 +312,7 @@ a separate window opens when you wanted your own browser, reconnect `unlab` in
   addresses it set again at every boot, and `/etc/hosts` in each machine lists
   every machine's first one. To make a machine a router, run
   `sudo sysctl -w net.ipv4.ip_forward=1` in it.
+- While [the CLI is linked](#the-internet), the gateway leads to the internet.
 - The package gateway also gives `eth0` the address `10.0.2.15` and a default
   route, and it answers DHCP there. `--no-gateway` leaves all three to you. With
   the gateway on, `10.0.2.0/24` and `198.51.100.0/24` are its own. A machine spawned with
@@ -289,8 +368,8 @@ The browser downloads indexes and packages over HTTPS from the configured
 Alpine includes both `main` and `community`. The package managers verify the
 distribution signatures, and installed packages persist on the guest disk.
 
-The gateway accepts only package repository requests. It requires no Wisp
-relay. Switch cable controls affect traffic between guests independently.
+The gateway accepts only package repository requests, unless
+[the CLI is linked](#the-internet). It requires no Wisp relay. Switch cable controls affect traffic between guests independently.
 Use `spawn 1 alpine --no-gateway` to boot without repository access. A machine
 from the lab image then still has iproute2, tcpdump, curl, dig, ssh and sshd, nginx,
 strace, and tools to partition and format a disk.
@@ -319,6 +398,12 @@ The lab image is Alpine with packages installed. It is a
 [release asset](https://github.com/gregbell/unlab/releases/tag/lab-image-1) that
 [this script](scripts/build-lab-image.ts) built.
 
+The SSH programs in [public/ssh](public/ssh/) are built from pinned releases by
+[this script](scripts/build-ssh-server.ts): `npm run ssh-server`, which needs
+[Zig](https://ziglang.org) and make. To use the CLI with your own copy of the lab,
+`npm run cli` builds it, and
+`node cli/dist/cli.mjs --origin http://localhost:5173` takes that lab's pages.
+
 ## How it works
 
 Each guest runs in its own worker. When Linux sends an Ethernet frame, the
@@ -333,8 +418,13 @@ frames on its stdin and stdout. The built helper is checked in. After changing i
 source, rebuild it with `npm run nic-helper`, which needs
 [Zig](https://ziglang.org).
 
-The [command registry](src/commands/verbs/) serves the buttons, command bar, and
-agent tools. The [model](src/model/) turns events into state changes and
+The [CLI](cli/src/) listens on this computer, and the lab's [page](src/link/) and each
+machine's [worker](src/runtime/machine-link.ts) connect to it: the page for commands, and
+a worker for [streams](src/streams/) both ways, SSH into its machine and connections out
+of it. A browser asks the person before a page may do that.
+
+The [command registry](src/commands/verbs/) serves the buttons, command bar, agent tools,
+and the CLI. The [model](src/model/) turns events into state changes and
 effects. The [runtime](src/runtime/) carries them out. For the reasoning behind
 those boundaries, read the [architecture notes](.audit/arch/synthesis.md).
 

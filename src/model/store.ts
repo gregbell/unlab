@@ -1,4 +1,13 @@
-import type { AgentEvent, CommandEvent, Effect, LabEvent, LabState, RuntimeEvent, UiEvent } from "./types.ts";
+import type {
+	AgentEvent,
+	CommandEvent,
+	Effect,
+	LabEvent,
+	LabState,
+	LinkEvent,
+	RuntimeEvent,
+	UiEvent,
+} from "./types.ts";
 import { update } from "./update.ts";
 
 export interface ReadStore {
@@ -19,6 +28,7 @@ export interface Store extends ReadStore {
 	readonly dispatchCommand: (event: CommandEvent) => void;
 	readonly dispatchUi: (event: UiEvent) => void;
 	readonly dispatchAgent: (event: AgentEvent) => void;
+	readonly dispatchLink: (event: LinkEvent) => void;
 }
 
 /** Runs `flush` later, for example on the next animation frame. */
@@ -151,6 +161,7 @@ export function createStore(initial: LabState, runEffect: (effect: Effect) => vo
 		dispatchCommand: dispatch,
 		dispatchUi: dispatch,
 		dispatchAgent: dispatch,
+		dispatchLink: dispatch,
 	};
 }
 

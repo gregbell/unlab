@@ -16,6 +16,7 @@ import {
 	type StopHow,
 } from "../model/index.ts";
 import { NICS } from "../net/index.ts";
+import type { LinkTarget } from "./machine-link.ts";
 import { SYNC_MS } from "./power.ts";
 import type { CopyReport, FromVm, ToVm, VmConfig } from "./protocol.ts";
 
@@ -64,6 +65,8 @@ export interface Vm {
 	closePty(pty: number): void;
 	/** Give the guest a new host table. */
 	reconfigure(hosts: readonly HostEntry[]): void;
+	/** Link the machine with a CLI, or unlink it. */
+	link(target: LinkTarget | null): void;
 	/** A frame from the switch, into one of the guest's NICs. */
 	deliver(nic: NicNo, frame: Uint8Array): void;
 	/** Copy the guest's disks as they are now, while it runs. One at a time. */
@@ -240,6 +243,9 @@ export function startVm(boot: VmBoot, sink: VmSink, deps: VmDeps): Vm {
 		},
 		reconfigure(hosts) {
 			post({ type: "reconfigure", name: identity.name, hosts });
+		},
+		link(target) {
+			post({ type: "link", target });
 		},
 		deliver(nic, frame) {
 			// The switch shares one frame with every port of a flood, so the

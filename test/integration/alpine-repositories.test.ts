@@ -26,6 +26,13 @@ test("apk requests both main and community indexes for the guest's release", asy
 		expect(indexes.sort()).toEqual(
 			["community", "main"].map((repo) => `/alpine/v${version}/${repo}/${arch}/APKINDEX.tar.gz`),
 		);
+		// As a machine has them that an earlier lab set up.
+		const base = `http://dl-cdn.alpinelinux.org/alpine/v${version}`;
+		const both = `${base}/main\n${base}/community\n`;
+		expect((await vm.exec("cat", ["/etc/apk/repositories"])).stdout).toBe(both);
+		expect((await execAsRoot(vm, 'echo "$1" > /etc/apk/repositories', [`${base} main community`])).exitCode).toBe(0);
+		expect((await execAsRoot(vm, alpinePackageSetup)).exitCode).toBe(0);
+		expect((await vm.exec("cat", ["/etc/apk/repositories"])).stdout).toBe(both);
 		// A guest can edit its repositories using an editor that saves by rename.
 		const main = `http://dl-cdn.alpinelinux.org/alpine/v${version}/main`;
 		const edit = await execAsRoot(vm, 'echo "$1" > /etc/apk/new && mv /etc/apk/new /etc/apk/repositories', [main]);

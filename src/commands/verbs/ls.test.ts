@@ -36,19 +36,19 @@ describe("ls", () => {
 			[
 				"node1",
 				{ kind: "state", text: "ready" },
-				"10.88.0.11/24 · 52:54:00:88:00:0b · up on port 1 · 4 GiB disk · console, sh1",
+				"10.88.0.11/24 · 52:54:00:88:00:0b · up on port 1 · package repositories only · 4 GiB disk · console, sh1",
 				"node1:sh1",
 			],
 			[
 				"node2",
 				{ kind: "state", text: "ready" },
-				"10.88.0.12/24 · 52:54:00:88:00:0c · cut on port 2 · 4 GiB disk · console",
+				"10.88.0.12/24 · 52:54:00:88:00:0c · cut on port 2 · package repositories only · 4 GiB disk · console",
 				"node2:console",
 			],
 			[
 				"node3",
 				{ kind: "state", text: "ready" },
-				"10.88.0.13/24 · 52:54:00:88:00:0d · up on port 3 · 4 GiB disk · console",
+				"10.88.0.13/24 · 52:54:00:88:00:0d · up on port 3 · package repositories only · 4 GiB disk · console",
 				"node3:console",
 			],
 			["node4", { kind: "state", text: "failed" }, "No prompt after 120 s.", "node4:console"],
@@ -82,7 +82,7 @@ describe("ls", () => {
 			"eth0 · 10.88.0.11/24 · 52:54:00:88:00:0b · up on port 1",
 			"eth1 · no address · 52:54:00:88:01:0b · cut on port 2",
 			"eth2 · no address · 52:54:00:88:02:0b · unplugged",
-			"4 GiB disk · console",
+			"package repositories only · 4 GiB disk · console",
 		]);
 		expect(result.data).toMatchObject([
 			{
@@ -127,7 +127,7 @@ describe("ls", () => {
 				"eth1 · 10.2.0.1/16 · 52:54:00:88:01:0b · port 2 reserved",
 				"no package gateway · 4 GiB disk · console",
 			],
-			["no address · 52:54:00:88:00:0c · port 3 reserved · 4 GiB disk · console"],
+			["no address · 52:54:00:88:00:0c · port 3 reserved · package repositories only · 4 GiB disk · console"],
 		]);
 		expect(result.data).toMatchObject([
 			{
@@ -140,6 +140,21 @@ describe("ls", () => {
 			},
 			{ address: null, gateway: true },
 		]);
+	});
+
+	it("says which machines reach the internet while a CLI is linked", async () => {
+		const lab = storeLab();
+		await lab.lab(1);
+		await lab.run("spawn 1 alpine --no-gateway");
+		lab.store.dispatchLink({ type: "cli/link", cli: { kind: "linked" } });
+		const result = await lab.run("ls");
+		if (result.kind !== "report") throw new Error("ls reports");
+		expect(result.blocks.map((b) => b.lastLine)).toEqual([
+			"10.88.0.11/24 · 52:54:00:88:00:0b · up on port 1 · internet through the CLI · 4 GiB disk · console",
+			"10.88.0.12/24 · 52:54:00:88:00:0c · port 2 reserved · no package gateway · 4 GiB disk · console",
+		]);
+		expect(result.data).toMatchObject([{ gateway: true, internet: true }, { gateway: false }]);
+		expect(result.data).not.toHaveProperty("1.internet");
 	});
 
 	it("says so when the lab is empty", async () => {
