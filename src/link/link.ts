@@ -17,6 +17,7 @@ import {
 import { type CliLink, type LabState, machineList, type Store } from "../model/index.ts";
 import {
 	type Asking,
+	FIRST_LINK_PORT,
 	type FromCli,
 	type FromLab,
 	LAB_PATH,
@@ -294,10 +295,10 @@ export function startLink(deps: LinkDeps): Link {
 	};
 }
 
-/** `#cli`, or `#cli=47123` for a CLI that listens elsewhere: how the CLI opens the lab. Null for anything else. */
+/** `#cli=27122`, with the port it listens on, is how the CLI opens the lab. Version 0.1.0 left the port out. Null for anything else. */
 export function linkAsked(hash: string): { readonly port: number } | null {
 	const match = /^#cli(?:=(\d{1,5}))?$/.exec(hash);
 	if (!match) return null;
-	const port = match[1] === undefined ? LINK_PORT : Number(match[1]);
+	const port = match[1] === undefined ? FIRST_LINK_PORT : Number(match[1]);
 	return port >= 1 && port <= 65535 ? { port } : null;
 }

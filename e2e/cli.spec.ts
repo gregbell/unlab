@@ -12,8 +12,6 @@ import { openWithTwoMachines, typed } from "./lab.ts";
 import { call } from "./webmcp.ts";
 
 const ORIGIN = `http://localhost:${process.env.E2E_PORT ?? 4173}`;
-/** The port a lab tries unless it is told of another. */
-const DEFAULT_PORT = 47122;
 
 test.use({
 	launchOptions: { executablePath: chromiumExecutable(), args: ["--enable-features=WebMCP"] },
@@ -356,10 +354,4 @@ test("an agent uses the lab's tools while a CLI is linked", async ({ page }) => 
 	expect(listed.result).toBe("2 machines · 2 ready");
 	await typed(page, "ls");
 	await expect(page.getByText("2 machines · 2 ready")).toBeVisible();
-});
-
-test("the default port is the one a lab tries", () => {
-	expect(readFileSync(new URL("../src/streams/protocol.ts", import.meta.url), "utf8")).toContain(
-		`LINK_PORT = ${DEFAULT_PORT}`,
-	);
 });

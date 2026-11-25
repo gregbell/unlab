@@ -4,8 +4,14 @@
 
 /** Goes up when either end could not understand the other. */
 export const PROTOCOL = 1;
-/** Where the CLI listens, on this computer only, unless it is told otherwise. */
-export const LINK_PORT = 47122;
+/**
+ * Where the CLI listens, on this computer only, unless it is told otherwise.
+ * Below what Linux and macOS hand out to outgoing connections, any of which
+ * would hold it against a listener.
+ */
+export const LINK_PORT = 27122;
+/** Where the CLI listened when it opened a lab at `#cli` without saying. */
+export const FIRST_LINK_PORT = 47122;
 /** The lab's address, whose pages the CLI takes. */
 export const LAB_ORIGIN = "https://unlab.run";
 

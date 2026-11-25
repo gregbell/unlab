@@ -6,7 +6,7 @@ import { networkInterfaces } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import { WebSocket } from "ws";
-import { PROTOCOL } from "../../src/streams/index.ts";
+import { LINK_PORT, PROTOCOL } from "../../src/streams/index.ts";
 import { freePort, type Session, TestCli, TestPage } from "../support/cli.ts";
 
 let cli: TestCli;
@@ -65,11 +65,21 @@ test("a lab of another version is told which to update, and nothing else happens
 	expect((await cli.once("status")).stdout).toContain("The lab is not linked.");
 });
 
-test("a second lab is refused while the first is there, and taken once it has gone", async () => {
+test("the port is one that no outgoing connection is given", () => {
+	// Linux starts at 32768 and macOS at 49152.
+	expect(LINK_PORT).toBeGreaterThan(1024);
+	expect(LINK_PORT).toBeLessThan(32768);
+});
+
+test("a second lab is refused while the first is there, said once however often it comes, and taken once the first has gone", async () => {
 	const first = new TestPage(cli.url);
 	await first.linked;
-	const second = new TestPage(cli.url);
-	expect(await second.refused).toContain("Another lab is linked to this CLI.");
+	for (let i = 0; i < 3; i++) {
+		const second = new TestPage(cli.url);
+		expect(await second.refused).toContain("Another lab is linked to this CLI.");
+	}
+	await session.shows("Another lab is linked");
+	expect(session.printed.split("Another lab is linked").length - 1).toBe(1);
 	first.close();
 	await expect
 		.poll(
