@@ -26,9 +26,12 @@ const theDisks = ({ spec }: Machine): string => {
 export const restore = defineVerb({
 	name: "restore",
 	about: "go back to a checkpoint and boot",
+	description:
+		"Put all of a machine's disks back to a checkpoint and boot it. What was written to them since is lost, and so is what it runs. Every checkpoint stays. Returns the machine's state once it is ready or failed. A machine that could not be restored has failed with its disks as they were.",
 	danger: true,
 	phases: ["ready", "off", "failed"],
 	grammar: { machine: slots.machine(), checkpoint: slots.checkpoint() },
+	example: { machine: "node2", checkpoint: "before" },
 	plan(a, lab): Plan | Refusal<"machine" | "checkpoint"> {
 		const machine = lab.machines[a.machine];
 		if (!machine) return refuse(`${a.machine} is gone.`, "machine");
@@ -66,8 +69,6 @@ export const restore = defineVerb({
 	tool: {
 		name: "checkpoint_restore",
 		title: "Restore a checkpoint",
-		description:
-			"Put all of a machine's disks back to a checkpoint and boot it. What was written to them since is lost, and so is what it runs. Every checkpoint stays. Returns the machine's state once it is ready or failed. A machine that could not be restored has failed with its disks as they were.",
 		policy: "ask",
 		annotations: { consequentialHint: true },
 	},

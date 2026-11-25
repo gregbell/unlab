@@ -157,7 +157,7 @@ describe("write", () => {
 			message: "text must be a string. Nothing was changed.",
 		});
 		expect(toolOf(lab).toLine({ machine: "node1", path: "/a" })).toMatchObject({
-			message: "write needs the text field. Nothing was changed.",
+			message: 'write needs the text field, such as "hello". Nothing was changed.',
 		});
 		expect(written).toEqual([]);
 	});

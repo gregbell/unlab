@@ -42,9 +42,12 @@ const isSaving = (lab: LabState, { n, name }: Machine, set: number): boolean => 
 export const checkpoint = defineVerb({
 	name: "checkpoint",
 	about: "save a machine's disks as they are now",
+	description:
+		"Save all of a machine's disks as they are now, under a name. The machine is ready or off, and a ready one runs on. Programs and memory are not saved. Returns the bytes of storage it takes, once it is saved, about a second for each 100 MB.",
 	danger: false,
 	phases: ["ready", "off"],
 	grammar: { machine: slots.machine(), checkpoint: slots.newCheckpoint() },
+	example: { machine: "node2", checkpoint: "before" },
 	plan(a, lab) {
 		const machine = lab.machines[a.machine];
 		if (machine?.life.phase !== "ready" && machine?.life.phase !== "off") {
@@ -84,8 +87,6 @@ export const checkpoint = defineVerb({
 	tool: {
 		name: "checkpoint_save",
 		title: "Save a checkpoint",
-		description:
-			"Save all of a machine's disks as they are now, under a name. The machine is ready or off, and a ready one runs on. Programs and memory are not saved. Returns the bytes of storage it takes, once it is saved, about a second for each 100 MB.",
 		policy: "run",
 	},
 });

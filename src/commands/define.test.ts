@@ -170,17 +170,18 @@ describe("defineVerb", () => {
 				about: "",
 				danger: false,
 				grammar,
+				example: { words: 1 },
 				plan: () => ({}),
 				describe: () => "",
 				execute: async () => ({ kind: "visible", text: "", data: null }),
 			});
-		expect(verb({ words: slots.text("words"), count: slots.count() })).toThrow(
-			"free text must be the last positional argument",
+		expect(verb({ words: slots.text("words", ""), count: slots.count("") })).toThrow(
+			"only the last positional argument can be left out or be free text",
 		);
-		expect(verb({ a: slots.option("--x", slots.count(), 1), b: slots.option("--x", slots.count(), 2) })).toThrow(
+		expect(verb({ a: slots.option("--x", slots.count(""), 1), b: slots.option("--x", slots.count(""), 2) })).toThrow(
 			"each option flag must be unique",
 		);
-		expect(verb({ words: slots.count(), more: slots.text("more") })).not.toThrow();
+		expect(verb({ words: slots.count(""), more: slots.text("more", "") })).not.toThrow();
 	});
 });
 

@@ -18,8 +18,7 @@ const args = (line: string, state = lab) => parsedOk(parse(line, state)).args;
 describe("verbs", () => {
 	it("offers the one close verb as the fix for a misspelt verb", () => {
 		expect(parse("spwn 2 alpine")).toEqual({
-			message:
-				"No verb called spwn. The verbs are spawn, rm, ls, exec, link, capture, focus, boot. Nothing was changed.",
+			message: "No verb is called spwn, so use spawn, rm, ls, exec, link, capture, focus or boot. Nothing was changed.",
 			token: 0,
 			fix: "spawn 2 alpine",
 		});
@@ -53,7 +52,7 @@ describe("count", () => {
 
 	it.each(["two", "0", "-1", "2.5", "1e3"])("refuses %s", (bad) => {
 		expect(parse(`spawn ${bad} alpine`)).toMatchObject({
-			message: `spawn wants a count here, not ${bad}. Nothing was changed.`,
+			message: `spawn wants a count such as 2 here, not ${bad}. Nothing was changed.`,
 			token: 1,
 		});
 	});
@@ -129,7 +128,7 @@ describe("options", () => {
 
 describe("argument count", () => {
 	it("names the missing argument", () => {
-		expect(parse("spawn 2")).toEqual({ message: "spawn needs an image. Nothing was changed." });
+		expect(parse("spawn 2")).toEqual({ message: "spawn needs an image such as alpine. Nothing was changed." });
 	});
 
 	it("points at the first extra token", () => {

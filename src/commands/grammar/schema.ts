@@ -1,8 +1,11 @@
+import type { Example } from "../manual.ts";
 import { type JsonSchema, type LineError, lineError } from "../types.ts";
-import { endsLine, type Grammar, type Options, type Slot, type Value } from "./slots.ts";
+import { endsLine, type Grammar, list, type Options, type Slot, type Value } from "./slots.ts";
 
-function optionsSchema(slot: Options<unknown>): JsonSchema {
-	const shapes = slot.variants.map((v): JsonSchema => {
+type Shape = Omit<JsonSchema, "description">;
+
+function optionsShape(slot: Options<unknown>): Shape {
+	const shapes = slot.variants.map((v): Shape => {
 		if ("value" in v) return v.value.schema;
 		return { type: "string", enum: [String(v.constant)] };
 	});
@@ -16,22 +19,27 @@ function optionsSchema(slot: Options<unknown>): JsonSchema {
 	return shapes.length === 1 ? { ...shapes[0], ...withDefault } : { anyOf: shapes, ...withDefault };
 }
 
-function slotSchema(slot: Slot): JsonSchema {
+function shapeOf(slot: Slot): Shape {
 	switch (slot.kind) {
 		case "positional":
 			return slot.schema;
+		case "optional":
+			return slot.value.schema;
 		case "options":
-			return optionsSchema(slot);
+			return optionsShape(slot);
 		case "rest":
-			return { type: "string", description: `The ${slot.label}, as typed after the verb in the command bar.` };
 		case "passthrough":
-			return { type: "string", description: `The ${slot.label}, passed on untouched.` };
 		case "verbatim":
-			return { type: "string", description: `The whole ${slot.label}, kept exactly as it is, its line ends too.` };
+			return { type: "string" };
 	}
 }
 
-const isRequired = (slot: Slot): boolean => slot.kind === "positional" || endsLine(slot);
+export function slotSchema(slot: Slot): JsonSchema {
+	return { ...shapeOf(slot), description: slot.about };
+}
+
+/** What the line cannot do without. */
+export const isRequired = (slot: Slot): boolean => slot.kind === "positional" || endsLine(slot);
 
 /** The agent tool's input schema. Advisory: `lineFromInput` checks every field itself. */
 export function toolSchema(grammar: Grammar): JsonSchema {
@@ -55,10 +63,16 @@ function word(key: string, value: unknown, { quote = String }: Pick<Value<unknow
 	return { ok: false, error: `${key} must be one word that does not start with -, not ${JSON.stringify(value)}.` };
 }
 
+/** An example's value for the field, as it would be written in the tool's input. */
+const such = (example: Example, key: string): string =>
+	example[key] === undefined ? "" : `, such as ${JSON.stringify(example[key])}`;
+
 function slotWords(key: string, slot: Slot, value: unknown): Words {
 	switch (slot.kind) {
 		case "positional":
 			return word(key, value, slot);
+		case "optional":
+			return word(key, value, slot.value);
 		case "options": {
 			if (Object.is(value, slot.default)) return { ok: true, words: [] };
 			const bare = slot.variants.find((v) => "constant" in v && Object.is(v.constant, value));
@@ -87,25 +101,30 @@ function slotWords(key: string, slot: Slot, value: unknown): Words {
 	}
 }
 
+export function noField(tool: string, unknown: string, fields: readonly string[]): string {
+	const why = `${tool} has no field called ${unknown}`;
+	return fields.length === 0 ? `${why}, so leave it out.` : `${why}, so use ${list(fields, "or")}.`;
+}
+
 /**
  * An agent's tool input as a bar line. Each field becomes whole tokens, so a
  * field cannot smuggle extra arguments or options; the line then goes through
  * the same parser as anything typed.
  */
-export function lineFromInput(verb: string, grammar: Grammar, input: unknown): string | LineError {
+export function lineFromInput(verb: string, grammar: Grammar, input: unknown, example: Example): string | LineError {
 	if (typeof input !== "object" || input === null || Array.isArray(input)) {
-		return lineError(`${verb} wants its input as an object of fields.`);
+		return lineError(`${verb} wants its input as an object of fields, such as ${JSON.stringify(example)}.`);
 	}
 	const fields = new Map(Object.entries(input));
 	const unknown = [...fields.keys()].find((k) => !(k in grammar));
-	if (unknown !== undefined) return lineError(`${verb} has no field called ${unknown}.`);
+	if (unknown !== undefined) return lineError(noField(verb, unknown, Object.keys(grammar)));
 
 	const words = [verb];
 	const tail: string[] = [];
 	for (const [key, slot] of Object.entries(grammar)) {
 		const value = fields.get(key);
 		if (value === undefined) {
-			if (isRequired(slot)) return lineError(`${verb} needs the ${key} field.`);
+			if (isRequired(slot)) return lineError(`${verb} needs the ${key} field${such(example, key)}.`);
 			continue;
 		}
 		const w = slotWords(key, slot, value);

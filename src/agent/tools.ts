@@ -13,6 +13,7 @@ import {
 	parseLine,
 	type Registry,
 	type Result,
+	slotSchema,
 	slots,
 	type ToolAnnotations,
 	type ToolFace,
@@ -228,7 +229,7 @@ function shellRead(screens: SessionScreens): AgentTool {
 		inputSchema: {
 			type: "object",
 			properties: {
-				machine: target.schema,
+				machine: slotSchema(target),
 				lines: { type: "integer", minimum: 1, default: SHELL_LINES, description: `At most ${SHELL_MAX}.` },
 			},
 			required: ["machine"],
@@ -280,11 +281,11 @@ function captureRead(capture: Pick<CaptureView, "frames">): AgentTool {
 		name,
 		title: "Read captured frames",
 		description:
-			"Read the newest captured frames on switch0 as decoded rows, oldest first. A filter takes the Wire view's terms: a protocol, a machine, a NIC (node2:eth1), an address, a MAC or port:N. Frames come from the guests.",
+			"Read the newest captured frames on switch0 as decoded rows, oldest first. Frames come from the guests.",
 		inputSchema: {
 			type: "object",
 			properties: {
-				filter: { type: "string", default: "", description: "Terms that must all match; `or` between alternatives." },
+				filter: { ...slotSchema(slots.frameFilter()), default: "" },
 				limit: { type: "integer", minimum: 1, default: CAPTURE_LIMIT, description: `At most ${CAPTURE_MAX}.` },
 			},
 			additionalProperties: false,

@@ -45,9 +45,12 @@ function theirCheckpoints(machines: readonly Machine[]): string[] {
 export const rm = defineVerb({
 	name: "rm",
 	about: "remove machines and their disks",
+	description:
+		"Remove machines, everything on their disks, and their checkpoints. There is no undo. Returns the names removed once they are gone.",
 	danger: true,
 	phases: ["booting", "ready", "stopping", "off", "restoring", "failed"],
 	grammar: { names: slots.machines() },
+	example: { names: "node2" },
 	plan(a, lab) {
 		const machines: Machine[] = [];
 		for (const name of a.names.machines) {
@@ -116,8 +119,6 @@ export const rm = defineVerb({
 	tool: {
 		name: "machines_remove",
 		title: "Remove machines",
-		description:
-			"Remove machines, everything on their disks, and their checkpoints. There is no undo. Returns the names removed once they are gone.",
 		policy: "ask",
 		annotations: { consequentialHint: true },
 	},

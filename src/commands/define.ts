@@ -11,9 +11,10 @@ import type {
 import type { Approval } from "./approval.ts";
 import { complete } from "./grammar/complete.ts";
 import { format as formatLine, type Shown, shown, signature as signatureOf } from "./grammar/format.ts";
-import { type Parsed, parse } from "./grammar/parse.ts";
+import { isPlain, type Parsed, parse } from "./grammar/parse.ts";
 import { lineFromInput, toolSchema } from "./grammar/schema.ts";
 import { type ArgsOf, endsLine, type Grammar, type ReadContext } from "./grammar/slots.ts";
+import { type Example, type ExampleOf, type Manual, manualOf } from "./manual.ts";
 import {
 	type Completion,
 	type ConfirmText,
@@ -113,8 +114,6 @@ export interface ToolSpec {
 	readonly name: ToolName;
 	/** For people, where the browser lists the tool. */
 	readonly title: string;
-	/** Defaults to the verb's `about`. */
-	readonly description?: string;
 	readonly policy: Policy;
 	readonly annotations?: ToolAnnotations;
 }
@@ -169,6 +168,7 @@ export interface CommandFace {
 	readonly signature: readonly string[];
 	read(tokenized: Tokenized, lab: LabState): ParsedLine | LineError;
 	complete(line: string, caret: number, lab: LabState): Completion;
+	readonly manual: Manual;
 	readonly tool: ToolFace | null;
 }
 
@@ -197,8 +197,13 @@ export type Command<Args, D extends boolean = boolean> = D extends true ? Danger
 
 interface VerbBase<N extends string, G extends Grammar, P> {
 	readonly name: N;
+	/** One line of it, for the list of verbs. */
 	readonly about: string;
+	/** The rest that a person or an agent needs to know, for help and the tool. Left out, `about` is all. */
+	readonly description?: string;
 	readonly grammar: G;
+	/** One call that does something useful, for help: the tool's input, which help also shows as a line. */
+	readonly example: ExampleOf<G>;
 	/** The lifecycle phases the verb's machine arguments accept. Only ready machines take commands unless a verb says otherwise. */
 	readonly phases?: readonly Phase[];
 	/** Pure. The only place the verb decides anything. */
@@ -223,6 +228,7 @@ export interface DangerVerbDefinition<N extends string, G extends Grammar, P> ex
 
 export interface VerbSpec<N extends string, Args, D extends boolean> {
 	readonly name: N;
+	readonly manual: Manual;
 	readonly danger: D;
 	/** The same command for the same deps, every time. */
 	bind(deps: CommandDeps): Command<Args, D>;
@@ -230,18 +236,20 @@ export interface VerbSpec<N extends string, Args, D extends boolean> {
 
 export interface AnyVerb {
 	readonly name: string;
+	readonly manual: Manual;
 	bind(deps: CommandDeps): CommandFace;
 }
 
 function checkGrammar(verb: string, grammar: Grammar): void {
 	const slots = Object.values(grammar);
-	const positional = slots.filter((s) => s.kind === "positional" || s.kind === "rest");
-	const rest = positional.findIndex((s) => s.kind === "rest");
+	const positional = slots.filter(isPlain);
+	const loose = positional.findIndex((s) => s.kind !== "positional");
 	const flags = slots.flatMap((s) => (s.kind === "options" ? s.variants.map((v) => v.flag) : []));
 	const fail = (problem: string) => {
 		throw new Error(`defineVerb(${verb}): ${problem}`);
 	};
-	if (rest >= 0 && rest !== positional.length - 1) fail("free text must be the last positional argument");
+	if (loose >= 0 && loose !== positional.length - 1)
+		fail("only the last positional argument can be left out or be free text");
 	if (slots.filter(endsLine).length > 1) fail("only one argument can follow --");
 	if (new Set(flags).size !== flags.length || flags.includes("--")) fail("each option flag must be unique and not --");
 }
@@ -258,6 +266,8 @@ export function defineVerb<N extends string, G extends Grammar, P>(
 	type Args = ArgsOf<G>;
 	type Planned = { readonly ok: true; readonly plan: P } | { readonly ok: false; readonly error: LineError };
 	checkGrammar(def.name, def.grammar);
+	const example: Example = def.example;
+	const manual = manualOf(def, example);
 	const phases = def.phases ?? ["ready"];
 	const context = (lab: LabState): ReadContext => ({ verb: def.name, lab, phases });
 	const format = (args: Args) => formatLine(def.name, def.grammar, args);
@@ -294,11 +304,11 @@ export function defineVerb<N extends string, G extends Grammar, P>(
 	const tool = (spec: ToolSpec): ToolFace => ({
 		name: spec.name,
 		title: spec.title,
-		description: spec.description ?? def.about,
+		description: manual.description,
 		policy: spec.policy,
 		annotations: spec.annotations ?? {},
 		inputSchema: toolSchema(def.grammar),
-		toLine: (input) => lineFromInput(def.name, def.grammar, input),
+		toLine: (input) => lineFromInput(def.name, def.grammar, input, example),
 		shown: brief,
 	});
 
@@ -329,6 +339,7 @@ export function defineVerb<N extends string, G extends Grammar, P>(
 			name: def.name,
 			about: def.about,
 			signature: signatureOf(def.grammar),
+			manual,
 			tool: def.tool ? tool(def.tool) : null,
 			parse: parseArgs,
 			validate: (args: Args, lab: LabState) => validate(args, lab),
@@ -385,6 +396,7 @@ export function defineVerb<N extends string, G extends Grammar, P>(
 
 	return {
 		name: def.name,
+		manual,
 		danger: def.danger,
 		bind(deps) {
 			const known = cache.get(deps);

@@ -15,10 +15,15 @@ describe("tool input schema", () => {
 	it("has a field per argument, the positionals required, nothing else allowed", () => {
 		const schema = toolOf(spawn).inputSchema;
 		expect(schema).toMatchObject({ type: "object", required: ["count", "image"], additionalProperties: false });
-		expect(schema.properties?.count).toEqual({ type: "integer", minimum: 1 });
+		expect(schema.properties?.count).toEqual({ type: "integer", minimum: 1, description: "How many." });
 		expect(schema.properties?.image).toMatchObject({ type: "string" });
-		expect(schema.properties?.mem).toEqual({ type: "integer", minimum: 1, default: 256 });
-		expect(schema.properties?.net).toEqual({ type: "string", enum: ["switch0", "none"], default: "switch0" });
+		expect(schema.properties?.mem).toEqual({ type: "integer", minimum: 1, default: 256, description: "The memory." });
+		expect(schema.properties?.net).toEqual({
+			type: "string",
+			enum: ["switch0", "none"],
+			default: "switch0",
+			description: "The network.",
+		});
 	});
 
 	it("requires the command after --", () => {
@@ -89,13 +94,13 @@ describe("tool input as a bar line", () => {
 
 	it("refuses missing, unknown and non-object input", () => {
 		expect(toolOf(spawn).toLine({ image: "alpine" })).toEqual({
-			message: "spawn needs the count field. Nothing was changed.",
+			message: "spawn needs the count field, such as 1. Nothing was changed.",
 		});
 		expect(toolOf(spawn).toLine({ count: 1, image: "alpine", cpu: 2 })).toEqual({
-			message: "spawn has no field called cpu. Nothing was changed.",
+			message: "spawn has no field called cpu, so use count, image, mem or net. Nothing was changed.",
 		});
 		expect(toolOf(ls).toLine(null)).toEqual({
-			message: "ls wants its input as an object of fields. Nothing was changed.",
+			message: "ls wants its input as an object of fields, such as {}. Nothing was changed.",
 		});
 		expect(toolOf(ls).toLine({})).toBe("ls");
 	});

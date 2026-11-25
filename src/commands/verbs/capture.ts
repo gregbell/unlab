@@ -6,8 +6,10 @@ import * as slots from "../grammar/slots.ts";
 export const capture = defineVerb({
 	name: "capture",
 	about: "filter the packet capture",
+	description: "Open the Wire view on the captured frames that match a filter. An agent reads them with capture_read.",
 	danger: false,
-	grammar: { filter: slots.text("filter") },
+	grammar: { filter: slots.frameFilter() },
+	example: { filter: "arp or node2" },
 	plan(a, lab) {
 		const compiled = compileFilter(a.filter, selectNames(lab));
 		if (compiled.ok) return { filter: a.filter };

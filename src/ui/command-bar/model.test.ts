@@ -185,6 +185,7 @@ describe("the artboards, replayed", () => {
 			"checkpoint",
 			"restore",
 			"forget",
+			"help",
 		]);
 		expect(view.chosen).toBe(3);
 		expect(view.hint).toBe("tab → spawn");
@@ -280,6 +281,7 @@ describe("the artboards, replayed", () => {
 				{ machine: "node2", hue: 2, status: { kind: "exit", code: 1 }, lastLine: LOSS, focus: "node2:console" },
 				{ machine: "node3", hue: 3, status: { kind: "exit", code: 0 }, lastLine: OK, focus: "node3:console" },
 			],
+			rows: [],
 		});
 
 		h.take();

@@ -1,8 +1,12 @@
 import { andList, type Disk, type LabState, type PlanError } from "../../model/index.ts";
 import { addressStr, ip4str, nicName, subnetStr } from "../../net/index.ts";
-import type { Selection } from "../grammar/slots.ts";
+import { list, type Selection } from "../grammar/slots.ts";
 
 export { andList };
+
+export function noVerb(text: string, names: readonly string[]): string {
+	return `No verb is called ${text}, so use ${list(names, "or")}.`;
+}
 
 /** `1 shell`, `2 shells`. */
 export function count(n: number, one: string, many = `${one}s`): string {

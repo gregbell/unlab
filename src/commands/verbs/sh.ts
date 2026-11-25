@@ -5,8 +5,11 @@ import * as slots from "../grammar/slots.ts";
 export const sh = defineVerb({
 	name: "sh",
 	about: "open another shell on a machine",
+	description:
+		"Open another shell on a machine and move the keyboard to it. It is a session, such as node2:sh1, that exec can name.",
 	danger: false,
 	grammar: { machine: slots.machine() },
+	example: { machine: "node2" },
 	plan(a, lab) {
 		const m = lab.machines[a.machine];
 		if (m?.life.phase !== "ready") return refuse(`${a.machine} is no longer ready.`, "machine");

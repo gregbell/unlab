@@ -104,7 +104,7 @@ describe("rm", () => {
 			message: "No machine called node7. You have node1, node2, node3. Nothing was changed.",
 			token: 1,
 		});
-		expect(lab.parse("rm")).toEqual({ message: "rm needs machines. Nothing was changed." });
+		expect(lab.parse("rm")).toEqual({ message: "rm needs machines such as node1,node3 or all. Nothing was changed." });
 	});
 
 	it("runs only with a yes for this exact line", async () => {

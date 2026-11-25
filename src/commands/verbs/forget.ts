@@ -16,9 +16,11 @@ export interface ForgetData {
 export const forget = defineVerb({
 	name: "forget",
 	about: "delete a checkpoint",
+	description: "Delete one checkpoint of a machine and free its storage. The machine's disks are left alone.",
 	danger: true,
 	phases: ["booting", "ready", "stopping", "off", "restoring", "failed"],
 	grammar: { machine: slots.machine(), checkpoint: slots.checkpoint() },
+	example: { machine: "node2", checkpoint: "before" },
 	plan(a, lab): Plan | Refusal<"machine" | "checkpoint"> {
 		const machine = lab.machines[a.machine];
 		if (!machine) return refuse(`${a.machine} is gone.`, "machine");
@@ -54,7 +56,6 @@ export const forget = defineVerb({
 	tool: {
 		name: "checkpoint_remove",
 		title: "Delete a checkpoint",
-		description: "Delete one checkpoint of a machine and free its storage. The machine's disks are left alone.",
 		policy: "ask",
 		annotations: { consequentialHint: true },
 	},

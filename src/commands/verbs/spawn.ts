@@ -25,6 +25,8 @@ function multiCpuBlocker(): string | undefined {
 }
 
 export const MULTICPU_BLOCKER = multiCpuBlocker();
+const MAX_CPUS = 16;
+const NETWORKS = slots.networks();
 export const DEFAULT_CPUS = MULTICPU_BLOCKER ? 1 : 2;
 
 /** `--net` as typed, for a machine of `nics` NICs. Null when it names some other number of them. */
@@ -69,28 +71,57 @@ function addressParts(nics: readonly NicRequest[]): string[] {
 export const spawn = defineVerb({
 	name: "spawn",
 	about: "boot machines",
+	description:
+		"Boot new Linux machines and return their names. Each boots on its own: ls (machines_list) says when it is ready, or failed and why. A NIC that is plugged in takes one of switch0's 8 ports. The package gateway gives eth0 10.0.2.15 and a default route, for package installs only. gateway off leaves it out, so DHCP on eth0 goes to the other machines. Chosen addresses are set again at every boot, and each machine's /etc/hosts names the others.",
 	danger: false,
 	grammar: {
-		count: slots.count({ suggest: (lab) => [1, 2, 3].filter((n) => n <= MAX_MACHINES - lab.rail.length) }),
+		count: slots.count(`How many machines. The lab holds ${MAX_MACHINES}.`, {
+			suggest: (lab) => [1, 2, 3].filter((n) => n <= MAX_MACHINES - lab.rail.length),
+		}),
 		image: slots.image(),
 		mem: slots.option(
 			"--mem",
-			slots.count({ label: "MiB", noun: "a size in MiB", suggest: () => [128, 256, 512, 1024] }),
+			slots.count(`The memory of each, in MiB, up to ${MAX_MEM_MIB}.`, {
+				label: "MiB",
+				noun: "a size in MiB such as 512",
+				suggest: () => [128, 256, 512, 1024],
+			}),
 			256,
 		),
-		cpus: slots.option("--cpus", slots.count({ label: "CPUs", suggest: () => [1, 2, 4, 8, 16] }), DEFAULT_CPUS),
-		disk: slots.option("--disk", slots.choice(DISK_SIZES), "4"),
+		cpus: slots.option(
+			"--cpus",
+			slots.count(`The CPUs of each, 1 to ${MAX_CPUS}.`, {
+				label: "CPUs",
+				noun: "a number of CPUs such as 2",
+				suggest: () => [1, 2, 4, 8, 16],
+			}),
+			DEFAULT_CPUS,
+		),
+		disk: slots.option(
+			"--disk",
+			slots.choice("The size in GiB of /dev/wdb, the disk that keeps all the machine's files.", DISK_SIZES),
+			"4",
+		),
 		extraDisk: slots.option("--extra-disk", slots.diskSizes(), null),
 		name: slots.option("--name", slots.newName(), null),
 		nics: slots.option(
 			"--nics",
-			slots.count({ label: "NICs", noun: "a number of NICs", suggest: () => NICS.map((nic) => nic + 1) }),
+			slots.count(`The NICs of each, 1 to ${MAX_NICS}: eth0 and on. Each that is plugged in takes a port.`, {
+				label: "NICs",
+				noun: "a number of NICs such as 2",
+				suggest: () => NICS.map((nic) => nic + 1),
+			}),
 			1,
 		),
-		net: slots.exclusive("switch0", [slots.valued("--net", slots.networks()), slots.flag("--no-net", "none")]),
+		net: slots.exclusive(NETWORKS.about, "switch0", [slots.valued("--net", NETWORKS), slots.flag("--no-net", "none")]),
 		addr: slots.option("--addr", slots.addresses(), null),
-		gateway: slots.exclusive<"on" | "off">("on", [slots.flag("--no-gateway", "off")]),
+		gateway: slots.exclusive<"on" | "off">(
+			"off leaves out the package gateway: its eth0 address and default route, package installs, and its DHCP on eth0.",
+			"on",
+			[slots.flag("--no-gateway", "off")],
+		),
 	},
+	example: { count: 1, image: "lab", name: "router", nics: 2, addr: "10.1.0.1/24,10.2.0.1/24", extraDisk: "1" },
 	plan(a, lab) {
 		if (a.mem > MAX_MEM_MIB) return refuse(`A machine has at most ${MAX_MEM_MIB} MiB of memory.`, "mem");
 		if (a.cpus > 16) return refuse("Choose 1 to 16 CPUs per machine.", "cpus");
@@ -163,8 +194,6 @@ export const spawn = defineVerb({
 	tool: {
 		name: "machines_spawn",
 		title: "Boot machines",
-		description:
-			"Boot new Linux machines on the lab's switch. Returns the names created. Each boots on its own and takes commands once ready. gateway off leaves out the package gateway, so DHCP on eth0 goes to the other machines.",
 		policy: "ask",
 	},
 });

@@ -6,8 +6,11 @@ import { andList } from "./words.ts";
 export const reboot = defineVerb({
 	name: "reboot",
 	about: "shut machines down and boot them again",
+	description:
+		"Shut machines down and boot them again, with the same disks, name, cables and addresses that the lab set. Running programs end, and what ip, sysctl and mount set is gone. Returns each machine's state once it is ready or failed, which takes seconds and at most two and a half minutes.",
 	danger: false,
 	grammar: { names: slots.machines() },
+	example: { names: "node2" },
 	plan: (a, lab) => planStop(a.names, lab),
 	describe: (plan) => describeStop("reboot", plan),
 	async execute(plan, ctx, deps) {
@@ -18,8 +21,6 @@ export const reboot = defineVerb({
 	tool: {
 		name: "machines_reboot",
 		title: "Reboot machines",
-		description:
-			"Shut machines down and boot them again, with the same disks, name and cables. Running programs end. Returns each machine's state once it is ready or failed, which takes seconds and at most two and a half minutes.",
 		policy: "run",
 	},
 });

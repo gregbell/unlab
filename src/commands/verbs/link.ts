@@ -75,9 +75,12 @@ function kindOf(change: LinkChange): Kind {
 export const link = defineVerb({
 	name: "link",
 	about: "plug or cut cables",
+	description:
+		"Plug in (up) or cut (down) the switch cables of machines or of single NICs. Returns the port and link state per NIC. A cable already as asked is left alone. A machine that is off can be unplugged or plugged in; its link comes up when it boots.",
 	danger: false,
 	phases: ["ready", "off"],
-	grammar: { link: slots.choice(["up", "down"]), machines: slots.cables() },
+	grammar: { link: slots.choice("up plugs the cables in, down cuts them.", ["up", "down"]), machines: slots.cables() },
+	example: { link: "down", machines: "node2" },
 	plan(a, lab) {
 		const up = a.link === "up";
 		const changes = planLink(lab, a.machines.nics, up);
@@ -116,8 +119,6 @@ export const link = defineVerb({
 	tool: {
 		name: "link_set",
 		title: "Plug in or cut cables",
-		description:
-			"Plug in (up) or cut (down) the switch cables of machines or of single NICs. Returns the port and link state per NIC. A cable already as asked is left alone. A machine that is off can be unplugged or plugged in; its link comes up when it boots.",
 		policy: "run",
 	},
 });

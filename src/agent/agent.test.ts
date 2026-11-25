@@ -73,6 +73,7 @@ function fakeModelContext() {
 }
 
 const ALL_TOOLS: readonly ToolName[] = [
+	"lab_help",
 	"machines_list",
 	"machines_spawn",
 	"machines_boot",
@@ -174,6 +175,7 @@ describe("registration", () => {
 		expect([...context.tools.values()].map((tool) => tool.title).sort()).toEqual([
 			"Boot machines",
 			"Delete a checkpoint",
+			"Explain the lab's verbs",
 			"List machines",
 			"Plug in or cut cables",
 			"Power machines off",

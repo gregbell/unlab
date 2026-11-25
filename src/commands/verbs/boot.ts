@@ -8,9 +8,12 @@ import { andList, imageLabel, planErrorSentence, ports, skippedPart } from "./wo
 export const boot = defineVerb({
 	name: "boot",
 	about: "boot machines that are off or failed",
+	description:
+		"Boot machines that are off or failed, with the disks they had. Returns each machine's state once it is ready or failed, which takes seconds and at most two minutes.",
 	danger: false,
 	phases: ["off", "failed"],
 	grammar: { names: slots.machines() },
+	example: { names: "node2" },
 	plan(a, lab) {
 		const plans = planBoot(lab, a.names.machines);
 		if (isPlanError(plans)) return refuse(planErrorSentence(plans), "names");
@@ -44,8 +47,6 @@ export const boot = defineVerb({
 	tool: {
 		name: "machines_boot",
 		title: "Power machines on",
-		description:
-			"Boot machines that are off or failed, with the disks they had. Returns each machine's state once it is ready or failed, which takes seconds and at most two minutes.",
 		policy: "run",
 	},
 });

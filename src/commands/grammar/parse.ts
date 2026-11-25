@@ -6,9 +6,11 @@ import {
 	endsLine,
 	type Grammar,
 	Miss,
+	type Optional,
 	type Options,
 	type ReadContext,
 	type Rest,
+	type Slot,
 	type Value,
 	type Variant,
 } from "./slots.ts";
@@ -38,10 +40,14 @@ export function flagTable(grammar: Grammar): ReadonlyMap<string, FlagEntry> {
 	return table;
 }
 
-export function positionalsOf(grammar: Grammar): readonly (readonly [string, Value<unknown> | Rest])[] {
-	return Object.entries(grammar).flatMap(([key, slot]) =>
-		slot.kind === "positional" || slot.kind === "rest" ? [[key, slot] as const] : [],
-	);
+type Plain = Value<unknown> | Optional<unknown> | Rest;
+
+export function isPlain(slot: Slot): slot is Plain {
+	return slot.kind === "positional" || slot.kind === "optional" || slot.kind === "rest";
+}
+
+export function positionalsOf(grammar: Grammar): readonly (readonly [string, Plain])[] {
+	return Object.entries(grammar).flatMap(([key, slot]) => (isPlain(slot) ? [[key, slot] as const] : []));
 }
 
 export function expectedOf(value: Value<unknown>, ctx: ReadContext): readonly string[] {
@@ -134,7 +140,7 @@ export function parse<G extends Grammar>(
 			restWords.push(token.text);
 			continue;
 		}
-		const value = read(slot, token, i, "here");
+		const value = read(slot.kind === "optional" ? slot.value : slot, token, i, "here");
 		if (!value.ok) return value.error;
 		values[key] = value.value;
 		next++;
@@ -146,6 +152,9 @@ export function parse<G extends Grammar>(
 		switch (slot.kind) {
 			case "positional":
 				if (!(key in values)) return fail(`${verb} needs ${slot.noun}.`);
+				break;
+			case "optional":
+				values[key] ??= null;
 				break;
 			case "rest":
 				values[key] = restWords.join(" ");

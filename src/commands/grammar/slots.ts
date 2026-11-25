@@ -64,15 +64,24 @@ export interface Value<T> {
 	readonly kind: "positional";
 	/** In the signature: `count`, `up | down`, `machines`. */
 	readonly label: string;
-	/** In sentences: `a count`, `up or down`. */
+	/** In sentences: `a count such as 2`, `up or down`. */
 	readonly noun: string;
+	/** What help and the tool's schema say it is. */
+	readonly about: string;
 	read(text: string, ctx: ReadContext): T | Miss;
 	/** Full-token inserts for what is typed so far; the engine filters them by prefix. */
 	suggest(typed: string, ctx: ReadContext): readonly Suggestion[];
 	format(value: T): string;
 	/** How a tool's text is written as one word. Left out, it has to be one. */
 	quote?(text: string): string;
-	readonly schema: JsonSchema;
+	readonly schema: Omit<JsonSchema, "description">;
+}
+
+/** A value that can be left out, with nothing after it. Null is what left out says. */
+export interface Optional<T> {
+	readonly kind: "optional";
+	readonly about: string;
+	readonly value: Value<T>;
 }
 
 export type Flag = `--${string}`;
@@ -84,6 +93,7 @@ export type Variant<T> =
 /** Mutually exclusive flags filling one argument, with the value used when all are left out. */
 export interface Options<T> {
 	readonly kind: "options";
+	readonly about: string;
 	readonly variants: readonly Variant<T>[];
 	readonly default: T;
 }
@@ -92,24 +102,28 @@ export interface Options<T> {
 export interface Rest {
 	readonly kind: "rest";
 	readonly label: string;
+	readonly about: string;
 }
 
 /** Everything after a bare `--`. */
 export interface Passthrough {
 	readonly kind: "passthrough";
 	readonly label: string;
+	readonly about: string;
 }
 
 /** Everything after a bare `--` and one space, whatever it is, and it can be nothing. */
 export interface Verbatim {
 	readonly kind: "verbatim";
 	readonly label: string;
+	readonly about: string;
 }
 
-export type Slot = Value<unknown> | Options<unknown> | Rest | Passthrough | Verbatim;
+export type Slot = Value<unknown> | Optional<unknown> | Options<unknown> | Rest | Passthrough | Verbatim;
 export type Grammar = Readonly<Record<string, Slot>>;
 
-type SlotValue<S> = S extends Value<infer T> ? T : S extends Options<infer T> ? T : string;
+type SlotValue<S> =
+	S extends Value<infer T> ? T : S extends Optional<infer T> ? T | null : S extends Options<infer T> ? T : string;
 export type ArgsOf<G extends Grammar> = { readonly [K in keyof G]: SlotValue<G[K]> };
 
 /** A machines argument as typed, expanded against the lab when it was read. */
@@ -138,7 +152,7 @@ const PHASE_WORDS: Readonly<Record<Phase, { readonly skipped: string; readonly s
 	removing: { skipped: "being removed", sentence: "is being removed" },
 };
 
-function list(words: readonly string[], conjunction: string): string {
+export function list(words: readonly string[], conjunction: string): string {
 	if (words.length < 2) return words.join("");
 	return `${words.slice(0, -1).join(", ")} ${conjunction} ${words[words.length - 1]}`;
 }
@@ -205,12 +219,14 @@ function readMachine(text: string, ctx: ReadContext): Machine | Miss {
 const POSITIVE_INTEGER = /^[1-9][0-9]*$/;
 
 export function count(
+	about: string,
 	opts: { label?: string; noun?: string; suggest?: (lab: LabState) => readonly number[] } = {},
 ): Value<number> {
 	return {
 		kind: "positional",
 		label: opts.label ?? "count",
-		noun: opts.noun ?? "a count",
+		noun: opts.noun ?? "a count such as 2",
+		about,
 		read(text) {
 			const n = Number(text);
 			return POSITIVE_INTEGER.test(text) && Number.isSafeInteger(n) ? n : new Miss();
@@ -223,11 +239,12 @@ export function count(
 	};
 }
 
-export function choice<const C extends string>(choices: readonly C[]): Value<C> {
+export function choice<const C extends string>(about: string, choices: readonly C[]): Value<C> {
 	return {
 		kind: "positional",
 		label: choices.join(" | "),
 		noun: list(choices, "or"),
+		about,
 		read(text) {
 			return choices.find((c) => c === text) ?? new Miss();
 		},
@@ -243,7 +260,9 @@ export function image(): Value<string> {
 	return {
 		kind: "positional",
 		label: "image",
-		noun: "an image",
+		noun: "an image such as alpine",
+		about:
+			"alpine, debian or lab: Alpine with iproute2, tcpdump, curl, dig, ssh, nginx, strace, sfdisk and mkfs installed, for use offline.",
 		read(text, { lab }) {
 			if (lab.images.some((i) => i.name === text)) return text;
 			const names = lab.images.map((i) => i.name);
@@ -254,11 +273,7 @@ export function image(): Value<string> {
 			return lab.images.map((i) => ({ insert: i.name, label: i.name, detail: i.label }));
 		},
 		format: (name) => name,
-		schema: {
-			type: "string",
-			description:
-				"alpine, debian or lab: Alpine with iproute2, tcpdump, curl, dig, ssh, nginx, strace, sfdisk and mkfs installed, for use offline.",
-		},
+		schema: { type: "string" },
 	};
 }
 
@@ -266,7 +281,8 @@ export function machine(): Value<MachineName> {
 	return {
 		kind: "positional",
 		label: "machine",
-		noun: "a machine",
+		noun: "a machine such as node2",
+		about: "A machine name, such as node2.",
 		read(text, ctx) {
 			const m = readMachine(text, ctx);
 			return m instanceof Miss ? m : m.name;
@@ -277,7 +293,7 @@ export function machine(): Value<MachineName> {
 				.map((m) => machineSuggestion(m));
 		},
 		format: (name) => name,
-		schema: { type: "string", description: "A machine name, such as node2." },
+		schema: { type: "string" },
 	};
 }
 
@@ -304,18 +320,16 @@ export function newName(): Value<MachineName | null> {
 	return {
 		kind: "positional",
 		label: "name",
-		noun: "a name",
+		noun: "a name such as web-1",
+		about:
+			"A name for the machine, which is also its hostname: lowercase letters, digits and hyphens, such as web-1. Left out, node and a number.",
 		read(text) {
 			const name = parseChosenName(text);
 			return isNameFault(name) ? new Miss(nameFault(text, name), undefined, false) : name;
 		},
 		suggest: () => [],
 		format: String,
-		schema: {
-			type: "string",
-			description:
-				"A name for the machine, which is also its hostname: lowercase letters, digits and hyphens, such as web-1. Left out, node and a number.",
-		},
+		schema: { type: "string" },
 	};
 }
 
@@ -338,11 +352,12 @@ export function newCheckpoint(): Value<CheckpointName> {
 	return {
 		kind: "positional",
 		label: "checkpoint",
-		noun: "a name for the checkpoint",
+		noun: "a name for the checkpoint such as before-upgrade",
+		about: CHECKPOINT,
 		read: readCheckpoint,
 		suggest: () => [],
 		format: (name) => name,
-		schema: { type: "string", description: CHECKPOINT },
+		schema: { type: "string" },
 	};
 }
 
@@ -351,7 +366,8 @@ export function checkpoint(): Value<CheckpointName> {
 	return {
 		kind: "positional",
 		label: "checkpoint",
-		noun: "a checkpoint",
+		noun: "a checkpoint such as before-upgrade",
+		about: CHECKPOINT,
 		read: readCheckpoint,
 		suggest: (_typed, { lab }) =>
 			machinesOf(lab).flatMap((m) =>
@@ -365,7 +381,7 @@ export function checkpoint(): Value<CheckpointName> {
 				),
 			),
 		format: (name) => name,
-		schema: { type: "string", description: CHECKPOINT },
+		schema: { type: "string" },
 	};
 }
 
@@ -392,7 +408,8 @@ export function filePath(): Value<string> {
 	return {
 		kind: "positional",
 		label: "path",
-		noun: "a path",
+		noun: "a path such as /etc/motd",
+		about: "The file's path from /, such as /etc/motd. Directories on the way that are missing are made.",
 		read(text, { verb }) {
 			const path = text.replace(/\\([\\\s])/g, "$1");
 			const fault = pathFault(path, verb);
@@ -401,10 +418,7 @@ export function filePath(): Value<string> {
 		suggest: () => [],
 		format: quotePath,
 		quote: quotePath,
-		schema: {
-			type: "string",
-			description: "The file's path from /, such as /etc/motd. Directories on the way that are missing are made.",
-		},
+		schema: { type: "string" },
 	};
 }
 
@@ -413,7 +427,9 @@ export function owner(): Value<string | null> {
 	return {
 		kind: "positional",
 		label: "user[:group]",
-		noun: "a user, or user:group",
+		noun: "a user such as root, or user:group",
+		about:
+			"Its user, or user:group. A user alone brings their own group. Left out, a file keeps its owner, and a new one is root's.",
 		read(text) {
 			const accounts = text.split(":");
 			const read = accounts.every((name) => /^\w[\w.-]*$/.test(name) && !(Number(name) > MAX_ID));
@@ -423,11 +439,7 @@ export function owner(): Value<string | null> {
 		},
 		suggest: () => ["root", "user"].map((name) => ({ insert: name, label: name })),
 		format: String,
-		schema: {
-			type: "string",
-			description:
-				"Its user, or user:group. A user alone brings their own group. Left out, a file keeps its owner, and a new one is root's.",
-		},
+		schema: { type: "string" },
 	};
 }
 
@@ -437,16 +449,14 @@ export function fileMode(): Value<string | null> {
 		kind: "positional",
 		label: "mode",
 		noun: "a mode such as 644",
+		about: "Its mode in octal, such as 600 or 755. Left out, a file keeps its mode, and a new one has 644.",
 		read(text) {
 			if (/^[0-7]{3,4}$/.test(text)) return text;
 			return new Miss(`--mode wants three or four octal digits, such as 644, not ${text}.`, undefined, false);
 		},
 		suggest: () => ["644", "600", "755"].map((mode) => ({ insert: mode, label: mode })),
 		format: String,
-		schema: {
-			type: "string",
-			description: "Its mode in octal, such as 600 or 755. Left out, a file keeps its mode, and a new one has 644.",
-		},
+		schema: { type: "string" },
 	};
 }
 
@@ -455,7 +465,8 @@ export function target(): Value<MachineName | SessionId> {
 	return {
 		kind: "positional",
 		label: "machine or session",
-		noun: "a machine or session",
+		noun: "a machine or session such as node2 or node2:sh1",
+		about: "A machine name (node2) for its active session, or one session (node2:sh1).",
 		read(text, ctx) {
 			const colon = text.indexOf(":");
 			const m = readMachine(colon < 0 ? text : text.slice(0, colon), ctx);
@@ -480,10 +491,7 @@ export function target(): Value<MachineName | SessionId> {
 				]);
 		},
 		format: (t) => t,
-		schema: {
-			type: "string",
-			description: "A machine name (node2) for its active session, or one session (node2:sh1).",
-		},
+		schema: { type: "string" },
 	};
 }
 
@@ -524,7 +532,8 @@ export function machines(): Value<Selection> {
 	return {
 		kind: "positional",
 		label: "machines",
-		noun: "machines",
+		noun: "machines such as node1,node3 or all",
+		about: "One machine (node2), a comma list (node1,node3), a glob (node*) or all.",
 		read(text, ctx) {
 			const picked: MachineName[] = [];
 			const skipped: { name: MachineName; reason: string }[] = [];
@@ -555,10 +564,7 @@ export function machines(): Value<Selection> {
 				: names;
 		},
 		format: (s) => s.written,
-		schema: {
-			type: "string",
-			description: "One machine (node2), a comma list (node1,node3), a glob (node*) or all.",
-		},
+		schema: { type: "string" },
 	};
 }
 
@@ -571,7 +577,9 @@ export function cables(): Value<CableSelection> {
 	return {
 		kind: "positional",
 		label: "machines",
-		noun: "machines",
+		noun: "machines such as node1,node3:eth1 or all",
+		about:
+			"One machine (node2) for all its cables, one NIC (node2:eth1), a comma list (node1,node3:eth1), a glob (node*) or all.",
 		read(text, ctx) {
 			const picked = new Map<string, NicRef>();
 			const skipped: { name: MachineName; reason: string }[] = [];
@@ -635,11 +643,7 @@ export function cables(): Value<CableSelection> {
 				: names;
 		},
 		format: (s) => s.written,
-		schema: {
-			type: "string",
-			description:
-				"One machine (node2) for all its cables, one NIC (node2:eth1), a comma list (node1,node3:eth1), a glob (node*) or all.",
-		},
+		schema: { type: "string" },
 	};
 }
 
@@ -649,6 +653,8 @@ export function networks(): Value<string> {
 		kind: "positional",
 		label: "network,...",
 		noun: "switch0 or none",
+		about:
+			"switch0 or none for every NIC, or a comma list with one for each, eth0 first, such as switch0,none. A NIC with none boots unplugged.",
 		read(text) {
 			for (const { part, ...span } of listParts(text)) {
 				if (NETWORKS.every((network) => network !== part)) return new Miss(undefined, span);
@@ -660,11 +666,7 @@ export function networks(): Value<string> {
 			return NETWORKS.map((network) => ({ insert: head + network, label: network }));
 		},
 		format: (written) => written,
-		schema: {
-			type: "string",
-			description:
-				"switch0 or none for every NIC, or a comma list with one for each, eth0 first, such as switch0,none. A NIC with none boots unplugged.",
-		},
+		schema: { type: "string" },
 	};
 }
 
@@ -690,6 +692,8 @@ export function addresses(): Value<readonly (Address | null)[] | null> {
 		kind: "positional",
 		label: "address,...",
 		noun: "addresses such as 10.1.0.1/24,none",
+		about:
+			"Each NIC's address, eth0 first, such as 10.1.0.1/24,none. none leaves it up without one. Left out, eth0 has one in 10.88.0.0/24. Needs count 1.",
 		read(text) {
 			const read: (Address | null)[] = [];
 			for (const { part, ...span } of listParts(text)) {
@@ -708,11 +712,7 @@ export function addresses(): Value<readonly (Address | null)[] | null> {
 			return [{ insert: `${head}none`, label: "none", detail: "up, with no address" }];
 		},
 		format: (list) => (list ?? []).map((address) => (address ? addressStr(address) : "none")).join(","),
-		schema: {
-			type: "string",
-			description:
-				"An address for each NIC, eth0 first, such as 10.1.0.1/24,none. none leaves it up with no address. Left out, eth0 gets one in 10.88.0.0/24.",
-		},
+		schema: { type: "string" },
 	};
 }
 
@@ -722,6 +722,7 @@ export function diskSizes(): Value<readonly GiB[] | null> {
 		kind: "positional",
 		label: "GiB,...",
 		noun: "sizes in GiB such as 1,4",
+		about: `Blank disks to add, as whole GiB each, such as 1,4: up to ${MAX_EXTRA_DISKS}, of 1 to ${MAX_EXTRA_GIB}. They are /dev/wdc and on, with no file system.`,
 		read(text) {
 			const parts = listParts(text);
 			const read: GiB[] = [];
@@ -742,15 +743,16 @@ export function diskSizes(): Value<readonly GiB[] | null> {
 			return [1, 4, 16].map((size) => ({ insert: `${head}${size}`, label: `${size} GiB` }));
 		},
 		format: (sizes) => (sizes ?? []).join(","),
-		schema: {
-			type: "string",
-			description: `The size in whole GiB of each blank disk to add, such as 1,4: up to ${MAX_EXTRA_DISKS}, of 1 to ${MAX_EXTRA_GIB} each. They are /dev/wdc and on.`,
-		},
+		schema: { type: "string" },
 	};
 }
 
+export function optional<T>(value: Value<T>): Optional<T> {
+	return { kind: "optional", about: value.about, value };
+}
+
 export function option<T>(flag: Flag, value: Value<T>, defaultValue: T): Options<T> {
-	return { kind: "options", variants: [{ flag, value }], default: defaultValue };
+	return { kind: "options", about: value.about, variants: [{ flag, value }], default: defaultValue };
 }
 
 export function valued<T>(flag: Flag, value: Value<T>): Variant<T> {
@@ -762,23 +764,31 @@ export function flag<const T>(flag: Flag, constant: T): Variant<T> {
 }
 
 /** `--net switch0 | --no-net`. At most one variant takes a value, so a value always formats one way. */
-export function exclusive<T>(defaultValue: T, variants: readonly Variant<T>[]): Options<T> {
+export function exclusive<T>(about: string, defaultValue: T, variants: readonly Variant<T>[]): Options<T> {
 	if (variants.filter((v) => "value" in v).length > 1) {
 		throw new Error(`exclusive(${variants.map((v) => v.flag).join(", ")}): at most one variant may take a value`);
 	}
-	return { kind: "options", variants, default: defaultValue };
+	return { kind: "options", about, variants, default: defaultValue };
 }
 
-export function text(label: string): Rest {
-	return { kind: "rest", label };
+export function text(label: string, about: string): Rest {
+	return { kind: "rest", label, about };
 }
 
-export function passthrough(label: string): Passthrough {
-	return { kind: "passthrough", label };
+/** Which captured frames to show. */
+export function frameFilter(): Rest {
+	return text(
+		"filter",
+		"Terms that must all match, with or between alternatives: a protocol, machine, NIC (node2:eth1), address, MAC or port:N. Empty, every frame.",
+	);
 }
 
-export function verbatim(label: string): Verbatim {
-	return { kind: "verbatim", label };
+export function passthrough(label: string, about: string): Passthrough {
+	return { kind: "passthrough", label, about };
+}
+
+export function verbatim(label: string, about: string): Verbatim {
+	return { kind: "verbatim", label, about };
 }
 
 /** The slot takes what follows `--`. */

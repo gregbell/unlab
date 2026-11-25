@@ -6,8 +6,11 @@ import { andList } from "./words.ts";
 export const poweroff = defineVerb({
 	name: "poweroff",
 	about: "shut machines down and keep their disks",
+	description:
+		"Shut machines down. Each keeps its disks, name and cables, holds no memory, and boots again with machines_boot. Returns each machine's state once it is off, which takes a second or two, and at most half a minute for a guest that does not shut down.",
 	danger: false,
 	grammar: { names: slots.machines() },
+	example: { names: "node2" },
 	plan: (a, lab) => planStop(a.names, lab),
 	describe: (plan) => describeStop("power off", plan),
 	async execute(plan, ctx, deps) {
@@ -18,8 +21,6 @@ export const poweroff = defineVerb({
 	tool: {
 		name: "machines_poweroff",
 		title: "Power machines off",
-		description:
-			"Shut machines down. Each keeps its disks, name and cables, holds no memory, and boots again with machines_boot. Returns each machine's state once it is off, which takes a second or two, and at most half a minute for a guest that does not shut down.",
 		policy: "run",
 	},
 });

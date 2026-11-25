@@ -35,7 +35,7 @@ describe("spawn", () => {
 	it("says what it wants in its own words, with a fix when one edit repairs the line", () => {
 		const lab = storeLab();
 		expect(lab.parse("spawn two alpine")).toEqual({
-			message: "spawn wants a count here, not two. Nothing was changed.",
+			message: "spawn wants a count such as 2 here, not two. Nothing was changed.",
 			token: 1,
 		});
 		expect(lab.parse("spawn 2 alpne")).toEqual({
@@ -44,7 +44,7 @@ describe("spawn", () => {
 			fix: "spawn 2 alpine",
 		});
 		expect(lab.parse("spawn 2 alpine --mem")).toMatchObject({
-			message: "spawn wants a size in MiB after --mem. Nothing was changed.",
+			message: "spawn wants a size in MiB such as 512 after --mem. Nothing was changed.",
 		});
 		expect(lab.parse("spawn 2 alpine --net switch0 --no-net")).toMatchObject({
 			message: "spawn takes --net or --no-net, not both. Nothing was changed.",

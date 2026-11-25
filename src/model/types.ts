@@ -270,6 +270,7 @@ export interface CaptureUi {
 
 export type Policy = "run" | "ask" | "off";
 export type ToolName =
+	| "lab_help"
 	| "machines_list"
 	| "machines_spawn"
 	| "machines_boot"
