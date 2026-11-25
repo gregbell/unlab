@@ -3,6 +3,7 @@ import { oneEditFix } from "./fix.ts";
 import { optionTokens } from "./format.ts";
 import {
 	type ArgsOf,
+	endsLine,
 	type Grammar,
 	Miss,
 	type Options,
@@ -156,18 +157,25 @@ export function parse<G extends Grammar>(
 					if (said) assumed.push(said.join(" "));
 				}
 				break;
-			case "passthrough":
-				if (!tokenized.passthrough) return fail(`${verb} wants a ${slot.label} after --.`, dashes);
+			case "passthrough": {
+				const typed = tokenized.passthrough?.trimStart();
+				if (!typed) return fail(`${verb} wants a ${slot.label} after --.`, dashes);
 				// Typed into a terminal, a control character edits or runs the line where no one can see it.
-				if (hasControl(tokenized.passthrough)) {
+				if (hasControl(typed)) {
 					return fail(`${verb} wants a ${slot.label} of printable characters after --.`, dashes);
 				}
+				values[key] = typed;
+				tokenOf[key] = tokens.length - 1;
+				break;
+			}
+			case "verbatim":
+				if (tokenized.passthrough === null) return fail(`${verb} wants a ${slot.label} after --.`);
 				values[key] = tokenized.passthrough;
 				tokenOf[key] = tokens.length - 1;
 				break;
 		}
 	}
-	if (dashes !== undefined && !entries.some(([, slot]) => slot.kind === "passthrough")) {
+	if (dashes !== undefined && !entries.some(([, slot]) => endsLine(slot))) {
 		return fail(`${verb} takes nothing after --.`, dashes);
 	}
 

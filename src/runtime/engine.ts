@@ -11,7 +11,7 @@
 // dispatched while it is still running the effects of the previous one.
 
 import type { CaptureLog } from "../capture/index.ts";
-import type { ExecOutcome, ExecPort } from "../commands/index.ts";
+import type { ExecOutcome, ExecPort, FileOutcome, FilePort } from "../commands/index.ts";
 import {
 	type DiskCopy,
 	type Effect,
@@ -51,6 +51,7 @@ export interface RuntimeReads {
 export interface Engine {
 	run(effect: Effect): void;
 	readonly exec: ExecPort;
+	readonly files: FilePort;
 	readonly screens: Screens;
 	readonly capture: CaptureLog;
 	readonly reads: RuntimeReads;
@@ -98,6 +99,14 @@ interface VmEntry {
 	/** The copy of its disks that it is making. */
 	saving: DiskCopy | null;
 	stopped: Promise<void> | null;
+	/** The files it is writing, by id. */
+	readonly writes: Map<number, Write>;
+}
+
+/** A file that a guest has been given to write. */
+interface Write {
+	readonly path: string;
+	settle(outcome: FileOutcome): void;
 }
 
 /** A copy of disks that no guest has open, or that waits until none has. */
@@ -159,6 +168,7 @@ export function createEngine(deps: EngineDeps): Engine {
 	const jobs = new Map<MachineName, Job>();
 	const ports = new Map<PortNo, NicRef>();
 	let published: readonly HostEntry[] | null = null;
+	let writes = 0;
 	let clock: { readonly hz: 1 | 10; readonly stop: () => void } | null = null;
 
 	const untap = sw.onTap((e) => capture.appendFrame(e));
@@ -211,6 +221,12 @@ export function createEngine(deps: EngineDeps): Engine {
 		if (data.includes("\r")) shellEvents(s, s.screen.submitted());
 	};
 
+	const endWrites = (entry: VmEntry | undefined, why: string) => {
+		for (const { path, settle } of entry?.writes.values() ?? []) {
+			settle({ kind: "unsure", reason: `${why} while ${path} was being written, so check whether it was.` });
+		}
+	};
+
 	const abandon = (s: SessionEntry, why = `${s.id} closed`) => {
 		s.injection?.fail(new ExecRefused(`${why} before the command returned.`));
 	};
@@ -225,8 +241,9 @@ export function createEngine(deps: EngineDeps): Engine {
 		return null;
 	};
 
-	/** The machine's worker is gone or going: nothing is waiting on its sessions, and its shells have ended. */
+	/** The machine's worker is gone or going: nothing is waiting on it, and its shells have ended. */
 	const endSessions = (machine: MachineName, why?: string) => {
+		endWrites(vms.get(machine), why ?? `${machine} stopped`);
 		for (const s of sessions.values()) {
 			if (s.machine !== machine) continue;
 			abandon(s, why);
@@ -270,6 +287,9 @@ export function createEngine(deps: EngineDeps): Engine {
 			const copy = entry.saving;
 			if (report.kind !== "progress") entry.saving = null;
 			reportSave(copy, report);
+		},
+		wrote(ref, id, outcome) {
+			if (listening(ref)) vms.get(ref.machine)?.writes.get(id)?.settle(outcome);
 		},
 		nicLost(ref, nic, reason) {
 			if (listening(ref)) dispatch({ type: "vm/nic-lost", ...ref, nic, reason });
@@ -436,7 +456,17 @@ export function createEngine(deps: EngineDeps): Engine {
 					sink,
 				);
 				const { hosts } = config;
-				vms.set(machine, { attempt, vm, phase: "booting", hosts, promptToken, lost: [], saving: null, stopped: null });
+				vms.set(machine, {
+					attempt,
+					vm,
+					phase: "booting",
+					hosts,
+					promptToken,
+					lost: [],
+					saving: null,
+					stopped: null,
+					writes: new Map(),
+				});
 				return;
 			}
 			case "vm/stop": {
@@ -626,9 +656,45 @@ export function createEngine(deps: EngineDeps): Engine {
 		},
 	};
 
+	const files: FilePort = {
+		write(machine, file, signal) {
+			return new Promise<FileOutcome>((resolve, reject) => {
+				const entry = vms.get(machine);
+				if (signal.aborted) {
+					reject(signal.reason);
+					return;
+				}
+				if (entry?.phase !== "ready") {
+					resolve({ kind: "refused", reason: `${machine} is not ready.` });
+					return;
+				}
+				const id = ++writes;
+				const over = () => {
+					signal.removeEventListener("abort", aborted);
+					entry.writes.delete(id);
+				};
+				function aborted() {
+					over();
+					reject(signal.reason);
+				}
+				const { path } = file;
+				entry.writes.set(id, {
+					path,
+					settle(outcome) {
+						over();
+						resolve(outcome);
+					},
+				});
+				signal.addEventListener("abort", aborted, { once: true });
+				entry.vm.writeFile(id, file);
+			});
+		},
+	};
+
 	return {
 		run,
 		exec,
+		files,
 		screens,
 		capture,
 		reads: {
@@ -642,7 +708,10 @@ export function createEngine(deps: EngineDeps): Engine {
 			for (const port of ports.keys()) sw.detach(port);
 			ports.clear();
 			for (const job of jobs.values()) job.drop();
-			for (const entry of vms.values()) void entry.vm.stop("drop");
+			for (const [machine, entry] of vms) {
+				endWrites(entry, `${machine} stopped`);
+				void entry.vm.stop("drop");
+			}
 			vms.clear();
 			for (const s of sessions.values()) {
 				abandon(s);

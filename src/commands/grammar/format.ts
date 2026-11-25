@@ -1,4 +1,5 @@
 import type { Grammar, Options, Slot } from "./slots.ts";
+import { tokenize } from "./tokenize.ts";
 
 function slotSignature(slot: Slot): string {
 	switch (slot.kind) {
@@ -8,6 +9,7 @@ function slotSignature(slot: Slot): string {
 		case "options":
 			return `[${slot.variants.map((v) => ("value" in v ? `${v.flag} ${v.value.label}` : v.flag)).join(" | ")}]`;
 		case "passthrough":
+		case "verbatim":
 			return `-- <${slot.label}>`;
 	}
 }
@@ -26,11 +28,34 @@ export function optionTokens(slot: Options<unknown>, value: unknown): readonly s
 	return valued && "value" in valued ? [valued.flag, valued.value.format(value)] : null;
 }
 
+/** The most characters of a text that a line shows. */
+const SHOWN_MAX = 200;
+
+/** Whether a text reads as part of a line: short, on one line, and nothing in it that does not show. */
+function reads(text: string): boolean {
+	return text.length <= SHOWN_MAX && !/[\p{C}\p{Zl}\p{Zp}]/u.test(text);
+}
+
+/** A line that a log or a panel shows, and the text that it leaves out. */
+export interface Shown {
+	readonly line: string;
+	readonly text: string | null;
+}
+
+/** A text that does not read as part of its line is left out with its `--`, so the line cannot be run again as it is. */
+export function shown(grammar: Grammar, line: string): Shown {
+	const { tokens, passthrough } = tokenize(line);
+	const dashes = tokens.at(-1);
+	const verbatim = Object.values(grammar).some((slot) => slot.kind === "verbatim");
+	if (!verbatim || !dashes || passthrough === null || reads(passthrough)) return { line, text: null };
+	return { line: line.slice(0, dashes.start).trimEnd(), text: passthrough };
+}
+
 /** The inverse of parse: positionals in order, options that differ from their default, then `-- passthrough`. */
 export function format(verb: string, grammar: Grammar, args: Readonly<Record<string, unknown>>): string {
 	const words = [verb];
 	const options: string[] = [];
-	let passthrough: string | null = null;
+	let tail: string | null = null;
 	for (const [key, slot] of Object.entries(grammar)) {
 		const value = args[key];
 		switch (slot.kind) {
@@ -44,9 +69,10 @@ export function format(verb: string, grammar: Grammar, args: Readonly<Record<str
 				if (!Object.is(value, slot.default)) options.push(...(optionTokens(slot, value) ?? []));
 				break;
 			case "passthrough":
-				passthrough = String(value);
+			case "verbatim":
+				tail = String(value);
 				break;
 		}
 	}
-	return [...words, ...options, ...(passthrough === null ? [] : ["--", passthrough])].join(" ");
+	return [...words, ...options, ...(tail === null ? [] : ["--", tail])].join(" ");
 }

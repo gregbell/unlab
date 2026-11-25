@@ -29,6 +29,7 @@ test("an agent lists, asks to remove node2, and node2 goes once the person click
 		"checkpoint_remove",
 		"checkpoint_restore",
 		"checkpoint_save",
+		"file_write",
 		"link_set",
 		"machines_boot",
 		"machines_list",
@@ -119,7 +120,7 @@ test("deny, abort, off and pause, each as the handoff says", async ({ page }) =>
 	await expect.poll(() => registered(page)).toEqual([]);
 	await expect(page.getByText("webmcp: paused")).toBeVisible();
 	await panel.getByRole("button", { name: "resume tools" }).click();
-	await expect.poll(() => registered(page)).toHaveLength(12);
+	await expect.poll(() => registered(page)).toHaveLength(13);
 	expect(errors).toEqual([]);
 });
 
@@ -190,7 +191,7 @@ for (const [where, width, height] of [
 		await page.setViewportSize({ width, height });
 		await page.goto("/");
 		await expect(page.getByRole("heading", { name: "Your Linux lab in a tab." })).toBeVisible();
-		await expect.poll(() => registered(page)).toHaveLength(13);
+		await expect.poll(() => registered(page)).toHaveLength(14);
 
 		await start(page, "spawn", "machines_spawn", { count: 1, image: "alpine" });
 		const boot = page.locator("unlab-agent-panel").getByRole("button", { name: "Boot node1", exact: true });

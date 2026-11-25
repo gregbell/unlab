@@ -17,7 +17,7 @@ import {
 	type SessionId,
 } from "../../model/index.ts";
 import { defaultAddress } from "../../net/index.ts";
-import type { CommandDeps, ExecPort } from "../define.ts";
+import type { CommandDeps, ExecPort, FilePort } from "../define.ts";
 
 export interface MachineFixture {
 	readonly n: number;
@@ -151,6 +151,11 @@ export const NO_EXEC: ExecPort = {
 	inject: () => Promise.reject(new Error("This test has no exec port.")),
 };
 
+/** For tests that never write a file: any write fails loudly. */
+export const NO_FILES: FilePort = {
+	write: () => Promise.reject(new Error("This test has no file port.")),
+};
+
 /** Deps over a mutable lab: tests swap the state to simulate the store changing under a command. */
 export function fakeDeps(initial: LabState, exec: ExecPort = NO_EXEC) {
 	let state = initial;
@@ -179,6 +184,7 @@ export function fakeDeps(initial: LabState, exec: ExecPort = NO_EXEC) {
 		},
 		now: () => clock++,
 		exec,
+		files: NO_FILES,
 	};
 	return {
 		deps,

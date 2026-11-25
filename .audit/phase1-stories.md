@@ -102,3 +102,22 @@
 | 7.1 | pinned by size and checksum in the image manifest | scripts/lab-image.ts, checked by scripts/fetch-distros.ts in CI (npm run distros alpine debian lab) |
 | 7.1 | boot time measured in CI beside Alpine's | e2e/lab-image.spec.ts: a lab machine boots about as fast as an Alpine one (printed, and in the job summary) |
 | 2.1 | a person can partition, format and mount it with tools already in the image | e2e/lab-image.spec.ts: a lab machine with no network has the tools, and keeps a disk that it partitions and formats |
+| 6.1 | one command writes given text to a given path in a guest, creating parent directories | e2e/files.spec.ts: alpine, debian: a text an agent writes arrives unchanged, with its directories, owner and mode, over a reload |
+| 6.1 | one command writes given text to a given path in a guest, typed in the bar | e2e/files.spec.ts: a person writes a line from the bar, which says what it will do and did |
+| 6.1 | one command writes given text to a given path, creating parent directories | test/integration/files.test.ts: alpine, debian: a new file is root's with mode 644, and a new directory is the file's owner's with 755 |
+| 6.1 | a path with spaces, quotes, dollars and backslashes | test/integration/files.test.ts: alpine, debian: paths with spaces, quotes, dollars, backslashes and non-ASCII are one file |
+| 6.1 | quotes, dollars, backslashes, newlines and non-ASCII arrive unchanged | e2e/files.spec.ts: alpine, debian: a text an agent writes arrives unchanged, with its directories, owner and mode, over a reload |
+| 6.1 | quotes, dollars, backslashes, newlines and non-ASCII arrive unchanged | test/integration/files.test.ts: alpine, debian: a text arrives byte for byte, whatever is in it |
+| 6.1 | owner and mode can be set, and system paths such as /etc can be written | e2e/files.spec.ts: alpine, debian: a text an agent writes arrives unchanged, with its directories, owner and mode, over a reload |
+| 6.1 | owner and mode that are not given are kept | test/integration/files.test.ts: alpine, debian: a file that is there keeps the owner and mode that were not given |
+| 6.1 | it does not type into any terminal the person is using | e2e/files.spec.ts: alpine, debian: a write leaves a person's program, half-typed line and shell history alone |
+| 6.1 | the file is on the disk once the command is done | test/integration/files.test.ts: alpine, debian: what is written is on the disk at once |
+| 6.1 | a write that fails, or that the machine's end cuts short, leaves the old file | e2e/files.spec.ts: a machine that goes down or comes back while it writes a file says so, and the old file is whole |
+| 6.1 | a write that fails leaves the old file and says why | e2e/files.spec.ts: a file system with no room, or that is read-only, is named, and what is there stays |
+| 6.1 | a write that fails leaves the old file and says why | test/integration/files.test.ts: alpine, debian: what cannot be written says why, and leaves nothing changed |
+| 6.1 | a file is replaced whole | test/integration/files.test.ts: alpine, debian: a program that reads the file as it is written has the old one or the new one, whole |
+| 6.1 | a file that nothing can be renamed over | test/integration/files.test.ts: alpine, debian: a file that nothing can be renamed over is written over, and put back when that fails |
+| 6.1 | a write an agent withdraws, and two for one file | e2e/files.spec.ts: a write an agent withdraws is whole or not at all, and the next one comes after it |
+| 6.1 | the lab's own /etc/hosts block and a write of that file | e2e/files.spec.ts: a host table that comes while an agent writes /etc/hosts is in it afterwards |
+| 6.1 | approvals, the agent panel and the recent lines stay readable | e2e/files.spec.ts: a text of several lines is readable where a person approves it, and left out of the lists of lines |
+| 1.4 (part) | a command sent to a machine that is not ready says which state it is in | e2e/files.spec.ts: a machine that is not ready is refused with its state |

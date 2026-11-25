@@ -43,6 +43,7 @@ function labOf() {
 		dispatch: store.dispatchCommand,
 		until: store.until,
 		now: () => clock,
+		files: { write: () => Promise.reject(new Error("This test has no file port.")) },
 		exec: {
 			inject: (session, _line, _source, signal) =>
 				new Promise((resolve, reject) => {
@@ -173,6 +174,7 @@ describe("the artboards, replayed", () => {
 			"rm",
 			"ls",
 			"exec",
+			"write",
 			"sh",
 			"link",
 			"capture",

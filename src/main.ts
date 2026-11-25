@@ -160,6 +160,7 @@ async function main(): Promise<void> {
 			until: (predicate, signal) => store.until(predicate, signal),
 			now,
 			exec: engine.exec,
+			files: engine.files,
 		},
 		VERBS,
 	);
