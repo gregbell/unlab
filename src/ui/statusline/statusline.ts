@@ -1,14 +1,16 @@
 import "./statusline.css";
 import "../panel-bar/panel-bar.ts";
+import "../whats-new/whats-new.ts";
 import { html, nothing, type TemplateResult } from "lit";
 import { parkedPanels, type StatusSegment, selectStatus } from "../../model/index.ts";
 import { AGENT_PANEL_ID } from "../agent-panel/agent-panel.ts";
-import { Select, UnlabElement } from "../base/index.ts";
+import { githubMark, Select, UnlabElement, xMark } from "../base/index.ts";
+import { AUTHOR_URL, REPO_URL, X_ACCOUNT, X_URL } from "../links.ts";
 
 const segment = (part: StatusSegment): TemplateResult =>
 	html`<span class="segment" data-key=${part.key} data-tone=${part.tone}>${part.text}</span>`;
 
-/** Counts for machines and sessions, the panel bar while a panel is parked, and WebMCP. Grey while all is well; red or yellow only while something is wrong or waiting. */
+/** Counts for machines and sessions, the panel bar while a panel is parked, WebMCP, what's new and who makes it. Grey while all is well; red or yellow only while something is wrong or waiting. */
 export class UnlabStatusline extends UnlabElement {
 	readonly #status = new Select(this, selectStatus);
 
@@ -30,8 +32,12 @@ export class UnlabStatusline extends UnlabElement {
 				@click=${() => this.app.store.dispatchUi({ type: "ui/agent-panel", open: !this.#agentPanel.value })}>${part.text}</button>`
 					: segment(part),
 			)}
-			<a href="https://github.com/gregbell/unlab" target="_blank" rel="noopener noreferrer">GitHub</a>
-			<span data-key="engine">Built with <a href="https://unkernel.dev/" target="_blank" rel="noopener noreferrer">unkernel.dev</a></span></div>`;
+			<unlab-whats-new></unlab-whats-new>
+			<span data-key="credit">Built by <a href=${AUTHOR_URL} target="_blank" rel="noopener noreferrer">Greg Bell</a> with <a href="https://unkernel.dev/" target="_blank" rel="noopener noreferrer">unkernel.dev</a></span>
+			<span class="marks">
+				<a href=${REPO_URL} target="_blank" rel="noopener noreferrer" aria-label="unlab on GitHub" title="unlab on GitHub">${githubMark}</a>
+				<a href=${X_URL} target="_blank" rel="noopener noreferrer" aria-label="${X_ACCOUNT} on X" title="${X_ACCOUNT} on X">${xMark}</a>
+			</span></div>`;
 	}
 }
 

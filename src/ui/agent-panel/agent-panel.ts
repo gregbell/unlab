@@ -5,6 +5,7 @@ import { repeat } from "lit/directives/repeat.js";
 import { type AgentCall, type LabState, type Policy, selectAgentIndicator, type ToolName } from "../../model/index.ts";
 import { Select, UnlabElement } from "../base/index.ts";
 import { hued } from "../confirm/hued.ts";
+import { REPO_URL } from "../links.ts";
 
 const POLICIES: readonly { readonly value: Policy; readonly label: string }[] = [
 	{ value: "run", label: "run" },
@@ -45,7 +46,7 @@ function resultText(call: AgentCall): string {
 
 /** Browsers block links to their own pages, so a person copies this one. */
 const FLAG = "chrome://flags/#enable-webmcp-testing";
-const GUIDE = "https://github.com/gregbell/unlab#use-the-lab-with-an-ai-agent";
+const GUIDE = `${REPO_URL}#use-the-lab-with-an-ai-agent`;
 
 const guideLink = html`<a href=${GUIDE} target="_blank" rel="noopener noreferrer">connect an agent</a>`;
 

@@ -4,7 +4,7 @@ import { html, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { live } from "lit/directives/live.js";
 import { isLineError, type LineError, type Result } from "../../commands/index.ts";
 import type { LabState, SessionId } from "../../model/index.ts";
-import { Select, UnlabElement } from "../base/index.ts";
+import { modalOpen, Select, UnlabElement } from "../base/index.ts";
 import { errorBlock, politeBlock, resultBlock, rowContent, signatureRow } from "./blocks.ts";
 import {
 	type BarEffect,
@@ -307,7 +307,7 @@ export class UnlabCommandBar extends UnlabElement {
 
 	/** Capture phase on window, so the shortcut wins over a focused terminal. */
 	readonly #onShortcut = (event: KeyboardEvent): void => {
-		if (!isShortcut(event)) return;
+		if (!isShortcut(event) || modalOpen()) return;
 		event.preventDefault();
 		event.stopPropagation();
 		this.#step({ kind: "open" });

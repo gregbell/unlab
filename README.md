@@ -323,6 +323,7 @@ those boundaries, read the [architecture notes](.audit/arch/synthesis.md).
 
 For a bug report, include the browser, guest distribution, and commands that
 reproduce it. For a change, describe what someone can do or observe in the lab.
+If people would notice it, also add an entry to [What’s new](src/ui/whats-new/updates.ts).
 [Open an issue](https://github.com/gregbell/unlab/issues) ·
 [Open a pull request](https://github.com/gregbell/unlab/compare)
 
