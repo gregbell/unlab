@@ -34,7 +34,8 @@ click the cable above port 2. Ping again, then click the cable to reconnect it.
 
 Open the command bar with `⌘K` on macOS or `Ctrl+/` elsewhere. It completes
 commands as you type and previews their effects. Run Linux commands directly in
-a guest console, or use `exec` in the bar to address a guest by name.
+a guest console, or use `exec` in the bar to address a guest by name. `help` lists
+every command, and `help spawn` explains one, with its options and an example.
 
 | Command bar example                          | What it does                                                                                                                           |
 | -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
@@ -59,6 +60,7 @@ a guest console, or use `exec` in the bar to address a guest by name.
 | `restore node2 before`                       | Put the disks back as they were at the checkpoint and boot, after a confirmation.                                                      |
 | `forget node2 before`                        | Delete the checkpoint and free its storage, after a confirmation.                                                                      |
 | `rm node2`                                   | Remove the machine and delete its disks and its checkpoints, after a confirmation that lists them.                                     |
+| `help reboot`                                | Explain a command. `help` alone lists them all.                                                                                        |
 
 Commands that accept multiple machines can take a list (`node1,node3`), a glob
 (`node*`), or `all`. Globs and `all` select the machines that the command can act
@@ -144,7 +146,7 @@ When you are done, turn remote debugging off.
 ### Connect a browser extension
 
 1. [Open the lab](https://unlab.run/) in Chrome. The bottom right
-   reads `webmcp: 13 tools registered`.
+   reads `webmcp: 15 tools registered`.
 2. To see a call without an agent, click that text, then click **try a call**. The
    call and its result appear in the panel.
 3. Install
@@ -168,6 +170,7 @@ them. Your choices survive a reload.
 
 | Tool                 | What it does                             | Default  |
 | -------------------- | ---------------------------------------- | -------- |
+| `lab_help`           | Explain the commands and the tools.      | `run`    |
 | `machines_list`      | List machines, addresses, links, disks.  | `run`    |
 | `machines_spawn`     | Boot machines.                           | `ask me` |
 | `machines_boot`      | Boot machines that are off or failed.    | `run`    |
