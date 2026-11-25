@@ -23,3 +23,7 @@ ts	phase	decision	why	evidence	result
 2026-11-25T00:17:14Z	disks	an approval runs only while the command would still ask the same	a reused name could otherwise be removed by an old yes	src/commands/define.ts changedSinceAsked	fixed
 2026-11-25T00:17:14Z	disks	formatting with tools already in the image is not met on stock images	Alpine and Debian ship no formatter for a file system the kernel mounts	.audit/phase1-stories.md 2.1	open, carried to the lab image
 2026-11-25T00:17:14Z	disks	known corner left open: wiping the root disk's label while an extra carries it makes the image mount the extra	no safe fix from the page was found	disks worker report	open
+2026-11-25T03:44:23Z	disks	merged PR 11	CI green: 34 integration, 265 browser, 41 e2e	PR 11; Actions run 45516912501	merged
+2026-11-25T03:44:23Z	power	a worker built reboot and power off; I read the runtime, engine and lifecycle reducer	stories 5.1, 5.2 and the waiting boxes of 2.2 and 4.1	PR for phase1/06-power	worker reports all gates exit 0; CI pending
+2026-11-25T03:44:23Z	power	boot, reboot and poweroff run without asking by default	they destroy no disk, and shell_exec, which already runs, can type reboot	src/model/update.ts DEFAULT_POLICIES	a preference the user may change
+2026-11-25T03:44:23Z	image	the user approved hosting the lab image as a GitHub release	asked before publishing under their name	user message 2026-11-25	approved
