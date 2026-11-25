@@ -1,5 +1,5 @@
 import "./capture.css";
-import "../wire/frame-detail.ts";
+import "./frame-detail.ts";
 import { html, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { live } from "lit/directives/live.js";
 import { createRef, type Ref, ref } from "lit/directives/ref.js";
@@ -7,16 +7,13 @@ import { repeat } from "lit/directives/repeat.js";
 import type { CaptureRow, FrameRow, LinkRow, RouteEnd } from "../../capture/index.ts";
 import { selectNames, type UiEvent } from "../../model/index.ts";
 import { compileFilter, EVERYONE, toPcap } from "../../net/index.ts";
-import { Select, UnlabElement } from "../base/index.ts";
+import { clearIcon, pauseIcon, resumeIcon, Select, UnlabElement, windowButtons } from "../base/index.ts";
 import { FollowCapture } from "./follow.ts";
 
 export type CaptureMode = "dock" | "full";
 
-/** The id of the app's dock, which the dock's hide button controls. */
-export const DOCK_ID = "unlab-dock";
-
 const DOCK_ROWS = 8;
-/** Row height in Wire. Every row, event rows too, is this tall, so the list can place any row by arithmetic. */
+/** Row height in the full list. Every row, event rows too, is this tall, so the list can place any row by arithmetic. */
 const ROW = 26;
 /** Rows rendered beyond each edge of the viewport, so a fast scroll does not show blank. */
 const OVERSCAN = 8;
@@ -35,10 +32,10 @@ function endText(end: RouteEnd): string {
 }
 
 /**
- * The capture: a toolbar, the rows and the counters. `dock` shows the last
- * eight rows. `full` is Wire's: the whole buffer, virtualised, with the
- * match count, Save .pcap, a selection the arrow keys move and the frame
- * detail beside it.
+ * The capture: a toolbar, the rows and the counters. `dock`, under the panes,
+ * shows the last eight rows, each cut to the width there is. `full` is the
+ * maximised panel: the whole buffer, virtualised, with the match count, Save
+ * .pcap, a selection the arrow keys move and the frame detail beside it.
  *
  * It reads frames from the capture while it renders and never copies them
  * into state; `capture.revision` decides when to render. The list is not a
@@ -52,6 +49,8 @@ export class UnlabCapture extends UnlabElement {
 	readonly #machines = new Select(this, (s) => s.machines);
 	readonly #names = new Select(this, selectNames);
 	readonly #scroller: Ref<HTMLElement> = createRef();
+	/** The full list's scroller, while there is one. */
+	#observed: HTMLElement | null = null;
 	#resize: ResizeObserver | null = null;
 	#viewport = 0;
 	#scrollTop = 0;
@@ -66,8 +65,7 @@ export class UnlabCapture extends UnlabElement {
 
 	override disconnectedCallback(): void {
 		super.disconnectedCallback();
-		this.#resize?.disconnect();
-		this.#resize = null;
+		this.#observe(null);
 	}
 
 	override render(): TemplateResult {
@@ -82,56 +80,61 @@ export class UnlabCapture extends UnlabElement {
 		return html`<div class="toolbar">
 				<span class="title">capture</span>
 				<span class="status" data-paused=${paused}>${paused ? "paused" : "live"}</span>
-				${full ? nothing : html`<span class="spacer"></span>`}
-				<label for="${id}-filter" class="filter-label">filter</label>
+				<span class="spacer"></span>
+				<label for="${id}-filter" class="visually-hidden">filter</label>
 				<input
 					id="${id}-filter"
 					class="field filter"
 					type="text"
 					autocomplete="off"
 					spellcheck="false"
-					placeholder="arp, icmp, node1…"
+					placeholder="filter: arp, icmp…"
 					aria-invalid=${compiled.ok ? "false" : "true"}
 					aria-describedby=${compiled.ok ? nothing : `${id}-filter-error`}
 					.value=${live(filter)}
 					@input=${(e: InputEvent) => this.#onFilter(e)}
 				/>
 				${compiled.ok ? nothing : html`<span id="${id}-filter-error" class="visually-hidden">${compiled.error.message}</span>`}
-				${full ? html`<span class="matches">${capture.matchedFrames} of ${capture.frameCount} frames</span><span class="spacer"></span>` : nothing}
-				<button type="button" class="button" @click=${() => this.#dispatch({ type: "ui/capture-pause", paused: !paused })}>
-					${paused ? "resume" : "pause"}
+				${full ? html`<span class="matches">${capture.matchedFrames} of ${capture.frameCount} frames</span>` : nothing}
+				<button
+					type="button"
+					class="button"
+					title=${paused ? "Resume" : "Pause"}
+					@click=${() => this.#dispatch({ type: "ui/capture-pause", paused: !paused })}
+				>
+					${paused ? resumeIcon : pauseIcon}<span class="label">${paused ? "resume" : "pause"}</span>
 				</button>
-				<button type="button" class="button" @click=${() => this.#dispatch({ type: "ui/capture-clear" })}>clear</button>
-				${
-					full
-						? html`<button type="button" class="button" @click=${this.#save}>save .pcap</button>`
-						: html`<a class="expand" href="#wire" @click=${this.#expand}>expand</a>
-								<button
-									type="button"
-									class="button"
-									aria-expanded="true"
-									aria-controls=${DOCK_ID}
-									@click=${() => this.#dispatch({ type: "ui/dock", dock: "collapsed" })}
-								>
-									hide
-								</button>`
-				}
+				<button type="button" class="button" title="Clear" @click=${() => this.#dispatch({ type: "ui/capture-clear" })}>
+					${clearIcon}<span class="label">clear</span>
+				</button>
+				${full ? html`<button type="button" class="button" @click=${this.#save}>save .pcap</button>` : nothing}
+				<span class="window">${windowButtons("capture", full, {
+					maximise: () => this.#dispatch({ type: "ui/panel-maximised", panel: "capture" }),
+					park: () => this.#dispatch({ type: "ui/panel-parked", panel: "capture" }),
+				})}</span>
 			</div>
 			${full ? html`<div class="body"><div class="list-column">${list}</div><unlab-frame-detail></unlab-frame-detail></div>` : list}`;
 	}
 
 	protected override updated(changed: PropertyValues<this>): void {
 		super.updated(changed);
-		const scroller = this.#scroller.value;
+		const scroller = this.#scroller.value ?? null;
+		if (scroller !== this.#observed) this.#observe(scroller);
+		if (scroller && this.#following) scroller.scrollTop = scroller.scrollHeight;
+	}
+
+	/** Each time the panel is maximised it has a new list, which starts at its newest row. */
+	#observe(scroller: HTMLElement | null): void {
+		this.#resize?.disconnect();
+		this.#resize = null;
+		this.#observed = scroller;
+		this.#following = true;
 		if (!scroller) return;
-		if (!this.#resize) {
-			this.#resize = new ResizeObserver(() => {
-				this.#viewport = scroller.clientHeight;
-				this.requestUpdate();
-			});
-			this.#resize.observe(scroller);
-		}
-		if (this.#following) scroller.scrollTop = scroller.scrollHeight;
+		this.#resize = new ResizeObserver(() => {
+			this.#viewport = scroller.clientHeight;
+			this.requestUpdate();
+		});
+		this.#resize.observe(scroller);
 	}
 
 	#dockList(): TemplateResult {
@@ -218,7 +221,7 @@ export class UnlabCapture extends UnlabElement {
 				>${this.#end(row.from)} <span>→</span> ${this.#end(row.to)}</span
 			>
 			${full ? html`<span class="len">${row.len}</span>` : nothing}
-			<span class="info">${row.info}${row.note ? html`<span class="note"> · ${row.note}</span>` : nothing}</span>
+			<span class="info" title=${full ? nothing : row.info + (row.note ? ` · ${row.note}` : "")}>${row.info}${row.note ? html`<span class="note"> · ${row.note}</span>` : nothing}</span>
 		</div>`;
 	}
 
@@ -239,7 +242,7 @@ export class UnlabCapture extends UnlabElement {
 			data-up=${row.up}
 		>
 			<span class="time">${row.time}</span>
-			<span class="text" title=${row.cause}>${row.text}. ${row.cause}</span>
+			<span class="text" title=${`${row.text}. ${row.cause}`}>${row.text}. ${row.cause}</span>
 		</div>`;
 	}
 
@@ -266,11 +269,6 @@ export class UnlabCapture extends UnlabElement {
 	#select(seq: number | null): void {
 		this.#dispatch({ type: "ui/frame-selected", seq });
 	}
-
-	readonly #expand = (event: Event): void => {
-		event.preventDefault();
-		this.#dispatch({ type: "ui/view", view: "wire" });
-	};
 
 	/** The whole buffer, ignoring the filter, timestamped on the wall clock. */
 	readonly #save = (): void => {

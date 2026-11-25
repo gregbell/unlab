@@ -3,11 +3,11 @@ import { html, nothing, type TemplateResult } from "lit";
 import { selectPorts, severalNics } from "../../model/index.ts";
 import { EVERYONE } from "../../net/index.ts";
 import { Select, UnlabElement } from "../base/index.ts";
-import { FollowCapture } from "../capture/follow.ts";
+import { FollowCapture } from "./follow.ts";
 import { type DetailField, frameDetail, type Words } from "./frame-detail-model.ts";
 
 /**
- * Wire's decode of the selected frame: its header line, the ethernet group,
+ * The decode of the selected frame: its header line, the ethernet group,
  * the protocol group, what switch0 did, and the bytes. A machine named
  * anywhere here takes its hue while it exists.
  */

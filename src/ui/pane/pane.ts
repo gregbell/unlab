@@ -12,7 +12,7 @@ import {
 	selectRail,
 	sessionLabel,
 } from "../../model/index.ts";
-import { Select, UnlabElement } from "../base/index.ts";
+import { Select, UnlabElement, windowButtons } from "../base/index.ts";
 
 type Tone = "address" | "booting" | "down";
 
@@ -56,7 +56,10 @@ export class UnlabPane extends UnlabElement {
 	readonly #word = new Select(this, (s) => selectRail(s).find((row) => row.name === this.machine)?.word);
 	/** Holds the keyboard right now. While the bar is open nothing in a pane does. */
 	readonly #keyboard = new Select(this, (s) => s.keyboard.kind === "pane" && s.keyboard.machine === this.machine);
-	readonly #shown = new Select(this, (s) => s.view === "lab" && s.panes.parked[this.machine] === undefined);
+	readonly #shown = new Select(
+		this,
+		(s) => s.view === "lab" && s.panels.maximised === null && s.panes.parked[this.machine] === undefined,
+	);
 	readonly #maximised = new Select(this, (s) => s.panes.maximised?.machine === this.machine);
 	readonly #sessions = new Select(this, (s) => s.sessions);
 	readonly #agentPanel = new Select(this, (s) => s.agentPanel);
@@ -110,18 +113,7 @@ export class UnlabPane extends UnlabElement {
 				<span class="fill"></span>
 				${legend ? html`<span class="legend"><span class="swatch"></span>blue rule: sent by the agent</span>` : nothing}
 				<span class="word" data-tone=${right.tone}>${right.text}</span>
-				<button
-					type="button"
-					class="icon"
-					aria-label="Maximise ${name}"
-					aria-pressed=${this.#maximised.value ? "true" : "false"}
-					@click=${this.#maximise}
-				>
-					<svg aria-hidden="true" width="12" height="12" viewBox="0 0 12 12"><rect x="1.5" y="1.5" width="9" height="9"></rect></svg>
-				</button>
-				<button type="button" class="icon" aria-label="Park ${name}" @click=${this.#park}>
-					<svg aria-hidden="true" width="12" height="12" viewBox="0 0 12 12"><path d="M2 10h8"></path></svg>
-				</button>
+				${windowButtons(name, this.#maximised.value, { maximise: this.#maximise, park: this.#park })}
 			</div>
 			<div class="body" @click=${this.#onClick} @focusin=${takesKeys ? nothing : this.#refuseKeys}>
 				${repeat(

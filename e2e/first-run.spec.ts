@@ -31,8 +31,8 @@ for (const image of ["alpine", "debian"]) {
 				timeout: 60_000,
 			});
 		}
-		await expect(page.getByText("2 of 2 machines ready")).toBeVisible();
-		await expect(page.getByText("switch0: 2 of 2 links up")).toBeVisible();
+		await expect(page.getByText("2 of 2 ready")).toBeVisible();
+		await expect(page.getByText("2 of 2 links up")).toBeVisible();
 		await page.getByRole("button", { name: "Ping node2", exact: true }).click();
 		await expect(page.locator("#panel-node1-console")).toContainText(/(?:^|[ ,])0% packet loss/);
 		await expect(
@@ -40,7 +40,7 @@ for (const image of ["alpine", "debian"]) {
 		).toBeVisible();
 		await page.reload();
 		await expect(form).toHaveCount(0);
-		await expect(page.getByText("2 of 2 machines ready")).toBeVisible({ timeout: 60000 });
+		await expect(page.getByText("2 of 2 ready")).toBeVisible({ timeout: 60000 });
 		expect(errors).toEqual([]);
 	});
 }

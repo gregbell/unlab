@@ -102,7 +102,7 @@ test("deny, abort, off and pause, each as the handoff says", async ({ page }) =>
 	await panel.getByRole("button", { name: "Deny", exact: true }).click();
 	expect(await finish(page, "deny")).toEqual({ error: "Denied by the user." });
 	await expect(block).toHaveCount(0);
-	await expect(page.getByText("2 of 2 machines ready")).toBeVisible();
+	await expect(page.getByText("2 of 2 ready")).toBeVisible();
 
 	await start(page, "abort", "machines_spawn", { count: 1, image: "alpine" });
 	await expect(block).toContainText("Boot node3");
@@ -131,7 +131,7 @@ test("a yes removes only what it was asked about: not a machine that took the na
 	const changed = { error: "What this does to web has changed since it was asked, so ask again. Nothing was changed." };
 	await page.goto("/");
 	await expect(page.getByRole("heading", { name: "Your Linux lab in a tab." })).toBeVisible();
-	const ready = expect(page.getByText("1 of 1 machine ready"));
+	const ready = expect(page.getByText("1 of 1 ready"));
 	await typed(page, "spawn 1 alpine --name web");
 	await ready.toBeVisible({ timeout: 60_000 });
 	const approve = page.locator("unlab-agent-panel").getByRole("button", { name: "Remove web", exact: true });
@@ -199,7 +199,7 @@ for (const [where, width, height] of [
 		await expect(boot).toBeInViewport({ ratio: 1 });
 		await boot.click();
 		expect(await finish(page, "spawn")).toMatchObject({ data: { names: ["node1"] } });
-		await expect(page.getByText("1 of 1 machine ready")).toBeVisible({ timeout: 60_000 });
+		await expect(page.getByText("1 of 1 ready")).toBeVisible({ timeout: 60_000 });
 	});
 }
 

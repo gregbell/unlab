@@ -38,7 +38,7 @@ test("extra disks are blank and sized as asked, take a partition and a file syst
 }) => {
 	await openLab(page);
 	await typed(page, "spawn 1 alpine --extra-disk 1,2");
-	await ready(page, "1 of 1 machine ready");
+	await ready(page, "1 of 1 ready");
 
 	expect(await sizes(page, 1)).toMatchObject({ wdb: 4 * KIB * KIB, wdc: KIB * KIB, wdd: 2 * KIB * KIB });
 	expect(await sizes(page, 1)).not.toHaveProperty("wde");
@@ -79,13 +79,13 @@ test("extra disks are blank and sized as asked, take a partition and a file syst
 		expect(await root(page, 1, "dd if=/dev/wdd bs=1M skip=100 count=1 2>/dev/null | head -c 3")).toBe("raw");
 	};
 	await page.reload();
-	await ready(page, "1 of 1 machine ready");
+	await ready(page, "1 of 1 ready");
 	await held();
 
 	await crash(page, 1);
 	await expect(details).toContainText("failed", { timeout: 60_000 });
 	await typed(page, "boot node1");
-	await ready(page, "1 of 1 machine ready");
+	await ready(page, "1 of 1 ready");
 	await held();
 });
 
@@ -94,7 +94,7 @@ test("rm lists every disk it deletes, once, and what a reload cut short is delet
 	await typed(page, "spawn 1 alpine --no-net --extra-disk 1,16");
 	await typed(page, "spawn 1 alpine --no-net --extra-disk 64");
 	await typed(page, "spawn 1 alpine --no-net");
-	await ready(page, "3 of 3 machines ready");
+	await ready(page, "3 of 3 ready");
 	expect(await databases(page)).toEqual([...kept(1, 2), ...kept(2, 1), ...kept(3)].sort());
 
 	await typed(page, "rm node1");
@@ -116,7 +116,7 @@ test("rm lists every disk it deletes, once, and what a reload cut short is delet
 	await expect(page.locator("unlab-pane[machine=node2]")).toHaveCount(0);
 	expect(await databases(page)).toEqual(expect.arrayContaining(kept(2, 1)));
 	await page.reload();
-	await ready(page, "1 of 1 machine ready");
+	await ready(page, "1 of 1 ready");
 	const left = [...kept(3), "kwdisk:unlab-node9.extra2-v1", "kwdisk:unlab-notes"].sort();
 	await expect.poll(() => databases(page)).toEqual(left);
 	expect(await sizes(page, 3)).toHaveProperty("wdb", 4 * KIB * KIB);
@@ -179,13 +179,13 @@ for (const [device, file] of [
 		await openLab(page);
 		await limitStorage(page, 8e6);
 		await typed(page, "spawn 1 alpine --no-net --extra-disk 1");
-		await ready(page, "1 of 1 machine ready");
+		await ready(page, "1 of 1 ready");
 		await shell(page, 1, `sudo sh -c "dd if=/dev/urandom of=${file} bs=1M count=32; sync"`).catch(() => {});
 		await outOfStorage(page, "node1", device);
 
 		await limitStorage(page);
 		await typed(page, "boot node1");
-		await ready(page, "1 of 1 machine ready");
+		await ready(page, "1 of 1 ready");
 	});
 }
 

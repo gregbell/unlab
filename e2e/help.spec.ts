@@ -112,7 +112,7 @@ test("an example from help runs as it stands, typed or called", async ({ page })
 	await openLab(page);
 	const { data } = (await call(page, "lab_help", { verb: "spawn" })) as Told;
 	await typed(page, data.example.line);
-	await expect(page.getByText("1 of 1 machine ready")).toBeVisible({ timeout: 60_000 });
+	await expect(page.getByText("1 of 1 ready")).toBeVisible({ timeout: 60_000 });
 	expect(await call(page, "machines_list", {})).toMatchObject({
 		data: [{ name: "router", state: "ready", nics: [{ address: "10.1.0.1" }, { address: "10.2.0.1" }] }],
 	});
@@ -124,7 +124,7 @@ test("an example from help runs as it stands, typed or called", async ({ page })
 test("a command for a session that runs a program says so, in the bar and to an agent", async ({ page }) => {
 	await openLab(page);
 	await typed(page, "spawn 1 alpine");
-	await expect(page.getByText("1 of 1 machine ready")).toBeVisible({ timeout: 60_000 });
+	await expect(page.getByText("1 of 1 ready")).toBeVisible({ timeout: 60_000 });
 	await start(page, "sleep", "shell_exec", { targets: "node1", command: "sleep 8" });
 	const called = async () =>
 		((await call(page, "shell_exec", { targets: "node1", command: "true" })) as { readonly error?: string }).error;
@@ -147,7 +147,7 @@ async function refused(page: Page, line: string): Promise<string> {
 test("what cannot run is refused in one sentence, the same in the bar and through WebMCP", async ({ page }) => {
 	await openLab(page);
 	await typed(page, "spawn 2 alpine --no-gateway");
-	await expect(page.getByText("2 of 2 machines ready")).toBeVisible({ timeout: 60_000 });
+	await expect(page.getByText("2 of 2 ready")).toBeVisible({ timeout: 60_000 });
 	expect(await call(page, "machines_poweroff", { names: "node2" })).toMatchObject({ data: [{ state: "off" }] });
 
 	const rows: readonly (readonly [line: string, tool: string, input: object, sentence: string])[] = [
@@ -234,9 +234,9 @@ test("what cannot run is refused in one sentence, the same in the bar and throug
 test("the bar completes and previews each verb and option as it does spawn", async ({ page }) => {
 	await openLab(page);
 	await typed(page, "spawn 1 alpine --nics 2 --no-gateway");
-	await expect(page.getByText("1 of 1 machine ready")).toBeVisible({ timeout: 60_000 });
+	await expect(page.getByText("1 of 1 ready")).toBeVisible({ timeout: 60_000 });
 	await typed(page, "spawn 1 alpine --name web --no-gateway");
-	await expect(page.getByText("2 of 2 machines ready")).toBeVisible({ timeout: 60_000 });
+	await expect(page.getByText("2 of 2 ready")).toBeVisible({ timeout: 60_000 });
 	expect(await call(page, "checkpoint_save", { machine: "node1", checkpoint: "before" })).not.toHaveProperty("error");
 	expect(await call(page, "machines_poweroff", { names: "web" })).toMatchObject({ data: [{ state: "off" }] });
 
@@ -270,7 +270,7 @@ test("the bar completes and previews each verb and option as it does spawn", asy
 		["poweroff ", "node1", "power off node1"],
 		["link down node1:", "node1:eth1", "cut the cable to node1:eth0"],
 		["link down node1:eth1", null, "cut the cable to node1:eth1"],
-		["capture node1:eth1", null, "show frames matching node1:eth1 in Wire"],
+		["capture node1:eth1", null, "show captured frames matching node1:eth1"],
 		["checkpoint ", "web"],
 		["checkpoint web now", null, "save web's disk as checkpoint now"],
 		["restore node1 ", "before", "put node1's disk back to checkpoint before and boot it"],

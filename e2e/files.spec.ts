@@ -11,7 +11,7 @@ test.use({
 	launchOptions: { executablePath: chromiumExecutable(), args: ["--enable-features=WebMCP"] },
 });
 
-async function openLab(page: Page, line = "spawn 1 alpine", ready = "1 of 1 machine ready"): Promise<void> {
+async function openLab(page: Page, line = "spawn 1 alpine", ready = "1 of 1 ready"): Promise<void> {
 	await page.goto("/");
 	await expect(page.getByRole("heading", { name: "Your Linux lab in a tab." })).toBeVisible();
 	await typed(page, line);
@@ -111,7 +111,7 @@ for (const image of ["alpine", "debian"]) {
 		// The last thing before the reload, so nothing but the write itself puts it on the disk.
 		await wrote(page, { path: "/etc/late/note", text: QUOTED, mode: "640" });
 		await page.reload();
-		await status(page, "1 of 1 machine ready");
+		await status(page, "1 of 1 ready");
 		expect(await sum(page, "/etc/late/note")).toBe(sha256(QUOTED));
 		expect(await stat("/etc/late/note")).toBe("root:root 640");
 		expect(await sum(page, "/srv/a/b/largest")).toBe(sha256(largest));
@@ -241,14 +241,14 @@ test("a file system with no room, or that is read-only, is named, and what is th
 });
 
 test("a machine that is not ready is refused with its state", async ({ page }) => {
-	await openLab(page, "spawn 2 alpine", "2 of 2 machines ready");
+	await openLab(page, "spawn 2 alpine", "2 of 2 ready");
 	const said = async (machine: string) =>
 		((await put(page, { path: "/etc/motd", text: "a" }, machine)) as { error: string }).error;
 	await typed(page, "spawn 1 alpine");
 	expect(await said("node3")).toBe(
 		"write wants a ready machine here, and node3 is still booting. Nothing was changed.",
 	);
-	await status(page, "3 of 3 machines ready");
+	await status(page, "3 of 3 ready");
 	await root(page, 2, "dd if=/dev/urandom of=/root/filler bs=1M count=100 2>/dev/null; sync");
 	expect(await call(page, "checkpoint_save", { machine: "node2", checkpoint: "before" })).toHaveProperty("data");
 	await typed(page, "restore node2 before");
@@ -278,7 +278,7 @@ test("a host table that comes while an agent writes /etc/hosts is in it afterwar
 	await start(page, "write", "file_write", { machine: "node1", path: "/etc/hosts", text: "10.88.0.99 mine\n" });
 	await writing(page);
 	await typed(page, "spawn 1 alpine");
-	await status(page, "2 of 2 machines ready");
+	await status(page, "2 of 2 ready");
 	expect(await root(page, 1, "cat /etc/hosts"), "the write is not over").not.toContain("mine");
 	expect(await finish(page, "write")).toHaveProperty("data");
 	await expect.poll(() => root(page, 1, "cat /etc/hosts")).toContain("10.88.0.12 node2");
@@ -291,8 +291,8 @@ test("a machine that goes down or comes back while it writes a file says so, and
 	await openLab(page);
 	await root(page, 1, "echo old > /etc/motd");
 	for (const [line, why, back] of [
-		["reboot node1", "rebooted", "1 of 1 machine ready"],
-		["poweroff node1", "powered off", "0 of 1 machine ready, 1 off"],
+		["reboot node1", "rebooted", "1 of 1 ready"],
+		["poweroff node1", "powered off", "0 of 1 ready, 1 off"],
 	]) {
 		await slow(page, 20);
 		await start(page, "write", "file_write", { machine: "node1", path: "/etc/motd", text: "new\n" });
@@ -304,7 +304,7 @@ test("a machine that goes down or comes back while it writes a file says so, and
 		await status(page, back);
 		if (why === "powered off") {
 			await typed(page, "boot node1");
-			await status(page, "1 of 1 machine ready");
+			await status(page, "1 of 1 ready");
 		}
 		expect(await root(page, 1, "cat /etc/motd; ls -A /etc | grep unlab || echo none")).toBe("old\nnone");
 	}

@@ -32,7 +32,7 @@ describe("dispatch", () => {
 		expect(store.state).toMatchObject({
 			agentPanel: true,
 			now: 5,
-			view: "wire",
+			panels: { maximised: null },
 			capture: { filter: "arp" },
 			agent: { firstCallAt: 5 },
 		});
@@ -63,7 +63,7 @@ describe("subscribers", () => {
 		store.dispatchRuntime({ type: "vm/stopped", machine: "node9", attempt: 1, clean: true, at: 0 });
 		store.dispatchUi({ type: "ui/view", view: "lab" });
 		expect(told).toBe(0);
-		store.dispatchUi({ type: "ui/view", view: "wire" });
+		store.dispatchUi({ type: "ui/view", view: "spawn" });
 		expect(told).toBe(1);
 	});
 
@@ -84,7 +84,7 @@ describe("subscribers", () => {
 		});
 		stopSecond.now = store.subscribe(() => heard.push("second"));
 		const stopThird = store.subscribe(() => heard.push("third"));
-		store.dispatchUi({ type: "ui/view", view: "wire" });
+		store.dispatchUi({ type: "ui/view", view: "spawn" });
 		expect(heard).toEqual(["first", "third"]);
 		stopThird();
 		stopThird();
@@ -100,7 +100,7 @@ describe("subscribers", () => {
 		const store = createStore(emptyLab(), noEffects);
 		const stop = store.subscribe(listener);
 		store.subscribe(listener);
-		store.dispatchUi({ type: "ui/view", view: "wire" });
+		store.dispatchUi({ type: "ui/view", view: "spawn" });
 		expect(told).toBe(2);
 		stop();
 		store.dispatchUi({ type: "ui/view", view: "lab" });
@@ -161,10 +161,10 @@ describe("re-entrant dispatch", () => {
 		store.subscribe(() => {
 			log.push(`told: ${store.state.view}`);
 			if (store.state.rail.length === 1 && store.state.view === "lab")
-				store.dispatchUi({ type: "ui/view", view: "wire" });
+				store.dispatchUi({ type: "ui/view", view: "spawn" });
 		});
 		store.dispatchCommand(spawnEvent(store.state, 1, { net: "none" }));
-		expect(log).toEqual(["told: lab", "screen/create", "vm/boot", "clock", "told: wire"]);
+		expect(log).toEqual(["told: lab", "screen/create", "vm/boot", "clock", "told: spawn"]);
 	});
 });
 
@@ -186,7 +186,7 @@ describe("until", () => {
 		store.dispatchCommand(remove("node1"));
 		store.dispatchRuntime({ type: "vm/stopped", machine: "node1", attempt: 1, clean: true, at: 0 });
 		const settledWith = store.state;
-		store.dispatchUi({ type: "ui/view", view: "wire" });
+		store.dispatchUi({ type: "ui/view", view: "spawn" });
 		await expect(waiting).resolves.toBe(settledWith);
 		expect(checks).toBe(3);
 	});
@@ -202,7 +202,7 @@ describe("until", () => {
 		const reason = new Error("the agent gave up");
 		abort.abort(reason);
 		await expect(waiting).rejects.toBe(reason);
-		store.dispatchUi({ type: "ui/view", view: "wire" });
+		store.dispatchUi({ type: "ui/view", view: "spawn" });
 		expect(checks).toBe(1);
 	});
 
@@ -224,13 +224,13 @@ describe("until", () => {
 		const store = createStore(emptyLab(), noEffects);
 		const signal = new AbortController().signal;
 		const broken = store.until((state) => {
-			if (state.view === "wire") throw new Error("bad predicate");
+			if (state.view === "spawn") throw new Error("bad predicate");
 			return false;
 		}, signal);
-		const fine = store.until((state) => state.view === "wire", signal);
-		store.dispatchUi({ type: "ui/view", view: "wire" });
+		const fine = store.until((state) => state.view === "spawn", signal);
+		store.dispatchUi({ type: "ui/view", view: "spawn" });
 		await expect(broken).rejects.toThrow("bad predicate");
-		await expect(fine).resolves.toMatchObject({ view: "wire" });
+		await expect(fine).resolves.toMatchObject({ view: "spawn" });
 	});
 });
 
@@ -266,8 +266,8 @@ describe("a throwing subscriber or effect", () => {
 		});
 		expect(() => store.dispatchUi({ type: "ui/capture-clear" })).toThrow(failure);
 		fail = false;
-		store.dispatchUi({ type: "ui/view", view: "wire" });
-		expect(store.state.view).toBe("wire");
+		store.dispatchUi({ type: "ui/view", view: "spawn" });
+		expect(store.state.view).toBe("spawn");
 	});
 });
 
@@ -285,7 +285,7 @@ describe("a notification schedule", () => {
 		const waiting = store.until((state) => state.rail.length === 2, new AbortController().signal);
 
 		store.dispatchCommand(spawnEvent(store.state, 2, { net: "none" }));
-		store.dispatchUi({ type: "ui/view", view: "wire" });
+		store.dispatchUi({ type: "ui/view", view: "spawn" });
 		store.dispatchRuntime({ type: "tick", now: 100 });
 
 		expect(ran).toEqual(["screen/create", "vm/boot", "screen/create", "vm/boot", "clock"]);
@@ -311,8 +311,8 @@ describe("a notification schedule", () => {
 		});
 		let told = 0;
 		store.subscribe(() => told++);
-		expect(() => store.dispatchUi({ type: "ui/view", view: "wire" })).toThrow("no animation frame");
-		expect(store.state.view).toBe("wire");
+		expect(() => store.dispatchUi({ type: "ui/view", view: "spawn" })).toThrow("no animation frame");
+		expect(store.state.view).toBe("spawn");
 		broken = false;
 		store.dispatchUi({ type: "ui/view", view: "lab" });
 		pending.splice(0).forEach((flush) => {

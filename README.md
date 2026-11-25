@@ -23,12 +23,14 @@ the tab before launching the app so it can open that lab.
 2. Select **Ping node2**. The replies appear in the `node1` console. In the
    capture below it, the first ARP request asks who has `10.88.0.12`. The ICMP
    echo requests and replies follow.
-3. Select **expand** in the capture to open the Wire view. Select a frame to
+3. Maximise the capture with the square at its top right. Select a frame to
    inspect its headers, or choose **save .pcap** to download a capture you can
    open in Wireshark.
 
 To see what a broken link looks like, press `Esc` to return to the consoles and
 click the cable above port 2. Ping again, then click the cable to reconnect it.
+Park a panel with the dash at its top right. Its name then waits in the bar at
+the bottom: click it to bring the panel back.
 
 ## Lab commands
 
@@ -50,7 +52,7 @@ every command, and `help spawn` explains one, with its options and an example.
 | `exec node1 -- ping -c 1 10.88.0.12`         | Send one ping from node1 and read the exit code from its shell.                                                                        |
 | `write node1 /etc/motd --mode 644 -- hello`  | Put a text in a file on the machine, as root, with the directories it needs. `--owner user:group` sets whose it is.                    |
 | `link down node2`                            | Cut node2's cables, whether it is on or off. Reconnect them with `link up node2`. Name one of several with `node2:eth1`.               |
-| `capture arp or node2`                       | Open the Wire view with a filter for ARP or traffic involving node2. `node2:eth1` keeps one interface's frames.                        |
+| `capture arp or node2`                       | Maximise the capture with a filter for ARP or traffic involving node2. `node2:eth1` keeps one interface's frames.                      |
 | `sh node2`                                   | Open another shell on node2.                                                                                                           |
 | `focus node2 --max`                          | Maximise or restore its pane. Use `--main` to promote it to the main pane.                                                             |
 | `reboot node2`                               | Shut the machine down and boot it again, with its disks, name, addresses, and cables. `reboot` typed in the guest does the same.       |
@@ -302,7 +304,7 @@ The lab image is Alpine with packages installed. It is a
 
 Each guest runs in its own worker. When Linux sends an Ethernet frame, the
 [virtual switch](src/runtime/switch.ts) forwards it and the
-[capture](src/capture/) records it. The Wire view decodes those same bytes.
+[capture](src/capture/) records it. The capture panel decodes those same bytes.
 Terminal output goes straight to the terminal, so the UI can update the capture
 once per animation frame.
 

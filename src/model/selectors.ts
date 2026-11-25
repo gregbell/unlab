@@ -31,7 +31,6 @@ import {
 	type Plug,
 	PORTS,
 	type PortNo,
-	SWITCH_NAME,
 } from "./types.ts";
 import { clockHz } from "./update.ts";
 
@@ -366,7 +365,7 @@ export interface LinkCount {
 	readonly cut: number;
 }
 
-/** The numbers in `2 of 3 links up`, for the faceplate header and the status line. */
+/** The numbers in `2 of 3 links up`, for the faceplate header and the panel bar. */
 export const selectLinks: (state: LabState) => LinkCount = memo(
 	(s) => [s.machines, s.rail],
 	(machines, rail) => {
@@ -405,9 +404,9 @@ export function selectAgentIndicator(state: LabState): AgentIndicator {
 }
 
 export interface StatusSegment {
-	readonly key: "machines" | "sessions" | "links" | "webmcp";
+	readonly key: "machines" | "sessions" | "webmcp";
 	readonly text: string;
-	/** `quiet` when all is well, `down` for a failed machine or a cut cable, `warn` while a call waits or the browser blocks the tools. */
+	/** `quiet` when all is well, `down` for a failed machine, `warn` while a call waits or the browser blocks the tools. */
 	readonly tone: "quiet" | "down" | "warn";
 }
 
@@ -420,7 +419,7 @@ function machinesSegment(machines: readonly Machine[]): StatusSegment {
 	const count = (phase: Phase): number => machines.filter((machine) => machine.life.phase === phase).length;
 	const total = machines.length - count("removing");
 	if (total === 0) return { key: "machines", text: "0 machines", tone: "quiet" };
-	const parts = [`${count("ready")} of ${plural(total, "machine")} ready`];
+	const parts = [`${count("ready")} of ${total} ready`];
 	if (count("booting") > 0) parts.push(`${count("booting")} booting`);
 	if (count("restoring") > 0) parts.push(`${count("restoring")} restoring`);
 	if (count("stopping") > 0) parts.push(`${count("stopping")} stopping`);
@@ -441,21 +440,13 @@ function webmcpSegment(agent: LabState["agent"], indicator: AgentIndicator): Sta
 }
 
 export const selectStatus: (state: LabState) => StatusLine = memo(
-	(s) => [s.machines, s.rail, s.sessions, s.agent, selectAgentIndicator(s), selectLinks(s)],
-	(machines, rail, sessions, agent, indicator, links) => {
+	(s) => [s.machines, s.rail, s.sessions, s.agent, selectAgentIndicator(s)],
+	(machines, rail, sessions, agent, indicator) => {
 		const list = machineList({ machines, rail });
 		const live = list.filter((machine) => machine.life.phase === "booting" || machine.life.phase === "ready");
 		const open = live.flatMap((machine) => machine.sessions).filter((id) => sessions[id]?.state === "open").length;
-		const left: StatusSegment[] = [
-			machinesSegment(list),
-			{ key: "sessions", text: `${open} open ${open === 1 ? "session" : "sessions"}`, tone: "quiet" },
-		];
-		if (links.total > 0) {
-			const text = `${SWITCH_NAME}: ${links.up} of ${plural(links.total, "link")} up`;
-			left.push({ key: "links", text, tone: links.cut > 0 ? "down" : "quiet" });
-		}
 		return {
-			left,
+			left: [machinesSegment(list), { key: "sessions", text: plural(open, "session"), tone: "quiet" }],
 			right: [webmcpSegment(agent, indicator)],
 		};
 	},

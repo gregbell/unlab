@@ -5,8 +5,8 @@
 	@scope (unlab-capture) to (unlab-frame-detail) {
 		:scope {
 			--row: 22px;
-			--columns: 62px 40px 176px minmax(0, 1fr);
-			--track-min: 620px;
+			--columns: 56px 40px 160px minmax(0, 1fr);
+			--track-min: 0;
 			display: flex;
 			flex-direction: column;
 			min-width: 0;
@@ -17,25 +17,55 @@
 			--row: 26px;
 			--columns: 62px 40px 176px 34px minmax(0, 1fr);
 			--track-min: 700px;
-			gap: var(--panel-gap);
-			background: transparent;
 		}
 
+		/* Always one line: the filter gives way first, then the buttons drop their words. */
 		.toolbar {
+			container-type: inline-size;
 			display: flex;
-			flex-wrap: wrap;
+			flex: none;
 			align-items: center;
-			gap: 4px 12px;
+			gap: 10px;
 			min-height: 34px;
-			padding: 4px var(--gutter);
+			padding: 4px 6px 4px var(--gutter);
 			border-bottom: 1px solid var(--line);
+			white-space: nowrap;
 		}
 
-		:scope[mode="full"] .toolbar {
-			background: var(--glass-panel);
-			gap: 6px 12px;
-			min-height: 40px;
-			border-bottom: 0;
+		.toolbar > :is(.title, .status, .button, .window) {
+			flex: none;
+		}
+
+		.window {
+			display: flex;
+			gap: 2px;
+		}
+
+		.label {
+			display: contents;
+		}
+
+		.toolbar .line-icon {
+			flex: none;
+		}
+
+		.button .line-icon {
+			display: none;
+		}
+
+		@container (width < 480px) {
+			.button .line-icon {
+				display: block;
+			}
+
+			.label {
+				position: absolute;
+				display: block;
+				width: 1px;
+				height: 1px;
+				overflow: hidden;
+				clip-path: inset(50%);
+			}
 		}
 
 		.title {
@@ -54,26 +84,21 @@
 			flex-grow: 1;
 		}
 
-		.filter-label,
 		.matches {
+			min-width: 0;
+			overflow: hidden;
 			color: var(--text-3);
+			text-overflow: ellipsis;
 		}
 
 		.filter {
-			width: 168px;
+			flex: 0 1 168px;
+			min-width: 52px;
 			border-color: var(--line);
 		}
 
-		:scope[mode="full"] .filter-label {
-			margin-left: 8px;
-		}
-
 		:scope[mode="full"] .filter {
-			flex: 0 1 300px;
-			width: auto;
-			min-width: 120px;
-			min-height: 26px;
-			border-color: var(--line-strong);
+			flex-basis: 300px;
 		}
 
 		.filter[aria-invalid="true"] {
@@ -85,16 +110,10 @@
 			padding-inline: 8px;
 		}
 
-		:scope[mode="full"] .button {
-			min-height: 26px;
-			padding-inline: 10px;
-		}
-
 		.body {
 			display: grid;
 			flex: 1 1 auto;
 			grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
-			gap: var(--panel-gap);
 			min-height: 0;
 		}
 
@@ -103,12 +122,14 @@
 			flex-direction: column;
 			min-width: 0;
 			min-height: 0;
-			background: var(--glass-panel);
 		}
 
-		/* Rows never wrap: a narrow region scrolls sideways instead. */
+		/*
+		 * Rows never wrap. The full list scrolls sideways. The dock's cuts them short: a scrollbar that came
+		 * and went with the rows would resize the terminals above.
+		 */
 		.rows {
-			overflow-x: auto;
+			overflow: hidden;
 			padding: 6px 0;
 		}
 
@@ -128,8 +149,18 @@
 			white-space: nowrap;
 		}
 
+		:scope[mode="dock"] .rows {
+			container-type: inline-size;
+		}
+
 		:scope[mode="dock"] .track {
 			min-height: calc(8 * var(--row));
+		}
+
+		@container (width < 480px) {
+			:scope[mode="dock"] .track {
+				--columns: 50px 34px 118px minmax(0, 1fr);
+			}
 		}
 
 		.track:focus-visible {
@@ -139,13 +170,13 @@
 		.row {
 			display: grid;
 			grid-template-columns: var(--columns);
-			gap: 0 14px;
+			gap: 0 12px;
 			align-items: center;
 			height: var(--row);
 			padding: 0 var(--gutter);
 		}
 
-		/* The info runs on past the row rather than clip; the list scrolls sideways to it. */
+		/* In the full list the info runs on past the row rather than clip; the list scrolls sideways to it. */
 		.row > span:not(.info) {
 			overflow: hidden;
 			text-overflow: ellipsis;
@@ -216,10 +247,15 @@
 			color: var(--text);
 		}
 
+		:scope[mode="dock"] .info {
+			overflow: hidden;
+			text-overflow: ellipsis;
+		}
+
 		/* An event row spans every column between dashed rules. */
 		.row.event {
 			display: flex;
-			gap: 14px;
+			gap: 12px;
 			border-top: 1px dashed currentcolor;
 			border-bottom: 1px dashed currentcolor;
 			color: var(--down);

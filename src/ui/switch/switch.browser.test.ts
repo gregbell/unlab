@@ -60,10 +60,10 @@ describe("<unlab-switch>", () => {
 
 	it("is one button per live column, named by what its click will do", async () => {
 		await mount("unlab-switch", { state: mixed });
-		const buttons = page.getByRole("button");
+		const buttons = page.getByRole("button", { name: /cable/ });
 		await expect.element(buttons.nth(0)).toHaveAccessibleName("Cut the cable from node1 to port 1");
 		await expect.element(buttons.nth(1)).toHaveAccessibleName("Reconnect the cable from node2 to port 2");
-		expect(document.querySelectorAll("unlab-switch button")).toHaveLength(2);
+		expect(document.querySelectorAll("unlab-switch .ports button")).toHaveLength(2);
 	});
 
 	it("cuts an up cable through the command service as a button", async () => {
@@ -94,7 +94,7 @@ describe("<unlab-switch>", () => {
 			expect(tag.scrollWidth).toBeLessThanOrEqual(column(port).clientWidth);
 		}
 		await expect
-			.element(page.getByRole("button").nth(2))
+			.element(page.getByRole("button", { name: /cable/ }).nth(2))
 			.toHaveAccessibleName("Cut the cable from node2:eth1 to port 3");
 		part(column(3), "button").click();
 		expect(runs).toEqual([{ line: "link down node2:eth1", source: "button" }]);
@@ -159,24 +159,49 @@ describe("<unlab-switch>", () => {
 		expect(style(part(empty, ".socket")).borderTopColor).toBe(tokenColor("line"));
 	});
 
-	it("is 6px between columns and notes how to cut in the dock, 10px and no note in Wire", async () => {
+	it("maximises and parks itself alone", async () => {
+		const { store } = await mount("unlab-switch", { state: mixed });
+		await page.getByRole("button", { name: "Maximise switch0" }).click();
+		expect(store.state.panels).toMatchObject({ open: ["capture", "switch0"], maximised: "switch0" });
+		await page.getByRole("button", { name: "Park switch0" }).click();
+		expect(store.state.panels).toMatchObject({ open: ["capture"], maximised: null });
+	});
+
+	it("is 6px between columns in the dock, and 10px maximised, with the MAC table beside them", async () => {
 		const { element, settle } = await mount("unlab-switch", {
 			state: mixed,
 			prepare: (el) => el.setAttribute("compact", ""),
 		});
 		const gap = () => column(2).getBoundingClientRect().left - column(1).getBoundingClientRect().right;
 		expect(Math.round(gap())).toBe(6);
+		expect(element.querySelector("unlab-mac-table")).toBeNull();
 		expect(element.textContent).toContain("Click a cable to cut or reconnect it.");
 		expect(part(column(1), ".socket").getBoundingClientRect().height).toBe(26);
 
 		element.removeAttribute("compact");
 		await settle();
 		expect(Math.round(gap())).toBe(10);
-		expect(element.textContent).not.toContain("Click a cable");
+		expect(element.textContent).toContain("Click a cable");
+		const table = part(element, "unlab-mac-table").getBoundingClientRect();
+		expect(table.left).toBeGreaterThan(column(8).getBoundingClientRect().right);
 	});
 });
 
 describe("a narrow faceplate", () => {
+	it.each([420, 240, 180])("keeps its header on one line at %ipx, with its buttons in it", async (width) => {
+		const { element } = await mount("unlab-switch", {
+			state: lab(spawn(8), ready()),
+			prepare: (el) => {
+				el.setAttribute("compact", "");
+				el.style.width = `${width}px`;
+			},
+		});
+		const header = part(element, ".header");
+		expect(header.getBoundingClientRect().height).toBe(35);
+		for (const button of header.querySelectorAll("button"))
+			expect(button.getBoundingClientRect().right).toBeLessThanOrEqual(header.getBoundingClientRect().right);
+	});
+
 	it("keeps every machine name whole and scrolls sideways instead", async () => {
 		const { element } = await mount("unlab-switch", {
 			state: lab(spawn(8), ready()),

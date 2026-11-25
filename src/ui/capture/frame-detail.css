@@ -9,7 +9,7 @@
 			gap: 16px;
 			min-width: 0;
 			padding: var(--gutter);
-			background: var(--glass-panel);
+			border-left: 1px solid var(--line);
 		}
 
 		.nothing {

@@ -13,7 +13,7 @@ test.use({
 const LONG = `long-${"x".repeat(56)}-1`;
 
 const allReady = (page: Page, count: number) =>
-	expect(page.getByText(`${count} of ${count} machines ready`)).toBeVisible({ timeout: 90_000 });
+	expect(page.getByText(`${count} of ${count} ready`)).toBeVisible({ timeout: 90_000 });
 
 /** web-1 is alpine, db is debian, and the third chooses nothing. */
 async function openNamed(page: Page): Promise<void> {
@@ -133,20 +133,22 @@ test("every command that takes a machine takes its name", async ({ page }) => {
 	await expect(page.locator("unlab-frame-detail .pair", { hasText: "destination" }).first()).toContainText(
 		/52:54:00:88:00:0b\s+web-1/,
 	);
+	if (shots) await page.screenshot({ path: `${shots}/names-capture.png` });
+	await page.getByRole("button", { name: "Maximise capture" }).click();
+	await page.getByRole("button", { name: "Maximise switch0" }).click();
 	await expect(page.locator("unlab-mac-table tr", { hasText: "52:54:00:88:00:0c" })).toContainText("db");
-	if (shots) await page.screenshot({ path: `${shots}/names-wire.png` });
 	await page.keyboard.press("Control+/");
 	await page.keyboard.type("capture dbx");
 	await page.keyboard.press("Enter");
 	await expect(page.locator("unlab-command-bar")).toContainText("capture cannot read dbx, so use");
 	await page.keyboard.press("Escape");
-	await page.getByRole("link", { name: "← lab" }).click();
+	await expect(page.locator("unlab-pane:visible")).toHaveCount(0);
 	await typed(page, "focus db --max");
 	await expect(page.locator("unlab-pane:visible")).toHaveCount(1);
 	await typed(page, "focus db --max");
 
 	await typed(page, "poweroff web-1");
-	await expect(page.getByText("2 of 3 machines ready, 1 off")).toBeVisible();
+	await expect(page.getByText("2 of 3 ready, 1 off")).toBeVisible();
 	await typed(page, "boot web-1");
 	await allReady(page, 3);
 	expect(await call(page, "machines_reboot", { names: "web-1" })).toMatchObject({ result: "web-1 ready" });
@@ -250,7 +252,7 @@ test("a name as long as a hostname can be fits everywhere it is shown", async ({
 	if (shots) await page.screenshot({ path: `${shots}/long-name.png` });
 	await typed(page, "capture icmp");
 	await expect(page.getByRole("option", { name: new RegExp(LONG) }).first()).toBeVisible();
-	if (shots) await page.screenshot({ path: `${shots}/long-name-wire.png` });
+	if (shots) await page.screenshot({ path: `${shots}/long-name-capture.png` });
 	await typed(page, "ls");
 	if (shots) await page.screenshot({ path: `${shots}/long-name-ls.png` });
 	await page.keyboard.press("Escape");

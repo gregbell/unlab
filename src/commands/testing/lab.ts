@@ -130,7 +130,7 @@ export function labWith(fixtures: readonly MachineFixture[], images: readonly Im
 		keyboard: { kind: "none" },
 		view: "lab",
 		agentPanel: false,
-		dock: "open",
+		panels: { open: ["capture", "switch0"], maximised: null },
 		capture: { filter: "", paused: false, selected: null },
 		agent: {
 			webmcp: { kind: "absent" },

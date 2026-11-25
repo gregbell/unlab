@@ -2,6 +2,7 @@ import fc from "fast-check";
 import { describe, expect, test } from "vitest";
 import { identity } from "./identity.ts";
 import { isPlanError, lowestFreePorts, planBoot, planLink, takenPorts } from "./machines.ts";
+import { parkedPanels, visiblePanels } from "./panels.ts";
 import { capacity, keyboardHolder, reconcilePanes, visiblePanes } from "./panes.ts";
 import {
 	address,
@@ -34,6 +35,7 @@ import {
 	type Next,
 	type NicNo,
 	type NicSpec,
+	type PanelName,
 	type PortNo,
 	type SessionId,
 } from "./types.ts";
@@ -62,7 +64,7 @@ describe("initialState", () => {
 			keyboard: { kind: "none" },
 			view: "lab",
 			agentPanel: false,
-			dock: "open",
+			panels: { open: ["capture", "switch0"], maximised: null },
 			capture: { filter: "", paused: false, selected: null },
 			log: [],
 			images: [{ name: "alpine", label: "alpine 3.24" }],
@@ -843,29 +845,35 @@ describe("focus and the keyboard", () => {
 });
 
 describe("views and capture", () => {
-	test("capture sets the filter and opens Wire", () => {
-		const s = run(emptyLab(), { type: "cmd/capture", filter: "arp node1" });
+	test("capture sets the filter and maximises the capture, parked or not, from any view", () => {
+		const s = run(
+			labWith(1),
+			{ type: "ui/panel-parked", panel: "capture" },
+			{ type: "ui/view", view: "spawn" },
+			{ type: "cmd/capture", filter: "arp node1" },
+		);
 		expect(s.capture.filter).toBe("arp node1");
-		expect(s.view).toBe("wire");
+		expect(s.view).toBe("lab");
+		expect(s.panels).toMatchObject({ open: ["capture", "switch0"], maximised: "capture" });
 		expect(update(s, { type: "cmd/capture", filter: "arp node1" }).state).toBe(s);
 	});
 
 	test("the view, the agent panel, the filter, pause and selection are recorded as set", () => {
 		let s = run(
 			emptyLab(),
-			{ type: "ui/view", view: "wire" },
+			{ type: "ui/view", view: "spawn" },
 			{ type: "ui/agent-panel", open: true },
 			{ type: "ui/capture-filter", filter: "port:3" },
 			{ type: "ui/capture-pause", paused: true },
 			{ type: "ui/frame-selected", seq: 41 },
 		);
 		expect(s).toMatchObject({
-			view: "wire",
+			view: "spawn",
 			agentPanel: true,
 			capture: { filter: "port:3", paused: true, selected: 41 },
 		});
 		for (const event of [
-			{ type: "ui/view", view: "wire" },
+			{ type: "ui/view", view: "spawn" },
 			{ type: "ui/agent-panel", open: true },
 			{ type: "ui/capture-filter", filter: "port:3" },
 			{ type: "ui/capture-pause", paused: true },
@@ -875,16 +883,6 @@ describe("views and capture", () => {
 		}
 		s = run(s, { type: "ui/view", view: "lab" });
 		expect(s.view).toBe("lab");
-	});
-
-	test("the dock starts open, collapses and opens again, and a repeat changes nothing", () => {
-		const open = emptyLab();
-		expect(open.dock).toBe("open");
-		expect(update(open, { type: "ui/dock", dock: "open" }).state).toBe(open);
-		const collapsed = update(open, { type: "ui/dock", dock: "collapsed" });
-		expect(collapsed).toEqual({ state: { ...open, dock: "collapsed" }, effects: [] });
-		expect(update(collapsed.state, { type: "ui/dock", dock: "collapsed" }).state).toBe(collapsed.state);
-		expect(run(collapsed.state, { type: "ui/dock", dock: "open" }).dock).toBe("open");
 	});
 
 	test("clear empties the capture and drops the selection", () => {
@@ -1321,5 +1319,70 @@ describe("any sequence of events", () => {
 			}),
 			{ numRuns: 300 },
 		);
+	});
+});
+
+describe("panels", () => {
+	const park = (panel: PanelName): LabEvent => ({ type: "ui/panel-parked", panel });
+	const unpark = (panel: PanelName): LabEvent => ({ type: "ui/panel-unparked", panel });
+	const maximise = (panel: PanelName): LabEvent => ({ type: "ui/panel-maximised", panel });
+
+	test("each parks and comes back alone, and they keep their order", () => {
+		const s = run(labWith(1), park("capture"));
+		expect([s.panels.open, parkedPanels(s.panels)]).toEqual([["switch0"], ["capture"]]);
+		expect(update(s, park("capture")).state).toBe(s);
+		const both = run(s, park("switch0"), unpark("switch0"), unpark("capture"));
+		expect([both.panels.open, parkedPanels(both.panels)]).toEqual([["capture", "switch0"], []]);
+		expect(update(both, unpark("capture")).state).toBe(both);
+	});
+
+	test("maximising one shows it alone, and again brings the others back", () => {
+		const s = run(labWith(1), maximise("switch0"));
+		expect(visiblePanels(s.panels)).toEqual(["switch0"]);
+		expect(parkedPanels(s.panels)).toEqual([]);
+		expect(visiblePanels(run(s, maximise("switch0")).panels)).toEqual(["capture", "switch0"]);
+	});
+
+	test("a parked panel stays parked while another is maximised, and bringing it back restores them both", () => {
+		const s = run(labWith(1), park("capture"), maximise("switch0"));
+		expect(parkedPanels(s.panels)).toEqual(["capture"]);
+		expect(visiblePanels(run(s, unpark("capture")).panels)).toEqual(["capture", "switch0"]);
+	});
+
+	test("the capture command brings a parked capture back and maximises it", () => {
+		const s = run(labWith(1), park("capture"), { type: "cmd/capture", filter: "arp" });
+		expect(visiblePanels(s.panels)).toEqual(["capture"]);
+		expect(parkedPanels(s.panels)).toEqual([]);
+	});
+
+	test("parking the maximised one brings the panes back", () => {
+		const s = run(labWith(1), maximise("switch0"), park("switch0"));
+		expect(s.panels).toEqual({ open: ["capture"], maximised: null });
+	});
+
+	test.each<[string, LabEvent]>([
+		["focus", { type: "cmd/focus", target: "node2", mode: "plain" }],
+		["a shell", { type: "cmd/shell", machine: "node2" }],
+		["the keyboard in a pane", { type: "ui/pane-focused", machine: "node1" }],
+		["unpark", { type: "ui/unpark", machine: "node2" }],
+		["a maximised pane", { type: "ui/maximise", machine: "node2" }],
+	])("%s brings the panes out from under a maximised one", (_, event) => {
+		expect(run(labWith(2), maximise("capture"), event).panels.maximised).toBeNull();
+	});
+
+	test("the command bar, a missing machine and a new one leave it maximised", () => {
+		let s = run(labWith(2), maximise("capture"), { type: "ui/bar", open: true }, { type: "ui/bar", open: false });
+		s = run(s, { type: "cmd/focus", target: "node7", mode: "plain" }, { type: "ui/unpark", machine: "node7" });
+		s = run(s, spawnEvent(s, 1));
+		expect(s.panels.maximised).toBe("capture");
+	});
+
+	test("nothing is maximised in an empty lab", () => {
+		const s = run(labWith(1), maximise("capture"), { type: "cmd/remove", machines: ["node1"], cause: "button" });
+		expect(s.panels.maximised).toBe("capture");
+		const gone = run(s, hasStopped("node1"));
+		expect(gone.rail).toEqual([]);
+		expect(gone.panels.maximised).toBeNull();
+		expect(run(emptyLab(), { type: "cmd/capture", filter: "arp" }).panels.maximised).toBeNull();
 	});
 });

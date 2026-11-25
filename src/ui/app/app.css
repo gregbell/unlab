@@ -11,7 +11,6 @@
 		unlab-command-bar,
 		unlab-capture > *,
 		unlab-switch > *,
-		unlab-wire,
 		unlab-agent-panel
 	) {
 		:scope {
@@ -97,18 +96,22 @@
 		}
 
 		/* Takes all the slack, so the rail keeps its 232px until a narrow window wraps it above. */
-		.centre,
-		.wire-view {
+		.centre {
 			display: flex;
 			flex: 999 1 560px;
 			flex-direction: column;
 			gap: var(--panel-gap);
 			min-width: 0;
 			background: transparent;
+			container-type: inline-size;
 		}
 
-		.centre {
-			container-type: inline-size;
+		.panes {
+			display: flex;
+			flex: 1 1 auto;
+			flex-direction: column;
+			gap: var(--panel-gap);
+			min-width: 0;
 		}
 
 		.dock {
@@ -125,6 +128,15 @@
 			grid-column: var(--dock-divider, 2) / -1;
 		}
 
+		/* Alone, a panel takes the whole width; maximised, the panes' room too. */
+		.dock > :only-child {
+			grid-column: 1 / -1;
+		}
+
+		.dock[data-maximised] {
+			flex: 1 1 auto;
+		}
+
 		@container (width < 560px) {
 			.dock {
 				grid-template-columns: minmax(0, 1fr);
@@ -134,35 +146,6 @@
 			.dock > unlab-switch {
 				grid-column: 1;
 			}
-		}
-
-		/* Collapsed, the dock is one row the height of the capture's toolbar, across both columns. */
-		.dock-strip {
-			display: flex;
-			flex-wrap: wrap;
-			grid-column: 1 / -1;
-			align-items: center;
-			gap: 4px 12px;
-			min-height: 34px;
-			padding: 4px var(--gutter);
-			background: var(--glass-panel);
-		}
-
-		.dock-strip .title {
-			font-weight: 500;
-		}
-
-		.dock-strip .status {
-			color: var(--ok);
-		}
-
-		.dock-strip .status[data-paused="true"] {
-			color: var(--warn);
-		}
-
-		.dock-strip .button {
-			min-height: var(--h-xs);
-			padding-inline: 8px;
 		}
 
 		.agent-panel {

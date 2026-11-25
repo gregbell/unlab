@@ -219,15 +219,13 @@ describe("<unlab-app> views", () => {
 
 	it("returns to the lab from the wordmark", async () => {
 		const { store, settle } = await mountApp();
-		store.dispatchUi({ type: "ui/view", view: "wire" });
+		store.dispatchUi({ type: "ui/view", view: "spawn" });
 		await settle();
 		expect(the(".lab").hidden).toBe(true);
-		expect(the(".wire-view").hidden).toBe(false);
 		await page.getByRole("button", { name: "unLAB, back to the lab" }).click();
 		await settle();
 		expect(store.state.view).toBe("lab");
 		expect(the(".lab").hidden).toBe(false);
-		expect(the(".wire-view").hidden).toBe(true);
 	});
 
 	it("returns to the lab on Esc", async () => {
@@ -259,29 +257,100 @@ describe("<unlab-app> views", () => {
 	});
 });
 
-describe("<unlab-app> dock", () => {
-	it("hides to one strip that gives the panes its height, and shows again, the focus staying on the toggle", async () => {
-		const { store, settle } = await mountApp(lab(spawn(3), ready(), link("down", "node3")));
+describe("<unlab-app> panels", () => {
+	const name = (panel: string) => page.getByRole("contentinfo").getByRole("button", { name: new RegExp(`^${panel}`) });
+
+	it("gives a lone panel the whole width, and no panels gives the panes their height and gap", async () => {
+		const { store, settle } = await mountApp();
 		await expect.poll(() => store.state.panes.grid.cols).toBe(2);
 		const open = box("unlab-pane-area").height;
-		const hide = page.getByRole("button", { name: "hide" });
-		await expect.element(hide).toHaveAttribute("aria-expanded", "true");
-		await expect.element(hide).toHaveAttribute("aria-controls", the(".dock").id);
-
-		await hide.click();
+		await page.getByRole("button", { name: "Park switch0" }).click();
 		await settle();
-		const show = page.getByRole("button", { name: "show" });
-		await expect.element(show).toHaveFocus();
-		await expect.element(show).toHaveAttribute("aria-expanded", "false");
-		await expect.element(show).toHaveAttribute("aria-controls", the(".dock").id);
-		expect(document.querySelector("unlab-app :is(unlab-capture, unlab-switch)")).toBeNull();
-		expect(box(".dock").height).toBe(34);
-		expect(box("unlab-pane-area").height).toBeGreaterThan(open + 150);
+		expect(box("unlab-capture").width).toBe(box("main.centre").width);
+		expect(document.querySelector("unlab-app unlab-switch")).toBeNull();
+		expect(box("unlab-pane-area").height).toBeGreaterThanOrEqual(open);
 
-		await userEvent.keyboard("{Enter}");
+		await page.getByRole("button", { name: "Park capture" }).click();
 		await settle();
-		await expect.element(page.getByRole("button", { name: "hide" })).toHaveFocus();
+		expect(the(".dock").hidden).toBe(true);
+		expect(box("unlab-pane-area").bottom).toBe(box(".body").bottom);
+
+		await name("capture").click();
+		await name("switch0").click();
+		await settle();
 		expect(box("unlab-pane-area").height).toBe(open);
+	});
+
+	it.each(["capture", "switch0"])(
+		"parks %s from its own button and brings it back by its name, and the focus follows",
+		async (panel) => {
+			const { settle } = await mountApp();
+			const park = page.getByRole("button", { name: `Park ${panel}` });
+			the(`#unlab-dock [aria-label="Park ${panel}"]`).focus();
+			await userEvent.keyboard("{Enter}");
+			await settle();
+			await expect.element(park).not.toBeInTheDocument();
+			await expect.element(name(panel)).toHaveFocus();
+			await userEvent.keyboard("{Enter}");
+			await settle();
+			await expect.element(park).toHaveFocus();
+			await expect.element(name(panel)).not.toBeInTheDocument();
+		},
+	);
+
+	it("maximises one panel over the panes, beside the rail, and restores it on Esc", async () => {
+		const { store, settle } = await mountApp();
+		const pane = the("unlab-pane[machine=node2]");
+		await page.getByRole("button", { name: "Maximise capture" }).click();
+		await settle();
+		expect(the(".panes").hidden).toBe(true);
+		expect(document.querySelector("unlab-app unlab-switch")).toBeNull();
+		expect(box("unlab-capture").height).toBe(box("main.centre").height);
+		expect(box("unlab-rail").width).toBeGreaterThan(200);
+		expect(the("unlab-capture unlab-frame-detail")).toBeTruthy();
+
+		await userEvent.keyboard("{Escape}");
+		await settle();
+		expect(store.state.panels.maximised).toBeNull();
+		expect(the(".panes").hidden).toBe(false);
+		expect(the("unlab-pane[machine=node2]")).toBe(pane);
+	});
+
+	it("shows a parked panel beside the others when its name is clicked under a maximised one", async () => {
+		const { store, settle } = await mountApp();
+		store.dispatchUi({ type: "ui/panel-parked", panel: "switch0" });
+		store.dispatchUi({ type: "ui/panel-maximised", panel: "capture" });
+		await settle();
+		await name("switch0").click();
+		await settle();
+		expect(the(".panes").hidden).toBe(false);
+		expect(the("unlab-capture").getAttribute("mode")).toBe("dock");
+		expect(the("unlab-switch").hasAttribute("compact")).toBe(true);
+	});
+
+	it("brings a machine's pane back from under a maximised panel when its rail row is chosen", async () => {
+		const { store, runs } = await mountApp();
+		store.dispatchUi({ type: "ui/panel-maximised", panel: "switch0" });
+		await page
+			.getByRole("complementary", { name: "Machines" })
+			.getByRole("button", { name: /^node3/ })
+			.click();
+		expect(runs).toEqual([{ line: "focus node3", source: "button" }]);
+	});
+
+	it("keeps every panel header and the status line on one line", async () => {
+		for (const width of [1280, 1462, 1920]) {
+			unmountAll();
+			await page.viewport(width, 827);
+			const { store, settle } = await mountApp(lab(spawn(2), ready()));
+			for (const toolbar of ["unlab-capture .toolbar", "unlab-switch .header"])
+				expect(box(toolbar).height, `${toolbar} at ${width}`).toBe(35);
+			expect(box("unlab-statusline").height, `status line at ${width}`).toBe(26);
+			store.dispatchUi({ type: "ui/panel-parked", panel: "capture" });
+			store.dispatchUi({ type: "ui/panel-parked", panel: "switch0" });
+			await settle();
+			expect(box("unlab-statusline").height, `status line with both names at ${width}`).toBe(26);
+		}
 	});
 });
 

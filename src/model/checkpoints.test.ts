@@ -155,7 +155,7 @@ describe("going back to a checkpoint", () => {
 		expect([...takenPorts(back)]).toEqual([1, 2]);
 		const going = focused(run(back, progress(3, 40, 2)));
 		expect(selectRail(going)[0].word).toBe("restoring 40%");
-		expect(selectStatus(going).left[0].text).toBe("1 of 2 machines ready, 1 restoring");
+		expect(selectStatus(going).left[0].text).toBe("1 of 2 ready, 1 restoring");
 		expect(details(going, "link")).toBe("plugged into port 1");
 		for (const late of [hasStopped("node1", 2), hasStopped("node1", 1), hasFailed("node1", 1), isReady("node1", 1)]) {
 			expect(update(going, late).state, "of the guest that was dropped").toBe(going);

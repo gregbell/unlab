@@ -10,7 +10,7 @@ export interface Tile {
 export interface Tiling {
 	/** `grid-template-columns`. */
 	readonly columns: string;
-	/** Grid line above the switch panel, at the last machine of the bottom row. */
+	/** Grid line above the switch panel, at the last machine of the bottom row, so two panels line up with the panes. */
 	readonly dockDivider?: number;
 	/** `grid-template-rows`. */
 	readonly rows: string;

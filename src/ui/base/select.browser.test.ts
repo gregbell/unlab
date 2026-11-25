@@ -34,10 +34,10 @@ describe("Select", () => {
 	it("re-renders when a selected value changes", async () => {
 		const { element, store, settle } = await mount("unlab-select-probe");
 		const before = element.renders;
-		store.dispatchUi({ type: "ui/view", view: "wire" });
+		store.dispatchUi({ type: "ui/view", view: "spawn" });
 		await settle();
 		expect(element.renders).toBe(before + 1);
-		expect(element.textContent).toBe("wire 0");
+		expect(element.textContent).toBe("spawn 0");
 	});
 
 	it("does not re-render for a state change its selectors do not see", async () => {

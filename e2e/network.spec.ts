@@ -1,7 +1,7 @@
 import { expect, type Page, test } from "@playwright/test";
 import { openWithTwoMachines } from "./lab.ts";
 
-/** When set, the test also saves screenshots of the dock and of Wire there, for comparing with the artboards. */
+/** When set, the test also saves screenshots of the panels there, for comparing with the artboards. */
 const shots = process.env.UI_SHOTS;
 
 async function shoot(page: Page, name: string): Promise<void> {
@@ -40,7 +40,7 @@ test("pings show in the dock; cutting a cable by its port floods, flushes and re
 	);
 	await expect(node2).toContainText("cut");
 	await expect(faceplate.locator('[data-port="2"] .word')).toHaveText("cut");
-	await expect(page.getByText("switch0: 1 of 2 links up")).toBeVisible();
+	await expect(page.getByText("1 of 2 links up")).toBeVisible();
 
 	// The console takes the line once its shell is back at a prompt; until then exec refuses it.
 	await expect(async () => {
@@ -52,24 +52,28 @@ test("pings show in the dock; cutting a cable by its port floods, flushes and re
 	await page.keyboard.press("Escape");
 	await shoot(page, "dock-cut");
 
-	await dock.getByRole("link", { name: "expand" }).click();
-	const wire = page.locator("unlab-wire");
-	await expect(wire).toBeVisible();
-	const macTable = wire.locator("unlab-mac-table");
+	await page.getByRole("button", { name: "Maximise switch0" }).click();
+	const macTable = page.locator("unlab-mac-table");
 	await expect(macTable.locator("tr", { hasText: "node2" })).toContainText("flushed, link down");
 	await expect(macTable.locator("tr", { hasText: "node1" })).toContainText("s ago");
 
-	await wire.getByRole("textbox", { name: "filter" }).fill("icmp");
-	const list = wire.getByRole("listbox", { name: "Captured frames" });
+	await shoot(page, "switch-maximised");
+
+	await page.getByRole("button", { name: "Maximise switch0" }).click();
+	await page.getByRole("button", { name: "Maximise capture" }).click();
+	const full = page.locator("unlab-capture[mode=full]");
+	await full.getByRole("textbox", { name: "filter" }).fill("icmp");
+	const list = full.getByRole("listbox", { name: "Captured frames" });
 	await list.focus();
 	await page.keyboard.press("ArrowUp");
-	await expect(wire.locator("unlab-frame-detail")).toContainText("icmp echo request");
-	await expect(wire.locator("unlab-frame-detail .did")).toContainText("did not know where node2 is");
-	await shoot(page, "wire-cut");
+	await expect(full.locator("unlab-frame-detail")).toContainText("icmp echo request");
+	await expect(full.locator("unlab-frame-detail .did")).toContainText("did not know where node2 is");
+	await shoot(page, "capture-maximised");
 
 	await page.keyboard.press("Escape");
-	await expect(wire).toHaveCount(0);
-	await expect(rail).toBeVisible();
+	await expect(full).toHaveCount(0);
+	await expect(console1).toBeVisible();
+	await expect(faceplate).toBeVisible();
 
 	await faceplate.getByRole("button", { name: "Reconnect the cable from node2 to port 2" }).click();
 	await expect(dock.getByRole("listitem").filter({ hasText: "port 2 link up" }).last()).toContainText(

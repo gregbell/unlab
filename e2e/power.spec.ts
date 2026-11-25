@@ -63,7 +63,7 @@ for (const image of ["alpine", "debian"]) {
 		await openLab(page);
 		await typed(page, "spawn 1 alpine");
 		await typed(page, `spawn 1 ${image} --name box --mem 512 --nics 2 --addr 10.88.0.50/24,10.2.0.1/24 --extra-disk 1`);
-		await status(page, "2 of 2 machines ready");
+		await status(page, "2 of 2 ready");
 		await typed(page, "link down box:eth1");
 		const before = await listed(page);
 		const memory = await root(page, "box", "grep MemTotal /proc/meminfo");
@@ -87,7 +87,7 @@ for (const image of ["alpine", "debian"]) {
 		await typed(page, "reboot box");
 		await expect(rail(page, "box")).toContainText("rebooting");
 		await expect(rail(page, "box")).toContainText("booting");
-		await status(page, "2 of 2 machines ready");
+		await status(page, "2 of 2 ready");
 
 		expect(await listed(page)).toEqual(before);
 		expect(await root(page, "box", "grep MemTotal /proc/meminfo")).toBe(memory);
@@ -116,7 +116,7 @@ for (const image of ["alpine", "debian"]) {
 	test(`reboot and poweroff typed in ${image} do what the commands do`, async ({ page }) => {
 		await openLab(page);
 		await typed(page, `spawn 1 ${image} --extra-disk 1`);
-		await status(page, "1 of 1 machine ready");
+		await status(page, "1 of 1 ready");
 		const before = await listed(page);
 		await announced(page);
 
@@ -126,7 +126,7 @@ for (const image of ["alpine", "debian"]) {
 		await page.keyboard.type("echo kept > ~/kept; reboot\n");
 		await expect(page.locator("#tab-node1-sh1")).toHaveCount(0);
 		await expect.poll(() => consoleText(page, "node1")).toContain("node1 is rebooting. sh1 closed with it.");
-		await status(page, "1 of 1 machine ready");
+		await status(page, "1 of 1 ready");
 		expect(await heard(page)).toContain("node1 rebooting. sh1 closed with it.");
 		expect(await listed(page)).toEqual(before);
 		expect(await shell(page, 1, "cat ~/kept; uptime -p 2>/dev/null; cut -d. -f1 /proc/uptime")).toMatchObject({
@@ -134,16 +134,16 @@ for (const image of ["alpine", "debian"]) {
 		});
 
 		await keys(page, "node1", "poweroff");
-		await status(page, "0 of 1 machine ready, 1 off");
+		await status(page, "0 of 1 ready, 1 off");
 		expect(await listed(page)).toMatchObject([{ name: "node1", state: "off", nics: [{ port: 1, link: "off" }] }]);
 		await expect(page.locator("unlab-pane[machine=node1]")).toContainText("node1 is off.");
 		await expect.poll(() => workers(page)).toBe(0);
 		await page.locator("unlab-pane[machine=node1]").getByRole("button", { name: "Boot" }).click();
-		await status(page, "1 of 1 machine ready");
+		await status(page, "1 of 1 ready");
 		expect(await shell(page, 1, "cat ~/kept")).toMatchObject({ output: "kept" });
 
 		await keys(page, "node1", "sudo halt");
-		await status(page, "0 of 1 machine ready, 1 off");
+		await status(page, "0 of 1 ready, 1 off");
 		expect(await heard(page)).not.toContain("failed");
 	});
 }
@@ -153,13 +153,13 @@ test("a machine that is off holds no memory, keeps its ports, name and disks, an
 }) => {
 	await openLab(page);
 	await typed(page, "spawn 2 alpine --extra-disk 1");
-	await status(page, "2 of 2 machines ready");
+	await status(page, "2 of 2 ready");
 	await typed(page, "link down node2");
 	await root(page, 2, "echo filed > /root/note; printf raw | dd of=/dev/wdc bs=1M seek=9 conv=notrunc 2>/dev/null");
 	expect(workers(page)).toBe(2);
 
 	await typed(page, "poweroff node2");
-	await status(page, "1 of 2 machines ready, 1 off");
+	await status(page, "1 of 2 ready, 1 off");
 	await expect.poll(() => workers(page)).toBe(1);
 	expect(await shell(page, 1, "ping -c 1 -W 1 node2")).toMatchObject({ exitCode: 1 });
 	const off = async () => {
@@ -180,7 +180,7 @@ test("a machine that is off holds no memory, keeps its ports, name and disks, an
 	await page.keyboard.press("Escape");
 
 	await page.reload();
-	await status(page, "1 of 2 machines ready, 1 off");
+	await status(page, "1 of 2 ready, 1 off");
 	expect(workers(page)).toBe(1);
 	await off();
 
@@ -191,7 +191,7 @@ test("a machine that is off holds no memory, keeps its ports, name and disks, an
 	await expect(page.locator(".port[data-port='2']")).toContainText("off");
 	await typed(page, "spawn 1 alpine");
 	await typed(page, "boot node2");
-	await status(page, "3 of 3 machines ready");
+	await status(page, "3 of 3 ready");
 	expect(await listed(page)).toMatchObject([
 		{ name: "node1" },
 		{ name: "node2", nics: [{ port: 2, link: "up" }] },
@@ -206,7 +206,7 @@ test("a machine that is off holds no memory, keeps its ports, name and disks, an
 test("what a disk had taken is kept by a guest that powers off or reboots without shutting down", async ({ page }) => {
 	await openLab(page);
 	await typed(page, "spawn 1 alpine --no-net --extra-disk 1,1");
-	await status(page, "1 of 1 machine ready");
+	await status(page, "1 of 1 ready");
 	for (const [round, command] of ["poweroff -nf", "reboot -nf"].entries()) {
 		const at = 100 + round;
 		const raw = (device: string) =>
@@ -218,12 +218,12 @@ test("what a disk had taken is kept by a guest that powers off or reboots withou
 			`sudo sh -c "${raw("wdd")}; printf last${round} | dd of=/dev/wdc bs=4096 seek=${at} conv=notrunc oflag=direct 2>/dev/null; ${command}"`,
 		);
 		if (round === 0) {
-			await status(page, "0 of 1 machine ready, 1 off");
+			await status(page, "0 of 1 ready, 1 off");
 			await typed(page, "boot node1");
 		} else {
 			await expect(rail(page, "node1")).toContainText("booting");
 		}
-		await status(page, "1 of 1 machine ready");
+		await status(page, "1 of 1 ready");
 		expect(await root(page, 1, `dd if=/dev/wdd bs=1M skip=${at} count=1 2>/dev/null | head -c 4`)).toBe(`raw${round}`);
 		expect(await root(page, 1, `dd if=/dev/wdc bs=4096 skip=${at} count=1 2>/dev/null | head -c 5`)).toBe(
 			`last${round}`,
@@ -236,7 +236,7 @@ test("an agent's power calls return once the machine is where it was going, and 
 }) => {
 	await openLab(page);
 	await typed(page, "spawn 2 alpine");
-	await status(page, "2 of 2 machines ready");
+	await status(page, "2 of 2 ready");
 	await root(page, 1, "echo kept > /root/kept");
 
 	expect(await call(page, "machines_reboot", { names: "all" })).toMatchObject({
@@ -270,13 +270,13 @@ test("an agent's power calls return once the machine is where it was going, and 
 	});
 	await page.evaluate(() => window.running?.get("reboot")?.controller.abort());
 	await expect(finish(page, "reboot")).rejects.toThrow(/abort/i);
-	await status(page, "2 of 2 machines ready");
+	await status(page, "2 of 2 ready");
 });
 
 test("a guest that does not shut down is stopped, says so, and keeps what its disks have", async ({ page }) => {
 	await openLab(page);
 	await typed(page, "spawn 1 alpine --no-net --extra-disk 1");
-	await status(page, "1 of 1 machine ready");
+	await status(page, "1 of 1 ready");
 	await root(
 		page,
 		1,
@@ -295,7 +295,7 @@ test("a guest that does not shut down is stopped, says so, and keeps what its di
 	await expect(details(page)).toContainText("off · did not shut down");
 	expect(await consoleText(page, "node1")).toContain("node1 is off. It did not shut down in 10 s");
 	await typed(page, "boot node1");
-	await status(page, "1 of 1 machine ready");
+	await status(page, "1 of 1 ready");
 	expect(await root(page, 1, "cat /root/late; dd if=/dev/wdc bs=1M skip=7 count=1 2>/dev/null | head -c 3")).toBe(
 		"late\nraw",
 	);
@@ -313,7 +313,7 @@ test("a reload while a machine stops ends as the stop would have, and an off mac
 }) => {
 	await openLab(page);
 	await typed(page, "spawn 2 alpine --no-net");
-	await status(page, "2 of 2 machines ready");
+	await status(page, "2 of 2 ready");
 	for (const n of [1, 2]) {
 		await root(
 			page,
@@ -326,7 +326,7 @@ test("a reload while a machine stops ends as the stop would have, and an off mac
 	await expect(rail(page, "node1")).toContainText("powering off");
 	await expect(rail(page, "node2")).toContainText("rebooting");
 	await page.reload();
-	await status(page, "1 of 2 machines ready, 1 off");
+	await status(page, "1 of 2 ready, 1 off");
 	expect(await listed(page)).toMatchObject([
 		{ name: "node1", state: "off" },
 		{ name: "node2", state: "ready" },
@@ -344,26 +344,26 @@ test("a kernel that crashes is a failed machine, and a full-screen program leave
 }) => {
 	await openLab(page);
 	await typed(page, "spawn 1 alpine --no-net");
-	await status(page, "1 of 1 machine ready");
+	await status(page, "1 of 1 ready");
 	await keys(page, "node1", "echo before-vi");
 	await keys(page, "node1", "vi /tmp/x");
 	await expect(panel(page, "node1")).toContainText("~");
 	await typed(page, "reboot node1");
 	await expect(rail(page, "node1")).toContainText("booting");
-	await status(page, "1 of 1 machine ready");
+	await status(page, "1 of 1 ready");
 	await expect.poll(() => consoleText(page, "node1")).toMatch(/before-vi[\s\S]*node1 is rebooting\.[\s\S]*Welcome to/);
 	expect(await shell(page, 1, "echo again")).toMatchObject({ exitCode: 0, output: "again" });
 
 	// Init runs a program that ends, and a kernel with no init panics.
 	await crash(page, 1);
-	await status(page, "0 of 1 machine ready, 1 failed");
+	await status(page, "0 of 1 ready, 1 failed");
 	const [machine] = (await listed(page)) as unknown as { state: string; reason: string }[];
 	expect(machine).toMatchObject({ state: "failed", reason: expect.stringContaining("Attempted to kill init") });
 	expect(await call(page, "shell_exec", { targets: "node1", command: "true" })).toEqual({
 		error: "exec wants a ready machine here, and node1 has failed. Nothing was changed.",
 	});
 	await typed(page, "boot node1");
-	await status(page, "1 of 1 machine ready");
+	await status(page, "1 of 1 ready");
 });
 
 test("a NIC that is gone from a running guest is said, and one that went down with its guest is not", async ({
@@ -371,7 +371,7 @@ test("a NIC that is gone from a running guest is said, and one that went down wi
 }) => {
 	await openLab(page);
 	await typed(page, "spawn 1 alpine --nics 2");
-	await status(page, "1 of 1 machine ready");
+	await status(page, "1 of 1 ready");
 	const warned: string[] = [];
 	page.on("console", (message) => {
 		if (/eth1/.test(message.text())) warned.push(message.text());
@@ -380,15 +380,15 @@ test("a NIC that is gone from a running guest is said, and one that went down wi
 	for (const command of ["reboot", "poweroff"]) {
 		await keys(page, "node1", command);
 		await expect(rail(page, "node1")).toContainText(command === "reboot" ? "booting" : "off");
-		if (command === "poweroff") await status(page, "0 of 1 machine ready, 1 off");
-		else await status(page, "1 of 1 machine ready");
+		if (command === "poweroff") await status(page, "0 of 1 ready, 1 off");
+		else await status(page, "1 of 1 ready");
 	}
 	await page.waitForTimeout(6000);
 	expect(warned).toEqual([]);
 	expect(await heard(page)).not.toContain("NIC");
 
 	await typed(page, "boot node1");
-	await status(page, "1 of 1 machine ready");
+	await status(page, "1 of 1 ready");
 	await root(page, 1, "kill -9 $(pidof unlab-nic)");
 	await expect.poll(() => heard(page)).toMatch(/node1 lost a NIC\. eth1 stopped: .*\. Reboot it to have it back\./);
 	await expect(details(page)).toContainText("gone from the guest until it reboots");

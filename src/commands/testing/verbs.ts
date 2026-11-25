@@ -167,7 +167,7 @@ export const focus = defineVerb({
 
 export const capture = defineVerb({
 	name: "capture",
-	about: "Sets the capture filter and opens Wire",
+	about: "Sets the capture filter and maximises the capture",
 	danger: false,
 	grammar: { filter: slots.text("filter", "The filter.") },
 	example: { filter: "arp" },

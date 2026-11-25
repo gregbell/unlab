@@ -14,7 +14,7 @@ test.use({
 async function openRouted(page: Page): Promise<void> {
 	await openWithTwoMachines(page);
 	await typed(page, "spawn 1 alpine --nics 2");
-	await expect(page.getByText("3 of 3 machines ready")).toBeVisible({ timeout: 60_000 });
+	await expect(page.getByText("3 of 3 ready")).toBeVisible({ timeout: 60_000 });
 	await root(page, 3, "ip addr add 10.2.0.1/24 dev eth1 && sysctl -w net.ipv4.ip_forward=1");
 	await root(page, 1, "ip route add 10.2.0.0/24 via 10.88.0.13");
 	await root(
@@ -58,8 +58,10 @@ test("a two-NIC machine forwards in the browser, and the capture and its filter 
 	await list.focus();
 	await page.keyboard.press("ArrowUp");
 	await expect(page.locator("unlab-frame-detail")).toContainText("node3:eth1");
+	if (shots) await page.screenshot({ path: `${shots}/capture-nics.png` });
+	await page.getByRole("button", { name: "Maximise capture" }).click();
+	await page.getByRole("button", { name: "Maximise switch0" }).click();
 	await expect(page.locator("unlab-mac-table tr", { hasText: "52:54:00:88:01:0d" })).toContainText("node3:eth1");
-	if (shots) await page.screenshot({ path: `${shots}/wire-nics.png` });
 	await page.keyboard.press("Escape");
 
 	// The same bytes arrive, in each direction, through the browser's workers and vsock.
@@ -123,7 +125,7 @@ test("a cable per NIC: cut one by name, from the faceplate and by machine, and a
 	expect(await reaches("10.88.0.13")).toBe(true);
 
 	await page.reload();
-	await expect(page.getByText("3 of 3 machines ready")).toBeVisible({ timeout: 90_000 });
+	await expect(page.getByText("3 of 3 ready")).toBeVisible({ timeout: 90_000 });
 	await expect(word(3)).toHaveText("up");
 	await expect(word(4)).toHaveText("cut");
 	expect(await root(page, 3, "cat /sys/class/net/eth1/address")).toBe("52:54:00:88:01:0d");
@@ -134,7 +136,7 @@ test("a NIC left unplugged takes no port, and a machine that needs more ports th
 }) => {
 	await openWithTwoMachines(page);
 	await typed(page, "spawn 1 alpine --nics 3 --net switch0,none,switch0");
-	await expect(page.getByText("3 of 3 machines ready")).toBeVisible({ timeout: 60_000 });
+	await expect(page.getByText("3 of 3 ready")).toBeVisible({ timeout: 60_000 });
 	await page
 		.getByRole("complementary", { name: "Machines" })
 		.getByRole("button", { name: /^node3\b/ })
@@ -171,7 +173,7 @@ test("a lab saved before machines had several NICs boots on the ports it had", a
 		localStorage.setItem("unlab.workspace.v1", JSON.stringify({ ...saved, order: ["node1", "node2"], parked: [] }));
 	});
 	await page.goto("/");
-	await expect(page.getByText("2 of 2 machines ready")).toBeVisible({ timeout: 60_000 });
+	await expect(page.getByText("2 of 2 ready")).toBeVisible({ timeout: 60_000 });
 	const faceplate = page.locator("unlab-switch[compact]");
 	await expect(faceplate.getByRole("button", { name: "Cut the cable from node1 to port 2" })).toBeVisible();
 	await faceplate.getByRole("button", { name: "Reconnect the cable from node2 to port 5" }).click();

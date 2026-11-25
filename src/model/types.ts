@@ -264,7 +264,7 @@ export interface CaptureUi {
 	/** As typed. The compiled predicate is derived and memoised. */
 	readonly filter: string;
 	readonly paused: boolean;
-	/** The Wire selection, by capture seq. */
+	/** The frame selected in the maximised capture, by its seq. */
 	readonly selected: number | null;
 }
 
@@ -323,10 +323,18 @@ export interface LogEntry {
 	readonly outcome: "ok" | "failed";
 }
 
-export type View = "lab" | "wire" | "spawn";
+export type View = "lab" | "spawn";
 
-/** The network dock under the panes: the capture and the switch, or one strip that sums them up. */
-export type Dock = "open" | "collapsed";
+/** The panels under the panes, left to right, which is also their order in the panel bar. */
+export const PANELS = ["capture", "switch0"] as const;
+export type PanelName = (typeof PANELS)[number];
+
+export interface Panels {
+	/** In `PANELS` order. The others are parked. */
+	readonly open: readonly PanelName[];
+	/** While one panel is maximised it stands in for the panes and the other panels. Always an open one. */
+	readonly maximised: PanelName | null;
+}
 
 export interface Departed {
 	readonly n: number;
@@ -348,7 +356,7 @@ export interface LabState {
 	readonly keyboard: Keyboard;
 	readonly view: View;
 	readonly agentPanel: boolean;
-	readonly dock: Dock;
+	readonly panels: Panels;
 	readonly capture: CaptureUi;
 	readonly agent: AgentState;
 	/** Bounded. `recent` and bar history are selectors over it. */
@@ -503,7 +511,9 @@ export type UiEvent =
 	| { readonly type: "ui/area-resized"; readonly width: number; readonly height: number }
 	| { readonly type: "ui/view"; readonly view: View }
 	| { readonly type: "ui/agent-panel"; readonly open: boolean }
-	| { readonly type: "ui/dock"; readonly dock: Dock }
+	| { readonly type: "ui/panel-unparked"; readonly panel: PanelName }
+	| { readonly type: "ui/panel-parked"; readonly panel: PanelName }
+	| { readonly type: "ui/panel-maximised"; readonly panel: PanelName }
 	| { readonly type: "ui/bar"; readonly open: boolean }
 	| { readonly type: "ui/capture-filter"; readonly filter: string }
 	| { readonly type: "ui/capture-pause"; readonly paused: boolean }
