@@ -8,15 +8,18 @@
 // the boot log and a shell. Beyond that each tab opens its own pty through
 // vm.spawn(), so a machine can have several independent shells.
 
-import { createKernel, type KernelInstance, NetStack, type Pty } from "unkernel";
+import { BootError, CowDisk, createKernel, type KernelInstance, NetStack, type Pty } from "unkernel";
+import { type Device, disksOf } from "../model/index.ts";
 import { defaultName } from "../net/index.ts";
-import { diskName } from "./disk-name.ts";
+import { rootStore } from "./disk-stores.ts";
+import { keepSaved, openExtraDisk } from "./extra-disk.ts";
 import { execAsRoot, hostsScript, setupScript } from "./guest.ts";
 import { MemoryDisk } from "./image.ts";
 import { MachineNics } from "./machine-nics.ts";
 import { alpinePackageSetup, packageBackend } from "./package-repositories.ts";
 import type { FromVm, PtySpec, ToVm, VmConfig } from "./protocol.ts";
 import { createShellTracker } from "./shell-tracker.ts";
+import { memoryShortage, storageFailure } from "./shortage.ts";
 
 function post(m: FromVm, transfer: Transferable[] = []): void {
 	self.postMessage(m, transfer);
@@ -165,12 +168,23 @@ async function boot(c: VmConfig): Promise<void> {
 		lost: (reason) => fail(reason, false),
 	});
 
+	const [root, ...extra] = disksOf(c);
+	const unsaved = (device: Device) => (error: unknown) => fail(storageFailure(c.name, device, error), true);
+
 	try {
 		post({ type: "stage", stage: "download" });
+		const extras = await Promise.all(
+			extra.map(({ device, gib }, i) =>
+				openExtraDisk({ n: c.n, k: i + 1, gib, onError: unsaved(device) }).catch((error: unknown) => {
+					throw new Error(storageFailure(c.name, device, error));
+				}),
+			),
+		);
 		vm = await createKernel({
 			distro: new MemoryDisk(c.image),
-			disks: [{ kind: "data", template: "bundled", name: diskName(c.n), size: (c.diskGiB ?? 4) * 2 ** 30 }],
-			onDiskError: (_, error) => fail(`Saving ${c.name} failed: ${error}`, true),
+			disks: [{ kind: "data", template: "bundled", name: rootStore(c.n), size: root.gib * 2 ** 30 }, ...extras],
+			// The extra disks report their own.
+			onDiskError: (_, error) => unsaved(root.device)(error),
 			net: nics.eth0,
 			memoryMiB: c.memoryMiB,
 			memoryFallbackMiB: [],
@@ -181,10 +195,17 @@ async function boot(c: VmConfig): Promise<void> {
 		});
 		if (vm.stats().cpus !== (c.cpus ?? 1))
 			throw new Error(`Requested ${c.cpus} CPUs but the browser started ${vm.stats().cpus}.`);
-		if (!vm.kernel.block.disks.some((d) => d.persistent))
-			throw new Error("Persistent disk unavailable. Check browser storage and boot again.");
+		const [, ...attached] = vm.kernel.block.disks;
+		for (const [i, { device }] of [root, ...extra].entries()) {
+			const disk = attached[i];
+			if (disk?.persistent) continue;
+			const notice = disk instanceof CowDisk ? disk.notice : undefined;
+			throw new Error(storageFailure(c.name, device, notice ?? "it is not kept"));
+		}
+		keepSaved(extras);
 	} catch (e) {
-		fail(e instanceof Error ? e.message : String(e), true);
+		const reason = e instanceof Error ? e.message : String(e);
+		fail(e instanceof BootError && e.stage === "memory" ? memoryShortage(c.name, c.memoryMiB) : reason, true);
 		return;
 	}
 

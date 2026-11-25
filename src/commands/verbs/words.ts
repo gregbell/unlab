@@ -1,4 +1,4 @@
-import type { LabState, PlanError } from "../../model/index.ts";
+import type { Disk, LabState, PlanError } from "../../model/index.ts";
 import { addressStr, ip4str, nicName, subnetStr } from "../../net/index.ts";
 import type { Selection } from "../grammar/slots.ts";
 
@@ -43,6 +43,11 @@ export function planErrorSentence(error: PlanError, ports = "Remove a machine wi
 		case "address-gateway":
 			return `--addr ${addressStr(error.address)} overlaps ${subnetStr(error.subnet)}, which the package gateway uses, so choose another subnet or add --no-gateway.`;
 	}
+}
+
+/** `4 GiB`, or with several `/dev/wdb 4 GiB, /dev/wdc 1 GiB`. */
+export function diskList(disks: readonly Disk[]): string {
+	return disks.map(({ device, gib }) => (disks.length === 1 ? `${gib} GiB` : `${device} ${gib} GiB`)).join(", ");
 }
 
 export function imageLabel(lab: LabState, image: string): string {

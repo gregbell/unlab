@@ -75,6 +75,7 @@ export function labWith(fixtures: readonly MachineFixture[], images: readonly Im
 			spec: {
 				image: "alpine",
 				memMiB: 256,
+				disks: { root: "4", extra: [] },
 				gateway: f.gateway ?? true,
 				nics: [{ net: "switch0", address: f.address === undefined ? defaultAddress(f.n) : f.address }],
 			},

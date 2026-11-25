@@ -21,7 +21,13 @@ const HOSTS: HostEntry[] = [
 ];
 const config = (n: number): BootConfig => ({
 	identity: { n, name: `node${n}`, mac: macStr(nodeMac(n)) },
-	spec: { image: "alpine", memMiB: 256, gateway: true, nics: [{ net: "switch0", address: defaultAddress(n) }] },
+	spec: {
+		image: "alpine",
+		memMiB: 256,
+		disks: { root: "4", extra: [] },
+		gateway: true,
+		nics: [{ net: "switch0", address: defaultAddress(n) }],
+	},
 	hosts: HOSTS,
 });
 

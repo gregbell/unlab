@@ -82,6 +82,7 @@ export const spawn = defineVerb({
 				request: {
 					image: plan.image,
 					memMiB: plan.memMiB,
+					disks: { root: "4", extra: [] },
 					gateway: true,
 					nics: [{ net: plan.net, address: "default" }],
 				},

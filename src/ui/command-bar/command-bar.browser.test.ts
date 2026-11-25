@@ -214,7 +214,7 @@ describe("<unlab-command-bar> CmdComplete: completing", () => {
 		await typeLine("spawn 2 alp");
 		expect(text(".hint")).toBe("tab → alpine");
 		expect(text(".signature")).toBe(
-			"spawn <count> <image> [--mem MiB] [--cpus CPUs] [--disk 4 | 8 | 16 | 32 | 64] [--name name] [--nics NICs] [--net network,... | --no-net] [--addr address,...] [--no-gateway]",
+			"spawn <count> <image> [--mem MiB] [--cpus CPUs] [--disk 4 | 8 | 16 | 32 | 64] [--extra-disk GiB,...] [--name name] [--nics NICs] [--net network,... | --no-net] [--addr address,...] [--no-gateway]",
 		);
 		expect(text(".signature .current")).toBe("<image>");
 		expect(style(".signature .current").textDecorationLine).toBe("underline");
@@ -303,7 +303,7 @@ describe("<unlab-command-bar> CmdConfirm: rm asks first", () => {
 		expect(text("unlab-confirm .heading")).toBe("Remove node3?");
 		expect(getComputedStyle(the("unlab-confirm .heading .machine")).color).toBe(tokenColor("hue-3"));
 		expect(text("unlab-confirm .detail")).toBe(
-			"Its console closes and everything on its disk is gone. There is no undo. Port 3 on switch0 frees up. node1 and node2 will stop getting answers from 10.88.0.13.",
+			"Its console closes and everything on its 4 GiB disk is gone. There is no undo. Port 3 on switch0 frees up. node1 and node2 will stop getting answers from 10.88.0.13.",
 		);
 		expect(page.getByRole("button", { name: "Remove node3", exact: true }).element()).toBeTruthy();
 		expect(texts("unlab-confirm button")).toEqual(["Remove node3↵", "Keep itesc"]);
@@ -448,7 +448,9 @@ describe("<unlab-command-bar> CmdFanout: exec results", () => {
 		await expect.poll(() => document.querySelector("unlab-command-bar .result")).not.toBeNull();
 		expect(text(".summary")).toBe("3 machines · 3 ready");
 		expect(texts(".machine-result .status")).toEqual(["ready", "ready", "ready"]);
-		expect(text(".machine-result .last")).toBe("10.88.0.11/24 · 52:54:00:88:00:0b · up on port 1 · console");
+		expect(text(".machine-result .last")).toBe(
+			"10.88.0.11/24 · 52:54:00:88:00:0b · up on port 1 · 4 GiB disk · console",
+		);
 		expect(document.querySelector("unlab-command-bar .footnote")).toBeNull();
 	});
 });

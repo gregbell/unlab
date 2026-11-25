@@ -110,6 +110,50 @@ describe("spawn", () => {
 		});
 	});
 
+	it("gives each machine the extra disks it names, and says so in the preview", async () => {
+		const lab = storeLab();
+		const will = (line: string) => lab.parsed(line).preview(lab.store.state);
+		const head = "boot node1 · alpine 3.24 · 256 MiB · 2 CPUs · 4 GiB disk";
+		expect(will("spawn 1 alpine --extra-disk 1")).toEqual({
+			will: `${head} · extra disk of 1 GiB · plugged into switch0 on port 1`,
+			assumed: "Left out, so assumed: --mem 256 --cpus 2 --disk 4 --nics 1 --net switch0",
+			tone: "plain",
+		});
+		expect(will("spawn 2 alpine --extra-disk 1,4")).toMatchObject({
+			will: expect.stringContaining("4 GiB disk · extra disks of 1 and 4 GiB each · "),
+		});
+		await lab.run("spawn 2 alpine --disk 8 --extra-disk 64,1");
+		for (const name of ["node1", "node2"] as const) {
+			expect(lab.store.state.machines[name]?.spec.disks).toEqual({ root: "8", extra: [64, 1] });
+		}
+		expect(lab.events.at(-1)).toMatchObject({ line: "spawn 2 alpine --disk 8 --extra-disk 64,1" });
+		await lab.run("spawn 1 alpine");
+		expect(lab.store.state.machines.node3?.spec.disks).toEqual({ root: "4", extra: [] });
+	});
+
+	it.each([
+		["0", "--extra-disk wants whole GiB from 1 to 64, such as 1,4, not 0."],
+		["65", "--extra-disk wants whole GiB from 1 to 64, such as 1,4, not 65."],
+		["1.5", "--extra-disk wants whole GiB from 1 to 64, such as 1,4, not 1.5."],
+		["4G", "--extra-disk wants whole GiB from 1 to 64, such as 1,4, not 4G."],
+		["1,", "--extra-disk wants whole GiB from 1 to 64, such as 1,4, not nothing."],
+		["1,1,1,1,1", "A machine has up to 4 extra disks, and --extra-disk names 5."],
+	])("refuses --extra-disk %s", (sizes, sentence) => {
+		expect(storeLab().parse(`spawn 1 alpine --extra-disk ${sizes}`)).toMatchObject({
+			message: `${sentence} Nothing was changed.`,
+		});
+	});
+
+	it("refuses more memory than a machine can have, naming memory", () => {
+		const lab = storeLab();
+		const line = lab.parsed("spawn 1 alpine --mem 4097");
+		expect(line.validate(lab.store.state)).toEqual({
+			message: "A machine has at most 4096 MiB of memory. Nothing was changed.",
+			token: 3,
+		});
+		expect(lab.parsed("spawn 1 alpine --mem 4096").validate(lab.store.state)).toBeNull();
+	});
+
 	it("gives each NIC its address or none, and says so in the preview", async () => {
 		const lab = storeLab();
 		const will = (line: string) => lab.parsed(line).preview(lab.store.state);
@@ -336,6 +380,7 @@ describe("spawn", () => {
 			"--mem",
 			"--cpus",
 			"--disk",
+			"--extra-disk",
 			"--name",
 			"--nics",
 			"--addr",

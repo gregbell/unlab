@@ -15,7 +15,7 @@ describe("rm", () => {
 		expect(danger(lab.parsed("rm node3")).confirm(lab.store.state)).toEqual({
 			question: "Remove node3?",
 			detail:
-				"Its console closes and everything on its disk is gone. There is no undo. " +
+				"Its console closes and everything on its 4 GiB disk is gone. There is no undo. " +
 				"Port 3 on switch0 frees up. node1 and node2 will stop getting answers from 10.88.0.13.",
 			actionLabel: "Remove node3",
 			machines: [{ n: 3, name: "node3" }],
@@ -30,7 +30,7 @@ describe("rm", () => {
 		expect(danger(lab.parsed("rm node2,node3")).confirm(lab.store.state)).toEqual({
 			question: "Remove node2 and node3?",
 			detail:
-				"Their consoles and 1 shell close and everything on their disks is gone. There is no undo. " +
+				"Their consoles and 1 shell close and everything on their disks is gone: node2's 4 GiB; node3's 4 GiB. There is no undo. " +
 				"Ports 2 and 3 on switch0 free up. node1 will stop getting answers from 10.88.0.13.",
 			actionLabel: "Remove node2 and node3",
 			machines: [
@@ -39,7 +39,28 @@ describe("rm", () => {
 			],
 		});
 		expect(danger(lab.parsed("rm node2")).confirm(lab.store.state)).toMatchObject({
-			detail: "Its console closes and everything on its disk is gone. There is no undo. Port 2 on switch0 frees up.",
+			detail:
+				"Its console closes and everything on its 4 GiB disk is gone. There is no undo. Port 2 on switch0 frees up.",
+		});
+	});
+
+	it("lists every disk that goes, in one question", async () => {
+		const lab = storeLab();
+		await lab.run("spawn 1 alpine --extra-disk 1,16");
+		await lab.run("spawn 1 alpine --disk 8");
+		const asks = (line: string) => danger(lab.parsed(line)).confirm(lab.store.state);
+		expect(asks("rm node1")).toMatchObject({
+			detail: expect.stringContaining(
+				"everything on its 3 disks is gone: /dev/wdb 4 GiB, /dev/wdc 1 GiB, /dev/wdd 16 GiB. There is no undo.",
+			),
+		});
+		expect(asks("rm all")).toMatchObject({
+			detail: expect.stringContaining(
+				"everything on their disks is gone: node1's /dev/wdb 4 GiB, /dev/wdc 1 GiB, /dev/wdd 16 GiB; node2's 8 GiB. There",
+			),
+		});
+		expect(lab.parsed("rm node1").preview(lab.store.state)).toMatchObject({
+			will: "remove node1 with its 3 disks · frees port 1",
 		});
 	});
 

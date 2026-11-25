@@ -160,7 +160,7 @@ describe("the artboards, replayed", () => {
 		expect(view.rows.slice(3, 6)).toEqual([
 			{ kind: "verb", name: "spawn", signature: "<count> <image>", about: "boot machines" },
 			{ kind: "verb", name: "rm", signature: "<machines>", about: "remove machines and their disks" },
-			{ kind: "verb", name: "ls", signature: "", about: "list machines, addresses and links" },
+			{ kind: "verb", name: "ls", signature: "", about: "list machines, addresses, links and disks" },
 		]);
 		expect(view.rows.filter((r) => r.kind === "verb").map((r) => r.kind === "verb" && r.name)).toEqual([
 			"spawn",
@@ -194,6 +194,7 @@ describe("the artboards, replayed", () => {
 				"[--mem MiB]",
 				"[--cpus CPUs]",
 				"[--disk 4 | 8 | 16 | 32 | 64]",
+				"[--extra-disk GiB,...]",
 				"[--name name]",
 				"[--nics NICs]",
 				"[--net network,... | --no-net]",
@@ -359,7 +360,7 @@ describe("the artboards, replayed", () => {
 			confirm: {
 				question: "Remove node3?",
 				detail:
-					"Its console closes and everything on its disk is gone. There is no undo. " +
+					"Its console closes and everything on its 4 GiB disk is gone. There is no undo. " +
 					"Port 3 on switch0 frees up. node1 and node2 will stop getting answers from 10.88.0.13.",
 				actionLabel: "Remove node3",
 				machines: [{ n: 3, name: "node3" }],

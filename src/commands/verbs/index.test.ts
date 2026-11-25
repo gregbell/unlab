@@ -9,11 +9,11 @@ describe("VERBS", () => {
 		expect(registry.commands.map((c) => [c.name, c.signature.join(" "), c.about])).toEqual([
 			[
 				"spawn",
-				"<count> <image> [--mem MiB] [--cpus CPUs] [--disk 4 | 8 | 16 | 32 | 64] [--name name] [--nics NICs] [--net network,... | --no-net] [--addr address,...] [--no-gateway]",
+				"<count> <image> [--mem MiB] [--cpus CPUs] [--disk 4 | 8 | 16 | 32 | 64] [--extra-disk GiB,...] [--name name] [--nics NICs] [--net network,... | --no-net] [--addr address,...] [--no-gateway]",
 				"boot machines",
 			],
 			["rm", "<machines>", "remove machines and their disks"],
-			["ls", "", "list machines, addresses and links"],
+			["ls", "", "list machines, addresses, links and disks"],
 			["exec", "<machines> -- <command>", "run a shell command in each console"],
 			["sh", "<machine>", "open another shell on a machine"],
 			["link", "<up | down> <machines>", "plug or cut cables"],
@@ -50,10 +50,11 @@ const lines = fc.oneof(
 			fc.constantFrom("alpine", "debian"),
 			fc.option(fc.constantFrom("--mem 128", "--mem 256", "--mem 1000")),
 			fc.option(fc.constantFrom("--net switch0", "--no-net")),
+			fc.option(fc.constantFrom("--extra-disk 1", "--extra-disk 64,1,1,2")),
 			fc.boolean(),
 		)
-		.map(([n, image, mem, net, swap]) => {
-			const options = [mem, net].filter((o) => o !== null);
+		.map(([n, image, mem, net, extra, swap]) => {
+			const options = [mem, net, extra].filter((o) => o !== null);
 			return ["spawn", n, image, ...(swap ? options.reverse() : options)].join(" ");
 		}),
 	fc.tuple(fc.constantFrom("up", "down"), word).map(([dir, w]) => `link ${dir} ${w}`),

@@ -34,7 +34,13 @@ const hostsOf = (...ns: number[]): HostEntry[] => ns.map((n) => ({ ip: `10.88.0.
 function config(n: number, hosts: readonly HostEntry[] = hostsOf(n), image = "alpine"): BootConfig {
 	return {
 		identity: identity(n),
-		spec: { image, memMiB: 256, gateway: true, nics: [{ net: "switch0", address: defaultAddress(n) }] },
+		spec: {
+			image,
+			memMiB: 256,
+			disks: { root: "4", extra: [] },
+			gateway: true,
+			nics: [{ net: "switch0", address: defaultAddress(n) }],
+		},
 		hosts,
 	};
 }
@@ -204,7 +210,7 @@ function setup() {
 			imagesAsked.push(name);
 			return Promise.resolve(new ArrayBuffer(4));
 		},
-		deleteDisk: (n) => deleted.push(n),
+		deleteDisks: (n) => deleted.push(n),
 		announce: (text) => announced.push(text),
 		every(ms, fn) {
 			const interval = { ms, fn, cancelled: false };
@@ -288,7 +294,7 @@ describe("a name used again", () => {
 			{ type: "port/detach", port: 1 },
 			{ type: "screen/dispose", session: `${web}:console` },
 			{ type: "screen/dispose", session: `${web}:sh1` },
-			{ type: "disk/delete", n: 1 },
+			{ type: "disks/delete", n: 1 },
 		);
 		expect(t.deleted).toEqual([1]);
 
