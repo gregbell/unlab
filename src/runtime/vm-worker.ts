@@ -205,14 +205,14 @@ async function boot(c: VmConfig): Promise<void> {
 		post({ type: "stage", stage: "download" });
 		const extras = await Promise.all(
 			extra.map(({ device, gib }, i) =>
-				openExtraDisk({ n: c.n, k: i + 1, gib, onError: unsaved(device) }).catch((error: unknown) => {
+				openExtraDisk({ n: c.n, set: 0, k: i + 1, gib, onError: unsaved(device) }).catch((error: unknown) => {
 					throw new Error(storageFailure(c.name, device, error));
 				}),
 			),
 		);
 		vm = await createKernel({
 			distro: new MemoryDisk(c.image),
-			disks: [{ kind: "data", template: "bundled", name: rootStore(c.n), size: root.gib * 2 ** 30 }, ...extras],
+			disks: [{ kind: "data", template: "bundled", name: rootStore(c.n, 0), size: root.gib * 2 ** 30 }, ...extras],
 			// The extra disks report their own.
 			onDiskError: (_, error) => unsaved(root.device)(error),
 			net: nics.eth0,
