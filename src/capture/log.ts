@@ -129,9 +129,17 @@ export const NO_REPLY_MS = 1000;
 
 type StoredFrame = Omit<FrameEntry, "noReply"> & { noReply: boolean };
 type Stored = StoredFrame | LinkEntry;
+/** What a machine asked of an address, however often. */
+interface Question {
+	readonly key: string;
+	/** Requests that still wait for an answer or for the sweep. */
+	open: number;
+	/** The tick of the latest reply. */
+	answered: number;
+}
 interface OpenRequest {
 	readonly frame: StoredFrame;
-	readonly key: string;
+	readonly question: Question;
 	/** Its place among ARP frames: a reply with a later tick answers it. */
 	readonly tick: number;
 }
@@ -159,11 +167,28 @@ export function createCaptureLog(opts: CaptureOptions): CaptureLog {
 	let revision = 0;
 	const counters = { in: 0, delivered: 0, flooded: 0 };
 
-	// Requests in arrival order, and the tick of the latest reply to each question.
-	const pending: OpenRequest[] = [];
+	// Requests in arrival order, and what they asked. Only those still in the ring, so there are never more than it
+	// holds: a sweep can be a minute away, and a storm would fill the page's memory with the others.
+	const pending: (OpenRequest | undefined)[] = new Array(limit);
 	let pendingHead = 0;
-	const replies = new Map<string, number>();
+	let pendingLen = 0;
+	const questions = new Map<string, Question>();
 	let arpTick = 0;
+	const ask = (frame: StoredFrame, key: string) => {
+		const question = questions.get(key) ?? { key, open: 0, answered: 0 };
+		questions.set(key, question);
+		question.open++;
+		for (let old = oldest(); old && old.frame.seq < first; old = oldest()) settle(old);
+		pending[(pendingHead + pendingLen) % limit] = { frame, question, tick: arpTick };
+		pendingLen++;
+	};
+	const oldest = (): OpenRequest | undefined => pending[pendingHead];
+	const settle = ({ question }: OpenRequest) => {
+		pending[pendingHead] = undefined;
+		pendingHead = (pendingHead + 1) % limit;
+		pendingLen--;
+		if (--question.open === 0) questions.delete(question.key);
+	};
 
 	const listeners = new Set<() => void>();
 	let scheduled = false;
@@ -283,7 +308,10 @@ export function createCaptureLog(opts: CaptureOptions): CaptureLog {
 			const arp = frame.length >= 42 && frame[12] === ETH_ARP >> 8 && frame[13] === (ETH_ARP & 255);
 			const addrs = arp ? arpAddrs(frame) : null;
 			if (addrs) arpTick++;
-			if (addrs?.op === 2) replies.set(arpKey(addrs.tpa, addrs.spa), arpTick);
+			if (addrs?.op === 2) {
+				const question = questions.get(arpKey(addrs.tpa, addrs.spa));
+				if (question) question.answered = arpTick;
+			}
 
 			if (paused) {
 				changed();
@@ -301,10 +329,8 @@ export function createCaptureLog(opts: CaptureOptions): CaptureLog {
 				names: names(),
 				noReply: false,
 			};
-			if (addrs?.op === 1 && addrs.spa !== addrs.tpa) {
-				pending.push({ frame: e, key: arpKey(addrs.spa, addrs.tpa), tick: arpTick });
-			}
 			push(e);
+			if (addrs?.op === 1 && addrs.spa !== addrs.tpa) ask(e, arpKey(addrs.spa, addrs.tpa));
 			changed();
 		},
 
@@ -327,19 +353,11 @@ export function createCaptureLog(opts: CaptureOptions): CaptureLog {
 
 		sweep(t) {
 			let marked = false;
-			while (pendingHead < pending.length && t - pending[pendingHead].frame.t >= NO_REPLY_MS) {
-				const r = pending[pendingHead++];
-				if ((replies.get(r.key) ?? 0) > r.tick) continue;
+			for (let r = oldest(); r && t - r.frame.t >= NO_REPLY_MS; r = oldest()) {
+				settle(r);
+				if (r.question.answered > r.tick) continue;
 				r.frame.noReply = true;
 				if (at(r.frame.seq) === r.frame) marked = true;
-			}
-			if (pendingHead === pending.length) {
-				pending.length = 0;
-				pendingHead = 0;
-				replies.clear();
-			} else if (pendingHead > 1024) {
-				pending.splice(0, pendingHead);
-				pendingHead = 0;
 			}
 			if (marked) changed();
 		},
@@ -351,9 +369,10 @@ export function createCaptureLog(opts: CaptureOptions): CaptureLog {
 			matchHead = 0;
 			matchLen = 0;
 			matchedFrames = 0;
-			pending.length = 0;
+			pending.fill(undefined);
 			pendingHead = 0;
-			replies.clear();
+			pendingLen = 0;
+			questions.clear();
 			changed();
 		},
 	};

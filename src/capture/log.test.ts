@@ -1,9 +1,13 @@
+import { setFlagsFromString } from "node:v8";
+import { runInNewContext } from "node:vm";
 import { describe, expect, test } from "vitest";
 import {
+	arpPacket,
 	arpReply,
 	arpRequest,
 	BROADCAST,
 	eth,
+	ip,
 	ipv4Packet,
 	mac,
 	NAMES,
@@ -346,6 +350,19 @@ describe("annotations", () => {
 		expect(notes(log)).toEqual(["flooded to port 2"]);
 	});
 
+	test("a question asked again is answered from the reply on, and again only by another", () => {
+		const { log, frame, at } = setup();
+		frame(arpRequest(1, 2), 1, bit(2), "group");
+		frame(arpRequest(1, 2), 1, bit(2), "group");
+		at(500);
+		frame(arpReply(2, 1), 2, bit(1));
+		frame(arpRequest(1, 2), 1, bit(2), "group");
+		log.sweep(1400);
+		at(1450);
+		log.sweep(1500);
+		expect(notes(log)).toEqual(["flooded to port 2", "flooded to port 2", null, "flooded to port 2 · no reply"]);
+	});
+
 	test("a request evicted or cleared before its sweep is forgotten", () => {
 		const { log, frame } = setup(2);
 		frame(arpRequest(1, 9), 1, 0, "group");
@@ -355,6 +372,45 @@ describe("annotations", () => {
 		log.clear();
 		log.sweep(5000);
 		expect(log.size).toBe(0);
+	});
+});
+
+describe("a storm of ARP with no sweep, as in a tab that is hidden", () => {
+	setFlagsFromString("--expose-gc");
+	const collect = runInNewContext("gc") as () => void;
+
+	test("keeps no request that has left the buffer", async () => {
+		const { log, frame } = setup(100);
+		const held = Array.from({ length: 1000 }, () => {
+			const bytes = arpRequest(1, 9);
+			frame(bytes, 1, bit(2), "group");
+			return new WeakRef(bytes);
+		});
+		// A WeakRef is held to the end of the task that made it.
+		await new Promise((resolve) => setTimeout(resolve));
+		collect();
+		expect(held.filter((ref) => ref.deref()).length).toBe(100);
+		log.sweep(1000);
+		expect(notes(log)).toEqual(new Array(100).fill("flooded to port 2 · no reply"));
+	});
+
+	test("grows with neither the questions nor the replies", () => {
+		const { log, frame } = setup(100);
+		const used = () => {
+			collect();
+			return process.memoryUsage().heapUsed;
+		};
+		const storm = (from: number) => {
+			for (let i = from; i < from + 50_000; i++) {
+				frame(arpRequest(1, 9, 0x0b000000 + i), 1, bit(2), "group");
+				frame(eth(mac(1), mac(2), 0x0806, arpPacket(2, mac(2), 0x0c000000 + i, mac(1), ip(1))), 2, bit(1));
+			}
+		};
+		storm(0);
+		const before = used();
+		storm(50_000);
+		expect((used() - before) / 2 ** 20).toBeLessThan(4);
+		expect(log.size).toBe(100);
 	});
 });
 
