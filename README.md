@@ -34,8 +34,9 @@ a guest console, or use `exec` in the bar to address a guest by name.
 
 | Command bar example                          | What it does                                                                                                                           |
 | -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `ls`                                         | List machines, and each network interface's MAC, address, port, and link.                                                              |
+| `ls`                                         | List machines and their disks, and each network interface's MAC, address, port, and link.                                              |
 | `spawn 2 alpine --mem 512 --cpus 2 --disk 8` | Add two Alpine machines with 512 MiB of RAM, two CPUs, and an 8 GiB disk each. Use `--no-net` to leave them unplugged.                 |
+| `spawn 1 alpine --extra-disk 1,4`            | Add a machine with two blank disks of 1 and 4 GiB: `/dev/wdc` and `/dev/wdd`. A machine takes up to four, of up to 64 GiB each.        |
 | `spawn 1 alpine --name web`                  | Add a machine called `web`. Every command takes the name, and it is the machine's hostname and what the others reach it by.            |
 | `spawn 1 alpine --nics 2 --net switch0,none` | Add a machine with two network interfaces: `eth0` plugged in and `eth1` left unplugged. Without `--net`, each takes its own port.      |
 | `spawn 1 alpine --addr 10.1.0.1/24`          | Add a machine with an address you choose. With `--nics`, give each interface an address or `none`: `--nics 2 --addr 10.1.0.1/24,none`. |
@@ -46,7 +47,7 @@ a guest console, or use `exec` in the bar to address a guest by name.
 | `sh node2`                                   | Open another shell on node2.                                                                                                           |
 | `focus node2 --max`                          | Maximise or restore its pane. Use `--main` to promote it to the main pane.                                                             |
 | `boot node2`                                 | Retry a failed boot.                                                                                                                   |
-| `rm node2`                                   | Remove the machine and delete its disk after confirmation.                                                                             |
+| `rm node2`                                   | Remove the machine and delete its disks, after a confirmation that lists them.                                                         |
 
 Commands that accept multiple machines can take a list (`node1,node3`), a glob
 (`node*`), or `all`. Globs and `all` select ready machines.
@@ -155,7 +156,7 @@ them. Your choices survive a reload.
 
 | Tool              | What it does                            | Default  |
 | ----------------- | --------------------------------------- | -------- |
-| `machines_list`   | List machines, addresses, and links.    | `run`    |
+| `machines_list`   | List machines, addresses, links, disks. | `run`    |
 | `machines_spawn`  | Boot machines.                          | `ask me` |
 | `machines_remove` | Remove machines and delete their disks. | `ask me` |
 | `shell_exec`      | Run a command in a guest's shell.       | `run`    |
@@ -197,9 +198,16 @@ a separate window opens when you wanted your own browser, reconnect `unlab` in
 - Each guest defaults to 256 MiB of RAM, a sparse 4 GiB disk, and two CPUs, or
   one CPU if the browser lacks multicore support. The disk uses browser storage
   as the guest writes to it.
-- Reloading the page boots each machine from its own IndexedDB-backed ext4 disk.
-  Switch ports and cable connections survive a reload. Shell processes and
-  packet captures start fresh. One tab at a time owns the lab.
+- `/dev/wda` is the image, `/dev/wdb` keeps the guest's files, and the disks that
+  `--extra-disk` adds follow from `/dev/wdc`. An extra disk starts blank, and the lab
+  never formats or mounts one. Alpine partitions it with `fdisk`. Neither image has
+  a formatter for a file system its kernel mounts, so install one first: on Alpine,
+  `sudo apk add e2fsprogs`.
+- Reloading the page boots each machine from its own IndexedDB-backed disks. Switch
+  ports and cable connections survive a reload. Shell processes and packet captures
+  start fresh. One tab at a time owns the lab.
+- A machine that the browser has no memory or storage left for fails with a sentence
+  that says which. Remove a machine or free some space, then use `boot`.
 
 ## Install packages
 
