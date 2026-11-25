@@ -1,7 +1,7 @@
 import { expect, type Page, test } from "@playwright/test";
 import { chromiumExecutable } from "../test/support/chromium.ts";
 import { typed } from "./lab.ts";
-import { call } from "./webmcp.ts";
+import { call, finish, start } from "./webmcp.ts";
 
 test.use({
 	launchOptions: { executablePath: chromiumExecutable(), args: ["--enable-features=WebMCP"] },
@@ -119,6 +119,20 @@ test("an example from help runs as it stands, typed or called", async ({ page })
 	expect(await call(page, "machines_spawn", data.example.input)).toEqual({
 		error: "A machine is already called router, so give another name with --name. Nothing was changed.",
 	});
+});
+
+test("a command for a session that runs a program says so, in the bar and to an agent", async ({ page }) => {
+	await openLab(page);
+	await typed(page, "spawn 1 alpine");
+	await expect(page.getByText("1 of 1 machine ready")).toBeVisible({ timeout: 60_000 });
+	await start(page, "sleep", "shell_exec", { targets: "node1", command: "sleep 8" });
+	const called = async () =>
+		((await call(page, "shell_exec", { targets: "node1", command: "true" })) as { readonly error?: string }).error;
+	await expect.poll(called).toContain("node1:console is running a program");
+	const error = await called();
+	expect(await refused(page, "exec node1 -- true")).toContain(error);
+	expect(await finish(page, "sleep")).toMatchObject({ data: { ran: [{ exitCode: 0 }] } });
+	expect(await called()).toBeUndefined();
 });
 
 /** What the bar says of a line that cannot run. */

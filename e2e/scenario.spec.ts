@@ -52,6 +52,10 @@ test("an agent builds a routed network with the page's addresses, and the router
 	});
 	await spawn(page, { image: "lab", name: "web", addr: "10.10.1.10/24" });
 	await spawn(page, { image: "alpine", name: "db", addr: "10.10.2.10/24" });
+	expect((await list(page)).at(-1)).toMatchObject({ name: "db", state: "booting" });
+	expect(await call(page, "shell_exec", { targets: "db", command: "true" })).toMatchObject({
+		error: expect.stringContaining("db is still booting"),
+	});
 	await states(page, "ready", "ready", "ready");
 	expect(await list(page)).toMatchObject([
 		{
