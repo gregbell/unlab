@@ -351,7 +351,7 @@ describe("spawn", () => {
 		}
 		lab.runtime({ type: "vm/failed", machine: web, attempt: 1, reason: "" });
 		expect(lab.parsed("boot web").validate(lab.store.state)).toBeNull();
-		expect(lab.parsed("capture wbe").validate(lab.store.state)).toMatchObject({ token: 1 });
+		expect(lab.parse("capture wbe")).toMatchObject({ token: 1, fix: "capture web" });
 		const complete = (line: string) =>
 			completeLine(lab.registry, line, line.length, lab.store.state).suggestions.map((s) => s.insert);
 		expect(complete("rm w")).toEqual(["web"]);

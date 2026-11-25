@@ -5,7 +5,7 @@ import "./ui/styles/index.css";
 import "./ui/app/app.ts";
 
 import { detectModelContext, startAgent } from "./agent/index.ts";
-import { createCaptureLog } from "./capture/index.ts";
+import { createCaptureLog, followLab } from "./capture/index.ts";
 import { createCommandService, createRegistry, VERBS } from "./commands/index.ts";
 import {
 	clockHz,
@@ -21,7 +21,6 @@ import {
 	severalNics,
 	switchLabel,
 } from "./model/index.ts";
-import { compileFilter } from "./net/index.ts";
 import { createRuntime, type DistroManifest, type Engine, sweepDisks } from "./runtime/index.ts";
 import type { AppServices, TerminalHost } from "./ui/services.ts";
 
@@ -135,26 +134,7 @@ async function main(): Promise<void> {
 	// The model asks for a faster clock while machines boot; at rest it still needs one, or its idea of now never moves.
 	runtime.run({ type: "clock", hz: clockHz(store.state) });
 
-	let filter = store.state.capture.filter;
-	let filtered = true;
-	let names = selectNames(store.state);
-	let paused = store.state.capture.paused;
-	store.subscribe(() => {
-		const next = store.state.capture;
-		const known = selectNames(store.state);
-		// A word that named no machine when it was typed can name one later.
-		if (next.filter !== filter || (!filtered && known !== names)) {
-			filter = next.filter;
-			const compiled = compileFilter(filter, known);
-			filtered = compiled.ok;
-			if (compiled.ok) capture.setFilter(compiled.filter);
-		}
-		names = known;
-		if (next.paused !== paused) {
-			paused = next.paused;
-			capture.setPaused(paused);
-		}
-	});
+	followLab(capture, store);
 
 	const engine = runtime;
 	const registry = createRegistry(

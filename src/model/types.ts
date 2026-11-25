@@ -375,6 +375,8 @@ export interface LabState {
 	readonly departed: Readonly<Partial<Record<MachineName, Departed>>>;
 	/** In the order they are shown. */
 	readonly switches: readonly [typeof DEFAULT_SWITCH, ...SwitchName[]];
+	/** Those that are gone, until a machine or a switch takes the name. Frames still name them. */
+	readonly departedSwitches: readonly SwitchName[];
 	/** The one whose faceplate is on the page. Always one of `switches`. */
 	readonly shownSwitch: SwitchName;
 	readonly sessions: Readonly<Partial<Record<SessionId, Session>>>;

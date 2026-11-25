@@ -38,8 +38,10 @@ export interface NameBook {
 	readonly addresses: ReadonlyMap<number, NodeNic>;
 	/** What each machine is called, by its n. No two have one name. */
 	readonly names: ReadonlyMap<number, MachineName>;
+	/** What switches are called, and those that are gone were until something else took the name. No machine of now has one. */
+	readonly switches: ReadonlySet<string>;
 }
-export const NO_NAMES: NameBook = { addresses: new Map(), names: new Map() };
+export const NO_NAMES: NameBook = { addresses: new Map(), names: new Map(), switches: new Set() };
 
 export function defaultName(n: number): MachineName {
 	return `node${n}`;

@@ -177,8 +177,10 @@ function addressed(spec: MachineSpec): readonly { readonly nic: NicNo; readonly 
 	});
 }
 
-/** Who is who in the lab now. A machine that is gone keeps its name until another takes it. */
-export function nameBook(state: Pick<LabState, "machines" | "rail" | "departed">): NameBook {
+type Named = Pick<LabState, "machines" | "rail" | "departed" | "switches" | "departedSwitches">;
+
+/** Who is who in the lab now. What is gone keeps its name until something else takes it. */
+export function nameBook(state: Named): NameBook {
 	const holders = new Map<MachineName, number>();
 	for (const name of Object.keys(state.departed) as MachineName[]) {
 		const gone = state.departed[name];
@@ -189,7 +191,11 @@ export function nameBook(state: Pick<LabState, "machines" | "rail" | "departed">
 		holders.set(name, n);
 		for (const { nic, address } of addressed(spec)) addresses.set(address.ip, { n, nic });
 	}
-	return { addresses, names: new Map([...holders].map(([name, n]) => [n, name])) };
+	return {
+		addresses,
+		names: new Map([...holders].map(([name, n]) => [n, name])),
+		switches: new Set([...state.switches, ...state.departedSwitches]),
+	};
 }
 
 export function isPlanError(plan: object | null): plan is PlanError | PlugPlanError {
@@ -549,6 +555,7 @@ export function bootMachines(state: LabState, nodes: readonly BootNode[], nextN:
 		nextN,
 		machines,
 		sessions,
+		departedSwitches: state.departedSwitches.filter((name) => !(name in machines)),
 		rail: [...state.rail, ...added.map((machine) => machine.name)],
 	};
 	const effects = added.flatMap((machine): Effect[] => [

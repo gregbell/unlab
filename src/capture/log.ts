@@ -206,10 +206,7 @@ export function createCaptureLog(opts: CaptureOptions): CaptureLog {
 
 	const at = (seq: number): Stored | undefined => (seq >= first && seq < next ? ring[seq % limit] : undefined);
 	const matchAt = (i: number): number => matches[(matchHead + i) % limit];
-	const passes = (e: Stored): boolean =>
-		e.kind === "frame"
-			? filter.matchesFrame(e.bytes, e.from, e.to, e.names)
-			: filter.matchesLink(e.port.port, e.machine, e.nic, e.names);
+	const passes = (e: Stored): boolean => (e.kind === "frame" ? filter.matchesFrame(e) : filter.matchesLink(e));
 	const index = (e: Stored) => {
 		if (!passes(e)) return;
 		matches[(matchHead + matchLen) % limit] = e.seq;

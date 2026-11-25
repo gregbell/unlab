@@ -3,7 +3,7 @@
 // engine wire the app's: filter and pause follow the store, and the
 // `capture/clear` effect clears it.
 
-import { type CaptureLog, createCaptureLog } from "../../src/capture/index.ts";
+import { type CaptureLog, createCaptureLog, followLab } from "../../src/capture/index.ts";
 import {
 	type Cause,
 	DEFAULT_SWITCH,
@@ -11,9 +11,8 @@ import {
 	type MachineName,
 	type PortNo,
 	type ReadStore,
-	selectNames,
 } from "../../src/model/index.ts";
-import { compileFilter, type Flood, type NameBook, type NicNo } from "../../src/net/index.ts";
+import type { Flood, NameBook, NicNo } from "../../src/net/index.ts";
 import { NAMES } from "./frames.ts";
 
 export interface TestCapture {
@@ -53,19 +52,7 @@ export function testCapture(limit?: number): TestCapture {
 			if (effect.type === "capture/clear") log.clear();
 		},
 		follow(store) {
-			let { filter, paused } = store.state.capture;
-			store.subscribe(() => {
-				const next = store.state.capture;
-				if (next.filter !== filter) {
-					filter = next.filter;
-					const compiled = compileFilter(filter, selectNames(store.state));
-					if (compiled.ok) log.setFilter(compiled.filter);
-				}
-				if (next.paused !== paused) {
-					paused = next.paused;
-					log.setPaused(paused);
-				}
-			});
+			followLab(log, store);
 		},
 	};
 }

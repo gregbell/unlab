@@ -5,6 +5,7 @@ import {
 	type CheckpointName,
 	DEFAULT_SWITCH,
 	type GiB,
+	heldPorts,
 	isNameFault,
 	type LabState,
 	lowestFreePorts,
@@ -17,10 +18,12 @@ import {
 	type NameFault,
 	type NicRef,
 	type NicSpec,
+	nicLabel,
 	nicsOf,
 	type Phase,
 	type Place,
 	PORTS,
+	type PortNo,
 	parseCheckpointName,
 	parseChosenName,
 	parseGiB,
@@ -30,17 +33,21 @@ import {
 	portName,
 	type SessionId,
 	type SwitchName,
+	selectNames,
 	sizeText,
 	takenPorts,
 } from "../../model/index.ts";
 import {
 	type AddressFault,
 	addressStr,
+	compileFilter,
+	FILTER_PROTOCOLS,
 	ip4str,
 	isAddressFault,
 	NICS,
 	type NicNo,
 	nicName,
+	PORT_WORD,
 	parseAddress,
 	parseNicName,
 } from "../../net/index.ts";
@@ -107,11 +114,22 @@ export interface Options<T> {
 	readonly default: T;
 }
 
+/** Why words cannot be read: the one at fault by its place in them, and what it could have been instead. */
+export interface WordsFault {
+	readonly message: string;
+	readonly start: number;
+	readonly instead: readonly string[];
+}
+
 /** The remaining plain tokens, joined by single spaces. */
 export interface Rest {
 	readonly kind: "rest";
 	readonly label: string;
 	readonly about: string;
+	/** Left out, any words are read. */
+	check?(text: string, ctx: ReadContext): WordsFault | null;
+	/** For the word under the caret, as a value's. Left out, none. */
+	suggest?(typed: string, ctx: ReadContext): readonly Suggestion[];
 }
 
 /** Everything after a bare `--`. */
@@ -960,12 +978,66 @@ export function text(label: string, about: string): Rest {
 	return { kind: "rest", label, about };
 }
 
+/** What a port's cable goes to, and whether it is cut. */
+function portDetail(lab: LabState, on: SwitchName, port: PortNo): string {
+	const held = heldPorts(lab, on).find((other) => other.port === port);
+	if (!held) return "no cable";
+	const { machine, nic } = held;
+	const plug = plugsOf(machine.life)[nic];
+	return `${nicLabel(machine, nic)} · ${plug?.kind === "port" && plug.link === "cut" ? "down" : "up"}`;
+}
+
+/** The parts of one machine or switch that is typed as far as its colon, or else whatever can be named. */
+function filterTerms(typed: string, lab: LabState): readonly Suggestion[] {
+	if (typed.startsWith(`${PORT_WORD}:`)) {
+		return PORTS.map((port) => ({ insert: `${PORT_WORD}:${port}`, label: `${PORT_WORD}:${port}` }));
+	}
+	const on = lab.switches.find((name) => typed.startsWith(`${name}:`));
+	if (on) {
+		return PORTS.map((port) => {
+			const insert = portName({ switch: on, port });
+			return { insert, label: insert, detail: portDetail(lab, on, port) };
+		});
+	}
+	return [
+		...machinesOf(lab).flatMap((m) => {
+			const nics = nicsOf(lab, m.name);
+			const inParts = nics.length > 1 || typed.startsWith(`${m.name}:`);
+			return [
+				machineSuggestion(m),
+				...(inParts ? nics : []).map(({ nic }): Suggestion => {
+					const label = `${m.name}:${nicName(nic)}`;
+					return { insert: label, label, detail: plugDetail(lab, m, nic), hue: m.hue };
+				}),
+			];
+		}),
+		...(lab.switches.length === 1 ? [] : lab.switches).map((name) => ({
+			insert: name,
+			label: name,
+			detail: portsTaken(lab, name),
+		})),
+		...FILTER_PROTOCOLS.map((name) => ({ insert: name, label: name })),
+	];
+}
+
 /** Which captured frames to show. */
 export function frameFilter(): Rest {
-	return text(
-		"filter",
-		"Terms that must all match, with or between alternatives: a protocol, machine, NIC (node2:eth1), address, MAC or port:N. Empty, every frame.",
-	);
+	return {
+		...text(
+			"filter",
+			"Terms that all match, with or between alternatives: protocol, machine, NIC (node2:eth1), IP, MAC, switch (lan), cable (lan:3), port:N. Empty is all.",
+		),
+		check(text, { lab }) {
+			const compiled = compileFilter(text, selectNames(lab));
+			if (compiled.ok) return null;
+			const { message, start, token } = compiled.error;
+			const colon = token.indexOf(":");
+			const named = filterTerms("", lab).map(({ insert }) => insert);
+			const instead = colon < 0 ? named : named.map((name) => name + token.slice(colon));
+			return { message: message.replace(/^Capture /, "capture "), start, instead };
+		},
+		suggest: (typed, { lab }) => filterTerms(typed, lab),
+	};
 }
 
 export function passthrough(label: string, about: string): Passthrough {
