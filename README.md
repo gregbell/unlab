@@ -103,6 +103,7 @@ has been used with Chromium 155.
 | `status`                             | Say what is linked and forwarded, and which connections machines have open.                           |
 | `spawn 2 alpine`, and all the others | Run a lab command, with the lab's own completion. One that asks first asks here.                      |
 
+To keep it running without a terminal, as a job in the background: `npx unlab.run > unlab.log &`.
 Any command runs from a shell too, and exits with the machine's own status:
 `npx unlab.run exec node1 -- uname -a`. Add `--json` before it for its data, and
 `--yes` for a command that asks first. `npx unlab.run --help` lists the options.

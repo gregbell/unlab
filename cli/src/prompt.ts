@@ -178,7 +178,15 @@ export async function prompt({ sshConfig, input, output, errors }: PromptOptions
 			}
 		});
 		opened.on("close", () => {
-			if (reader === opened) queue = queue.then(() => ended.resolve());
+			if (reader !== opened) return;
+			// In a terminal it is Ctrl-D. Without one it is the end of what was piped in, or a job in the background.
+			if (input.isTTY) queue = queue.then(() => ended.resolve());
+			else {
+				reader = undefined;
+				queue = queue.then(() => {
+					out("Input ended. The CLI runs on until it is stopped.");
+				});
+			}
 		});
 		opened.on("line", (text) => {
 			if (answering) {

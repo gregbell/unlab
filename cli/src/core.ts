@@ -84,6 +84,9 @@ export class Core {
 	readonly #forwards: Forwards;
 	readonly #files: SshFiles;
 	readonly #watching = new Set<Socket>();
+	/** Every connection to the socket: the prompt's, ssh's, other runs of the CLI. */
+	readonly #clients = new Set<Socket>();
+	#idle: (() => void) | undefined;
 	#port = 0;
 	#states = new Map<string, string>();
 	#local: Server | undefined;
@@ -180,7 +183,20 @@ export class Core {
 		};
 	}
 
+	/** Resolves once nothing is connected to the socket: a single command that started the CLI ends it then, and not under another's feet. */
+	idle(): Promise<void> {
+		if (this.#clients.size === 0) return Promise.resolve();
+		return new Promise((resolve) => {
+			this.#idle = resolve;
+		});
+	}
+
 	#came(socket: Socket): void {
+		this.#clients.add(socket);
+		socket.once("close", () => {
+			this.#clients.delete(socket);
+			if (this.#clients.size === 0) this.#idle?.();
+		});
 		const say = (reply: Reply) => socket.write(`${JSON.stringify(reply)}\n`);
 		const done = (value: unknown = null) => {
 			say({ type: "ok", value });

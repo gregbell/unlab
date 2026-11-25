@@ -65,9 +65,27 @@ async function start(options: Options): Promise<Core | null> {
 		await core.start();
 	} catch (error) {
 		if ((error as NodeJS.ErrnoException).code !== "EADDRINUSE") throw error;
+		// Another run of the CLI that started at the same moment has the port, and is about to answer.
+		if (await answers(STARTING_MS)) return null;
 		throw new Error(`Another program has port ${options.port}. Quit it, or choose another with --port.`);
 	}
 	return core;
+}
+
+/** How long a CLI that has its port takes to answer on its socket. */
+const STARTING_MS = 3000;
+
+async function answers(ms: number): Promise<boolean> {
+	for (const until = Date.now() + ms; Date.now() < until; ) {
+		try {
+			await request<Status>({ type: "status" });
+			return true;
+		} catch (error) {
+			if (!(error instanceof NotRunning)) throw error;
+			await new Promise((resolve) => setTimeout(resolve, 100));
+		}
+	}
+	return false;
 }
 
 /** Rejects when the lab that came cannot be used: waiting on, or opening it again, would not change that. */
@@ -174,7 +192,11 @@ async function main(args: readonly string[]): Promise<number> {
 		});
 	}
 	try {
-		if (options.words.length > 0) return await once(options, core);
+		if (options.words.length > 0) {
+			const code = await once(options, core);
+			await core?.idle();
+			return code;
+		}
 		await interactive(options, core);
 		return 0;
 	} finally {

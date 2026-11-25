@@ -143,6 +143,24 @@ test("ssh-config prints the line, and edits nothing", async () => {
 	expect(printed).toMatchObject({ code: 0, stdout: `Include ${join(cli.dir, "ssh_config")}\n` });
 });
 
+test("one with nothing to read runs on, as a job in the background does", async () => {
+	session.child.stdin?.end();
+	await session.shows("Input ended. The CLI runs on until it is stopped.");
+	await new Promise((resolve) => setTimeout(resolve, 1000));
+	expect(session.child.exitCode).toBeNull();
+	expect((await cli.once("status")).stdout).toContain("The lab is not linked.");
+});
+
+test("commands that start at the same moment share one CLI", async () => {
+	session.child.kill("SIGTERM");
+	await session.exited;
+	// The first to have the port ends it only once the others are done with it.
+	const all = await Promise.all(Array.from({ length: 6 }, () => cli.once("status")));
+	for (const ran of all) expect(ran).toMatchObject({ code: 0, stdout: "The lab is not linked.\n", stderr: "" });
+	session = cli.start();
+	await session.shows("Waiting for the lab");
+});
+
 test("a CLI that was killed leaves nothing in the way of the next", async () => {
 	session.child.kill("SIGKILL");
 	await session.exited;
