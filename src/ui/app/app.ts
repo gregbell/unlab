@@ -12,7 +12,7 @@ import { ContextProvider } from "@lit/context";
 import { html, LitElement, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { type PanelName, parkedPanels, selectTiling, type UiEvent, visiblePanels } from "../../model/index.ts";
 import { AGENT_PANEL_ID } from "../agent-panel/agent-panel.ts";
-import { plusIcon, Select, servicesContext } from "../base/index.ts";
+import { modalOpen, plusIcon, Select, servicesContext } from "../base/index.ts";
 import type { AppServices } from "../services.ts";
 
 const ANNOUNCER = "unlab-announcer";
@@ -141,7 +141,7 @@ export class UnlabApp extends LitElement {
 
 	/** Esc leaves another view, then restores a maximised panel, then closes the agent panel. A terminal keeps its own Esc. */
 	readonly #onKeydown = (event: KeyboardEvent): void => {
-		if (event.key !== "Escape" || event.defaultPrevented) return;
+		if (event.key !== "Escape" || event.defaultPrevented || modalOpen()) return;
 		if (event.target instanceof Node && this.querySelector("unlab-pane-area")?.contains(event.target)) return;
 		const { view, agentPanel, panels } = this.app.store.state;
 		if (view !== "lab") this.#ui({ type: "ui/view", view: "lab" });

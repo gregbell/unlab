@@ -2,7 +2,7 @@
 @layer tokens, base, components;
 
 @layer components {
-	@scope (unlab-statusline) to (unlab-panel-bar) {
+	@scope (unlab-statusline) to (unlab-panel-bar, unlab-whats-new) {
 		:scope {
 			display: flex;
 			flex-wrap: wrap;
@@ -46,6 +46,24 @@
 		.agent-toggle:hover,
 		.agent-toggle[aria-expanded="true"] {
 			color: var(--link-hover);
+		}
+
+		.marks {
+			display: inline-flex;
+			gap: 4px;
+		}
+
+		.marks a {
+			display: inline-flex;
+			align-items: center;
+			justify-content: center;
+			width: 24px;
+			height: 24px;
+			color: var(--text-2);
+		}
+
+		.marks a:hover {
+			color: var(--text);
 		}
 
 		.segment[data-tone="down"] {
