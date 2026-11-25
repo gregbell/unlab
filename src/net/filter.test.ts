@@ -224,6 +224,13 @@ describe("terms that say where a frame was", () => {
 		expect(compile("lan:1", book).matchesFrame(ping(1, 3), 1, bit(2), "lan")).toBe(true);
 	});
 
+	test("hide no MAC that starts with a switch's name", () => {
+		const book: NameBook = { ...NAMES, switches: new Set(["switch0", "fe"]) };
+		const frame = eth(mac(1), Uint8Array.of(0xfe, 0x54, 0, 0x88, 0, 12), 0x0800, []);
+		expect(compile("fe:54:00:88:00:0c", book).matchesFrame(frame, 1, 0)).toBe(true);
+		expect(compile("fe:5", book).matchesFrame(frame, 5, 0, "fe")).toBe(true);
+	});
+
 	test("a filter says whether it is one place, or names any", () => {
 		const scope = (source: string) => compile(source, THREE).scope;
 		for (const source of ["", "arp", "node2 or node2:eth1", "port:3"]) {

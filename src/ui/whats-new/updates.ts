@@ -14,6 +14,13 @@ export interface Update {
 export const UPDATES: readonly Update[] = [
 	{
 		date: "2026-11-25",
+		title: "Follow a packet from switch to switch",
+		detail:
+			"Filter the capture by a switch, or by one cable, and save that cable as a .pcap. With several switches, each row says where the frame came in and went out.",
+		example: "capture switch0:1",
+	},
+	{
+		date: "2026-11-25",
 		title: "Move a cable while a machine runs",
 		detail:
 			"Plug a network interface into another switch, at a port you name or the lowest free one, or unplug it. Build a router between two switches.",
