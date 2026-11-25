@@ -102,7 +102,6 @@
 | 7.1 | pinned by size and checksum in the image manifest | scripts/lab-image.ts, checked by scripts/fetch-distros.ts in CI (npm run distros alpine debian lab) |
 | 7.1 | boot time measured in CI beside Alpine's | e2e/lab-image.spec.ts: a lab machine boots about as fast as an Alpine one (printed, and in the job summary) |
 | 2.1 | a person can partition, format and mount it with tools already in the image | e2e/lab-image.spec.ts: a lab machine with no network has the tools, and keeps a disk that it partitions and formats |
-||||||| parent of 0d41c3c (docs(audit): map the file story to its tests)
 | 6.1 | one command writes given text to a given path in a guest, creating parent directories | e2e/files.spec.ts: alpine, debian: a text an agent writes arrives unchanged, with its directories, owner and mode, over a reload |
 | 6.1 | one command writes given text to a given path in a guest, typed in the bar | e2e/files.spec.ts: a person writes a line from the bar, which says what it will do and did |
 | 6.1 | one command writes given text to a given path, creating parent directories | test/integration/files.test.ts: alpine, debian: a new file is root's with mode 644, and a new directory is the file's owner's with 755 |
