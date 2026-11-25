@@ -1,6 +1,6 @@
 // Who the CLI talks to, and what it keeps: no machine is needed for these.
 
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { createServer } from "node:net";
 import { networkInterfaces } from "node:os";
 import { join } from "node:path";
@@ -155,7 +155,13 @@ test("commands that start at the same moment share one CLI", async () => {
 	session.child.kill("SIGTERM");
 	await session.exited;
 	// The first to have the port ends it only once the others are done with it.
+	// From nothing, as a computer that never ran it: each makes the files it needs at the same moment.
+	rmSync(cli.dir, { recursive: true });
 	const all = await Promise.all(Array.from({ length: 6 }, () => cli.once("status")));
+	const key = (await cli.run("ssh-keygen", ["-y", "-P", "", "-f", join(cli.dir, "id_ed25519")])).stdout;
+	expect(readFileSync(join(cli.dir, "known_hosts"), "utf8")).toMatch(/^unlab ssh-ed25519 /);
+	expect(key).toMatch(/^ssh-ed25519 /);
+	expect(readdirSync(cli.dir).filter((file) => file.endsWith(".part"))).toEqual([]);
 	for (const ran of all) expect(ran).toMatchObject({ code: 0, stdout: "The lab is not linked.\n", stderr: "" });
 	session = cli.start();
 	await session.shows("Waiting for the lab");

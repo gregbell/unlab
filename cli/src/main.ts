@@ -2,13 +2,13 @@
 // `npx unlab.run`: links the lab in the browser with this computer.
 
 import { spawn } from "node:child_process";
-import { copyFileSync, mkdirSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
 import type { Asking } from "../../src/streams/index.ts";
 import { Core, NotRunning, proxy, request, type Status, watch } from "./core.ts";
-import { configDir } from "./keys.ts";
+import { configDir, keep } from "./keys.ts";
 import { lineOf, type Options, readOptions, USAGE, UsageError } from "./options.ts";
 import { askingText } from "./print.ts";
 import { prompt } from "./prompt.ts";
@@ -28,7 +28,7 @@ function keepProgram(): readonly string[] {
 	mkdirSync(dir, { recursive: true, mode: 0o700 });
 	const kept = join(dir, "cli.mjs");
 	const self = fileURLToPath(import.meta.url);
-	if (self !== kept) copyFileSync(self, kept);
+	if (self !== kept) keep(kept, readFileSync(self), 0o644);
 	return [process.execPath, kept];
 }
 

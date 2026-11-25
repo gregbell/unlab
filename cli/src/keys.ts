@@ -5,8 +5,8 @@
 // and the link is what says which machine a connection reaches. So a machine
 // that rebooted, or took a removed one's name, is known without a question.
 
-import { createPrivateKey, createPublicKey, generateKeyPairSync, type KeyObject } from "node:crypto";
-import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { createPrivateKey, createPublicKey, generateKeyPairSync, type KeyObject, randomBytes } from "node:crypto";
+import { chmodSync, existsSync, linkSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { SshKeys } from "../../src/streams/index.ts";
@@ -66,18 +66,30 @@ function opensshKey(key: Raw): string {
 	return ["-----BEGIN OPENSSH PRIVATE KEY-----", ...lines, "-----END OPENSSH PRIVATE KEY-----", ""].join("\n");
 }
 
-function keep(path: string, text: string, mode: number): void {
-	const part = `${path}.part`;
+/** A file of its own beside the one it is for: several runs of the CLI can start at the same moment. */
+const partOf = (path: string) => `${path}.${process.pid}.${randomBytes(4).toString("hex")}.part`;
+
+/** Whole or not at all, for any run that reads it meanwhile. */
+export function keep(path: string, text: string | Uint8Array, mode: number): void {
+	const part = partOf(path);
 	writeFileSync(part, text, { mode });
 	chmodSync(part, mode);
 	renameSync(part, path);
 }
 
-/** A key of the CLI's own, made the first time. */
+/** A key of the CLI's own, made the first time. Two runs that make one at once both end up with the one that was first. */
 function keyAt(path: string): Raw {
 	if (!existsSync(path)) {
 		const { privateKey } = generateKeyPairSync("ed25519");
-		keep(path, privateKey.export({ format: "pem", type: "pkcs8" }) as string, 0o600);
+		const part = partOf(path);
+		writeFileSync(part, privateKey.export({ format: "pem", type: "pkcs8" }) as string, { mode: 0o600 });
+		try {
+			linkSync(part, path);
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+		} finally {
+			rmSync(part, { force: true });
+		}
 	}
 	const key = createPrivateKey(readFileSync(path));
 	if (createPublicKey(key).asymmetricKeyType !== "ed25519") throw new Error(`${path} is not a key of the CLI's.`);
