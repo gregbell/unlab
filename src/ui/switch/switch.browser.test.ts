@@ -6,10 +6,12 @@ import {
 	lab,
 	link,
 	mount,
+	power,
 	ready,
 	remove,
 	spawn,
 	spawnNamed,
+	stopped,
 	tokenColor,
 	unmountAll,
 } from "../base/testing.ts";
@@ -127,6 +129,26 @@ describe("<unlab-switch>", () => {
 			expect(style(part(col, ".light")).backgroundColor, `port ${c.port} light`).toBe(tokenColor(c.light));
 			expect(style(part(col, ".name")).color, `port ${c.port} name`).toBe(tokenColor(`hue-${c.port}`));
 		}
+	});
+
+	it("draws a machine that is off and one that is stopping, and cuts an off machine's cable", async () => {
+		const { runs } = await mount("unlab-switch", {
+			state: lab(spawn(2), ready(), power("off", "node1", "node2"), stopped("node1")),
+		});
+		const cases = [
+			{ port: 1, word: "off", wordColour: "text-3", cable: "solid" },
+			{ port: 2, word: "stop", wordColour: "text-2", cable: "dotted" },
+		] as const;
+		for (const c of cases) {
+			const col = column(c.port);
+			expect(part(col, ".word").textContent).toBe(c.word);
+			expect(style(part(col, ".word")).color).toBe(tokenColor(c.wordColour));
+			expect(style(part(col, ".cable")).borderLeftStyle).toBe(c.cable);
+			expect(style(part(col, ".light")).backgroundColor).toBe(tokenColor("line-strong"));
+		}
+		expect(column(2).querySelector("button")).toBeNull();
+		await page.getByRole("button", { name: "Cut the cable from node1 to port 1" }).click();
+		expect(runs).toEqual([{ line: "link down node1", source: "button" }]);
 	});
 
 	it("shows an empty port as its number alone in a --line socket", async () => {

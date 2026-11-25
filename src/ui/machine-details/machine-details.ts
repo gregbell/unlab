@@ -32,7 +32,7 @@ interface Peer {
 type Fact = Omit<DetailRow, "label"> & { readonly label: DetailRow["label"] | "frames" };
 
 /**
- * The machine with the keyboard: its name, its facts and four actions. Each
+ * The machine with the keyboard: its name, its facts and its actions. Each
  * action is the command of the same name, so it can fail only the way the bar
  * would.
  */
@@ -91,12 +91,27 @@ export class UnlabMachineDetails extends UnlabElement {
 					return html`<button
 						type="button"
 						class="button"
-						?disabled=${!accepts.commands || details.cables.length === 0}
+						?disabled=${!accepts.cables || details.cables.length === 0}
 						@click=${() => this.runLine(`link ${action.to} ${cable.label}`)}
 					>
 						${cable.nic === null ? action.only : action.one(cable.nic)}
 					</button>`;
 				})}
+				<button type="button" class="button" ?disabled=${!accepts.commands} @click=${() => this.runLine(`reboot ${name}`)}>
+					reboot
+				</button>
+				${
+					accepts.boot
+						? html`<button type="button" class="button" @click=${() => this.runLine(`boot ${name}`)}>boot</button>`
+						: html`<button
+								type="button"
+								class="button"
+								?disabled=${!accepts.commands}
+								@click=${() => this.runLine(`poweroff ${name}`)}
+							>
+								power off
+							</button>`
+				}
 				<button
 					type="button"
 					class="button danger"

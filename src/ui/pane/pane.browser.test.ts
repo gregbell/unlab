@@ -9,11 +9,13 @@ import {
 	lab,
 	link,
 	mount,
+	power,
 	ready,
 	remove,
 	type Step,
 	spawn,
 	spawnNamed,
+	stopped,
 	tick,
 	tokenColor,
 	unmountAll,
@@ -190,6 +192,39 @@ describe("<unlab-pane> failed and removing", () => {
 		expect(runs).toEqual([{ line: "boot node1", source: "button" }]);
 		await page.getByRole("button", { name: "Remove", exact: true }).click();
 		expect(confirms).toEqual(["rm node1"]);
+	});
+
+	it("keeps the log of a machine that is off, offers Boot and Remove under it, and takes no keys", async () => {
+		const { runs, confirms, terminals } = await mountPanes(
+			lab(spawn(2), ready(), power("off", "node1"), stopped("node1")),
+		);
+		expect(word("node1")).toBe("off");
+		expect(style("node1", ".word").color).toBe(tokenColor("text-3"));
+		expect(part("node1", ".headline").textContent).toBe("node1 is off.");
+		expect(style("node1", ".headline").color).toBe(tokenColor("text"));
+		expect(terminals.host("node1:console").visible.at(-1)).toBe(true);
+		expect(page.getByRole("button", { name: "New shell on node1" }).query()).toBeNull();
+		await page.getByRole("button", { name: "Boot", exact: true }).click();
+		expect(runs).toEqual([{ line: "boot node1", source: "button" }]);
+		await page.getByRole("button", { name: "Remove", exact: true }).click();
+		expect(confirms).toEqual(["rm node1"]);
+	});
+
+	it("says of a machine that had to be cut short what that may have lost", async () => {
+		await mountPanes(lab(spawn(2), ready(), power("off", "node1", "node2"), stopped("node1"), stopped("node2", false)));
+		expect(part("node1", ".reason").textContent).toBe("It keeps its disks and its ports.");
+		expect(part("node2", ".reason").textContent).toBe(
+			"It did not shut down in 10 s, so it was stopped, and what it had not written to disk may be lost.",
+		);
+	});
+
+	it("says powering off or rebooting, with the guest's last words on show", async () => {
+		const { terminals } = await mountPanes(lab(spawn(2), ready(), power("off", "node1"), power("reboot", "node2")));
+		expect([word("node1"), word("node2")]).toEqual(["powering off", "rebooting"]);
+		expect(style("node1", ".word").color).toBe(tokenColor("text-2"));
+		expect(terminals.host("node1:console").visible.at(-1)).toBe(true);
+		expect(page.getByRole("button", { name: "New shell on node1" }).query()).toBeNull();
+		expect(terminals.host("node1:console").mounts).toHaveLength(1);
 	});
 
 	it("says Removing node4. and takes no input while a machine leaves", async () => {

@@ -3,10 +3,10 @@ import { html, nothing, type TemplateResult } from "lit";
 import { type PortView, SWITCH_NAME, selectLinks, selectPorts, selectSubnets } from "../../model/index.ts";
 import { Select, UnlabElement } from "../base/index.ts";
 
-/** What a click on a port column runs. Empty, booting and removing ports do nothing. */
+/** What a click on a port column runs. Empty ports, and those of a machine on its way somewhere, do nothing. */
 function clickLine(port: PortView): string | null {
 	if (!port.machine) return null;
-	if (port.state === "up") return `link down ${port.machine.label}`;
+	if (port.state === "up" || port.state === "off") return `link down ${port.machine.label}`;
 	if (port.state === "cut") return `link up ${port.machine.label}`;
 	return null;
 }

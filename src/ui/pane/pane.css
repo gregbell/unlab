@@ -154,7 +154,7 @@
 			min-height: 0;
 		}
 
-		.failure {
+		:is(.failure, .off) {
 			display: flex;
 			flex-direction: column;
 			gap: 6px;
@@ -163,6 +163,9 @@
 
 		.headline {
 			overflow-wrap: anywhere;
+		}
+
+		.failure .headline {
 			color: var(--down);
 		}
 

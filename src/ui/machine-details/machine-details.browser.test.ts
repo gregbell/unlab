@@ -7,10 +7,12 @@ import {
 	lab,
 	link,
 	mount,
+	power,
 	ready,
 	remove,
 	spawn,
 	spawnAt,
+	stopped,
 	tick,
 	tokenColor,
 	unmountAll,
@@ -85,14 +87,18 @@ describe("<unlab-machine-details>", () => {
 
 	it("runs each action's command as a button", async () => {
 		const { runs } = await mount("unlab-machine-details", { state: lab(spawn(3), ready(), focus("node2")) });
-		expect(enabledActions()).toEqual(["new shell", "Ping peers", "cut cable", "remove"]);
+		expect(enabledActions()).toEqual(["new shell", "Ping peers", "cut cable", "reboot", "power off", "remove"]);
 		await action("new shell").click();
 		await action("Ping peers").click();
 		await action("cut cable").click();
+		await action("reboot").click();
+		await action("power off").click();
 		expect(runs).toEqual([
 			{ line: "sh node2", source: "button" },
 			{ line: "exec node2 -- ping -c 3 10.88.0.11; ping -c 3 10.88.0.13", source: "button" },
 			{ line: "link down node2", source: "button" },
+			{ line: "reboot node2", source: "button" },
+			{ line: "poweroff node2", source: "button" },
 		]);
 	});
 
@@ -169,7 +175,7 @@ describe("<unlab-machine-details>", () => {
 
 	it("cannot ping without a ready peer", async () => {
 		await mount("unlab-machine-details", { state: lab(spawn(2), ready("node1"), focus("node1")) });
-		expect(enabledActions()).toEqual(["new shell", "cut cable", "remove"]);
+		expect(enabledActions()).toEqual(["new shell", "cut cable", "reboot", "power off", "remove"]);
 	});
 
 	it("while booting, counts up and only offers remove", async () => {
@@ -179,13 +185,31 @@ describe("<unlab-machine-details>", () => {
 		expect(enabledActions()).toEqual(["remove"]);
 	});
 
-	it("when failed, gives the runtime's reason and only offers remove", async () => {
+	it("when failed, gives the runtime's reason and offers boot and remove", async () => {
 		await mount("unlab-machine-details", {
 			state: lab(spawn(1), focus("node1"), fail("node1", "No prompt after 120 s.")),
 		});
 		expect(value("state").textContent).toBe("failed");
 		expect(getComputedStyle(value("state")).color).toBe(tokenColor("down"));
 		await expect.element(page.getByText("No prompt after 120 s.")).toBeVisible();
+		expect(enabledActions()).toEqual(["boot", "remove"]);
+	});
+
+	it("when off, offers to boot it and to change its cable", async () => {
+		const { runs } = await mount("unlab-machine-details", {
+			state: lab(spawn(2), ready(), focus("node1"), power("off", "node1"), stopped("node1")),
+		});
+		expect(value("state").textContent).toBe("off");
+		expect(value("link").textContent).toBe("plugged into port 1");
+		expect(enabledActions()).toEqual(["cut cable", "boot", "remove"]);
+		await action("boot").click();
+		await action("cut cable").click();
+		expect(runs.map((run) => run.line)).toEqual(["boot node1", "link down node1"]);
+	});
+
+	it("while stopping, only offers remove", async () => {
+		await mount("unlab-machine-details", { state: lab(spawn(2), ready(), focus("node1"), power("off", "node1")) });
+		expect(value("state").textContent).toBe("powering off");
 		expect(enabledActions()).toEqual(["remove"]);
 	});
 
