@@ -172,7 +172,6 @@ test("a machine that is off holds no memory, keeps its ports, name and disks, an
 		await typed(page, "exec node2 -- ls");
 		await expect(page.locator("unlab-command-bar")).toContainText("Skipped node2: off.");
 		await page.keyboard.press("Escape");
-		await page.keyboard.press("Escape");
 	};
 	await off();
 	if (shots) await page.screenshot({ path: `${shots}/off.png` });
