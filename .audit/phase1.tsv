@@ -34,3 +34,6 @@ ts	phase	decision	why	evidence	result
 2026-11-25T05:43:02Z	lab-image	published lab image as release lab-image-1 on gregbell/unlab	user approved releases 2026-11-25	sha256 2a2f31d4..., downloaded copy matches	published
 2026-11-25T05:43:02Z	lab-image	left IPv6 and pid lines out of nginx config	kernel has no IPv6 and /run is empty	nginx -t failed as packaged, then curl 404 from it	done
 2026-11-25T05:43:02Z	lab-image	measured boot alpine 1943,1803,1699,1798 lab 2146,1830,1803,1811 ms	story asks for CI measure	e2e/lab-image.spec.ts local run	pass
+2026-11-25T06:39:31Z	files	text on stdin of a root script, temp file then rename, 1 MiB limit	argv holds 64 KiB; old file stays whole on any failure	31 broken behaviours red; e2e/files.spec.ts 11 green after rebase	reviewed diff
+2026-11-25T06:39:31Z	files	policy run for file_write	same reach as shell_exec, which runs	src/model/update.ts	default, user can set ask
+2026-11-25T06:39:31Z	files	open: typing straight after starting cat on Debian showed ahalf sentence	seen before any write, cause not traced	worker report	open item
