@@ -39,7 +39,9 @@ import {
 	type SpawnOptions,
 	spawnEvent,
 	spawnRequest,
+	switchNamed,
 	WIDE,
+	withSwitches,
 } from "./testkit.ts";
 import {
 	BOOT_TIMEOUT_MS,
@@ -48,6 +50,7 @@ import {
 	type LabState,
 	type MachineName,
 	type MachineSpec,
+	type NicSpec,
 	type Phase,
 	type RuntimeEvent,
 } from "./types.ts";
@@ -923,6 +926,77 @@ describe("a machine's name", () => {
 		expect(nameOf(nameBook(s), 2)).toBe("node2");
 		s = gone(s, web);
 		expect(nameOf(nameBook(s), 3)).toBe("web");
+	});
+});
+
+describe("a lab with several switches", () => {
+	const lan = switchNamed("lan");
+	const several = () => withSwitches(labWith(3), lan);
+	const request = (net: NicSpec["net"][]) => spawnRequest({ net });
+
+	test("gives each NIC the lowest free port of its own switch, in machine and NIC order", () => {
+		const plan = planSpawn(several(), 2, request([lan, "switch0", lan, "none"]));
+		expect(plan).toMatchObject({
+			machines: [
+				{ ports: [{ switch: "lan", port: 1 }, port0(4), { switch: "lan", port: 2 }, null] },
+				{ ports: [{ switch: "lan", port: 3 }, port0(5), { switch: "lan", port: 4 }, null] },
+			],
+		});
+	});
+
+	test("counts each switch's ports by themselves, and names the one that has too few", () => {
+		let s = several();
+		s = run(s, spawnEvent(s, 2, { net: [lan, lan, lan] }));
+		expect([...takenPorts(s, "switch0")]).toEqual([1, 2, 3]);
+		expect([...takenPorts(s, lan)]).toEqual([1, 2, 3, 4, 5, 6]);
+		expect(lowestFreePorts(s, lan, 8)).toEqual([7, 8]);
+		expect(planSpawn(s, 1, request(["switch0", lan, lan, lan]))).toEqual({
+			kind: "no-ports",
+			switch: "lan",
+			free: 2,
+			wanted: 3,
+		});
+	});
+
+	test("has no port on a switch that is not there", () => {
+		expect(planSpawn(several(), 1, request([switchNamed("wan")]))).toEqual({
+			kind: "no-ports",
+			switch: "wan",
+			free: 0,
+			wanted: 1,
+		});
+	});
+
+	test("cuts, frees and boots again on the ports of the switch each cable is in", () => {
+		let s = several();
+		s = run(s, spawnEvent(s, 1, { net: [lan, "switch0"] }), isReady("node4"));
+		expect(effectsOf(s, linkEvent(s, false, { machine: "node4", nic: 0 }))).toContainEqual(
+			expect.objectContaining({ type: "link/set", port: { switch: "lan", port: 1 }, up: false }),
+		);
+		const failed = effectsOf(s, hasFailed("node4")).filter((e) => e.type === "port/detach");
+		expect(failed).toEqual([
+			{ type: "port/detach", port: { switch: "lan", port: 1 } },
+			{ type: "port/detach", port: port0(4) },
+		]);
+		s = run(s, hasFailed("node4"));
+		expect([...takenPorts(s, lan)]).toEqual([]);
+		expect(planBoot(s, ["node4"])).toEqual([{ machine: "node4", ports: [{ switch: "lan", port: 1 }, port0(4)] }]);
+	});
+
+	test("plugs a NIC that is on none into the default switch", () => {
+		let s = several();
+		s = run(s, spawnEvent(s, 1, { net: "none" }), isReady("node4"));
+		expect(planLink(s, ["node4"], true)).toEqual([
+			{ machine: "node4", nic: 0, up: true, port: port0(4), newPort: true },
+		]);
+	});
+
+	test("keeps a switch's name from machines, and a name that no switch has is free", () => {
+		const s = several();
+		expect(planSpawn(s, 1, spawnRequest({ name: "lan" }))).toEqual({ kind: "name-taken", name: "lan", by: "switch" });
+		expect(planSpawn(s, 1, spawnRequest({ name: "switch1" }))).toMatchObject({
+			machines: [{ identity: { name: "switch1" } }],
+		});
 	});
 });
 

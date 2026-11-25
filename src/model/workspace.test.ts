@@ -265,7 +265,7 @@ describe("a lab with several switches", () => {
 
 	test.each<[string, unknown]>([
 		["none of them", undefined],
-		["no default switch", ["lan", "switch2"]],
+		["another in the default one's place", ["wan", "lan"]],
 		["two of one name", ["switch0", "lan", "lan"]],
 		["a name that is no hostname", ["switch0", "lan", "The LAN"]],
 		["a name that means something else", ["switch0", "lan", "none"]],

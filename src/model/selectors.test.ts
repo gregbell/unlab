@@ -28,8 +28,17 @@ import {
 	remove,
 	run,
 	spawnEvent,
+	switchNamed,
+	withSwitches,
 } from "./testkit.ts";
-import { AGENT_IDLE_MS, type LabEvent, type LabState, type MachineName, type ToolName } from "./types.ts";
+import {
+	AGENT_IDLE_MS,
+	type LabEvent,
+	type LabState,
+	type MachineName,
+	type SwitchName,
+	type ToolName,
+} from "./types.ts";
 import { DEFAULT_POLICIES } from "./update.ts";
 
 const tick = (now: number): LabEvent => ({ type: "tick", now });
@@ -612,6 +621,31 @@ describe("recent and history", () => {
 
 	test("bar history is the lines typed in the bar, newest first", () => {
 		expect(selectBarHistory(s)).toEqual(["link down node3", "ls", "spawn 3 alpine --net switch0"]);
+	});
+});
+
+describe("a lab with several switches", () => {
+	const lan = switchNamed("lan");
+	let s = withSwitches(labWith(1), lan);
+	s = run(s, spawnEvent(s, 1, { net: [lan, "switch0"] }), isReady("node2"));
+	s = run(s, linkEvent(s, false, { machine: "node2", nic: 0 }));
+
+	test("shows each switch its own ports and links", () => {
+		const shown = (on: SwitchName) =>
+			selectPorts(on)(s).flatMap((p) => (p.machine ? [[p.port, p.machine.label, p.word]] : []));
+		expect(shown("switch0")).toEqual([
+			[1, "node1", "up"],
+			[2, "node2:eth1", "up"],
+		]);
+		expect(shown(lan)).toEqual([[1, "node2:eth0", "cut"]]);
+		expect(selectLinks("switch0")(s)).toEqual({ up: 2, total: 2, cut: 0 });
+		expect(selectLinks(lan)(s)).toEqual({ up: 0, total: 1, cut: 1 });
+	});
+
+	test("remembers each switch by itself", () => {
+		const [first, second] = [selectPorts("switch0")(s), selectPorts(lan)(s)];
+		expect(selectPorts("switch0")(s)).toBe(first);
+		expect(selectPorts(lan)(s)).toBe(second);
 	});
 });
 

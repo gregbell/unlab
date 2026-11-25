@@ -23,7 +23,9 @@ import {
 	remove,
 	run,
 	spawnEvent,
+	switchNamed,
 	WIDE,
+	withSwitches,
 } from "./testkit.ts";
 import {
 	type Effect,
@@ -1033,6 +1035,7 @@ type Intent =
 	| { readonly kind: "bar"; readonly open: boolean }
 	| { readonly kind: "tick"; readonly dt: number };
 
+const LAN = switchNamed("lan");
 const pick = fc.nat({ max: 30 });
 const skew = fc.constantFrom(0, 0, 0, 0, -1, 1);
 const kinds = <K extends string>(...names: K[]) => fc.constantFrom(...names);
@@ -1042,7 +1045,10 @@ const intentArb: fc.Arbitrary<Intent> = fc.oneof(
 		arbitrary: fc.record({
 			kind: kinds("spawn"),
 			count: fc.integer({ min: 1, max: 3 }),
-			nets: fc.array(fc.constantFrom("switch0", "none"), { minLength: 1, maxLength: 4 }),
+			nets: fc.array(fc.constantFrom<NicSpec["net"]>("switch0", "switch0", LAN, "none"), {
+				minLength: 1,
+				maxLength: 4,
+			}),
 		}),
 	},
 	{
@@ -1089,8 +1095,11 @@ function eventOf(intent: Intent, s: LabState): LabEvent | null {
 	switch (intent.kind) {
 		case "spawn": {
 			const count = Math.min(intent.count, MAX_MACHINES - s.rail.length);
-			const wanted = count * intent.nets.filter((net) => net === "switch0").length;
-			if (count === 0 || lowestFreePorts(s, "switch0", wanted).length < wanted) return null;
+			const fits = s.switches.every((on) => {
+				const wanted = count * intent.nets.filter((net) => net === on).length;
+				return lowestFreePorts(s, on, wanted).length === wanted;
+			});
+			if (count === 0 || !fits) return null;
 			return spawnEvent(s, count, { net: intent.nets });
 		}
 		case "stage":
@@ -1256,8 +1265,12 @@ function checkLab(s: LabState, world: World): void {
 		});
 	});
 	expect(new Set(plugged.map((p) => portKey(p.port))).size).toBe(plugged.length);
-	expect([...takenPorts(s, "switch0")].sort()).toEqual(plugged.map((p) => p.port.port).sort());
-	expect(lowestFreePorts(s, "switch0", 8)).toHaveLength(8 - plugged.length);
+	for (const on of s.switches) {
+		const held = plugged.flatMap(({ port }) => (port.switch === on ? [port.port] : []));
+		expect([...takenPorts(s, on)].sort()).toEqual(held.sort());
+		expect(lowestFreePorts(s, on, 8)).toHaveLength(8 - held.length);
+	}
+	expect(plugged.filter(({ port }) => !s.switches.includes(port.switch))).toEqual([]);
 
 	expect([...s.panes.order].sort()).toEqual([...s.rail].sort());
 	const visible = visiblePanes(s.panes);
@@ -1303,7 +1316,7 @@ describe("any sequence of events", () => {
 				fc.constantFrom(WIDE, { width: 850, height: 250 }),
 				(intents, area) => {
 					const world = new World();
-					let s = emptyLab(area);
+					let s = withSwitches(emptyLab(area), LAN);
 					for (const intent of intents) {
 						const event = eventOf(intent, s);
 						if (!event) continue;
@@ -1322,7 +1335,7 @@ describe("any sequence of events", () => {
 	test("a runtime event or a planned command delivered twice does nothing the second time", () => {
 		fc.assert(
 			fc.property(fc.array(intentArb, { maxLength: 60 }), (intents) => {
-				let s = emptyLab();
+				let s = withSwitches(emptyLab(), LAN);
 				for (const intent of intents) {
 					const event = eventOf(intent, s);
 					if (!event) continue;

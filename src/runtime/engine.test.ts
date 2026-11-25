@@ -12,6 +12,7 @@ import {
 	type MachineName,
 	parseCheckpointName,
 	parseMachineName,
+	parseSwitchName,
 	type RuntimeEvent,
 	type SessionId,
 	type StopHow,
@@ -712,6 +713,69 @@ describe("ports and frames", () => {
 		a.sink.frame(a.ref, 0, arpRequest(1, 2));
 		expect(b.sent).toEqual([]);
 		expect(c.sent).toHaveLength(1);
+	});
+});
+
+describe("several switches", () => {
+	const lan = parseSwitchName("lan") as SwitchName;
+	/** node1 on port 1 of switch0, node2 on port 1 of lan, and node3 on port 2 of both. */
+	const plugged = () => {
+		const t = setup();
+		const vms = [t.ready(1), t.ready(2), t.ready(3)] as const;
+		const cables = [
+			{ port: { switch: "switch0", port: 1 }, machine: "node1", nic: 0 },
+			{ port: { switch: lan, port: 1 }, machine: "node2", nic: 0 },
+			{ port: { switch: "switch0", port: 2 }, machine: "node3", nic: 0 },
+			{ port: { switch: lan, port: 2 }, machine: "node3", nic: 1 },
+		] as const;
+		for (const cable of cables) {
+			t.run({ type: "port/attach", ...cable }, { type: "link/set", ...cable, up: true, cause: "runtime" });
+		}
+		for (const vm of vms) vm.sent.length = 0;
+		return { ...t, vms };
+	};
+
+	test("carry frames of their own: a broadcast on one reaches no machine on the other", () => {
+		const { vms, capture } = plugged();
+		const [vm1, vm2, vm3] = vms;
+		vm1.sink.frame(vm1.ref, 0, arpRequest(1, 3));
+		expect(vm2.sent).toEqual([]);
+		expect(vm3.sent).toEqual([["deliver", 0, expect.any(Uint8Array)]]);
+		vm2.sink.frame(vm2.ref, 0, arpRequest(2, 3));
+		expect(vm1.sent).toEqual([]);
+		expect(vm3.sent).toHaveLength(2);
+		expect(vm3.sent[1]).toEqual(["deliver", 1, expect.any(Uint8Array)]);
+		expect([...capture.frames()].map((e) => [e.switch, e.from, e.to])).toEqual([
+			["switch0", 1, 0b10],
+			["lan", 1, 0b10],
+		]);
+	});
+
+	test("each have their own MAC table and counters", () => {
+		const { vms, engine } = plugged();
+		const [vm1, vm2] = vms;
+		vm1.sink.frame(vm1.ref, 0, arpRequest(1, 3));
+		vm2.sink.frame(vm2.ref, 0, arpRequest(2, 3));
+		vm2.sink.frame(vm2.ref, 0, arpRequest(2, 3));
+		expect(engine.reads.macTable("switch0").map((e) => [e.mac, e.port])).toEqual([["52:54:00:88:00:0b", 1]]);
+		expect(engine.reads.macTable(lan).map((e) => [e.mac, e.port])).toEqual([["52:54:00:88:00:0c", 1]]);
+		expect(engine.reads.counters({ switch: "switch0", port: 1 })).toMatchObject({ rxFrames: 1 });
+		expect(engine.reads.counters({ switch: lan, port: 1 })).toMatchObject({ rxFrames: 2 });
+		expect(engine.reads.macTable(parseSwitchName("wan") as SwitchName)).toEqual([]);
+	});
+
+	test("cut and free a port of one, and leave the other's port of that number as it was", () => {
+		const { vms, engine, run, capture } = plugged();
+		const [vm1, vm2, vm3] = vms;
+		run({ type: "link/set", port: { switch: lan, port: 2 }, machine: "node3", nic: 1, up: false, cause: "bar" });
+		expect(capture.entry(5)).toMatchObject({ kind: "link", port: { switch: "lan", port: 2 }, up: false });
+		vm2.sink.frame(vm2.ref, 0, arpRequest(2, 3));
+		expect(vm3.sent).toEqual([]);
+		run({ type: "port/detach", port: { switch: lan, port: 1 } });
+		vm1.sink.frame(vm1.ref, 0, arpRequest(1, 3));
+		expect(vm3.sent).toEqual([["deliver", 0, expect.any(Uint8Array)]]);
+		expect(engine.reads.counters({ switch: lan, port: 1 })).toBeUndefined();
+		expect(engine.reads.counters({ switch: "switch0", port: 1 })).toMatchObject({ rxFrames: 1 });
 	});
 });
 

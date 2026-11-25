@@ -12,7 +12,7 @@ import {
 	udpSegment,
 } from "../../../test/support/frames.ts";
 import type { FrameEntry } from "../../capture/index.ts";
-import type { PortNo } from "../../model/index.ts";
+import { type PortNo, parseSwitchName } from "../../model/index.ts";
 import { NO_NAMES } from "../../net/index.ts";
 import { frameDetail, type LabNames, type Named } from "./frame-detail-model.ts";
 
@@ -136,6 +136,22 @@ describe("frameDetail", () => {
 				{ label: "length", value: "20", who: null },
 			],
 		});
+	});
+
+	it("says which switch did it, and who is on that switch's ports", () => {
+		const lan = parseSwitchName("lan") ?? "switch0";
+		const names: LabNames = {
+			holder: ({ switch: on, port }) => (on === lan && port === 2 ? only(2) : null),
+			severalNics: () => false,
+		};
+		const flooded = entry(arpRequest(1, 2), { switch: lan, from: 1, to: ports([2]), flood: "group" });
+		expect(frameDetail(flooded, names).did).toEqual([
+			["Broadcast, so sent out every live port: delivered to ", only(2), " on port 2."],
+		]);
+		const forwarded = entry(ping(1, 2), { switch: lan, from: 1, to: ports([2]) });
+		expect(frameDetail(forwarded, names).did).toEqual([
+			["lan had learned ", only(2), " on port 2, so it forwarded the frame there only."],
+		]);
 	});
 
 	describe("what switch0 did", () => {
