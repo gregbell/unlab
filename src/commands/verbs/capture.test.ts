@@ -52,6 +52,21 @@ describe("capture", () => {
 		expect(lab.parsed("capture lan:2 icmp or port:3").validate(lab.store.state)).toBeNull();
 	});
 
+	it("offers no fix that would be refused in its turn", async () => {
+		const lab = storeLab();
+		await lab.lab(2);
+		const once = lab.parse("capture node1:eth5");
+		expect(once).toMatchObject({ token: 1 });
+		expect(once).not.toHaveProperty("fix");
+		const several = await (async () => {
+			const two = storeLab();
+			await two.lab(1);
+			await two.run("mkswitch");
+			return two;
+		})();
+		expect(several.parse("capture switch1:9")).not.toHaveProperty("fix");
+	});
+
 	it("is refused when the switch that it names has gone to a machine since it was read", async () => {
 		const lab = await several();
 		const line = lab.parsed("capture lan:2");

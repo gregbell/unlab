@@ -1028,12 +1028,17 @@ export function frameFilter(): Rest {
 			"Terms that all match, with or between alternatives: protocol, machine, NIC (node2:eth1), IP, MAC, switch (lan), cable (lan:3), port:N. Empty is all.",
 		),
 		check(text, { lab }) {
-			const compiled = compileFilter(text, selectNames(lab));
+			const names = selectNames(lab);
+			const compiled = compileFilter(text, names);
 			if (compiled.ok) return null;
 			const { message, start, token } = compiled.error;
 			const colon = token.indexOf(":");
 			const named = filterTerms("", lab).map(({ insert }) => insert);
-			const instead = colon < 0 ? named : named.map((name) => name + token.slice(colon));
+			const words = colon < 0 ? named : named.map((name) => name + token.slice(colon));
+			// A fix that is refused in its turn would offer this line back.
+			const fits = (word: string) =>
+				compileFilter(text.slice(0, start) + word + text.slice(start + token.length), names).ok;
+			const instead = words.filter(fits);
 			return { message: message.replace(/^Capture /, "capture "), start, instead };
 		},
 		suggest: (typed, { lab }) => filterTerms(typed, lab),
