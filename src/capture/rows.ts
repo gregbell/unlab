@@ -131,6 +131,7 @@ function note(e: FrameEntry, on: SwitchName | null): string | null {
 
 /** The lab raises a link only when a machine comes up with a cable it did not have, so that is a plug-in, not a reconnect. */
 function linkVerb(e: LinkEntry): string {
+	if (e.plug) return e.up ? "plugged in" : "unplugged";
 	if (!e.up) return "cut";
 	return e.cause === "runtime" ? "plugged in" : "reconnected";
 }

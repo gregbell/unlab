@@ -39,6 +39,12 @@ export interface PortRef {
 	readonly port: PortNo;
 }
 
+/** Where a cable can be put. A port of null is the lowest free one. */
+export interface Place {
+	readonly switch: SwitchName;
+	readonly port: PortNo | null;
+}
+
 /** One NIC of one machine. NIC 0 is eth0. */
 export interface NicRef {
 	readonly machine: MachineName;
@@ -298,6 +304,8 @@ export type ToolName =
 	| "shell_read"
 	| "file_write"
 	| "link_set"
+	| "cable_plug"
+	| "cable_unplug"
 	| "capture_read";
 
 export interface AgentCall {
@@ -427,8 +435,22 @@ export interface LinkChange extends NicRef {
 	readonly newPort: boolean;
 }
 
+/** Where a NIC's cable will be, or null for a NIC that will have none. */
+export interface PlugPlan extends NicRef {
+	readonly to: PortRef | null;
+}
+
+interface NoPorts {
+	readonly kind: "no-ports";
+	readonly switch: SwitchName;
+	readonly free: number;
+	readonly wanted: number;
+}
+
+export type PlugPlanError = NoPorts | { readonly kind: "port-taken"; readonly port: PortRef; readonly by: NicRef };
+
 export type PlanError =
-	| { readonly kind: "no-ports"; readonly switch: SwitchName; readonly free: number; readonly wanted: number }
+	| NoPorts
 	| { readonly kind: "no-room"; readonly free: number; readonly wanted: number }
 	| { readonly kind: "unknown-image"; readonly image: string }
 	| NameTaken<MachineName>
@@ -519,6 +541,7 @@ export type CommandEvent =
 	| { readonly type: "cmd/restore"; readonly plan: RestorePlan }
 	| { readonly type: "cmd/forget"; readonly machine: MachineName; readonly set: number }
 	| { readonly type: "cmd/link"; readonly changes: readonly LinkChange[]; readonly cause: Cause }
+	| { readonly type: "cmd/plug"; readonly plan: PlugPlan; readonly cause: Cause }
 	| { readonly type: "cmd/shell"; readonly machine: MachineName }
 	| {
 			readonly type: "cmd/focus";
@@ -620,6 +643,8 @@ export type Effect =
 			readonly nic: NicNo;
 			readonly up: boolean;
 			readonly cause: Cause;
+			/** The cable was put in the port or taken out of it, and not cut or reconnected. */
+			readonly plug?: true;
 	  }
 	| { readonly type: "pty/open"; readonly session: SessionId }
 	| { readonly type: "pty/close"; readonly session: SessionId }

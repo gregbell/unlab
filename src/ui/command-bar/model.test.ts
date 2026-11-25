@@ -177,6 +177,8 @@ describe("the artboards, replayed", () => {
 			"write",
 			"sh",
 			"link",
+			"plug",
+			"unplug",
 			"mkswitch",
 			"rmswitch",
 			"topology",

@@ -38,6 +38,7 @@ export {
 	nicsOf,
 	planBoot,
 	planLink,
+	planPlug,
 	planRestore,
 	planSpawn,
 	plugsOf,
@@ -51,7 +52,7 @@ export { panelLabel, parkedPanels, visiblePanels } from "./panels.ts";
 export { capacity, gridFor, parkedPanes, visiblePanes } from "./panes.ts";
 export * from "./selectors.ts";
 export { createStore, type ReadStore, type Schedule, type Store } from "./store.ts";
-export { planSwitch, portLabel, portText, switchLabel } from "./switches.ts";
+export { planSwitch, portLabel, portName, portText, switchLabel } from "./switches.ts";
 export { type Tile, type Tiling, tile } from "./tiling.ts";
 export * from "./types.ts";
 export { clockHz, DEFAULT_POLICIES, initialState, update } from "./update.ts";

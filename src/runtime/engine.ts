@@ -586,9 +586,9 @@ export function createEngine(deps: EngineDeps): Engine {
 				dropSwitch(effect.switch);
 				return;
 			case "link/set": {
-				const { port, machine, nic, up, cause } = effect;
+				const { port, machine, nic, up, cause, plug } = effect;
 				switchOf(port.switch).sw.setLink(port.port, up);
-				capture.appendLink({ port, machine, nic, up, cause });
+				capture.appendLink({ port, machine, nic, up, cause, plug });
 				return;
 			}
 			case "pty/open": {

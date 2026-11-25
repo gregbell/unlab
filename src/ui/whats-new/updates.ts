@@ -14,6 +14,13 @@ export interface Update {
 export const UPDATES: readonly Update[] = [
 	{
 		date: "2026-11-25",
+		title: "Move a cable while a machine runs",
+		detail:
+			"Plug a network interface into another switch, at a port you name or the lowest free one, or unplug it. Build a router between two switches.",
+		example: "plug node1 switch0:5",
+	},
+	{
+		date: "2026-11-25",
 		title: "More than one switch",
 		detail:
 			"Add up to eight, and choose which one each network interface is plugged into. topology lists what is in every port.",

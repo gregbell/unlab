@@ -3,7 +3,7 @@
 import { isAddressFault, parseAddress } from "../net/index.ts";
 import { parseGiB } from "./disks.ts";
 import { isNameFault, parseCheckpointName, parseChosenName, parseSwitchName } from "./identity.ts";
-import { isPlanError, planBoot, planLink, planRestore, planSpawn } from "./machines.ts";
+import { isPlanError, planBoot, planLink, planPlug, planRestore, planSpawn } from "./machines.ts";
 import {
 	type Address,
 	type AgentCall,
@@ -20,6 +20,7 @@ import {
 	type Next,
 	type NicRef,
 	type NicSpec,
+	type Place,
 	type RuntimeEvent,
 	type SessionId,
 	type Source,
@@ -179,6 +180,12 @@ export function linkEvent(state: LabState, up: boolean, ...cables: readonly (Mac
 	const changes = planLink(state, cables, up);
 	if (isPlanError(changes)) throw new Error(`cannot plan the link change: ${JSON.stringify(changes)}`);
 	return { type: "cmd/link", changes, cause: "bar" };
+}
+
+export function plugEvent(state: LabState, nic: NicRef, to: Place | null): CommandEvent {
+	const plan = to === null ? { ...nic, to } : planPlug(state, nic, to);
+	if (isPlanError(plan)) throw new Error(`cannot plan the plug: ${JSON.stringify(plan)}`);
+	return { type: "cmd/plug", plan, cause: "bar" };
 }
 
 export const isReady = (machine: MachineName, attempt = 1, bootMs = 3582): RuntimeEvent => ({

@@ -115,7 +115,7 @@ export const topology = defineVerb({
 	name: "topology",
 	about: "list switches, their ports and what is plugged in",
 	description:
-		"List the lab's wiring: every switch with its eight ports, what each port's cable goes to, and the cable's link: up, cut, or down when the machine at its end is not ready. Then the NICs that are plugged into no switch.",
+		"List the lab's wiring: every switch with its eight ports, what each port's cable goes to, and the cable's link: up, cut, or down when the machine at its end is not ready. Then the NICs that are plugged into no switch. Port 3 of lan is lan:3 to plug.",
 	danger: false,
 	grammar: {},
 	example: {},

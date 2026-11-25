@@ -6,19 +6,29 @@ import {
 	type LinkWord,
 	type MachineDetails,
 	type MachineName,
+	type SwitchName,
 	selectDetails,
 	selectRail,
 } from "../../model/index.ts";
 import { ip4str, subnetsOverlap } from "../../net/index.ts";
 import { Select, UnlabElement } from "../base/index.ts";
 
-/** The cable action: what it reads, for the machine's only cable and for one of several, and which way it turns the link. */
-const CABLE: Readonly<
-	Record<LinkWord, { readonly only: string; readonly one: (nic: string) => string; readonly to: "up" | "down" }>
-> = {
-	up: { only: "cut cable", one: (nic) => `cut ${nic}`, to: "down" },
-	cut: { only: "reconnect", one: (nic) => `reconnect ${nic}`, to: "up" },
-	unplugged: { only: "plug in", one: (nic) => `plug in ${nic}`, to: "up" },
+interface CableAction {
+	/** Which way it turns the link. */
+	readonly to: "up" | "down";
+	/** What it reads, for the machine's only cable and for one of several. `into` is a switch to name. */
+	readonly only: (into: SwitchName | null) => string;
+	readonly one: (nic: string, into: SwitchName | null) => string;
+}
+
+const CABLE: Readonly<Record<LinkWord, CableAction>> = {
+	up: { only: () => "cut cable", one: (nic) => `cut ${nic}`, to: "down" },
+	cut: { only: () => "reconnect", one: (nic) => `reconnect ${nic}`, to: "up" },
+	unplugged: {
+		only: (into) => (into === null ? "plug in" : `plug into ${into}`),
+		one: (nic, into) => (into === null ? `plug in ${nic}` : `plug ${nic} into ${into}`),
+		to: "up",
+	},
 };
 
 /** What the action shows for a machine with no cable to act on yet. */
@@ -94,7 +104,7 @@ export class UnlabMachineDetails extends UnlabElement {
 						?disabled=${!accepts.cables || details.cables.length === 0}
 						@click=${() => this.runLine(`link ${action.to} ${cable.label}`)}
 					>
-						${cable.nic === null ? action.only : action.one(cable.nic)}
+						${cable.nic === null ? action.only(details.plugsInto) : action.one(cable.nic, details.plugsInto)}
 					</button>`;
 				})}
 				<button type="button" class="button" ?disabled=${!accepts.commands} @click=${() => this.runLine(`reboot ${name}`)}>

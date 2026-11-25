@@ -81,7 +81,7 @@ function kindOf(change: LinkChange): Kind {
 export const link = defineVerb({
 	name: "link",
 	about: "plug or cut cables",
-	description: `Plug in (up) or cut (down) the switch cables of machines or of single NICs. Returns the port and link state per NIC, with the port's switch when the lab has several. A cable already as asked is left alone. A NIC that is unplugged goes into the lowest free port of ${DEFAULT_SWITCH}. A machine that is off can be unplugged or plugged in; its link comes up when it boots.`,
+	description: `Plug in (up) or cut (down) the switch cables of machines or of single NICs. Returns the port and link state per NIC, with the port's switch when the lab has several. A cable already as asked is left alone. A NIC that is unplugged goes into the lowest free port of ${DEFAULT_SWITCH}, and plug puts it in any. The cables of a machine that is off can be cut or plugged in; their links come up when it boots.`,
 	danger: false,
 	phases: ["ready", "off"],
 	grammar: { link: slots.choice("up plugs the cables in, down cuts them.", ["up", "down"]), machines: slots.cables() },

@@ -9,6 +9,7 @@ import { helpFor } from "./help.ts";
 import { link } from "./link.ts";
 import { ls } from "./ls.ts";
 import { mkswitch } from "./mkswitch.ts";
+import { plug, unplug } from "./plug.ts";
 import { poweroff } from "./poweroff.ts";
 import { reboot } from "./reboot.ts";
 import { restore } from "./restore.ts";
@@ -25,6 +26,7 @@ export type { ForgetData } from "./forget.ts";
 export type { CableState } from "./link.ts";
 export type { ListedMachine } from "./ls.ts";
 export type { SwitchData } from "./mkswitch.ts";
+export type { PluggedCable } from "./plug.ts";
 export type { PowerState } from "./power.ts";
 export type { RemoveData } from "./rm.ts";
 export type { RemovedSwitch } from "./rmswitch.ts";
@@ -41,6 +43,7 @@ export {
 	link,
 	ls,
 	mkswitch,
+	plug,
 	poweroff,
 	reboot,
 	restore,
@@ -49,6 +52,7 @@ export {
 	sh,
 	spawn,
 	topology,
+	unplug,
 	write,
 };
 
@@ -63,6 +67,8 @@ export const VERBS: readonly AnyVerb[] = [
 	write,
 	sh,
 	link,
+	plug,
+	unplug,
 	mkswitch,
 	rmswitch,
 	topology,

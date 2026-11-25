@@ -10,7 +10,7 @@ export interface SwitchData {
 export const mkswitch = defineVerb({
 	name: "mkswitch",
 	about: "add a switch",
-	description: `Add a switch of 8 ports with nothing plugged in, and return its name. A lab has up to ${MAX_SWITCHES} switches. No frame passes from one to another except through a machine with a NIC on each. spawn plugs NICs into it with net.`,
+	description: `Add a switch of 8 ports with nothing plugged in, and return its name. A lab has up to ${MAX_SWITCHES} switches. No frame passes from one to another except through a machine with a NIC on each. spawn plugs NICs into it with net, and plug moves them there.`,
 	danger: false,
 	grammar: { name: slots.optional(slots.newSwitch()) },
 	example: { name: "lan" },

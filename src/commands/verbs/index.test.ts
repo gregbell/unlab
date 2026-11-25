@@ -18,6 +18,8 @@ describe("VERBS", () => {
 			["write", "<machine> <path> [--owner user[:group]] [--mode mode] -- <text>", "put a text in a file on a machine"],
 			["sh", "<machine>", "open another shell on a machine"],
 			["link", "<up | down> <machines>", "plug or cut cables"],
+			["plug", "<nic> <switch[:port]>", "plug a NIC into a switch, or move its cable there"],
+			["unplug", "<nic>", "unplug a NIC and free its port"],
 			["mkswitch", "[name]", "add a switch"],
 			["rmswitch", "<switch>", "remove a switch and unplug what is in it"],
 			["topology", "", "list switches, their ports and what is plugged in"],
@@ -45,6 +47,8 @@ describe("VERBS", () => {
 			["exec", "shell_exec", "run", { untrustedContentHint: true }],
 			["write", "file_write", "run", { untrustedContentHint: true }],
 			["link", "link_set", "run", {}],
+			["plug", "cable_plug", "run", {}],
+			["unplug", "cable_unplug", "run", {}],
 			["mkswitch", "switch_add", "run", {}],
 			["rmswitch", "switch_remove", "ask", { consequentialHint: true }],
 			["topology", "topology_read", "run", { readOnlyHint: true }],
@@ -84,6 +88,10 @@ const lines = fc.oneof(
 			return ["spawn", n, image, ...(swap ? options.reverse() : options)].join(" ");
 		}),
 	fc.tuple(fc.constantFrom("up", "down"), word).map(([dir, w]) => `link ${dir} ${w}`),
+	fc
+		.tuple(fc.constantFrom("node1", "node2:eth0", "node3"), fc.constantFrom("wan", "wan:8", "switch0:2"))
+		.map(([nic, to]) => `plug ${nic} ${to}`),
+	fc.constantFrom("unplug node1", "unplug node3:eth0"),
 	word.map((w) => `rm ${w}`),
 	fc
 		.tuple(fc.constantFrom("node1", "node2:sh1", "all", "node1:console,node3"), fc.string({ minLength: 1 }))

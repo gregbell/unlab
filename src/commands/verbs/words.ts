@@ -2,9 +2,13 @@ import {
 	andList,
 	type Disk,
 	type LabState,
+	lowestFreePorts,
+	nicLabel,
 	type PlanError,
+	type PlugPlanError,
 	type PortNo,
 	type PortRef,
+	portName,
 	type SwitchName,
 	type SwitchPlanError,
 	switchLabel,
@@ -100,6 +104,22 @@ export function planErrorSentence(error: PlanError, ports = "remove a machine wi
 		case "address-gateway":
 			return `--addr ${addressStr(error.address)} overlaps ${subnetStr(error.subnet)}, which the package gateway uses, so choose another subnet or add --no-gateway.`;
 	}
+}
+
+/** A plan error from the model, as `plug` says it. */
+export function plugErrorSentence(lab: LabState, error: PlugPlanError): string {
+	const on = error.kind === "no-ports" ? error.switch : error.port.switch;
+	const [free] = lowestFreePorts(lab, on, 1);
+	const others = lab.switches.filter((other) => other !== on && lowestFreePorts(lab, other, 1).length > 0);
+	const instead =
+		free === undefined
+			? `so ${others.length === 0 ? "" : `use ${list(others, "or")}, or `}free a port with unplug`
+			: `so use ${portName({ switch: on, port: free })}`;
+	if (error.kind === "no-ports") return `${on} has no free port, ${instead}.`;
+	const { machine, nic } = error.by;
+	const holder = lab.machines[machine];
+	const taken = `${portName(error.port)} is taken by ${holder ? nicLabel(holder, nic) : machine}`;
+	return free === undefined ? `${taken} and ${on} has no free port, ${instead}.` : `${taken}, ${instead}.`;
 }
 
 /** `4 GiB`, or with several `/dev/wdb 4 GiB, /dev/wdc 1 GiB`. */

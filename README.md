@@ -53,6 +53,8 @@ every command, and `help spawn` explains one, with its options and an example.
 | `spawn 1 alpine --nics 2 --net switch0,lan`  | Add a machine with one network interface on each switch. `--net lan` puts every interface on `lan`.                                    |
 | `rmswitch lan`                               | Remove a switch, after a confirmation that lists what is plugged in. Those interfaces are left unplugged, and the machines run on.     |
 | `topology`                                   | List every switch, every port, what is in it, and whether its link is up.                                                              |
+| `plug node2 lan:3`                           | Move node2's cable to port 3 of `lan`, or plug it in. `lan` alone is its lowest free port. Name one of several with `node2:eth1`.      |
+| `unplug node2:eth1`                          | Take the interface's cable out and free its port, also for later boots.                                                                |
 | `exec node1 -- ping -c 1 10.88.0.12`         | Send one ping from node1 and read the exit code from its shell.                                                                        |
 | `write node1 /etc/motd --mode 644 -- hello`  | Put a text in a file on the machine, as root, with the directories it needs. `--owner user:group` sets whose it is.                    |
 | `link down node2`                            | Cut node2's cables, whether it is on or off. Reconnect them with `link up node2`. Name one of several with `node2:eth1`.               |
@@ -152,7 +154,7 @@ When you are done, turn remote debugging off.
 ### Connect a browser extension
 
 1. [Open the lab](https://unlab.run/) in Chrome. The bottom right
-   reads `webmcp: 18 tools registered`.
+   reads `webmcp: 20 tools registered`.
 2. To see a call without an agent, click that text, then click **try a call**. The
    call and its result appear in the panel.
 3. Install
@@ -193,6 +195,8 @@ them. Your choices survive a reload.
 | `shell_read`         | Read what a guest's terminal shows.      | `run`    |
 | `file_write`         | Put a text in a file on a machine.       | `run`    |
 | `link_set`           | Cut or reconnect a machine's cables.     | `run`    |
+| `cable_plug`         | Plug a NIC in, or move its cable.        | `run`    |
+| `cable_unplug`       | Unplug a NIC and free its port.          | `run`    |
 | `capture_read`       | Read captured frames from the switches.  | `run`    |
 
 Commands run inside the guests, not on your computer. Guest output can contain
@@ -217,8 +221,12 @@ a separate window opens when you wanted your own browser, reconnect `unlab` in
 - A lab has up to eight machines and eight switches. It starts with `switch0`, which
   stays. A switch has eight ports. A machine has one to four network interfaces, and
   each takes a port on a switch or is left unplugged. `link up` plugs one that is
-  unplugged into `switch0`. A switch carries IPv4 traffic between its guests. A separate
-  gateway on `eth0` provides access to package repositories.
+  unplugged into `switch0`, and `plug` into any. A switch carries IPv4 traffic between its
+  guests. A separate gateway on `eth0` provides access to package repositories, whichever
+  switch `eth0` is on.
+- `lan:3` is port 3 of the switch `lan`. A cable moves as it is, so one that is cut stays
+  cut until `link up`. The switch that it leaves forgets what it learned from it. A machine
+  that fails boots on the switch its cable was moved to, at the lowest free port.
 - With more than one switch, the switch panel's title chooses which one it shows, with
   its ports, frame counts and MAC table.
 - Unless you choose, `eth0` starts with an address in `10.88.0.0/24` and `eth1` and
@@ -228,7 +236,8 @@ a separate window opens when you wanted your own browser, reconnect `unlab` in
   `sudo sysctl -w net.ipv4.ip_forward=1` in it.
 - The package gateway also gives `eth0` the address `10.0.2.15` and a default
   route, and it answers DHCP there. `--no-gateway` leaves all three to you. With
-  the gateway on, `10.0.2.0/24` and `198.51.100.0/24` are its own.
+  the gateway on, `10.0.2.0/24` and `198.51.100.0/24` are its own. A machine spawned with
+  `eth0` on `none` has no gateway, and plugging it in later does not add one.
 - Each guest defaults to 256 MiB of RAM, a sparse 4 GiB disk, and two CPUs, or
   one CPU if the browser lacks multicore support. The disk uses browser storage
   as the guest writes to it.
