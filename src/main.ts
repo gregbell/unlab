@@ -86,7 +86,8 @@ async function main(): Promise<void> {
 		initialState(images, { width: window.innerWidth - 232, height: window.innerHeight - 300 }),
 		localStorage.getItem(key),
 	);
-	await sweepDisks(new Set(machineList(restored.state).map((machine) => machine.n)));
+	const kept = new Set(machineList(restored.state).map((machine) => machine.n));
+	await sweepDisks((n) => n < restored.state.nextN && !kept.has(n));
 	const store: Store = createStore(
 		restored.state,
 		(effect: Effect) => {

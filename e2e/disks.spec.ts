@@ -108,7 +108,7 @@ test("rm lists every disk it deletes, once, and what a reload cut short is delet
 
 	await page.evaluate(() => {
 		IDBFactory.prototype.deleteDatabase = () => ({}) as IDBOpenDBRequest;
-		// Saved by a machine the lab lost its record of, and by something that is not a machine.
+		// Saved under a number this lab has not given out, and by something that is not a machine.
 		for (const name of ["kwdisk:unlab-node9.extra2-v1", "kwdisk:unlab-notes"]) indexedDB.open(name);
 	});
 	await typed(page, "rm node2");
@@ -117,8 +117,14 @@ test("rm lists every disk it deletes, once, and what a reload cut short is delet
 	expect(await databases(page)).toEqual(expect.arrayContaining(kept(2, 1)));
 	await page.reload();
 	await ready(page, "1 of 1 machine ready");
-	await expect.poll(() => databases(page)).toEqual([...kept(3), "kwdisk:unlab-notes"].sort());
+	const left = [...kept(3), "kwdisk:unlab-node9.extra2-v1", "kwdisk:unlab-notes"].sort();
+	await expect.poll(() => databases(page)).toEqual(left);
 	expect(await sizes(page, 3)).toHaveProperty("wdb", 4 * KIB * KIB);
+
+	await page.evaluate(() => localStorage.clear());
+	await page.reload();
+	await expect(page.getByRole("heading", { name: "Your Linux lab in a tab." })).toBeVisible();
+	expect(await databases(page), "a lost record is no reason to delete disks").toEqual(left);
 });
 
 test("a machine the browser has no memory for fails naming memory and the size, and one past the limit is refused", async ({

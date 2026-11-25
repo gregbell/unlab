@@ -25,15 +25,16 @@ export function deleteMachineDisks(n: number): void {
 }
 
 /**
- * Deletes the disks of machines that are gone and whose deletion a crash or a
- * reload cut short. Waits only to see which there are: a disk opened after
- * that waits for its own deletion.
+ * Deletes the disks of removed machines whose deletion a crash or a reload cut
+ * short. Only numbers the lab has given out count: a lab whose record was lost
+ * has given out none, and its disks are not garbage. Waits only to see which
+ * there are: a disk opened after that waits for its own deletion.
  */
-export async function sweepDisks(machines: ReadonlySet<number>): Promise<void> {
+export async function sweepDisks(removed: (n: number) => boolean): Promise<void> {
 	try {
 		for (const { name = "" } of await indexedDB.databases()) {
 			const n = DATABASE.exec(name)?.[1];
-			if (n !== undefined && !machines.has(Number(n))) drop(name);
+			if (n !== undefined && removed(Number(n))) drop(name);
 		}
 	} catch (error) {
 		console.error("Could not look for disks that no machine has", error);
