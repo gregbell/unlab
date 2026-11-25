@@ -235,6 +235,7 @@ test("a machine in the browser reaches the internet while linked, and nothing af
 		stdout: "from outside",
 		stderr: "",
 	});
+	expect((await cli.ssh("node1.unlab", `ping -c 2 -W 5 ${address}`)).stdout).toContain("2 packets received");
 	session.child.kill("SIGKILL");
 	await expect(status(page)).toHaveText("cli: waiting", { timeout: 5000 });
 	const tried = (await call(page, "shell_exec", { targets: "node1", command: `wget -T 3 -qO- ${url}` })) as {

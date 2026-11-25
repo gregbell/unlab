@@ -78,6 +78,7 @@ afterAll(async () => {
 
 test("a running machine reaches nothing before the CLI links, and the internet within five seconds of it", async () => {
 	expect(await answers(1)).toBe(false);
+	expect((await lab.machines[0].exec(`ping -c 1 -W 2 ${host}`)).stdout).toContain("0 packets received");
 	page = await link(cli);
 	await within(5000, () => answers(1));
 });
@@ -86,6 +87,18 @@ test("a machine looks a name up, and one that is none is not found", async () =>
 	expect(await lab.machines[0].run("nslookup -type=a localhost")).toContain("127.0.0.1");
 	const none = await lab.machines[0].exec("nslookup -type=a no-such-name.invalid");
 	expect(none.stdout + none.stderr).toContain("NXDOMAIN");
+});
+
+test("ping reaches the internet, with times a guest can believe, and the gateway still answers its own", async () => {
+	const ping = await lab.machines[0].run(`ping -c 3 -W 5 ${host}`);
+	expect(ping).toContain("3 packets transmitted, 3 packets received");
+	const times = [...ping.matchAll(/time=([\d.]+) ms/g)].map((m) => Number(m[1]));
+	console.log(`ping through the relay: ${times.join(", ")} ms`);
+	expect(Math.max(...times)).toBeLessThan(500);
+	expect(await lab.machines[0].run("ping -c 1 -W 5 10.0.2.2")).toContain("1 packets received");
+	const none = await lab.machines[0].exec("ping -c 2 -W 3 192.0.2.1");
+	expect(none.stdout).toContain("0 packets received");
+	await session.shows(`node1 → ping ${host}`);
 });
 
 test("a machine without a gateway gets none", async () => {
@@ -163,6 +176,7 @@ test("it ends within five seconds of the CLI quitting, and a link from another C
 	for (const address of [host, "127.0.0.2", "192.168.0.1", "169.254.169.254", "100.64.0.1", "10.99.0.1"]) {
 		await within(5000, async () => (await tried(`${address}:${port}`)).includes("Connection refused"));
 	}
+	expect((await machine.exec(`ping -c 2 -W 3 ${host}`)).stdout).toContain("0 packets received");
 	// A name for such an address is refused as the address is.
 	strict.close();
 });

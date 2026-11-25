@@ -122,7 +122,13 @@ export interface SshKeys {
 export type FromMachine =
 	| { readonly kind: "tcp"; readonly host: string; readonly port: number }
 	/** Answered with the IPv4 addresses. */
-	| { readonly kind: "lookup"; readonly name: string };
+	| { readonly kind: "lookup"; readonly name: string }
+	/** One echo, answered with the far end's TTL, or refused when there is none. */
+	| { readonly kind: "ping"; readonly address: string };
+
+export interface Pong {
+	readonly ttl: number;
+}
 
 /** A lookup's refusal when there is no such name, which is not a failure to ask. */
 export const NO_SUCH_NAME = "no such name";

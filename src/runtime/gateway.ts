@@ -3,7 +3,8 @@
 // under a running guest, whose address, route and name server stay as they are.
 
 import type { NetBackend, NetConnection, NetConnectionEvents } from "unkernel";
-import { type FromMachine, type Mux, NO_SUCH_NAME, Refused, type Stream } from "../streams/index.ts";
+import { type FromMachine, type Mux, NO_SUCH_NAME, type Pong, Refused, type Stream } from "../streams/index.ts";
+import type { Echoed } from "./ping.ts";
 
 function ask(mux: Mux, to: FromMachine, signal?: AbortSignal): Promise<Stream> {
 	return mux.open(to, signal);
@@ -133,6 +134,18 @@ export class GatewayBackend implements NetBackend {
 
 	connect(to: { host: string; port: number }, on: NetConnectionEvents): NetConnection {
 		return this.#mux ? new RelayConnection(this.#mux, to, on) : this.#packages.connect(to, on);
+	}
+
+	/** Null when there is no CLI to ping from. */
+	ping(address: string): Promise<Echoed | null> | null {
+		if (!this.#mux) return null;
+		return ask(this.#mux, { kind: "ping", address }).then(
+			(stream) => {
+				stream.reset();
+				return stream.answer as Pong;
+			},
+			() => null,
+		);
 	}
 
 	async lookup(name: string): Promise<string[]> {

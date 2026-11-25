@@ -9,6 +9,7 @@ import { execAsRoot, setupScript } from "../../src/runtime/guest.ts";
 import { type Channel, type LinkTarget, MachineLink } from "../../src/runtime/machine-link.ts";
 import { MachineNics } from "../../src/runtime/machine-nics.ts";
 import { alpinePackageSetup, packageBackend } from "../../src/runtime/package-repositories.ts";
+import { PingingGateway } from "../../src/runtime/ping.ts";
 import { LAB_ORIGIN } from "../../src/streams/index.ts";
 import { sshPrograms } from "../support/ssh-programs.ts";
 
@@ -60,7 +61,8 @@ const link = new MachineLink({
 	dial: (url) => new WebSocket(url, { origin: LAB_ORIGIN }).on("error", () => {}) as unknown as Channel,
 	programs: async () => sshPrograms(),
 });
-const gateway = data.gateway ? new NetStack({ mac: data.macs[0], backend }) : undefined;
+const stack = data.gateway ? new NetStack({ mac: data.macs[0], backend }) : undefined;
+const gateway = stack && switching ? new PingingGateway(stack, (to) => switching.ping(to)) : stack;
 const nics = new MachineNics({
 	macs: data.macs,
 	gateway,
