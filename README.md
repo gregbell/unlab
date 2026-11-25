@@ -10,6 +10,10 @@ cable, and see what happens to the packets.
 **[Open the live lab](https://gregbell.github.io/unlab/)** ·
 [Run locally](#run-locally) · [Contribute](#contribute)
 
+To open unlab in its own window, choose **Install** in Chrome’s address bar.
+The installed app shares the lab and guest disks from your browser tab. Close
+the tab before launching the app so it can open that lab.
+
 ![Two Alpine consoles above a live packet capture and an eight-port switch. node1 receives three ping replies from node2 at 10.88.0.12.](docs/images/first-ping.png)
 
 ## Follow your first ping
