@@ -5,7 +5,7 @@
 // filter change rebuilds it once. Subscribers hear at most once per scheduled
 // flush, whatever the frame rate.
 
-import type { Cause, MachineName, PortNo, PortRef, SwitchName } from "../model/index.ts";
+import type { Cause, DeadCable, MachineName, PortNo, PortRef, SwitchName } from "../model/index.ts";
 import {
 	arpAddrs,
 	type CaptureFilter,
@@ -63,6 +63,8 @@ export interface LinkEvent {
 	readonly cause: Cause;
 	/** The cable was put in the port or taken out of it, and not cut or reconnected. */
 	readonly plug?: true;
+	/** That was done to a cable whose link was down, and stays down. */
+	readonly dead?: DeadCable;
 }
 
 export interface CaptureCounters {
@@ -344,9 +346,9 @@ export function createCaptureLog(opts: CaptureOptions): CaptureLog {
 			changed();
 		},
 
-		appendLink({ port, machine, nic, up, cause, plug }) {
+		appendLink({ port, machine, nic, up, cause, plug, dead }) {
 			if (paused) return;
-			push({ kind: "link", seq: next, t: now(), port, machine, nic, up, cause, plug, names: names() });
+			push({ kind: "link", seq: next, t: now(), port, machine, nic, up, cause, plug, dead, names: names() });
 			changed();
 		},
 

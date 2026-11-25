@@ -623,6 +623,14 @@ export interface DiskCopy {
 /** `drop` loses what is not saved yet. The others save every disk, and `off` and `reboot` have the guest shut down first. */
 export type StopHow = "drop" | "save" | Next;
 
+/** A cable that is moved while its link is down, and why it is. */
+export interface DeadCable {
+	readonly way: "in" | "out";
+	readonly cut: boolean;
+	/** What its machine is doing, when that keeps its links down. */
+	readonly machine: Exclude<Phase, "ready" | "removing" | "failed"> | null;
+}
+
 export type Effect =
 	| { readonly type: "vm/boot"; readonly machine: MachineName; readonly attempt: number; readonly config: BootConfig }
 	/** Stop the worker as `how` says, then report vm/stopped. Idempotent, and `drop` hurries a slower stop. */
@@ -647,6 +655,15 @@ export type Effect =
 			readonly cause: Cause;
 			/** The cable was put in the port or taken out of it, and not cut or reconnected. */
 			readonly plug?: true;
+	  }
+	/** Writes the capture event row of a cable that was put in the port or taken out of it while its link was down. */
+	| {
+			readonly type: "capture/dead-cable";
+			readonly port: PortRef;
+			readonly machine: MachineName;
+			readonly nic: NicNo;
+			readonly cause: Cause;
+			readonly dead: DeadCable;
 	  }
 	| { readonly type: "pty/open"; readonly session: SessionId }
 	| { readonly type: "pty/close"; readonly session: SessionId }

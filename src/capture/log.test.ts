@@ -277,6 +277,26 @@ test("a cable that is moved is unplugged and plugged in, and not cut or reconnec
 	]);
 });
 
+test("a cable that is moved while its link is down says why, and that it stays down", () => {
+	const { log } = setup();
+	const move = (way: "in" | "out", cut: boolean, machine: "off" | "booting" | "restoring" | null) =>
+		log.appendLink({ port: port0(2), machine: "node1", nic: 0, up: false, cause: "bar", dead: { way, cut, machine } });
+	move("out", true, null);
+	move("in", true, null);
+	move("out", false, "off");
+	move("in", true, "off");
+	move("out", false, "booting");
+	move("out", false, "restoring");
+	expect(log.tail(6).map((row) => (row.kind === "link" ? [row.text, row.up, row.cause] : []))).toEqual([
+		["port 2 link down", false, "Cut cable to node1 unplugged by you."],
+		["port 2 link down", false, "Cut cable to node1 plugged in by you."],
+		["port 2 link down", false, "Cable to node1, which is off, unplugged by you."],
+		["port 2 link down", false, "Cut cable to node1, which is off, plugged in by you."],
+		["port 2 link down", false, "Cable to node1, which is booting, unplugged by you."],
+		["port 2 link down", false, "Cable to node1, which is being restored, unplugged by you."],
+	]);
+});
+
 test("a link the lab raises is a machine plugging in at boot, not a reconnect", () => {
 	const { log } = setup();
 	log.appendLink({ port: port0(1), machine: "node1", nic: 0, up: true, cause: "runtime" });

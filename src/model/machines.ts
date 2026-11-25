@@ -22,6 +22,7 @@ import {
 	type Checkpoint,
 	type CheckpointName,
 	DEFAULT_SWITCH,
+	type DeadCable,
 	type DiskCopy,
 	type DiskSets,
 	type Effect,
@@ -415,12 +416,40 @@ function cablesOf(life: Lifecycle): readonly { nic: NicNo; port: PortRef; link: 
 	});
 }
 
-/** Takes down every link that is up on the switch. They come up at the first prompt, and stay until the guest has stopped. */
+/** What its machine is doing, when that keeps the links of its cables down. They come up at the first prompt, and stay until the guest has stopped. */
+function unlinkedBy(life: Lifecycle): DeadCable["machine"] {
+	switch (life.phase) {
+		case "booting":
+		case "off":
+		case "restoring":
+			return life.phase;
+		case "stopping":
+			return life.linked ? null : life.phase;
+		default:
+			return null;
+	}
+}
+
+/** Takes down every link that is up on the switch. */
 function linksDown({ name, life }: Machine, cause: Cause): Effect[] {
-	if (life.phase !== "ready" && !(life.phase === "stopping" && life.linked)) return [];
+	if (unlinkedBy(life) !== null) return [];
 	return cablesOf(life)
 		.filter(({ link }) => link === "up")
 		.map(({ port, nic }) => ({ type: "link/set", port, machine: name, nic, up: false, cause }));
+}
+
+/** A cable is put in the port or taken out of it, with the link it has. */
+function replug(
+	{ name, life }: Machine,
+	{ nic, port, link }: ReturnType<typeof cablesOf>[number],
+	way: "in" | "out",
+	cause: Cause,
+): Effect {
+	const by = unlinkedBy(life);
+	const cut = link === "cut";
+	return cut || by !== null
+		? { type: "capture/dead-cable", port, machine: name, nic, cause, dead: { way, cut, machine: by } }
+		: { type: "link/set", port, machine: name, nic, up: way === "in", cause, plug: true };
 }
 
 const onSwitch = (on: SwitchName) => (port: PortRef | null) => port?.switch === on;
@@ -442,9 +471,9 @@ export function unplugAll(state: LabState, on: SwitchName, cause: Cause): Step {
 		const asked = spec.nics.some(({ net }) => net === on);
 		if (held.length === 0 && !asked) continue;
 		effects.push(
-			...linksDown(machine, cause).flatMap((effect): Effect[] =>
-				effect.type === "link/set" && onSwitch(on)(effect.port) ? [{ ...effect, plug: true }] : [],
-			),
+			...cablesOf(life)
+				.filter(({ port }) => port.switch === on)
+				.map((cable) => replug(machine, cable, "out", cause)),
 		);
 		for (const port of held) effects.push({ type: "port/detach", port });
 		const nics = spec.nics.map((nic): NicSpec => (nic.net === on ? { ...nic, net: "none" } : nic));
@@ -981,19 +1010,14 @@ export function plug(state: LabState, plan: PlugPlan, cause: Cause): Step {
 	const changed = rewired(machine, nic, set);
 	if (!changed) return step(state);
 
-	const link = (port: PortRef, up: boolean): Effect => {
-		return { type: "link/set", port, machine: name, nic, up, cause, plug: true };
-	};
-	const linked = machine.life.phase === "ready";
 	const effects: Effect[] = [];
+	// The link first, so the switch forgets what it had learned there and the capture says so.
 	if (old.kind === "port") {
-		// The link first, so the switch forgets what it had learned there and the capture says so.
-		if (linked && old.link === "up") effects.push(link(old.port, false));
-		effects.push({ type: "port/detach", port: old.port });
+		effects.push(replug(machine, { ...old, nic }, "out", cause), { type: "port/detach", port: old.port });
 	}
 	if (set.kind === "port") {
-		effects.push({ type: "port/attach", port: set.port, machine: name, nic });
-		if (linked && set.link === "up") effects.push(link(set.port, true));
+		const { port } = set;
+		effects.push({ type: "port/attach", port, machine: name, nic }, replug(machine, { ...set, nic }, "in", cause));
 	}
 	const label = nicLabel(machine, nic);
 	const said = to === null ? "unplugged" : `plugged into ${to.switch} port ${to.port}`;

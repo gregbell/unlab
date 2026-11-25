@@ -1,7 +1,15 @@
 // What a capture row shows, built from an entry only when the row is on
 // screen: decoding runs per visible row, never per frame.
 
-import { type Cause, type MachineName, PORTS, type PortNo, portText, type SwitchName } from "../model/index.ts";
+import {
+	type Cause,
+	type DeadCable,
+	type MachineName,
+	PORTS,
+	type PortNo,
+	portText,
+	type SwitchName,
+} from "../model/index.ts";
 import {
 	arpAddrs,
 	decode,
@@ -134,6 +142,7 @@ function note(e: FrameEntry, on: SwitchName | null): string | null {
 
 /** The lab raises a link only when a machine comes up with a cable it did not have, so that is a plug-in, not a reconnect. */
 function linkVerb(e: LinkEntry): string {
+	if (e.dead) return e.dead.way === "in" ? "plugged in" : "unplugged";
 	if (e.plug) return e.up ? "plugged in" : "unplugged";
 	if (!e.up) return "cut";
 	return e.cause === "runtime" ? "plugged in" : "reconnected";
@@ -145,6 +154,19 @@ const WHO: Readonly<Record<Exclude<Cause, "power">, string>> = {
 	button: "you",
 	runtime: "the lab",
 };
+
+const DOING: Readonly<Record<NonNullable<DeadCable["machine"]>, string>> = {
+	booting: "booting",
+	stopping: "stopping",
+	off: "off",
+	restoring: "being restored",
+};
+
+/** `Cable to node3`, `Cut cable to node3`, `Cable to node3, which is off,`. */
+function cableText({ dead }: LinkEntry, to: string): string {
+	const cable = `${dead?.cut ? "Cut cable" : "Cable"} to ${to}`;
+	return dead?.machine ? `${cable}, which is ${DOING[dead.machine]},` : cable;
+}
 
 function linkRow(e: LinkEntry, names: RowNames): LinkRow {
 	const cable = nicLabel(e.machine, e.nic, names.severalNics(e.machine));
@@ -160,7 +182,7 @@ function linkRow(e: LinkEntry, names: RowNames): LinkRow {
 		cause:
 			e.cause === "power"
 				? `${e.machine} ${e.up ? "booted" : "stopped"}.`
-				: `Cable to ${cable} ${linkVerb(e)} by ${WHO[e.cause]}.`,
+				: `${cableText(e, cable)} ${linkVerb(e)} by ${WHO[e.cause]}.`,
 	};
 }
 
