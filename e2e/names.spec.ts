@@ -146,8 +146,7 @@ test("every command that takes a machine takes its name", async ({ page }) => {
 	await typed(page, "focus db --max");
 
 	await typed(page, "poweroff web-1");
-	const rail = page.getByRole("complementary", { name: "Machines" });
-	await expect(rail.getByRole("button", { name: /^web-1\b/ })).toContainText("off", { timeout: 60_000 });
+	await expect(page.getByText("2 of 3 machines ready, 1 off")).toBeVisible();
 	await typed(page, "boot web-1");
 	await allReady(page, 3);
 	expect(await call(page, "machines_reboot", { names: "web-1" })).toMatchObject({ result: "web-1 ready" });
