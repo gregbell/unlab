@@ -16,8 +16,6 @@ export interface VmConfig {
 	addresses: readonly (Address | null)[];
 	/** The distro image bytes, shared with every machine using the same image. */
 	image: ArrayBufferLike;
-	/** Which image that is, for display. */
-	distro: string;
 	memoryMiB: number;
 	disks: Disks;
 	/** Which set of them. */

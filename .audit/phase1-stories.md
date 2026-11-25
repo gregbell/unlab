@@ -2,7 +2,7 @@
 
 | Story | Box | Test |
 | --- | --- | --- |
-| 7.2 | strace of a simple command runs to completion and prints its system calls | test/integration/strace.test.ts: strace runs a command to completion and prints its system calls |
+| 7.2 | strace of a simple command runs to completion and prints its system calls | test/integration/lab-image.test.ts: strace runs a command to completion and prints its system calls |
 | 1.3 (part) | a machine that needs more switch ports than the lab has is refused with a sentence naming ports | e2e/nics.spec.ts: a NIC left unplugged takes no port, and a machine that needs more ports than are free is refused |
 | 3.1 | a spawn option sets how many NICs a machine has | e2e/nics.spec.ts: a two-NIC machine forwards in the browser, and the capture and its filter name each hop's NIC |
 | 3.1 | each NIC is an ordinary Ethernet interface with its own MAC, usable with ip and tcpdump | test/integration/nics.test.ts: is an ordinary Ethernet interface with its own MAC, up and without an address |
@@ -97,3 +97,8 @@
 | 2.2 (part) | running out of browser storage is reported in a sentence that names storage, while a checkpoint is saved | e2e/checkpoints.spec.ts: storage that runs out under the checkpoint, under the guest while a checkpoint is saved leaves no checkpoint and an unharmed machine |
 | 2.2 (part) | running out of browser storage is reported in a sentence that names storage, during a restore | e2e/checkpoints.spec.ts: a restore that runs out of storage, or whose checkpoint is gone, fails with the disks as they were |
 | 1.4 (part) | ls reports what a machine is doing, and a command sent to one that is not ready says which state it is in | e2e/checkpoints.spec.ts: what stops under a checkpoint that is being saved ends it, and what would is refused |
+| 7.1 | spawn accepts a lab image beside alpine and debian | e2e/lab-image.spec.ts: a lab machine with no network has the tools, and keeps a disk that it partitions and formats |
+| 7.1 | with no network, a machine from it has ip from iproute2, tcpdump, curl, dig, ssh and sshd, nginx, strace, and tools to partition and format a disk | test/integration/lab-image.test.ts (all), e2e/lab-image.spec.ts: a lab machine with no network has the tools, and keeps a disk that it partitions and formats |
+| 7.1 | pinned by size and checksum in the image manifest | scripts/lab-image.ts, checked by scripts/fetch-distros.ts in CI (npm run distros alpine debian lab) |
+| 7.1 | boot time measured in CI beside Alpine's | e2e/lab-image.spec.ts: a lab machine boots about as fast as an Alpine one (printed, and in the job summary) |
+| 2.1 | a person can partition, format and mount it with tools already in the image | e2e/lab-image.spec.ts: a lab machine with no network has the tools, and keeps a disk that it partitions and formats |

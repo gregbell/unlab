@@ -23,7 +23,7 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - run: npm run distros alpine debian
+      - run: npm run distros alpine debian lab
       - run: npx playwright install --with-deps chromium
       - run: npm run check
       - run: npm run test:integration

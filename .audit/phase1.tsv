@@ -31,3 +31,6 @@ ts	phase	decision	why	evidence	result
 2026-11-25T05:36:42Z	checkpoints	numbered disk sets: restore copies to a new set, live pointer changes in one step	a machine is always restored or untouched	e2e/checkpoints.spec.ts 11 tests; live-copy.browser.test.ts 12 mutations red	worker report reviewed against diff
 2026-11-25T05:36:42Z	checkpoints	accepted: browser process death can lose localStorage's last seconds after a restore	record could name a deleted set; checkpoints remain to restore from	inferred, not tested	open item
 2026-11-25T05:36:42Z	checkpoints	left unkernel CowDisk discard race alone	present before this slice, reproduced without our code	worker Node repro	open item for user
+2026-11-25T05:43:02Z	lab-image	published lab image as release lab-image-1 on gregbell/unlab	user approved releases 2026-11-25	sha256 2a2f31d4..., downloaded copy matches	published
+2026-11-25T05:43:02Z	lab-image	left IPv6 and pid lines out of nginx config	kernel has no IPv6 and /run is empty	nginx -t failed as packaged, then curl 404 from it	done
+2026-11-25T05:43:02Z	lab-image	measured boot alpine 1943,1803,1699,1798 lab 2146,1830,1803,1811 ms	story asks for CI measure	e2e/lab-image.spec.ts local run	pass

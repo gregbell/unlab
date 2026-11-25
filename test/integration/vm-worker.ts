@@ -11,7 +11,6 @@ export interface MachineData {
 	readonly name: string;
 	readonly namedPrompt: boolean;
 	readonly addresses: readonly (Address | null)[];
-	readonly image: "alpine" | "debian";
 	readonly macs: readonly string[];
 	readonly distro: string;
 	readonly hosts: readonly HostEntry[];
@@ -70,8 +69,7 @@ try {
 		gateway: data.gateway !== false,
 		promptToken: "0123456789abcdef",
 	});
-	const prepareApk = data.gateway === "packages" && data.image === "alpine";
-	const setup = await execAsRoot(vm, prepareApk ? `${alpinePackageSetup}\n${script}` : script);
+	const setup = await execAsRoot(vm, data.gateway === "packages" ? `${alpinePackageSetup}\n${script}` : script);
 	if (setup.exitCode !== 0) throw new Error(`setup: ${setup.stderr}`);
 
 	port.on("message", (m: ToMachine) => {

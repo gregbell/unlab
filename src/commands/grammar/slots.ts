@@ -246,7 +246,11 @@ export function image(): Value<string> {
 			return lab.images.map((i) => ({ insert: i.name, label: i.name, detail: i.label }));
 		},
 		format: (name) => name,
-		schema: { type: "string", description: "An image name from the lab's manifest, such as alpine." },
+		schema: {
+			type: "string",
+			description:
+				"alpine, debian or lab: Alpine with iproute2, tcpdump, curl, dig, ssh, nginx, strace, sfdisk and mkfs installed, for use offline.",
+		},
 	};
 }
 

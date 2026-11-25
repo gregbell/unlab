@@ -24,7 +24,7 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - run: npm run distros alpine debian
+      - run: npm run distros alpine debian lab
       # Pages serves the site from /unlab/, not the root.
       - run: npx vite build --base /unlab/
         env:

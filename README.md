@@ -40,6 +40,7 @@ a guest console, or use `exec` in the bar to address a guest by name.
 | -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
 | `ls`                                         | List machines and their disks, and each network interface's MAC, address, port, and link.                                              |
 | `spawn 2 alpine --mem 512 --cpus 2 --disk 8` | Add two Alpine machines with 512 MiB of RAM, two CPUs, and an 8 GiB disk each. Use `--no-net` to leave them unplugged.                 |
+| `spawn 1 lab`                                | Add an Alpine machine with network, service, and disk tools already installed.                                                         |
 | `spawn 1 alpine --extra-disk 1,4`            | Add a machine with two blank disks of 1 and 4 GiB: `/dev/wdc` and `/dev/wdd`. A machine takes up to four, of up to 64 GiB each.        |
 | `spawn 1 alpine --name web`                  | Add a machine called `web`. Every command takes the name, and it is the machine's hostname and what the others reach it by.            |
 | `spawn 1 alpine --nics 2 --net switch0,none` | Add a machine with two network interfaces: `eth0` plugged in and `eth1` left unplugged. Without `--net`, each takes its own port.      |
@@ -216,8 +217,9 @@ a separate window opens when you wanted your own browser, reconnect `unlab` in
   as the guest writes to it.
 - `/dev/wda` is the image, `/dev/wdb` keeps the guest's files, and the disks that
   `--extra-disk` adds follow from `/dev/wdc`. An extra disk starts blank, and the lab
-  never formats or mounts one. Alpine partitions it with `fdisk`. Neither image has
-  a formatter for a file system its kernel mounts, so install one first: on Alpine,
+  never formats or mounts one. The lab image partitions it with
+  `sfdisk` or `parted` and formats it with `mkfs.ext4`. Alpine and Debian have no
+  formatter for a file system their kernel mounts, so install one first: on Alpine,
   `sudo apk add e2fsprogs`.
 - A machine that is shut down or rebooted saves everything its guest has written to a
   disk first. Its programs, and settings that only its memory held, are gone. Shells
@@ -246,6 +248,7 @@ Run these commands in the guest console:
 | ------ | ------------------------------------------- |
 | Alpine | `sudo apk update && sudo apk add vim`       |
 | Debian | `sudo apt update && sudo apt install -y jq` |
+| Lab    | As on Alpine.                               |
 
 The browser downloads indexes and packages over HTTPS from the configured
 [Alpine mirror](https://repo.c48.uk/alpine/) or
@@ -255,7 +258,9 @@ distribution signatures, and installed packages persist on the guest disk.
 
 The gateway accepts only package repository requests. It requires no Wisp
 relay. Switch cable controls affect traffic between guests independently.
-Use `spawn 1 alpine --no-gateway` to boot without repository access.
+Use `spawn 1 alpine --no-gateway` to boot without repository access. A machine
+from the lab image then still has iproute2, tcpdump, curl, dig, ssh and sshd, nginx,
+strace, and tools to partition and format a disk.
 
 ## Run locally
 
@@ -266,15 +271,20 @@ server.
 git clone https://github.com/gregbell/unlab.git
 cd unlab
 npm ci
-npm run distros -- alpine debian
+npm run distros -- alpine debian lab
 npm run dev
 ```
 
 Open the URL printed by Vite. The distro download checks each root image's size
-and SHA-256 against the unkernel release that matches the pinned npm package.
+and SHA-256 against the unkernel release that matches the pinned npm package, or,
+for the lab image, against [its pin](scripts/lab-image.ts).
 The kernel comes directly from that package's `unkernel.wasm`. The
 [image manifest](public/distros/distros.json) records the upstream build IDs and
 checksums.
+
+The lab image is Alpine with packages installed. It is a
+[release asset](https://github.com/gregbell/unlab/releases/tag/lab-image-1) that
+[this script](scripts/build-lab-image.ts) built.
 
 ## How it works
 

@@ -16,7 +16,7 @@ export interface MachineSetup {
 	readonly ports: readonly (PortNo | null)[];
 	/** Each NIC's address, or null for none. Left out, the lab's own choice. */
 	readonly addr?: readonly (string | null)[];
-	readonly distro?: "alpine" | "debian";
+	readonly distro?: "alpine" | "debian" | "lab";
 	/** `packages` is the app's own gateway, which reaches only the package repositories. */
 	readonly gateway?: boolean | "packages";
 }
@@ -72,7 +72,6 @@ export async function bootLab(setups: readonly MachineSetup[]): Promise<TestLab>
 			namedPrompt: setup.name !== undefined,
 			addresses: addressesOf(setup),
 			macs: NICS.slice(0, setup.ports.length).map((nic) => macStr(nodeMac(setup.n, nic))),
-			image: setup.distro ?? "alpine",
 			distro: imagePath(setup.distro ?? "alpine"),
 			hosts,
 			gateway: setup.gateway ?? false,
