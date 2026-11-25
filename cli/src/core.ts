@@ -183,12 +183,22 @@ export class Core {
 		};
 	}
 
-	/** Resolves once nothing is connected to the socket: a single command that started the CLI ends it then, and not under another's feet. */
-	idle(): Promise<void> {
-		if (this.#clients.size === 0) return Promise.resolve();
-		return new Promise((resolve) => {
-			this.#idle = resolve;
-		});
+	/**
+	 * Resolves once nothing is connected to the socket, and nothing new can be:
+	 * a single command that started the CLI ends it then, and not under the
+	 * feet of another that came meanwhile. One that comes later starts its own.
+	 */
+	async idle(): Promise<void> {
+		const none = () =>
+			this.#clients.size === 0
+				? Promise.resolve()
+				: new Promise<void>((resolve) => {
+						this.#idle = resolve;
+					});
+		await none();
+		await new Promise((resolve) => this.#local?.close(resolve) ?? resolve(null));
+		rmSync(socketPath(), { force: true });
+		await none();
 	}
 
 	#came(socket: Socket): void {

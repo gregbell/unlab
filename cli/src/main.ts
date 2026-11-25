@@ -46,46 +46,37 @@ function openBrowser(url: string): void {
 
 const labUrl = ({ origin, port }: Options) => `${origin}/#cli=${port}`;
 
-/** The CLI that runs, or this one once it does. Null for one that was running. */
-async function start(options: Options): Promise<Core | null> {
-	try {
-		await request<Status>({ type: "status" });
-		return null;
-	} catch (error) {
-		if (!(error instanceof NotRunning)) throw error;
-	}
-	const core = new Core({
-		port: options.port,
-		origins: [options.origin],
-		lan: options.lan,
-		log: options.log,
-		command: keepProgram(),
-	});
-	try {
-		await core.start();
-	} catch (error) {
-		if ((error as NodeJS.ErrnoException).code !== "EADDRINUSE") throw error;
-		// Another run of the CLI that started at the same moment has the port, and is about to answer.
-		if (await answers(STARTING_MS)) return null;
-		throw new Error(`Another program has port ${options.port}. Quit it, or choose another with --port.`);
-	}
-	return core;
-}
-
-/** How long a CLI that has its port takes to answer on its socket. */
+/** How long another run of the CLI may hold the port before it answers, as it starts or as it ends. */
 const STARTING_MS = 3000;
 
-async function answers(ms: number): Promise<boolean> {
-	for (const until = Date.now() + ms; Date.now() < until; ) {
+/** The CLI that runs, or this one once it does. Null for one that was running. */
+async function start(options: Options): Promise<Core | null> {
+	const command = keepProgram();
+	for (const until = Date.now() + STARTING_MS; ; ) {
 		try {
 			await request<Status>({ type: "status" });
-			return true;
+			return null;
 		} catch (error) {
 			if (!(error instanceof NotRunning)) throw error;
-			await new Promise((resolve) => setTimeout(resolve, 100));
 		}
+		const core = new Core({
+			port: options.port,
+			origins: [options.origin],
+			lan: options.lan,
+			log: options.log,
+			command,
+		});
+		try {
+			await core.start();
+			return core;
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException).code !== "EADDRINUSE") throw error;
+		}
+		if (Date.now() > until) {
+			throw new Error(`Another program has port ${options.port}. Quit it, or choose another with --port.`);
+		}
+		await new Promise((resolve) => setTimeout(resolve, 100));
 	}
-	return false;
 }
 
 /** Rejects when the lab that came cannot be used: waiting on, or opening it again, would not change that. */
