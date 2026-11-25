@@ -106,6 +106,9 @@ export interface SpawnRequest extends Hardware {
 	readonly name?: MachineName;
 }
 
+/** What a machine's kernel stopping leads to. */
+export type Next = "off" | "reboot";
+
 /**
  * The lifecycle is the type. A failed machine has no plugs, so it cannot hold
  * a port. A removing machine keeps its ports (links already down) until it is
