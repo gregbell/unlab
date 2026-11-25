@@ -29,7 +29,7 @@
 | 4.2 | broadcast frames reach every other plugged machine | test/integration/addresses.test.ts: carries a broadcast to every other plugged machine |
 | 4.2 | without the package gateway, a DHCP server on one guest gives a lease to another | test/integration/addresses.test.ts: leases an address from a DHCP server on another machine |
 | 4.2 | without the package gateway, the image's own DHCP client neither delays the boot nor reaches the switch | test/integration/addresses.test.ts: boots alpine, boots debian as fast as one with it, and its boot puts nothing on the switch |
-| 4.2 | with the gateway on, apk add and apt install work on a machine with a chosen address | test/integration/addresses.test.ts: installs packages on alpine, on debian, and is reached on its address |
+| 4.2 | with the gateway on, apk add and apt install work on a machine with a chosen address | test/integration/addresses.test.ts: installs packages on alpine, and is reached on its address. The debian case is commented out since 2026-11-25, because mirror.unkernel.dev answers 403, so nothing shows apt install now |
 | 4.2 | an address that collides with the gateway's own range is refused in a sentence | e2e/addresses.spec.ts: an address the machine could not use is refused in a sentence, and nothing boots |
 | 4.2 | an address that collides with the gateway's own range is refused in a sentence | test/integration/addresses.test.ts: reaches the gateway only on the subnets the lab refuses |
 | 4.3 | capture rows name the machine that sent and received each frame when it uses a chosen address | e2e/addresses.spec.ts: the capture names the machine at each end in any subnet, and a reused address does not rename old rows |
