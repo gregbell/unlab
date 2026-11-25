@@ -631,6 +631,8 @@ describe("ports", () => {
 		]);
 		s = run(s, linkEvent(s, true, "node2"));
 		expect(machine(s, "node2").life).toMatchObject({ plugs: [{ kind: "port", port: port0(1), link: "up" }] });
+		s = run(s, hasFailed("node2"), remove("node3"), hasStopped("node3"));
+		expect(planBoot(s, ["node2"])).toEqual([{ machine: "node2", ports: [port0(1)] }]);
 	});
 });
 

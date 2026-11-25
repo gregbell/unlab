@@ -894,6 +894,19 @@ export function link(state: LabState, changes: readonly LinkChange[], cause: Cau
 	return result;
 }
 
+/** The machine with one NIC's cable as given, now and for its later boots. Null for a NIC that takes no change. */
+function rewired(machine: Machine, nic: NicNo, plug: Plug): Machine | null {
+	const { life, spec } = machine;
+	if ((life.phase !== "ready" && life.phase !== "off") || !life.plugs[nic]) return null;
+	const net = plug.kind === "port" ? plug.port.switch : "none";
+	const at = <T>(list: readonly T[], change: (old: T) => T) => list.map((old, i) => (i === nic ? change(old) : old));
+	return {
+		...machine,
+		life: { ...life, plugs: at(life.plugs, () => plug) },
+		spec: { ...spec, nics: at(spec.nics, (old) => ({ ...old, net })) },
+	};
+}
+
 function linkOne(state: LabState, change: LinkChange, cause: Cause): Step {
 	const machine = state.machines[change.machine];
 	if (machine?.life.phase !== "ready" && machine?.life.phase !== "off") return step(state);
@@ -905,11 +918,9 @@ function linkOne(state: LabState, change: LinkChange, cause: Cause): Step {
 		: plug.kind === "port" && samePort(plug.port, port) && (plug.link === "up") !== up;
 	if (!fits) return step(state);
 
-	const set: Plug = { kind: "port", port, link: up ? "up" : "cut" };
-	const next = put(state, {
-		...machine,
-		life: { ...machine.life, plugs: machine.life.plugs.map((other, i) => (i === nic ? set : other)) },
-	});
+	const changed = rewired(machine, nic, { kind: "port", port, link: up ? "up" : "cut" });
+	if (!changed) return step(state);
+	const next = put(state, changed);
 	const label = nicLabel(machine, nic);
 	const effects: Effect[] = [];
 	if (change.newPort) effects.push({ type: "port/attach", port, machine: machine.name, nic });

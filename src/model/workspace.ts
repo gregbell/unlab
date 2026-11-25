@@ -107,9 +107,11 @@ function readPort(saved: unknown, switches: LabState["switches"]): PortRef | nul
 function readNic(saved: unknown, switches: LabState["switches"]): SavedNic {
 	if (!record(saved) || typeof saved.cut !== "boolean") return invalid();
 	const port = readPort(saved.port, switches);
+	const net = saved.net === "none" ? "none" : readSwitch(saved.net, switches);
 	return {
 		spec: {
-			net: saved.net === "none" ? "none" : readSwitch(saved.net, switches),
+			// A NIC that was plugged in after it was spawned on none used to be saved as on none.
+			net: port?.switch ?? net,
 			address: readAddress(saved.address),
 		},
 		plug: port ? { kind: "port", port, link: saved.cut ? "cut" : "up" } : { kind: "none" },

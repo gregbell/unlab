@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import { port0 } from "../../test/support/ports.ts";
 import { planSwitch, portLabel } from "./switches.ts";
 import {
+	bootEvent,
 	effectsOf,
 	emptyLab,
 	hasFailed,
@@ -164,6 +165,16 @@ describe("removing a switch", () => {
 		]);
 	});
 
+	test("leaves a NIC that link up plugged in again to boot there, after a failure and a reload", () => {
+		const back = run(wired(), removed(lan));
+		const s = run(back, linkEvent(back, true, "node3"));
+		expect(machine(s, "node3").spec.nics).toMatchObject([{ net: "switch0" }]);
+		const booted = (state: LabState) => run(state, bootEvent(state, "node3")).machines.node3?.life;
+		const failed = run(s, hasFailed("node3"));
+		expect(booted(failed)).toMatchObject({ plugs: [{ port: port0(3), link: "up" }] });
+		expect(booted(reloaded(failed))).toMatchObject({ plugs: [{ port: port0(3), link: "up" }] });
+	});
+
 	test("comes back empty under the same name", () => {
 		const s = added(run(wired(), removed(lan)), lan);
 		expect(s.switches).toEqual(["switch0", "lan"]);
@@ -214,6 +225,14 @@ describe("a reload", () => {
 		const s = added(labWith(1), wan, null, lan);
 		expect(reloaded(s).switches).toEqual(["switch0", "wan", "switch1", "lan"]);
 		expect(reloaded(added(emptyLab(), lan)).switches).toEqual(["switch0", "lan"]);
+	});
+
+	test("opens a lab whose plugged NIC was saved with no network on the switch that it is in, for its later boots", () => {
+		const saved = JSON.parse(saveWorkspace(labWith(1)));
+		saved.nodes[0].nics[0].net = "none";
+		const s = restoreWorkspace(initialState(IMAGES, WIDE), JSON.stringify(saved)).state;
+		const failed = run(s, hasFailed("node1"));
+		expect(run(failed, bootEvent(failed, "node1")).machines.node1?.life).toMatchObject({ plugs: [{ port: port0(1) }] });
 	});
 
 	test("refuses a ninth switch, and one with a name that no one could have chosen", () => {
