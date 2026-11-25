@@ -103,7 +103,8 @@ has been used with Chromium 155.
 | `status`                             | Say what is linked and forwarded, and which connections machines have open.                           |
 | `spawn 2 alpine`, and all the others | Run a lab command, with the lab's own completion. One that asks first asks here.                      |
 
-To keep it running without a terminal, as a job in the background: `npx unlab.run > unlab.log &`.
+To keep it running without a terminal, as a job in the background: `npx unlab.run > unlab.log &`. It runs
+until it is stopped, as any program is: `kill` it, or Ctrl-C at its prompt.
 Any command runs from a shell too, and exits with the machine's own status:
 `npx unlab.run exec node1 -- uname -a`. Add `--json` before it for its data, and
 `--yes` for a command that asks first. `npx unlab.run --help` lists the options.
@@ -116,9 +117,13 @@ name and `.unlab`. Add the line that `npx unlab.run ssh-config` prints to the to
 
 ```sh
 scp ./site.tar node1.unlab:/tmp/
+scp -3 node1.unlab:/tmp/site.tar node2.unlab:/tmp/
 rsync -a ./src/ node1.unlab:src/
 ssh -L 8080:localhost:80 node1.unlab
 ```
+
+`scp -3` copies from one machine to another through your computer. To leave your own `~/.ssh/config` as it is,
+give ssh the CLI's instead: `ssh -F ~/.config/unlab/ssh_config node1.unlab`.
 
 The CLI has keys of its own in `~/.config/unlab`, and reads and writes none of yours. It
 works with any image, and with machines that have no network. To reach one for the first
