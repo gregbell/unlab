@@ -1,0 +1,87 @@
+import { readFileSync } from "node:fs";
+import { describe, expect, test } from "vitest";
+import { createStore, initialState, machineList, portsOf, restoreWorkspace, saveWorkspace } from "../model/index.ts";
+import { createRegistry, isLineError, parseLine, VERBS } from "./index.ts";
+import { IMAGES, NO_EXEC, NO_FILES } from "./testing/lab.ts";
+import type { ListedMachine } from "./verbs/index.ts";
+
+/** A lab as the code that wrote that version saved it. `.audit/phase2/save-labs.mjs` makes them. */
+const savedBy = (version: number): string =>
+	readFileSync(new URL(`../../test/fixtures/saved-labs/version-${version}.json`, import.meta.url), "utf8");
+
+async function open(saved: string) {
+	const restored = restoreWorkspace(initialState(IMAGES, { width: 1300, height: 500 }), saved);
+	const store = createStore(restored.state, () => {});
+	const registry = createRegistry(
+		{
+			state: () => store.state,
+			dispatch: (event) => store.dispatchCommand(event),
+			until: store.until,
+			now: () => 0,
+			exec: NO_EXEC,
+			files: NO_FILES,
+		},
+		VERBS,
+	);
+	const booted = restored.effects.flatMap((e) => (e.type === "vm/boot" ? [e.machine] : []));
+	for (const machine of booted) store.dispatchRuntime({ type: "vm/ready", machine, attempt: 1, bootMs: 10 });
+	const ls = parseLine(registry, "ls", store.state);
+	if (isLineError(ls) || ls.danger) throw new Error("ls should parse and be safe");
+	const result = await ls.run({ source: "bar", signal: new AbortController().signal });
+	if (result.kind !== "report") throw new Error("ls reports");
+	return {
+		state: store.state,
+		booted,
+		/** `eth0 10.88.0.11/24 up on port 1` for each NIC of each machine. */
+		cables: (result.data as ListedMachine[]).map(({ name, nics }) => [
+			name,
+			...nics.map((nic) => {
+				const address = nic.address === null ? "no address" : `${nic.address}/${nic.prefix}`;
+				return `${nic.name} ${address} ${nic.port === null ? nic.link : `${nic.link} on port ${nic.port}`}`;
+			}),
+		]),
+	};
+}
+
+const FIRST = [
+	["node1", "eth0 10.88.0.11/24 up on port 1"],
+	["node3", "eth0 10.88.0.13/24 up on port 3"],
+];
+const OFF = [FIRST[0], ["node3", "eth0 10.88.0.13/24 off on port 3"]];
+const cut = (name: string) => [name, "eth0 10.88.0.14/24 cut on port 2"];
+const router = (eth0: string, eth2: string) => [
+	"node5",
+	`eth0 ${eth0} up on port 4`,
+	"eth1 no address unplugged",
+	`eth2 ${eth2} cut on port 5`,
+];
+const ROUTER = router("10.1.0.1/24", "10.2.0.1/24");
+const LOOSE = ["node6", "eth0 10.88.0.16/24 unplugged"];
+
+describe("a lab saved by an earlier version", () => {
+	test.each([
+		[1, [...FIRST, cut("node4"), ["node5", "eth0 10.88.0.15/24 unplugged"]]],
+		[2, [...FIRST, cut("node4"), router("10.88.0.15/24", "no address"), LOOSE]],
+		[3, [...FIRST, cut("node4"), ROUTER, LOOSE]],
+		[4, [...FIRST, cut("switch1"), ROUTER, LOOSE]],
+		[5, [...OFF, cut("switch1"), ROUTER, LOOSE]],
+		[6, [...OFF, cut("switch1"), ROUTER, LOOSE]],
+	])(
+		"version %i opens as one switch0, with its machines, ports, cuts and names as they were",
+		async (version, cables) => {
+			const { state, booted, cables: opened } = await open(savedBy(version));
+			expect(opened).toEqual(cables);
+			expect(state.switches).toEqual(["switch0"]);
+			expect(new Set(machineList(state).flatMap(({ life }) => portsOf(life).map((port) => port.switch)))).toEqual(
+				new Set(["switch0"]),
+			);
+			expect(booted).toEqual(state.rail.filter((name) => version < 5 || name !== "node3"));
+			expect(state.panes.parked).toEqual({ node3: "user" });
+			expect(state.agent.policies.link_set).toBe("ask");
+
+			const again = await open(saveWorkspace(state));
+			expect(again.cables).toEqual(cables);
+			expect(again.booted).toEqual(booted);
+		},
+	);
+});

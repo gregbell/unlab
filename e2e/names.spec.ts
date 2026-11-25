@@ -224,7 +224,11 @@ test("a lab saved before machines had names keeps them and their disks", async (
 		const key = "unlab.workspace.v1";
 		const saved = JSON.parse(localStorage.getItem(key) ?? "");
 		saved.version = 3;
-		for (const node of saved.nodes) delete node.name;
+		delete saved.switches;
+		for (const node of saved.nodes) {
+			delete node.name;
+			for (const nic of node.nics) nic.port = nic.port.port;
+		}
 		const set = Storage.prototype.setItem;
 		set.call(localStorage, key, JSON.stringify(saved));
 		// The page saves again as it goes.

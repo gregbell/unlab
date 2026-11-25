@@ -1,0 +1,64 @@
+{
+	"version": 1,
+	"nextN": 6,
+	"nodes": [
+		{
+			"n": 1,
+			"hue": 1,
+			"image": "alpine",
+			"memMiB": 256,
+			"cpus": 1,
+			"diskGiB": "8",
+			"net": "switch0",
+			"port": 1,
+			"cut": false
+		},
+		{
+			"n": 3,
+			"hue": 3,
+			"image": "alpine",
+			"memMiB": 256,
+			"cpus": 1,
+			"diskGiB": "8",
+			"net": "switch0",
+			"port": 3,
+			"cut": false
+		},
+		{
+			"n": 4,
+			"hue": 2,
+			"image": "alpine",
+			"memMiB": 256,
+			"cpus": 1,
+			"diskGiB": "8",
+			"net": "switch0",
+			"port": 2,
+			"cut": true
+		},
+		{
+			"n": 5,
+			"hue": 4,
+			"image": "alpine",
+			"memMiB": 256,
+			"cpus": 1,
+			"diskGiB": "8",
+			"net": "none",
+			"port": null,
+			"cut": false
+		}
+	],
+	"dock": "open",
+	"order": ["node1", "node3", "node4", "node5"],
+	"parked": ["node3"],
+	"focus": "node1",
+	"policies": {
+		"machines_list": "run",
+		"machines_spawn": "ask",
+		"machines_remove": "ask",
+		"shell_exec": "run",
+		"shell_read": "run",
+		"link_set": "ask",
+		"capture_read": "run"
+	},
+	"paused": false
+}

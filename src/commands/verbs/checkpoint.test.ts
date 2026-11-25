@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { port0 } from "../../../test/support/ports.ts";
 import { storeLab } from "../testing/store.ts";
 import { isLineError } from "../types.ts";
 
@@ -149,7 +150,7 @@ describe("forget", () => {
 		expect(lab.parsed("forget node1 before").preview(lab.store.state)).toMatchObject({
 			will: "delete checkpoint before of node1 · frees 12.5 MiB",
 		});
-		lab.store.dispatchCommand({ type: "cmd/restore", plan: { machine: "node1", set: 1, ports: [1] } });
+		lab.store.dispatchCommand({ type: "cmd/restore", plan: { machine: "node1", set: 1, ports: [port0(1)] } });
 		expect(message(lab, "forget node1 before")).toBe(
 			"node1 is being restored to before, so wait until it has been. Nothing was changed.",
 		);

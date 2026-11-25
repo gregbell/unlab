@@ -2,27 +2,29 @@
 
 import { isAddressFault, parseAddress } from "../net/index.ts";
 import { parseGiB } from "./disks.ts";
-import { isNameFault, parseCheckpointName, parseChosenName } from "./identity.ts";
+import { isNameFault, parseCheckpointName, parseChosenName, parseSwitchName } from "./identity.ts";
 import { isPlanError, planBoot, planLink, planRestore, planSpawn } from "./machines.ts";
-import type {
-	Address,
-	AgentCall,
-	CheckpointName,
-	CommandEvent,
-	Effect,
-	GiB,
-	ImageInfo,
-	LabEvent,
-	LabState,
-	Machine,
-	MachineName,
-	Next,
-	NicRef,
-	NicSpec,
-	RuntimeEvent,
-	SessionId,
-	Source,
-	SpawnRequest,
+import {
+	type Address,
+	type AgentCall,
+	type CheckpointName,
+	type CommandEvent,
+	DEFAULT_SWITCH,
+	type Effect,
+	type GiB,
+	type ImageInfo,
+	type LabEvent,
+	type LabState,
+	type Machine,
+	type MachineName,
+	type Next,
+	type NicRef,
+	type NicSpec,
+	type RuntimeEvent,
+	type SessionId,
+	type Source,
+	type SpawnRequest,
+	type SwitchName,
 } from "./types.ts";
 import { initialState, update } from "./update.ts";
 
@@ -85,15 +87,26 @@ export function named(text: string): MachineName {
 	return name;
 }
 
+export function switchNamed(text: string): SwitchName {
+	const name = parseSwitchName(text);
+	if (!name) throw new Error(`${text} is no switch's name`);
+	return name;
+}
+
+/** The lab with these switches beside the default one. */
+export function withSwitches(state: LabState, ...names: readonly SwitchName[]): LabState {
+	return { ...state, switches: [DEFAULT_SWITCH, ...names] };
+}
+
 export function spawnRequest(options: SpawnOptions = {}): SpawnRequest {
 	const { addr, image = "alpine", memMiB = 256 } = options;
-	const nets = [options.net ?? "switch0"].flat();
+	const nets = [options.net ?? DEFAULT_SWITCH].flat();
 	return {
 		image,
 		...(options.name === undefined ? {} : { name: named(options.name) }),
 		memMiB,
 		disks: { root: "4", extra: (options.extra ?? []).map(gib) },
-		gateway: options.gateway ?? nets[0] === "switch0",
+		gateway: options.gateway ?? nets[0] !== "none",
 		nics: nets.map((net, nic) => {
 			if (addr === undefined) return { net, address: nic === 0 ? "default" : null };
 			const chosen = addr[nic];

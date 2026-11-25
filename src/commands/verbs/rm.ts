@@ -2,7 +2,7 @@ import { disksOf, type Machine, type MachineName, machineList, plugsOf, portsOf 
 import { ip4str } from "../../net/index.ts";
 import { defineVerb, machineNow, Refusal } from "../define.ts";
 import * as slots from "../grammar/slots.ts";
-import { andList, count, diskList, ports, skippedPart } from "./words.ts";
+import { andList, count, diskList, ports, portsFree, skippedPart } from "./words.ts";
 
 /** The addresses a machine answers its peers on: it is ready, and the cable to their NIC is up. */
 function answers(m: Machine): string[] {
@@ -65,7 +65,7 @@ export const rm = defineVerb({
 		const freed = plan.machines.flatMap((m) => portsOf(m.life));
 		return [
 			`remove ${andList(names)} with ${theirDisks(plan.machines)}`,
-			...(freed.length > 0 ? [`frees ${ports(freed)}`] : []),
+			...(freed.length > 0 ? [`frees ${ports(freed.map(({ port }) => port))}`] : []),
 			...skippedPart(plan.skipped),
 		].join(" · ");
 	},
@@ -90,10 +90,8 @@ export const rm = defineVerb({
 		const going = new Set<MachineName>(names);
 		const silenced = plan.machines.flatMap(answers);
 		const peers = machineList(lab).filter((m) => !going.has(m.name) && answers(m).length > 0);
-		const frees =
-			freed.length === 1 ? `Port ${freed[0]} on switch0 frees up.` : `Ports ${andList(freed)} on switch0 free up.`;
 		const affected = [
-			...(freed.length === 0 ? [] : [frees]),
+			...portsFree(freed),
 			...(silenced.length === 0 || peers.length === 0
 				? []
 				: [`${andList(peers.map((m) => m.name))} will stop getting answers from ${andList(silenced)}.`]),

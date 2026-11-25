@@ -3,16 +3,18 @@ import {
 	type CheckpointName,
 	type CommandEvent,
 	DEFAULT_POLICIES,
+	DEFAULT_SWITCH,
 	HUES,
 	type ImageInfo,
 	type LabState,
 	type Lifecycle,
 	type Machine,
 	type MachineName,
+	PANELS,
 	type Phase,
 	type Plug,
 	PORTS,
-	type PortNo,
+	type PortRef,
 	type Session,
 	type SessionId,
 } from "../../model/index.ts";
@@ -37,11 +39,11 @@ export const IMAGES: readonly ImageInfo[] = [
 	{ name: "debian", label: "debian 13" },
 ];
 
-function portOf(n: number): PortNo {
-	return PORTS[(n - 1) % PORTS.length];
+function portOf(n: number): PortRef {
+	return { switch: DEFAULT_SWITCH, port: PORTS[(n - 1) % PORTS.length] };
 }
 
-function plugged(f: MachineFixture, port: PortNo): Plug {
+function plugged(f: MachineFixture, port: PortRef): Plug {
 	return f.link === "none" ? { kind: "none" } : { kind: "port", port, link: f.link ?? "up" };
 }
 
@@ -98,7 +100,7 @@ export function labWith(fixtures: readonly MachineFixture[], images: readonly Im
 				memMiB: 256,
 				disks: { root: "4", extra: [] },
 				gateway: f.gateway ?? true,
-				nics: [{ net: "switch0", address: f.address === undefined ? defaultAddress(f.n) : f.address }],
+				nics: [{ net: DEFAULT_SWITCH, address: f.address === undefined ? defaultAddress(f.n) : f.address }],
 			},
 			sessions: ids,
 			activeSession: ids[0],
@@ -125,12 +127,13 @@ export function labWith(fixtures: readonly MachineFixture[], images: readonly Im
 		machines,
 		rail,
 		departed: {},
+		switches: [DEFAULT_SWITCH],
 		sessions,
 		panes: { order: rail, parked: {}, focusStamp: {}, focusClock: 0, maximised: null, grid: { cols: 2, rows: 2 } },
 		keyboard: { kind: "none" },
 		view: "lab",
 		agentPanel: false,
-		panels: { open: ["capture", "switch0"], maximised: null },
+		panels: { open: PANELS, maximised: null },
 		capture: { filter: "", paused: false, selected: null },
 		agent: {
 			webmcp: { kind: "absent" },

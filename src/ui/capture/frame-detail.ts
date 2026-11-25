@@ -8,13 +8,12 @@ import { type DetailField, frameDetail, type Words } from "./frame-detail-model.
 
 /**
  * The decode of the selected frame: its header line, the ethernet group,
- * the protocol group, what switch0 did, and the bytes. A machine named
+ * the protocol group, what the switch did, and the bytes. A machine named
  * anywhere here takes its hue while it exists.
  */
 export class UnlabFrameDetail extends UnlabElement {
 	readonly #selected = new Select(this, (s) => s.capture.selected);
 	readonly #machines = new Select(this, (s) => s.machines);
-	readonly #ports = new Select(this, selectPorts);
 
 	constructor() {
 		super();
@@ -32,11 +31,10 @@ export class UnlabFrameDetail extends UnlabElement {
 			return html`<p class="nothing">Nothing selected</p>
 				<p class="hint">Click a frame, or move through the list with the arrow keys.</p>`;
 		}
-		const ports = this.#ports.value;
 		const machines = this.#machines.value;
 		const d = frameDetail(entry, {
-			holder(port) {
-				const machine = ports[port - 1]?.machine;
+			holder: ({ switch: on, port }) => {
+				const machine = selectPorts(on)(this.app.store.state)[port - 1]?.machine;
 				return machine ? { n: machine.n, label: machine.label } : null;
 			},
 			severalNics: (name) => severalNics({ machines }, name),
@@ -54,7 +52,7 @@ export class UnlabFrameDetail extends UnlabElement {
 				</section>`,
 			)}
 			<section class="group">
-				<h3>what switch0 did</h3>
+				<h3>what ${entry.switch} did</h3>
 				<p class="did">${d.did.map((words, i) => html`${i > 0 ? " " : ""}${this.#words(words)}`)}</p>
 			</section>
 			<section class="group">

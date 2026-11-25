@@ -21,6 +21,7 @@ import {
 	type Cause,
 	type Checkpoint,
 	type CheckpointName,
+	DEFAULT_SWITCH,
 	type DiskCopy,
 	type DiskSets,
 	type Effect,
@@ -43,6 +44,7 @@ import {
 	type Plug,
 	PORTS,
 	type PortNo,
+	type PortRef,
 	type RestorePlan,
 	type Saving,
 	type Session,
@@ -52,6 +54,7 @@ import {
 	type SpawnRequest,
 	type Step,
 	type StopHow,
+	type SwitchName,
 } from "./types.ts";
 
 /** What a machine in each phase takes. `commands` is everything that needs its guest. */
@@ -95,7 +98,7 @@ export function nicPortsOf(life: Lifecycle): NicPorts {
 	return plugsOf(life).map((plug) => (plug.kind === "port" ? plug.port : null));
 }
 
-export function portsOf(life: Lifecycle): readonly PortNo[] {
+export function portsOf(life: Lifecycle): readonly PortRef[] {
 	return nicPortsOf(life).flatMap((port) => port ?? []);
 }
 
@@ -104,13 +107,19 @@ export function savingOf(life: Lifecycle): Saving | null {
 	return life.phase === "ready" || life.phase === "off" ? (life.saving ?? null) : null;
 }
 
-export function takenPorts(state: LabState): ReadonlySet<PortNo> {
-	return new Set(machineList(state).flatMap((machine) => portsOf(machine.life)));
+export function samePort(a: PortRef, b: PortRef): boolean {
+	return a.switch === b.switch && a.port === b.port;
 }
 
-/** Up to `count` free ports, lowest first. */
-export function lowestFreePorts(state: LabState, count: number): readonly PortNo[] {
-	const taken = takenPorts(state);
+export function takenPorts(state: LabState, on: SwitchName): ReadonlySet<PortNo> {
+	const held = machineList(state).flatMap((machine) => portsOf(machine.life));
+	return new Set(held.filter((ref) => ref.switch === on).map(({ port }) => port));
+}
+
+/** Up to `count` of the switch's free ports, lowest first. A switch that is not there has none. */
+export function lowestFreePorts(state: LabState, on: SwitchName, count: number): readonly PortNo[] {
+	if (!state.switches.includes(on)) return [];
+	const taken = takenPorts(state, on);
 	return PORTS.filter((port) => !taken.has(port)).slice(0, Math.max(0, count));
 }
 
@@ -163,7 +172,7 @@ export function isPlanError(plan: object | null): plan is PlanError {
 /**
  * What a spawn of `count` machines will be. Numbers come from the counter,
  * names from the request or the numbers, hues are the first free ones, ports
- * the lowest free ones in machine and NIC order. The reducer applies this plan
+ * the lowest free ones of each NIC's switch, in machine and NIC order. The reducer applies this plan
  * and no other.
  */
 export function planSpawn(state: LabState, count: number, request: SpawnRequest): SpawnPlan | PlanError {
@@ -173,15 +182,20 @@ export function planSpawn(state: LabState, count: number, request: SpawnRequest)
 	const room = Math.max(0, Math.min(MAX_MACHINES - used, HUES.length - used, MAX_NODE + 1 - state.nextN));
 	if (count > room) return { kind: "no-room", free: room, wanted: count };
 	const names = Array.from({ length: count }, (_, i) => request.name ?? defaultName(state.nextN + i));
-	const taken = names.find((name, i) => state.machines[name] || names.indexOf(name) < i);
-	if (taken) return { kind: "name-taken", name: taken };
-	const plugged = pluggedNics(request.nics);
-	const ports = claimPorts(state, count * plugged);
+	for (const [i, name] of names.entries()) {
+		if (state.machines[name] || names.indexOf(name) < i) return { kind: "name-taken", name, by: "machine" };
+		if (state.switches.some((other) => other === name)) return { kind: "name-taken", name, by: "switch" };
+	}
+	const nets = request.nics.map(({ net }) => net);
+	const ports = claimPorts(
+		state,
+		names.flatMap(() => nets),
+	);
 	if (isPlanError(ports)) return ports;
 	const machines = firstFreeHues(state, count).map((hue, i): SpawnPlan["machines"][number] => ({
 		identity: identity(state.nextN + i, names[i]),
 		hue,
-		ports: nicPorts(request.nics, ports.slice(i * plugged)),
+		ports: ports.slice(i * nets.length, (i + 1) * nets.length),
 		spec: specFor(request, state.nextN + i),
 	}));
 	const held = new Map<number, NicRef>();
@@ -221,14 +235,17 @@ function addressClash(spec: MachineSpec, held: ReadonlyMap<number, NicRef>): Pla
 	return null;
 }
 
-function pluggedNics(nics: readonly Pick<NicSpec, "net">[]): number {
-	return nics.filter((nic) => nic.net === "switch0").length;
-}
-
-/** The claimed ports, in order, to the NICs that plug in. */
-function nicPorts(nics: readonly Pick<NicSpec, "net">[], ports: readonly PortNo[]): NicPorts {
-	let next = 0;
-	return nics.map((nic) => (nic.net === "switch0" ? ports[next++] : null));
+/** Each NIC's lowest free port on its switch, in order. Null for one on none. */
+function claimPorts(state: LabState, nets: readonly NicSpec["net"][]): NicPorts | PlanError {
+	const ports: (PortRef | null)[] = nets.map(() => null);
+	for (const on of new Set(nets)) {
+		if (on === "none") continue;
+		const nics = nets.flatMap((net, nic) => (net === on ? [nic] : []));
+		const free = lowestFreePorts(state, on, nics.length);
+		if (free.length < nics.length) return { kind: "no-ports", switch: on, free: free.length, wanted: nics.length };
+		for (const [i, nic] of nics.entries()) ports[nic] = { switch: on, port: free[i] };
+	}
+	return ports;
 }
 
 function plugInto(ports: NicPorts): readonly Plug[] {
@@ -249,7 +266,7 @@ export function nicsOf(state: Pick<LabState, "machines">, name: MachineName): re
 /**
  * The cables that would change. A machine's name alone is all its NICs. NICs
  * of machines that take no cable now, are not there, or are already as asked are left out.
- * `link up` on an unplugged NIC takes the lowest free port.
+ * `link up` on an unplugged NIC takes the default switch's lowest free port.
  */
 export function planLink(
 	state: LabState,
@@ -267,11 +284,17 @@ export function planLink(
 		const plug = life && ACCEPTS[life.phase].cables ? plugsOf(life)[nic] : undefined;
 		return plug ? [{ machine, nic, plug }] : [];
 	});
-	const ports = claimPorts(state, up ? plugs.filter(({ plug }) => plug.kind === "none").length : 0);
+	const ports = claimPorts(
+		state,
+		plugs.flatMap(({ plug }) => (up && plug.kind === "none" ? [DEFAULT_SWITCH] : [])),
+	);
 	if (isPlanError(ports)) return ports;
 	let claimed = 0;
 	return plugs.flatMap(({ machine, nic, plug }): LinkChange[] => {
-		if (plug.kind === "none") return up ? [{ machine, nic, up, port: ports[claimed++], newPort: true }] : [];
+		if (plug.kind === "none") {
+			const port = up ? ports[claimed++] : null;
+			return port ? [{ machine, nic, up, port, newPort: true }] : [];
+		}
 		return (plug.link === "up") === up ? [] : [{ machine, nic, up, port: plug.port, newPort: false }];
 	});
 }
@@ -281,10 +304,10 @@ export function planBoot(state: LabState, names: readonly MachineName[]): readon
 	const machines = [...new Set(names)]
 		.flatMap((name) => state.machines[name] ?? [])
 		.filter(({ life }) => savingOf(life) === null);
-	const unplugged = machines.filter((machine) => machine.life.phase === "failed");
+	const failed = machines.filter((machine) => machine.life.phase === "failed");
 	const ports = claimPorts(
 		state,
-		unplugged.reduce((sum, { spec }) => sum + pluggedNics(spec.nics), 0),
+		failed.flatMap(({ spec }) => spec.nics.map(({ net }) => net)),
 	);
 	if (isPlanError(ports)) return ports;
 	let claimed = 0;
@@ -292,8 +315,8 @@ export function planBoot(state: LabState, names: readonly MachineName[]): readon
 		if (life.phase === "off") return [{ machine: name, ports: nicPortsOf(life) }];
 		if (life.phase !== "failed") return [];
 		const from = claimed;
-		claimed += pluggedNics(spec.nics);
-		return [{ machine: name, ports: nicPorts(spec.nics, ports.slice(from)) }];
+		claimed += spec.nics.length;
+		return [{ machine: name, ports: ports.slice(from, claimed) }];
 	});
 }
 
@@ -304,13 +327,11 @@ export function planRestore(state: LabState, name: MachineName, set: number): Re
 	const { life, spec } = machine;
 	if (!ACCEPTS[life.phase].restore || savingOf(life)) return null;
 	if (life.phase !== "failed") return { machine: name, set, ports: nicPortsOf(life) };
-	const ports = claimPorts(state, pluggedNics(spec.nics));
-	return isPlanError(ports) ? ports : { machine: name, set, ports: nicPorts(spec.nics, ports) };
-}
-
-function claimPorts(state: LabState, wanted: number): readonly PortNo[] | PlanError {
-	const ports = lowestFreePorts(state, wanted);
-	return ports.length < wanted ? { kind: "no-ports", free: ports.length, wanted } : ports;
+	const ports = claimPorts(
+		state,
+		spec.nics.map(({ net }) => net),
+	);
+	return isPlanError(ports) ? ports : { machine: name, set, ports };
 }
 
 /** Both are plain data that one planner laid out. */
@@ -335,7 +356,7 @@ function onAttempt(state: LabState, name: MachineName, attempt: number): Machine
 }
 
 /** The machine's plugged NICs, eth0 first, each with the port its cable is in. */
-function cablesOf(life: Lifecycle): readonly { nic: NicNo; port: PortNo; link: "up" | "cut" }[] {
+function cablesOf(life: Lifecycle): readonly { nic: NicNo; port: PortRef; link: "up" | "cut" }[] {
 	const plugs = plugsOf(life);
 	return NICS.flatMap((nic) => {
 		const plug = plugs[nic];
@@ -828,8 +849,8 @@ function linkOne(state: LabState, change: LinkChange, cause: Cause): Step {
 	const plug = machine.life.plugs[nic];
 	if (!plug) return step(state);
 	const fits = change.newPort
-		? up && plug.kind === "none" && lowestFreePorts(state, 1)[0] === port
-		: plug.kind === "port" && plug.port === port && (plug.link === "up") !== up;
+		? up && plug.kind === "none" && lowestFreePorts(state, port.switch, 1)[0] === port.port
+		: plug.kind === "port" && samePort(plug.port, port) && (plug.link === "up") !== up;
 	if (!fits) return step(state);
 
 	const set: Plug = { kind: "port", port, link: up ? "up" : "cut" };

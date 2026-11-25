@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import { port0 } from "../../test/support/ports.ts";
 import { nameOf } from "../net/index.ts";
 import { identity } from "./identity.ts";
 import {
@@ -38,7 +39,9 @@ import {
 	type SpawnOptions,
 	spawnEvent,
 	spawnRequest,
+	switchNamed,
 	WIDE,
+	withSwitches,
 } from "./testkit.ts";
 import {
 	BOOT_TIMEOUT_MS,
@@ -47,6 +50,7 @@ import {
 	type LabState,
 	type MachineName,
 	type MachineSpec,
+	type NicSpec,
 	type Phase,
 	type RuntimeEvent,
 } from "./types.ts";
@@ -341,7 +345,7 @@ function eventFor(column: Column, s: LabState, name: MachineName, attempt: numbe
 		case "cmd/checkpoint":
 			return checkpoint(name, "after");
 		case "cmd/restore":
-			return { type: "cmd/restore", plan: { machine: name, set: 1, ports: [1] } };
+			return { type: "cmd/restore", plan: { machine: name, set: 1, ports: [port0(1)] } };
 		case "cmd/forget":
 			return { type: "cmd/forget", machine: name, set: 1 };
 		case "session/opened":
@@ -367,7 +371,7 @@ function eventFor(column: Column, s: LabState, name: MachineName, attempt: numbe
 		case "cmd/link":
 			return {
 				type: "cmd/link",
-				changes: [{ machine: name, nic: 0, up: false, port: 1, newPort: false }],
+				changes: [{ machine: name, nic: 0, up: false, port: port0(1), newPort: false }],
 				cause: "bar",
 			};
 		case "cmd/shell":
@@ -464,14 +468,14 @@ describe("the lifecycle table", () => {
 
 	test("a failed machine holds no port, and a removing one keeps its port until it is gone", () => {
 		let s = labWith(2);
-		expect([...takenPorts(s)]).toEqual([1, 2]);
+		expect([...takenPorts(s, "switch0")]).toEqual([1, 2]);
 		s = run(s, hasFailed("node1"));
-		expect([...takenPorts(s)]).toEqual([2]);
+		expect([...takenPorts(s, "switch0")]).toEqual([2]);
 		s = run(s, remove("node2"));
-		expect(machine(s, "node2").life).toEqual({ phase: "removing", attempt: 1, ports: [2] });
-		expect([...takenPorts(s)]).toEqual([2]);
+		expect(machine(s, "node2").life).toEqual({ phase: "removing", attempt: 1, ports: [port0(2)] });
+		expect([...takenPorts(s, "switch0")]).toEqual([2]);
 		s = run(s, hasStopped("node2"));
-		expect([...takenPorts(s)]).toEqual([]);
+		expect([...takenPorts(s, "switch0")]).toEqual([]);
 	});
 
 	test("a late message from the worker a boot again replaced is ignored", () => {
@@ -532,23 +536,26 @@ describe("ports", () => {
 	test("a machine takes the lowest free port at spawn", () => {
 		const s = labWith(3);
 		expect(s.rail.map((name) => machine(s, name).life)).toMatchObject([
-			{ plugs: [{ kind: "port", port: 1, link: "up" }] },
-			{ plugs: [{ kind: "port", port: 2, link: "up" }] },
-			{ plugs: [{ kind: "port", port: 3, link: "up" }] },
+			{ plugs: [{ kind: "port", port: port0(1), link: "up" }] },
+			{ plugs: [{ kind: "port", port: port0(2), link: "up" }] },
+			{ plugs: [{ kind: "port", port: port0(3), link: "up" }] },
 		]);
-		expect(lowestFreePorts(s, 8)).toEqual([4, 5, 6, 7, 8]);
-		expect(lowestFreePorts(s, 2)).toEqual([4, 5]);
+		expect(lowestFreePorts(s, "switch0", 8)).toEqual([4, 5, 6, 7, 8]);
+		expect(lowestFreePorts(s, "switch0", 2)).toEqual([4, 5]);
 	});
 
 	test("a machine keeps its port while cut", () => {
 		let s = labWith(3);
 		s = run(s, linkEvent(s, false, "node2"));
-		expect(machine(s, "node2").life).toMatchObject({ phase: "ready", plugs: [{ kind: "port", port: 2, link: "cut" }] });
-		expect([...takenPorts(s)]).toEqual([1, 2, 3]);
+		expect(machine(s, "node2").life).toMatchObject({
+			phase: "ready",
+			plugs: [{ kind: "port", port: port0(2), link: "cut" }],
+		});
+		expect([...takenPorts(s, "switch0")]).toEqual([1, 2, 3]);
 		s = run(s, spawnEvent(s, 1));
-		expect(machine(s, "node4").life).toMatchObject({ plugs: [{ port: 4 }] });
+		expect(machine(s, "node4").life).toMatchObject({ plugs: [{ port: port0(4) }] });
 		s = run(s, linkEvent(s, true, "node2"));
-		expect(machine(s, "node2").life).toMatchObject({ plugs: [{ kind: "port", port: 2, link: "up" }] });
+		expect(machine(s, "node2").life).toMatchObject({ plugs: [{ kind: "port", port: port0(2), link: "up" }] });
 	});
 
 	test("boot again takes the lowest free port, and keeps the name, hue, image and memory", () => {
@@ -557,13 +564,13 @@ describe("ports", () => {
 		s = run(s, hasFailed("node2"));
 		expect(machine(s, "node2").life).toEqual({ phase: "failed", attempt: 1, reason: "Kernel panic." });
 		s = run(s, spawnEvent(s, 1));
-		expect(machine(s, "node4").life).toMatchObject({ plugs: [{ port: 2 }] });
+		expect(machine(s, "node4").life).toMatchObject({ plugs: [{ port: port0(2) }] });
 		s = run(s, bootEvent(s, "node2", 9000));
 		expect(machine(s, "node2")).toMatchObject({
 			...identity(2),
 			hue: 2,
 			spec: { image: "debian", memMiB: 512, nics: [{ net: "switch0" }] },
-			life: { phase: "booting", attempt: 2, since: 9000, plugs: [{ kind: "port", port: 4, link: "up" }] },
+			life: { phase: "booting", attempt: 2, since: 9000, plugs: [{ kind: "port", port: port0(4), link: "up" }] },
 		});
 	});
 
@@ -572,7 +579,7 @@ describe("ports", () => {
 		s = run(s, hasFailed("node1"));
 		const planned = bootEvent(s, "node1");
 		s = run(s, spawnEvent(s, 1));
-		expect(machine(s, "node3").life).toMatchObject({ plugs: [{ port: 1 }] });
+		expect(machine(s, "node3").life).toMatchObject({ plugs: [{ port: port0(1) }] });
 		expect(update(s, planned).state).toBe(s);
 	});
 
@@ -580,7 +587,7 @@ describe("ports", () => {
 		let s = emptyLab();
 		s = run(s, spawnEvent(s, 1, { net: "none" }));
 		expect(machine(s, "node1").life).toMatchObject({ plugs: [{ kind: "none" }] });
-		expect([...takenPorts(s)]).toEqual([]);
+		expect([...takenPorts(s, "switch0")]).toEqual([]);
 		s = run(s, hasFailed("node1"));
 		expect(planBoot(s, ["node1"])).toEqual([{ machine: "node1", ports: [null] }]);
 		s = run(s, bootEvent(s, "node1"));
@@ -593,12 +600,16 @@ describe("ports", () => {
 		s = run(s, spawnEvent(s, 1, { net: "none" }));
 		s = run(s, spawnEvent(s, 1));
 		s = run(s, isReady("node1"), isReady("node2"), isReady("node3"));
-		expect(machine(s, "node3").life).toMatchObject({ plugs: [{ port: 2 }] });
-		expect(planLink(s, ["node2"], true)).toEqual([{ machine: "node2", nic: 0, up: true, port: 3, newPort: true }]);
+		expect(machine(s, "node3").life).toMatchObject({ plugs: [{ port: port0(2) }] });
+		expect(planLink(s, ["node2"], true)).toEqual([
+			{ machine: "node2", nic: 0, up: true, port: port0(3), newPort: true },
+		]);
 		s = run(s, remove("node1"), hasStopped("node1"));
-		expect(planLink(s, ["node2"], true)).toEqual([{ machine: "node2", nic: 0, up: true, port: 1, newPort: true }]);
+		expect(planLink(s, ["node2"], true)).toEqual([
+			{ machine: "node2", nic: 0, up: true, port: port0(1), newPort: true },
+		]);
 		s = run(s, linkEvent(s, true, "node2"));
-		expect(machine(s, "node2").life).toMatchObject({ plugs: [{ kind: "port", port: 1, link: "up" }] });
+		expect(machine(s, "node2").life).toMatchObject({ plugs: [{ kind: "port", port: port0(1), link: "up" }] });
 	});
 });
 
@@ -607,8 +618,8 @@ describe("planSpawn", () => {
 		const s = labWith(3);
 		expect(planSpawn(s, 2, ALPINE)).toEqual({
 			machines: [
-				{ identity: identity(4), hue: 4, ports: [4], spec: alpineAt("10.88.0.14/24") },
-				{ identity: identity(5), hue: 5, ports: [5], spec: alpineAt("10.88.0.15/24") },
+				{ identity: identity(4), hue: 4, ports: [port0(4)], spec: alpineAt("10.88.0.14/24") },
+				{ identity: identity(5), hue: 5, ports: [port0(5)], spec: alpineAt("10.88.0.15/24") },
 			],
 			request: ALPINE,
 		});
@@ -629,7 +640,7 @@ describe("planSpawn", () => {
 		const s = labWith(6);
 		expect(planSpawn(s, 3, ALPINE)).toEqual({ kind: "no-room", free: 2, wanted: 3 });
 		expect(planSpawn(s, 3, UNPLUGGED)).toEqual({ kind: "no-room", free: 2, wanted: 3 });
-		expect(planSpawn(s, 2, ALPINE)).toMatchObject({ machines: [{ ports: [7] }, { ports: [8] }] });
+		expect(planSpawn(s, 2, ALPINE)).toMatchObject({ machines: [{ ports: [port0(7)] }, { ports: [port0(8)] }] });
 	});
 
 	test("a lab holds eight machines, counting ones still being removed", () => {
@@ -639,7 +650,7 @@ describe("planSpawn", () => {
 		expect(planSpawn(s, 1, UNPLUGGED)).toEqual({ kind: "no-room", free: 0, wanted: 1 });
 		s = run(s, hasStopped("node3"));
 		expect(planSpawn(s, 1, ALPINE)).toEqual({
-			machines: [{ identity: identity(9), hue: 3, ports: [3], spec: alpineAt("10.88.0.19/24") }],
+			machines: [{ identity: identity(9), hue: 3, ports: [port0(3)], spec: alpineAt("10.88.0.19/24") }],
 			request: ALPINE,
 		});
 	});
@@ -675,11 +686,11 @@ describe("planLink", () => {
 		let s = labWith(3);
 		s = run(s, linkEvent(s, false, "node2"));
 		expect(planLink(s, ["node1", "node2", "node3"], false)).toEqual([
-			{ machine: "node1", nic: 0, up: false, port: 1, newPort: false },
-			{ machine: "node3", nic: 0, up: false, port: 3, newPort: false },
+			{ machine: "node1", nic: 0, up: false, port: port0(1), newPort: false },
+			{ machine: "node3", nic: 0, up: false, port: port0(3), newPort: false },
 		]);
 		expect(planLink(s, ["node1", "node2", "node3"], true)).toEqual([
-			{ machine: "node2", nic: 0, up: true, port: 2, newPort: false },
+			{ machine: "node2", nic: 0, up: true, port: port0(2), newPort: false },
 		]);
 	});
 
@@ -687,7 +698,7 @@ describe("planLink", () => {
 		let s = labWith(1);
 		s = run(s, spawnEvent(s, 1));
 		expect(planLink(s, ["node1", "node1", "node2", "node7"], false)).toEqual([
-			{ machine: "node1", nic: 0, up: false, port: 1, newPort: false },
+			{ machine: "node1", nic: 0, up: false, port: port0(1), newPort: false },
 		]);
 	});
 
@@ -696,8 +707,8 @@ describe("planLink", () => {
 		s = run(s, spawnEvent(s, 3, { net: "none" }));
 		s = run(s, ...s.rail.map((name) => isReady(name)));
 		expect(planLink(s, ["node3", "node1"], true)).toEqual([
-			{ machine: "node3", nic: 0, up: true, port: 1, newPort: true },
-			{ machine: "node1", nic: 0, up: true, port: 2, newPort: true },
+			{ machine: "node3", nic: 0, up: true, port: port0(1), newPort: true },
+			{ machine: "node1", nic: 0, up: true, port: port0(2), newPort: true },
 		]);
 		expect(planLink(s, ["node3"], false)).toEqual([]);
 	});
@@ -713,16 +724,16 @@ describe("planBoot", () => {
 	test("plans the lowest free port", () => {
 		let s = labWith(3);
 		s = run(s, hasFailed("node1"), hasFailed("node3"));
-		expect(planBoot(s, ["node3"])).toEqual([{ machine: "node3", ports: [1] }]);
+		expect(planBoot(s, ["node3"])).toEqual([{ machine: "node3", ports: [port0(1)] }]);
 	});
 
 	test("plans several at once: off machines hold their ports, and failed ones share out the rest", () => {
 		let s = labWith(4);
 		s = run(s, power("off", "node2"), hasStopped("node2"), hasFailed("node1"), hasFailed("node4"));
 		expect(planBoot(s, ["node4", "node3", "node2", "node1"])).toEqual([
-			{ machine: "node4", ports: [1] },
-			{ machine: "node2", ports: [2] },
-			{ machine: "node1", ports: [4] },
+			{ machine: "node4", ports: [port0(1)] },
+			{ machine: "node2", ports: [port0(2)] },
+			{ machine: "node1", ports: [port0(4)] },
 		]);
 	});
 });
@@ -852,7 +863,7 @@ describe("a machine's name", () => {
 			mac: "52:54:00:88:00:0c",
 			hue: 2,
 			sessions: ["web:console"],
-			life: { plugs: [{ port: 2 }] },
+			life: { plugs: [{ port: port0(2) }] },
 		});
 		expect(addressText(machine(s, web))).toBe("10.88.0.12");
 		expect(hostsFor(s)).toEqual([
@@ -864,14 +875,14 @@ describe("a machine's name", () => {
 	test("is taken until its machine is gone", () => {
 		const plan = (s: LabState) => planSpawn(s, 1, spawnRequest({ name: "web" }));
 		let s = spawnWeb(emptyLab());
-		expect(plan(s)).toEqual({ kind: "name-taken", name: "web" });
+		expect(plan(s)).toEqual({ kind: "name-taken", name: "web", by: "machine" });
 		s = run(s, hasFailed(web));
-		expect(plan(s)).toEqual({ kind: "name-taken", name: "web" });
+		expect(plan(s)).toEqual({ kind: "name-taken", name: "web", by: "machine" });
 		s = run(s, remove(web));
-		expect(plan(s)).toEqual({ kind: "name-taken", name: "web" });
+		expect(plan(s)).toEqual({ kind: "name-taken", name: "web", by: "machine" });
 		s = run(s, hasStopped(web));
 		expect(isPlanError(plan(s))).toBe(false);
-		expect(planSpawn(s, 2, spawnRequest({ name: "web" }))).toEqual({ kind: "name-taken", name: "web" });
+		expect(planSpawn(s, 2, spawnRequest({ name: "web" }))).toEqual({ kind: "name-taken", name: "web", by: "machine" });
 	});
 
 	test("nothing late from one machine reaches the next of that name", () => {
@@ -918,11 +929,82 @@ describe("a machine's name", () => {
 	});
 });
 
+describe("a lab with several switches", () => {
+	const lan = switchNamed("lan");
+	const several = () => withSwitches(labWith(3), lan);
+	const request = (net: NicSpec["net"][]) => spawnRequest({ net });
+
+	test("gives each NIC the lowest free port of its own switch, in machine and NIC order", () => {
+		const plan = planSpawn(several(), 2, request([lan, "switch0", lan, "none"]));
+		expect(plan).toMatchObject({
+			machines: [
+				{ ports: [{ switch: "lan", port: 1 }, port0(4), { switch: "lan", port: 2 }, null] },
+				{ ports: [{ switch: "lan", port: 3 }, port0(5), { switch: "lan", port: 4 }, null] },
+			],
+		});
+	});
+
+	test("counts each switch's ports by themselves, and names the one that has too few", () => {
+		let s = several();
+		s = run(s, spawnEvent(s, 2, { net: [lan, lan, lan] }));
+		expect([...takenPorts(s, "switch0")]).toEqual([1, 2, 3]);
+		expect([...takenPorts(s, lan)]).toEqual([1, 2, 3, 4, 5, 6]);
+		expect(lowestFreePorts(s, lan, 8)).toEqual([7, 8]);
+		expect(planSpawn(s, 1, request(["switch0", lan, lan, lan]))).toEqual({
+			kind: "no-ports",
+			switch: "lan",
+			free: 2,
+			wanted: 3,
+		});
+	});
+
+	test("has no port on a switch that is not there", () => {
+		expect(planSpawn(several(), 1, request([switchNamed("wan")]))).toEqual({
+			kind: "no-ports",
+			switch: "wan",
+			free: 0,
+			wanted: 1,
+		});
+	});
+
+	test("cuts, frees and boots again on the ports of the switch each cable is in", () => {
+		let s = several();
+		s = run(s, spawnEvent(s, 1, { net: [lan, "switch0"] }), isReady("node4"));
+		expect(effectsOf(s, linkEvent(s, false, { machine: "node4", nic: 0 }))).toContainEqual(
+			expect.objectContaining({ type: "link/set", port: { switch: "lan", port: 1 }, up: false }),
+		);
+		const failed = effectsOf(s, hasFailed("node4")).filter((e) => e.type === "port/detach");
+		expect(failed).toEqual([
+			{ type: "port/detach", port: { switch: "lan", port: 1 } },
+			{ type: "port/detach", port: port0(4) },
+		]);
+		s = run(s, hasFailed("node4"));
+		expect([...takenPorts(s, lan)]).toEqual([]);
+		expect(planBoot(s, ["node4"])).toEqual([{ machine: "node4", ports: [{ switch: "lan", port: 1 }, port0(4)] }]);
+	});
+
+	test("plugs a NIC that is on none into the default switch", () => {
+		let s = several();
+		s = run(s, spawnEvent(s, 1, { net: "none" }), isReady("node4"));
+		expect(planLink(s, ["node4"], true)).toEqual([
+			{ machine: "node4", nic: 0, up: true, port: port0(4), newPort: true },
+		]);
+	});
+
+	test("keeps a switch's name from machines, and a name that no switch has is free", () => {
+		const s = several();
+		expect(planSpawn(s, 1, spawnRequest({ name: "lan" }))).toEqual({ kind: "name-taken", name: "lan", by: "switch" });
+		expect(planSpawn(s, 1, spawnRequest({ name: "switch1" }))).toMatchObject({
+			machines: [{ identity: { name: "switch1" } }],
+		});
+	});
+});
+
 describe("machines with several NICs", () => {
 	const ROUTER = spawnRequest({ net: ["switch0", "none", "switch0"] });
 	const ports = (s: LabState, count: number): unknown => {
 		const plan = planSpawn(s, count, ROUTER);
-		return isPlanError(plan) ? plan : plan.machines.map((m) => m.ports);
+		return isPlanError(plan) ? plan : plan.machines.map((m) => m.ports.map((ref) => ref?.port ?? null));
 	};
 
 	test("take the lowest free ports in machine and NIC order, and none for a NIC left unplugged", () => {
@@ -937,26 +1019,26 @@ describe("machines with several NICs", () => {
 
 	test("are refused when the switch has too few ports, however much room the lab has", () => {
 		const s = labWith(5);
-		expect(ports(s, 2)).toEqual({ kind: "no-ports", free: 3, wanted: 4 });
+		expect(ports(s, 2)).toEqual({ kind: "no-ports", switch: "switch0", free: 3, wanted: 4 });
 		expect(ports(s, 1)).toEqual([[6, null, 7]]);
 	});
 
 	test("hold one port for each plugged NIC until they are gone", () => {
 		let s = emptyLab();
 		s = run(s, spawnEvent(s, 1, { net: ["switch0", "none", "switch0"] }), isReady("node1"));
-		expect([...takenPorts(s)]).toEqual([1, 2]);
+		expect([...takenPorts(s, "switch0")]).toEqual([1, 2]);
 		const event = remove("node1");
 		expect(effectsOf(s, event)).toEqual([
-			{ type: "link/set", port: 1, machine: "node1", nic: 0, up: false, cause: "bar" },
-			{ type: "link/set", port: 2, machine: "node1", nic: 2, up: false, cause: "bar" },
+			{ type: "link/set", port: port0(1), machine: "node1", nic: 0, up: false, cause: "bar" },
+			{ type: "link/set", port: port0(2), machine: "node1", nic: 2, up: false, cause: "bar" },
 			{ type: "vm/stop", machine: "node1", attempt: 1, how: "drop" },
 		]);
 		s = run(s, event);
-		expect(machine(s, "node1").life).toEqual({ phase: "removing", attempt: 1, ports: [1, null, 2] });
-		expect([...takenPorts(s)]).toEqual([1, 2]);
+		expect(machine(s, "node1").life).toEqual({ phase: "removing", attempt: 1, ports: [port0(1), null, port0(2)] });
+		expect([...takenPorts(s, "switch0")]).toEqual([1, 2]);
 		expect(effectsOf(s, hasStopped("node1")).filter((e) => e.type === "port/detach")).toEqual([
-			{ type: "port/detach", port: 1 },
-			{ type: "port/detach", port: 2 },
+			{ type: "port/detach", port: port0(1) },
+			{ type: "port/detach", port: port0(2) },
 		]);
 	});
 
@@ -964,13 +1046,13 @@ describe("machines with several NICs", () => {
 		const s = emptyLab();
 		const spawned = spawnEvent(s, 1, { net: ["switch0", "switch0"] });
 		expect(effectsOf(s, spawned).slice(1, 4)).toMatchObject([
-			{ type: "port/attach", port: 1, machine: "node1", nic: 0 },
-			{ type: "port/attach", port: 2, machine: "node1", nic: 1 },
+			{ type: "port/attach", port: port0(1), machine: "node1", nic: 0 },
+			{ type: "port/attach", port: port0(2), machine: "node1", nic: 1 },
 			{ type: "vm/boot" },
 		]);
 		expect(effectsOf(run(s, spawned), isReady("node1")).filter((e) => e.type === "link/set")).toEqual([
-			{ type: "link/set", port: 1, machine: "node1", nic: 0, up: true, cause: "runtime" },
-			{ type: "link/set", port: 2, machine: "node1", nic: 1, up: true, cause: "runtime" },
+			{ type: "link/set", port: port0(1), machine: "node1", nic: 0, up: true, cause: "runtime" },
+			{ type: "link/set", port: port0(2), machine: "node1", nic: 1, up: true, cause: "runtime" },
 		]);
 	});
 
@@ -978,23 +1060,23 @@ describe("machines with several NICs", () => {
 		let s = emptyLab();
 		s = run(s, spawnEvent(s, 1, { net: ["switch0", "none", "switch0"] }), hasFailed("node1"));
 		s = run(s, spawnEvent(s, 1));
-		expect([...takenPorts(s)]).toEqual([1]);
-		expect(planBoot(s, ["node1"])).toEqual([{ machine: "node1", ports: [2, null, 3] }]);
+		expect([...takenPorts(s, "switch0")]).toEqual([1]);
+		expect(planBoot(s, ["node1"])).toEqual([{ machine: "node1", ports: [port0(2), null, port0(3)] }]);
 		s = run(s, spawnEvent(s, 6));
-		expect(planBoot(s, ["node1"])).toEqual({ kind: "no-ports", free: 1, wanted: 2 });
+		expect(planBoot(s, ["node1"])).toEqual({ kind: "no-ports", switch: "switch0", free: 1, wanted: 2 });
 	});
 
 	test("change the cable of one NIC alone, or of every NIC by the machine's name", () => {
 		let s = emptyLab();
 		s = run(s, spawnEvent(s, 1, { net: ["switch0", "switch0", "none"] }), isReady("node1"));
 		const eth1 = { machine: "node1", nic: 1 } as const;
-		expect(planLink(s, [eth1], false)).toEqual([{ ...eth1, up: false, port: 2, newPort: false }]);
+		expect(planLink(s, [eth1], false)).toEqual([{ ...eth1, up: false, port: port0(2), newPort: false }]);
 		expect(planLink(s, ["node1", eth1], false)).toEqual([
-			{ machine: "node1", nic: 0, up: false, port: 1, newPort: false },
-			{ ...eth1, up: false, port: 2, newPort: false },
+			{ machine: "node1", nic: 0, up: false, port: port0(1), newPort: false },
+			{ ...eth1, up: false, port: port0(2), newPort: false },
 		]);
 		expect(effectsOf(s, linkEvent(s, false, eth1))).toEqual([
-			{ type: "link/set", port: 2, ...eth1, up: false, cause: "bar" },
+			{ type: "link/set", port: port0(2), ...eth1, up: false, cause: "bar" },
 			{ type: "announce", text: "node1:eth1 link down" },
 		]);
 		s = run(s, linkEvent(s, false, eth1));
@@ -1002,8 +1084,8 @@ describe("machines with several NICs", () => {
 			plugs: [{ link: "up" }, { link: "cut" }, { kind: "none" }],
 		});
 		expect(planLink(s, ["node1"], true)).toEqual([
-			{ ...eth1, up: true, port: 2, newPort: false },
-			{ machine: "node1", nic: 2, up: true, port: 3, newPort: true },
+			{ ...eth1, up: true, port: port0(2), newPort: false },
+			{ machine: "node1", nic: 2, up: true, port: port0(3), newPort: true },
 		]);
 		expect(planLink(s, [{ machine: "node1", nic: 3 }], true)).toEqual([]);
 	});
@@ -1011,6 +1093,6 @@ describe("machines with several NICs", () => {
 	test("cannot plug in more NICs than the switch has ports free", () => {
 		let s = labWith(6);
 		s = run(s, spawnEvent(s, 1, { net: ["none", "none", "none"] }), isReady("node7"));
-		expect(planLink(s, ["node7"], true)).toEqual({ kind: "no-ports", free: 2, wanted: 3 });
+		expect(planLink(s, ["node7"], true)).toEqual({ kind: "no-ports", switch: "switch0", free: 2, wanted: 3 });
 	});
 });

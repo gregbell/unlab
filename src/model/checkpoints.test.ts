@@ -1,4 +1,6 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, test } from "vitest";
+import { port0 } from "../../test/support/ports.ts";
 import { disksOf } from "./disks.ts";
 import { savingOf, takenPorts } from "./machines.ts";
 import { selectDetails, selectRail, selectStatus } from "./selectors.ts";
@@ -108,13 +110,13 @@ describe("saving a checkpoint", () => {
 			checkpoint("node1", "fourth"),
 			power("off", "node1"),
 			power("reboot", "node1"),
-			{ type: "cmd/restore", plan: { machine: "node1", set: 1, ports: [1] } } as const,
+			{ type: "cmd/restore", plan: { machine: "node1", set: 1, ports: [port0(1)] } } as const,
 		]) {
 			expect(update(saving, event).state).toBe(saving);
 		}
 		let off = run(s, power("off", "node1"), hasStopped("node1"), checkpoint("node1", "third"));
 		expect(machine(off, "node1").life).toMatchObject({ phase: "off", saving: { set: 3 } });
-		const plan = { machine: "node1", ports: [1] } as const;
+		const plan = { machine: "node1", ports: [port0(1)] } as const;
 		expect(update(off, { type: "cmd/boot", machines: [plan], at: 0 }).state).toBe(off);
 		off = run(off, isSaved("node1", 3));
 		expect(machine(run(off, bootEvent(off, "node1")), "node1").life.phase).toBe("booting");
@@ -150,9 +152,9 @@ describe("going back to a checkpoint", () => {
 		expect(machine(back, "node1")).toMatchObject({
 			sessions: ["node1:console"],
 			sets: { live: 0, next: 4 },
-			life: { phase: "restoring", plugs: [{ port: 1 }] },
+			life: { phase: "restoring", plugs: [{ port: port0(1) }] },
 		});
-		expect([...takenPorts(back)]).toEqual([1, 2]);
+		expect([...takenPorts(back, "switch0")]).toEqual([1, 2]);
 		const going = focused(run(back, progress(3, 40, 2)));
 		expect(selectRail(going)[0].word).toBe("restoring 40%");
 		expect(selectStatus(going).left[0].text).toBe("1 of 2 ready, 1 restoring");
@@ -163,14 +165,14 @@ describe("going back to a checkpoint", () => {
 
 		const { state: booting, effects: then } = update(going, isRestored("node1", 3));
 		expect(machine(booting, "node1")).toMatchObject({
-			life: { phase: "booting", attempt: 3, plugs: [{ port: 1, link: "up" }] },
+			life: { phase: "booting", attempt: 3, plugs: [{ port: port0(1), link: "up" }] },
 			sets: { live: 3, next: 4, checkpoints: [{ name: "before" }, { name: "after" }] },
 		});
 		expect(then.slice(0, 3).map((e) => e.type)).toEqual(["screen/note", "disks/delete", "vm/boot"]);
 		expect(then).toContainEqual({ type: "disks/delete", n: 1, sets: [0] });
 		expect(then[2]).toMatchObject({ attempt: 3, config: { set: 3 } });
 		expect(effectsOf(booting, isReady("node1", 3))).toContainEqual(
-			expect.objectContaining({ type: "link/set", port: 1, up: true, cause: "power" }),
+			expect.objectContaining({ type: "link/set", port: port0(1), up: true, cause: "power" }),
 		);
 	});
 
@@ -181,13 +183,13 @@ describe("going back to a checkpoint", () => {
 			life: { phase: "failed", reason: "Browser storage is full." },
 			sets: { live: 0 },
 		});
-		expect([...takenPorts(s)]).toEqual([2]);
+		expect([...takenPorts(s, "switch0")]).toEqual([2]);
 		const boot = effectsOf(s, bootEvent(s, "node1")).find((e) => e.type === "vm/boot");
 		expect(boot).toMatchObject({ attempt: 3, config: { set: 0 } });
 
 		const taken = run(s, spawnEvent(s, 1));
 		const again = effectsOf(taken, restoreEvent(taken, "node1", 2));
-		expect(again).toContainEqual({ type: "port/attach", port: 3, machine: "node1", nic: 0 });
+		expect(again).toContainEqual({ type: "port/attach", port: port0(3), machine: "node1", nic: 0 });
 		expect(again.at(-1)).toMatchObject({ type: "checkpoint/restore", copy: { from: 2, to: 4 } });
 	});
 
@@ -243,11 +245,11 @@ describe("a reload", () => {
 		s = run(s, restoreEvent(s, "node1", 1));
 		const { state, effects } = reloaded(s);
 		expect(machine(state, "node1")).toMatchObject({
-			life: { phase: "restoring", plugs: [{ port: 1 }] },
+			life: { phase: "restoring", plugs: [{ port: port0(1) }] },
 			sets: { live: 0, next: 5 },
 		});
 		expect(effects.flatMap((e) => (e.type === "vm/boot" ? [e.machine] : []))).toEqual(["node2"]);
-		expect(effects).toContainEqual(expect.objectContaining({ type: "port/attach", port: 1, machine: "node1" }));
+		expect(effects).toContainEqual(expect.objectContaining({ type: "port/attach", port: port0(1), machine: "node1" }));
 		expect(effects).toContainEqual(
 			expect.objectContaining({ type: "checkpoint/restore", copy: expect.objectContaining({ from: 1, to: 4 }) }),
 		);
@@ -273,9 +275,8 @@ describe("a reload", () => {
 	});
 
 	test("of a lab saved before there were checkpoints finds each machine's disks where they were", () => {
-		const saved = JSON.parse(saveWorkspace(labWith(1)));
-		delete saved.nodes[0].sets;
-		const { state } = restoreWorkspace(initialState(IMAGES, WIDE), JSON.stringify({ ...saved, version: 5 }));
+		const saved = readFileSync(new URL("../../test/fixtures/saved-labs/version-5.json", import.meta.url), "utf8");
+		const { state } = restoreWorkspace(initialState(IMAGES, WIDE), saved);
 		expect(machine(state, "node1").sets).toEqual({ live: 0, next: 1, checkpoints: [] });
 	});
 });

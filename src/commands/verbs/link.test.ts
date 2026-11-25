@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { port0 } from "../../../test/support/ports.ts";
 import { completeLine } from "../index.ts";
 import { storeLab } from "../testing/store.ts";
 
@@ -149,12 +150,12 @@ describe("link", () => {
 		});
 		expect(lab.events[0]).toEqual({
 			type: "cmd/link",
-			changes: [{ machine: "node3", nic: 0, up: false, port: 3, newPort: false }],
+			changes: [{ machine: "node3", nic: 0, up: false, port: port0(3), newPort: false }],
 			cause: "agent",
 		});
 		expect(lab.effects).toContainEqual({
 			type: "link/set",
-			port: 3,
+			port: port0(3),
 			machine: "node3",
 			nic: 0,
 			up: false,
@@ -190,8 +191,8 @@ describe("link", () => {
 			{ type: "vm/ready", machine: "node2", attempt: 2, bootMs: 1 },
 		);
 		expect(lab.effects.filter((e) => e.type === "link/set")).toMatchObject([
-			{ port: 1, up: true },
-			{ port: 2, up: true },
+			{ port: port0(1), up: true },
+			{ port: port0(2), up: true },
 		]);
 	});
 

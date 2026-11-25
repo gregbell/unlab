@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { port0 } from "../../../test/support/ports.ts";
 import { storeLab } from "../testing/store.ts";
 
 const turn = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -20,7 +21,7 @@ describe("reboot and poweroff", () => {
 		const lab = storeLab();
 		await lab.lab(2);
 		await lab.run("poweroff node2");
-		expect(lab.store.state.machines.node2?.life).toMatchObject({ phase: "off", plugs: [{ port: 2 }] });
+		expect(lab.store.state.machines.node2?.life).toMatchObject({ phase: "off", plugs: [{ port: port0(2) }] });
 		for (const line of ["poweroff node2", "reboot node2", "exec node2 -- ls"]) {
 			expect(lab.parse(line)).toMatchObject({
 				message: expect.stringContaining("a ready machine here, and node2 is off."),

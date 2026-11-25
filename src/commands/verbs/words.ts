@@ -1,4 +1,12 @@
-import { andList, type Disk, type LabState, type PlanError } from "../../model/index.ts";
+import {
+	andList,
+	type Disk,
+	type LabState,
+	type PlanError,
+	type PortNo,
+	type PortRef,
+	type SwitchName,
+} from "../../model/index.ts";
 import { addressStr, ip4str, nicName, subnetStr } from "../../net/index.ts";
 import { list, type Selection } from "../grammar/slots.ts";
 
@@ -18,16 +26,35 @@ export function ports(list: readonly number[]): string {
 	return `${list.length === 1 ? "port" : "ports"} ${andList(list)}`;
 }
 
+function bySwitch(refs: readonly PortRef[]): readonly (readonly [SwitchName, readonly PortNo[]])[] {
+	const grouped = Map.groupBy(refs, (ref) => ref.switch);
+	return [...grouped].map(([on, held]) => [on, held.map(({ port }) => port)]);
+}
+
+/** `plugged into switch0 on ports 2 and 3`, or `unplugged`. */
+export function pluggedInto(refs: readonly PortRef[]): string {
+	const where = bySwitch(refs).map(([on, list]) => `${on} on ${ports(list)}`);
+	return where.length === 0 ? "unplugged" : `plugged into ${andList(where)}`;
+}
+
+/** `Ports 2 and 3 on switch0 free up.` */
+export function portsFree(refs: readonly PortRef[]): string[] {
+	if (refs.length === 0) return [];
+	const [first, ...rest] = bySwitch(refs).map(([on, list]) => `${ports(list)} on ${on}`);
+	const which = andList([first.replace("p", "P"), ...rest]);
+	return [`${which} ${refs.length === 1 ? "frees" : "free"} up.`];
+}
+
 /** The preview's tail for machines a selection left out: `skipped node4: still booting`. */
 export function skippedPart(skipped: Selection["skipped"]): string[] {
 	return skipped.length === 0 ? [] : [`skipped ${skipped.map((s) => `${s.name}: ${s.reason}`).join(", ")}`];
 }
 
-/** A plan error from the model, as the verb says it. `ports` is what would make the switch's ports enough. */
+/** A plan error from the model, as the verb says it. `ports` is what would make a switch's ports enough. */
 export function planErrorSentence(error: PlanError, ports = "remove a machine with rm to free its ports"): string {
 	switch (error.kind) {
 		case "no-ports":
-			return `switch0 has ${count(error.free, "free port")} and this takes ${error.wanted}, so ${ports}.`;
+			return `${error.switch} has ${count(error.free, "free port")} and this takes ${error.wanted}, so ${ports}.`;
 		case "no-room":
 			return error.free === 0
 				? "The lab has no room for another machine, so remove one with rm first."
@@ -35,7 +62,7 @@ export function planErrorSentence(error: PlanError, ports = "remove a machine wi
 		case "unknown-image":
 			return `No image is called ${error.image}, so spawn another machine from an image that the lab has.`;
 		case "name-taken":
-			return `A machine is already called ${error.name}, so give another name with --name.`;
+			return `A ${error.by} is already called ${error.name}, so give another name with --name.`;
 		case "address-taken":
 			return `${ip4str(error.address.ip)} is already ${error.by.machine}'s, so give another address with --addr.`;
 		case "address-overlap":

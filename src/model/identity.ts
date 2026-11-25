@@ -13,11 +13,12 @@ import {
 import {
 	ALL_MACHINES,
 	type CheckpointName,
+	DEFAULT_SWITCH,
 	type Identity,
 	type Machine,
 	type MachineName,
 	type SessionId,
-	SWITCH_NAME,
+	type SwitchName,
 } from "./types.ts";
 
 /** A number is never reused, so a lab runs out of MACs after MAX_NODE. `planSpawn` checks before it asks. */
@@ -66,7 +67,13 @@ export type NameFault =
 
 /** What the images' own /etc/hosts calls the guest it is in, which would come before another machine's address. */
 export const LOOPBACK_NAMES: readonly string[] = ["localhost", "ip6-localhost", "ip6-loopback", "unkernel"];
-const WORDS: ReadonlySet<string> = new Set([ALL_MACHINES, SWITCH_NAME, EVERYONE, ...LOOPBACK_NAMES, ...FILTER_WORDS]);
+const WORDS: ReadonlySet<string> = new Set([
+	ALL_MACHINES,
+	DEFAULT_SWITCH,
+	EVERYONE,
+	...LOOPBACK_NAMES,
+	...FILTER_WORDS,
+]);
 
 function isWord(text: string): boolean {
 	// State is keyed by name, and an object answers to some names that nobody gave it.
@@ -83,6 +90,12 @@ export function parseChosenName(text: string): MachineName | NameFault {
 
 export function isNameFault(read: MachineName | NameFault): read is NameFault {
 	return typeof read !== "string";
+}
+
+/** A switch's name is beside machines' names, and beside `none` where a NIC's network is named. */
+export function parseSwitchName(text: string): SwitchName | null {
+	if (text === DEFAULT_SWITCH) return text;
+	return isNameFault(parseChosenName(text)) || text === "none" ? null : (text as string as SwitchName);
 }
 
 export interface SessionAddress {

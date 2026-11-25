@@ -15,7 +15,11 @@ export type HueNo = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
 export const PORTS: readonly PortNo[] = [1, 2, 3, 4, 5, 6, 7, 8];
 export const HUES: readonly HueNo[] = [1, 2, 3, 4, 5, 6, 7, 8];
 export const MAX_MACHINES = 8;
-export const SWITCH_NAME = "switch0";
+/** The switch that every lab has. */
+export const DEFAULT_SWITCH = "switch0" as const;
+declare const switchName: unique symbol;
+/** What a switch goes by: the default one's name, or one that was chosen and checked. */
+export type SwitchName = typeof DEFAULT_SWITCH | (string & { readonly [switchName]: true });
 /** What a command takes for every machine. */
 export const ALL_MACHINES = "all";
 
@@ -26,6 +30,12 @@ export interface Identity {
 	readonly name: MachineName;
 	/** eth0's. */
 	readonly mac: string;
+}
+
+/** One port of one switch. */
+export interface PortRef {
+	readonly switch: SwitchName;
+	readonly port: PortNo;
 }
 
 /** One NIC of one machine. NIC 0 is eth0. */
@@ -42,10 +52,10 @@ export type Cause = Source | "runtime" | "power";
 
 export type Plug =
 	| { readonly kind: "none" }
-	| { readonly kind: "port"; readonly port: PortNo; readonly link: "up" | "cut" };
+	| { readonly kind: "port"; readonly port: PortRef; readonly link: "up" | "cut" };
 
 /** A port for each NIC, eth0 first, or null for one that is not plugged in. */
-export type NicPorts = readonly (PortNo | null)[];
+export type NicPorts = readonly (PortRef | null)[];
 
 export interface ImageInfo {
 	/** The manifest name, used in the grammar: `alpine`. */
@@ -104,7 +114,7 @@ export interface Saving {
 export const MAX_MEM_MIB = 4096;
 
 export interface NicSpec {
-	readonly net: "switch0" | "none";
+	readonly net: SwitchName | "none";
 	/** What the lab sets on it at every boot. Null leaves it up with none. */
 	readonly address: Address | null;
 }
@@ -326,7 +336,7 @@ export interface LogEntry {
 export type View = "lab" | "spawn";
 
 /** The panels under the panes, left to right, which is also their order in the panel bar. */
-export const PANELS = ["capture", "switch0"] as const;
+export const PANELS = ["capture", DEFAULT_SWITCH] as const;
 export type PanelName = (typeof PANELS)[number];
 
 export interface Panels {
@@ -351,6 +361,8 @@ export interface LabState {
 	readonly rail: readonly MachineName[];
 	/** The last machine of each name that is gone. Frames still name it, and the name's next machine boots on from its attempt. */
 	readonly departed: Readonly<Partial<Record<MachineName, Departed>>>;
+	/** In the order they are shown. */
+	readonly switches: readonly [typeof DEFAULT_SWITCH, ...SwitchName[]];
 	readonly sessions: Readonly<Partial<Record<SessionId, Session>>>;
 	readonly panes: Panes;
 	readonly keyboard: Keyboard;
@@ -391,16 +403,16 @@ export interface RestorePlan extends BootPlan {
 
 export interface LinkChange extends NicRef {
 	readonly up: boolean;
-	readonly port: PortNo;
-	/** `link up` on an unplugged NIC takes the lowest free port. */
+	readonly port: PortRef;
+	/** `link up` on an unplugged NIC takes the default switch's lowest free port. */
 	readonly newPort: boolean;
 }
 
 export type PlanError =
-	| { readonly kind: "no-ports"; readonly free: number; readonly wanted: number }
+	| { readonly kind: "no-ports"; readonly switch: SwitchName; readonly free: number; readonly wanted: number }
 	| { readonly kind: "no-room"; readonly free: number; readonly wanted: number }
 	| { readonly kind: "unknown-image"; readonly image: string }
-	| { readonly kind: "name-taken"; readonly name: MachineName }
+	| { readonly kind: "name-taken"; readonly name: MachineName; readonly by: "machine" | "switch" }
 	| { readonly kind: "address-taken"; readonly address: Address; readonly by: NicRef }
 	/** Two of one machine's NICs would be in overlapping subnets. */
 	| { readonly kind: "address-overlap"; readonly nics: readonly [NicNo, NicNo] }
@@ -574,12 +586,12 @@ export type Effect =
 	| { readonly type: "checkpoint/save"; readonly copy: DiskCopy }
 	/** Once the worker is gone. Reports checkpoint/restored, or vm/failed with the live disks as they were. */
 	| { readonly type: "checkpoint/restore"; readonly copy: DiskCopy }
-	| { readonly type: "port/attach"; readonly port: PortNo; readonly machine: MachineName; readonly nic: NicNo }
-	| { readonly type: "port/detach"; readonly port: PortNo }
+	| { readonly type: "port/attach"; readonly port: PortRef; readonly machine: MachineName; readonly nic: NicNo }
+	| { readonly type: "port/detach"; readonly port: PortRef }
 	/** Changes the switch link and writes the capture event row, in that order. */
 	| {
 			readonly type: "link/set";
-			readonly port: PortNo;
+			readonly port: PortRef;
 			readonly machine: MachineName;
 			readonly nic: NicNo;
 			readonly up: boolean;

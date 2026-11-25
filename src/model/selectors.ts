@@ -14,6 +14,7 @@ import {
 	nicPortsOf,
 	plugsOf,
 	portsOf,
+	samePort,
 	savingOf,
 } from "./machines.ts";
 import { keyboardHolder, parkedPanes, visiblePanes } from "./panes.ts";
@@ -31,6 +32,8 @@ import {
 	type Plug,
 	PORTS,
 	type PortNo,
+	type PortRef,
+	type SwitchName,
 } from "./types.ts";
 import { clockHz } from "./update.ts";
 
@@ -46,6 +49,18 @@ function memo<const Inputs extends readonly unknown[], Out>(
 		const out = compute(...next);
 		last = { inputs: next, out };
 		return out;
+	};
+}
+
+/** A selector for each switch, each memoised by itself. */
+function perSwitch<Out>(
+	make: (on: SwitchName) => (state: LabState) => Out,
+): (on: SwitchName) => (state: LabState) => Out {
+	const made = new Map<SwitchName, (state: LabState) => Out>();
+	return (on) => {
+		const select = made.get(on) ?? make(on);
+		made.set(on, select);
+		return select;
 	};
 }
 
@@ -188,7 +203,7 @@ export interface MachineDetails {
 	readonly hue: HueNo;
 	readonly phase: Phase;
 	/** The ports its cables hold or have reserved. The element reads the ports' frame counters with them. */
-	readonly ports: readonly PortNo[];
+	readonly ports: readonly PortRef[];
 	/** One for each NIC, eth0 first. Empty unless the machine takes them now. */
 	readonly cables: readonly Cable[];
 	/** Why it failed, or could not save the last checkpoint, as the runtime said it. */
@@ -213,15 +228,16 @@ function stateTone(machine: Machine): Pick<DetailRow, "tone"> {
 }
 
 function linkRow(label: "link" | NicName, { life }: Machine, nic: NicNo): DetailRow {
-	if (life.phase === "removing" && life.ports[nic]) return { label, value: `port ${life.ports[nic]} down` };
+	if (life.phase === "removing" && life.ports[nic]) return { label, value: `port ${life.ports[nic].port} down` };
 	const plug = plugsOf(life)[nic];
 	if (!plug || plug.kind === "none") return { label, value: "unplugged" };
-	if (life.phase === "booting") return { label, value: `port ${plug.port} reserved` };
+	const { port } = plug.port;
+	if (life.phase === "booting") return { label, value: `port ${port} reserved` };
 	if (life.phase === "ready" && life.lost?.includes(nic))
 		return { label, value: "gone from the guest until it reboots", tone: "down" };
-	if (plug.link === "cut") return { label, value: `cable cut on port ${plug.port}`, tone: "down" };
-	if (life.phase === "off" || life.phase === "restoring") return { label, value: `plugged into port ${plug.port}` };
-	return { label, value: `connected on port ${plug.port}`, tone: "ok" };
+	if (plug.link === "cut") return { label, value: `cable cut on port ${port}`, tone: "down" };
+	if (life.phase === "off" || life.phase === "restoring") return { label, value: `plugged into port ${port}` };
+	return { label, value: `connected on port ${port}`, tone: "ok" };
 }
 
 /** The only disk is the machine's own. Several are told apart by device. */
@@ -324,10 +340,12 @@ export interface PortView {
 	readonly actionLabel: string | null;
 }
 
-function portView(port: PortNo, machine: Machine | undefined): PortView {
+function portView(ref: PortRef, machine: Machine | undefined): PortView {
+	const { port } = ref;
 	if (!machine) return { port, state: "empty", machine: null, word: null, actionLabel: null };
 	const { n, name, hue, life } = machine;
-	const nic = NICS.find((k) => nicPortsOf(life)[k] === port) ?? 0;
+	const held = nicPortsOf(life);
+	const nic = NICS.find((k) => held[k] && samePort(held[k], ref)) ?? 0;
 	const label = nicLabel(machine, nic);
 	const holder = { n, name, hue, label, nic: machine.spec.nics.length > 1 ? nicName(nic) : null };
 	if (life.phase === "removing") return { port, state: "removing", machine: holder, word: "down", actionLabel: null };
@@ -344,18 +362,21 @@ function portView(port: PortNo, machine: Machine | undefined): PortView {
 	return { port, state: "cut", machine: holder, word: "cut", actionLabel };
 }
 
-/** The faceplate's eight ports, lowest first. */
-export const selectPorts: (state: LabState) => readonly PortView[] = memo(
-	(s) => [s.machines, s.rail],
-	(machines, rail) => {
-		const list = machineList({ machines, rail });
-		return PORTS.map((port) =>
-			portView(
-				port,
-				list.find((machine) => portsOf(machine.life).includes(port)),
-			),
-		);
-	},
+/** A switch's eight ports, lowest first. */
+export const selectPorts = perSwitch((on) =>
+	memo(
+		(s) => [s.machines, s.rail],
+		(machines, rail): readonly PortView[] => {
+			const list = machineList({ machines, rail });
+			return PORTS.map((port) => {
+				const ref = { switch: on, port };
+				return portView(
+					ref,
+					list.find(({ life }) => portsOf(life).some((held) => samePort(held, ref))),
+				);
+			});
+		},
+	),
 );
 
 export interface LinkCount {
@@ -365,21 +386,23 @@ export interface LinkCount {
 	readonly cut: number;
 }
 
-/** The numbers in `2 of 3 links up`, for the faceplate header and the panel bar. */
-export const selectLinks: (state: LabState) => LinkCount = memo(
-	(s) => [s.machines, s.rail],
-	(machines, rail) => {
-		const plugged = machineList({ machines, rail }).flatMap(({ life }) =>
-			plugsOf(life).flatMap((plug) =>
-				plug.kind === "port" ? [{ ready: life.phase === "ready", link: plug.link }] : [],
-			),
-		);
-		return {
-			up: plugged.filter((cable) => cable.ready && cable.link === "up").length,
-			total: plugged.length,
-			cut: plugged.filter((cable) => cable.ready && cable.link === "cut").length,
-		};
-	},
+/** The numbers in `2 of 3 links up`, for a switch's header and the panel bar. */
+export const selectLinks = perSwitch((on) =>
+	memo(
+		(s) => [s.machines, s.rail],
+		(machines, rail): LinkCount => {
+			const plugged = machineList({ machines, rail }).flatMap(({ life }) =>
+				plugsOf(life).flatMap((plug) =>
+					plug.kind === "port" && plug.port.switch === on ? [{ ready: life.phase === "ready", link: plug.link }] : [],
+				),
+			);
+			return {
+				up: plugged.filter((cable) => cable.ready && cable.link === "up").length,
+				total: plugged.length,
+				cut: plugged.filter((cable) => cable.ready && cable.link === "cut").length,
+			};
+		},
+	),
 );
 
 /** Unchanged by a focus, because focusing never moves a pane. */

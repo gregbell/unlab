@@ -673,9 +673,9 @@ describe("shell_read", () => {
 describe("capture_read", () => {
 	it("returns the newest matching frames as decoded rows, oldest first", async () => {
 		const { call, capture, lastCall } = await setup();
-		capture.appendFrame({ from: 1, to: 0b10, flood: "group", frame: arpRequest(1, 2) });
-		capture.appendFrame({ from: 2, to: 0b01, flood: null, frame: arpReply(2, 1) });
-		capture.appendFrame({ from: 1, to: 0b10, flood: null, frame: ping(1, 2) });
+		capture.appendFrame({ switch: "switch0", from: 1, to: 0b10, flood: "group", frame: arpRequest(1, 2) });
+		capture.appendFrame({ switch: "switch0", from: 2, to: 0b01, flood: null, frame: arpReply(2, 1) });
+		capture.appendFrame({ switch: "switch0", from: 1, to: 0b10, flood: null, frame: ping(1, 2) });
 		const reply = await call("capture_read", { filter: "arp", limit: 1 });
 		expect(reply).toMatchObject({
 			rows: [{ kind: "frame", proto: "ARP", from: { name: "node2" }, to: { name: "node1" } }],
@@ -698,8 +698,20 @@ describe("capture_read", () => {
 		});
 		if (isPlanError(plan)) throw new Error("cannot spawn");
 		store.dispatchCommand({ type: "cmd/spawn", plan, at: 0 });
-		capture.appendFrame({ from: 1, to: 0b100, flood: null, frame: routedPing(mac(1), mac(3), 1, 2) });
-		capture.appendFrame({ from: 4, to: 0b10, flood: null, frame: routedPing(mac(3, 1), mac(2), 1, 2) });
+		capture.appendFrame({
+			switch: "switch0",
+			from: 1,
+			to: 0b100,
+			flood: null,
+			frame: routedPing(mac(1), mac(3), 1, 2),
+		});
+		capture.appendFrame({
+			switch: "switch0",
+			from: 4,
+			to: 0b10,
+			flood: null,
+			frame: routedPing(mac(3, 1), mac(2), 1, 2),
+		});
 		await expect(call("capture_read", {})).resolves.toMatchObject({
 			rows: [
 				{ from: { kind: "machine", name: "node1" }, to: { name: "node3", nic: "eth0" } },

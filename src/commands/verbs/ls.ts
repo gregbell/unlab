@@ -65,7 +65,7 @@ function listed(m: Machine): ListedMachine {
 			mac: nicMac(m.n, nic),
 			address: address && ip4str(address.ip),
 			prefix: address?.prefix ?? null,
-			port: ports[nic] ?? null,
+			port: ports[nic]?.port ?? null,
 			link: cableLink(m.life, nic),
 		};
 	});

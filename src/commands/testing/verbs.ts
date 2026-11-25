@@ -1,4 +1,5 @@
 import {
+	DEFAULT_SWITCH,
 	type LabState,
 	type LinkChange,
 	lowestFreePorts,
@@ -40,7 +41,7 @@ export const link = defineVerb({
 	},
 	describe: (p) =>
 		p.changes
-			.map((c) => `${c.up ? "plug" : "cut the cable from"} ${c.machine} ${c.up ? "into" : "to"} port ${c.port}`)
+			.map((c) => `${c.up ? "plug" : "cut the cable from"} ${c.machine} ${c.up ? "into" : "to"} port ${c.port.port}`)
 			.join(" · "),
 	async execute(plan, ctx, deps) {
 		deps.dispatch({ type: "cmd/link", changes: plan.changes, cause: ctx.source });
@@ -68,7 +69,7 @@ export const spawn = defineVerb({
 	},
 	example: { count: 1, image: "alpine" },
 	plan(a, lab) {
-		const free = lowestFreePorts(lab, MAX_MACHINES).length;
+		const free = lowestFreePorts(lab, DEFAULT_SWITCH, MAX_MACHINES).length;
 		if (a.net === "switch0" && free < a.count) {
 			return refuse(`switch0 has ${free} free ports. Add --no-net to boot them unplugged.`, "count");
 		}

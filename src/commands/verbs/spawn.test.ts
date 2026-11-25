@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { port0 } from "../../../test/support/ports.ts";
 import { completeLine } from "../index.ts";
 import { storeLab } from "../testing/store.ts";
 
@@ -67,7 +68,7 @@ describe("spawn", () => {
 		await lab.run("spawn 1 alpine --nics 3 --net none,switch0,none");
 		expect(lab.store.state.machines.node2).toMatchObject({
 			spec: { nics: [{ net: "none" }, { net: "switch0" }, { net: "none" }] },
-			life: { plugs: [{ kind: "none" }, { kind: "port", port: 2 }, { kind: "none" }] },
+			life: { plugs: [{ kind: "none" }, { kind: "port", port: port0(2) }, { kind: "none" }] },
 		});
 		expect(lab.events.at(-1)).toMatchObject({ line: "spawn 1 alpine --nics 3 --net none,switch0,none" });
 	});

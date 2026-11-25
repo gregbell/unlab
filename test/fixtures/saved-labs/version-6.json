@@ -1,0 +1,177 @@
+{
+	"version": 6,
+	"nextN": 7,
+	"nodes": [
+		{
+			"n": 1,
+			"name": "node1",
+			"hue": 1,
+			"image": "alpine",
+			"memMiB": 256,
+			"cpus": 1,
+			"disks": {
+				"root": "8",
+				"extra": []
+			},
+			"gateway": true,
+			"nics": [
+				{
+					"net": "switch0",
+					"address": "10.88.0.11/24",
+					"port": 1,
+					"cut": false
+				}
+			],
+			"sets": {
+				"live": 0,
+				"next": 2,
+				"checkpoints": [
+					{
+						"name": "before",
+						"set": 1,
+						"bytes": 1048576
+					}
+				]
+			}
+		},
+		{
+			"n": 3,
+			"name": "node3",
+			"hue": 3,
+			"image": "alpine",
+			"memMiB": 256,
+			"cpus": 1,
+			"disks": {
+				"root": "8",
+				"extra": []
+			},
+			"gateway": true,
+			"nics": [
+				{
+					"net": "switch0",
+					"address": "10.88.0.13/24",
+					"port": 3,
+					"cut": false
+				}
+			],
+			"sets": {
+				"live": 0,
+				"next": 1,
+				"checkpoints": []
+			},
+			"off": true
+		},
+		{
+			"n": 4,
+			"name": "switch1",
+			"hue": 2,
+			"image": "alpine",
+			"memMiB": 256,
+			"cpus": 1,
+			"disks": {
+				"root": "8",
+				"extra": []
+			},
+			"gateway": true,
+			"nics": [
+				{
+					"net": "switch0",
+					"address": "10.88.0.14/24",
+					"port": 2,
+					"cut": true
+				}
+			],
+			"sets": {
+				"live": 0,
+				"next": 1,
+				"checkpoints": []
+			}
+		},
+		{
+			"n": 5,
+			"name": "node5",
+			"hue": 4,
+			"image": "alpine",
+			"memMiB": 256,
+			"cpus": 1,
+			"disks": {
+				"root": "8",
+				"extra": [1]
+			},
+			"gateway": false,
+			"nics": [
+				{
+					"net": "switch0",
+					"address": "10.1.0.1/24",
+					"port": 4,
+					"cut": false
+				},
+				{
+					"net": "none",
+					"address": null,
+					"port": null,
+					"cut": false
+				},
+				{
+					"net": "switch0",
+					"address": "10.2.0.1/24",
+					"port": 5,
+					"cut": true
+				}
+			],
+			"sets": {
+				"live": 0,
+				"next": 1,
+				"checkpoints": []
+			}
+		},
+		{
+			"n": 6,
+			"name": "node6",
+			"hue": 5,
+			"image": "alpine",
+			"memMiB": 256,
+			"cpus": 1,
+			"disks": {
+				"root": "8",
+				"extra": []
+			},
+			"gateway": false,
+			"nics": [
+				{
+					"net": "none",
+					"address": "10.88.0.16/24",
+					"port": null,
+					"cut": false
+				}
+			],
+			"sets": {
+				"live": 0,
+				"next": 1,
+				"checkpoints": []
+			}
+		}
+	],
+	"panels": ["capture", "switch0"],
+	"order": ["node1", "node3", "switch1", "node5", "node6"],
+	"parked": ["node3"],
+	"focus": "node1",
+	"policies": {
+		"lab_help": "run",
+		"machines_list": "run",
+		"machines_spawn": "ask",
+		"machines_boot": "run",
+		"machines_reboot": "run",
+		"machines_poweroff": "run",
+		"machines_remove": "ask",
+		"checkpoint_save": "run",
+		"checkpoint_restore": "ask",
+		"checkpoint_remove": "ask",
+		"shell_exec": "run",
+		"shell_read": "run",
+		"file_write": "run",
+		"link_set": "ask",
+		"capture_read": "run"
+	},
+	"paused": false
+}

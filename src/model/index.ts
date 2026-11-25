@@ -16,6 +16,7 @@ export {
 	parseChosenName,
 	parseMachineName,
 	parseSessionId,
+	parseSwitchName,
 	type SessionAddress,
 	sessionLabel,
 } from "./identity.ts";
@@ -39,6 +40,7 @@ export {
 	planSpawn,
 	plugsOf,
 	portsOf,
+	samePort,
 	savingOf,
 	severalNics,
 	takenPorts,

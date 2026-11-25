@@ -1,7 +1,7 @@
 import "./switch.css";
 import "./mac-table.ts";
 import { html, nothing, type TemplateResult } from "lit";
-import { type PortView, SWITCH_NAME, selectLinks, selectPorts, selectSubnets } from "../../model/index.ts";
+import { DEFAULT_SWITCH, type PortView, selectLinks, selectPorts, selectSubnets } from "../../model/index.ts";
 import { Select, UnlabElement, windowButtons } from "../base/index.ts";
 
 /** What a click on a port column runs. Empty ports, and those of a machine on its way somewhere, do nothing. */
@@ -23,8 +23,8 @@ export class UnlabSwitch extends UnlabElement {
 	static override properties = { compact: { type: Boolean, reflect: true } };
 	declare compact: boolean;
 
-	readonly #ports = new Select(this, selectPorts);
-	readonly #links = new Select(this, selectLinks);
+	readonly #ports = new Select(this, selectPorts(DEFAULT_SWITCH));
+	readonly #links = new Select(this, selectLinks(DEFAULT_SWITCH));
 	readonly #subnets = new Select(this, selectSubnets);
 
 	constructor() {
@@ -35,13 +35,13 @@ export class UnlabSwitch extends UnlabElement {
 	override render(): TemplateResult {
 		const links = this.#links.value;
 		return html`<div class="header">
-				<span class="title">${SWITCH_NAME}</span>
+				<span class="title">${DEFAULT_SWITCH}</span>
 				<span class="subnet">L2 · ${this.#subnets.value}</span>
 				<span class="spacer"></span>
 				<span class="links" data-cut=${links.cut > 0}>${links.up} of ${links.total} links up</span>
-				<span class="window">${windowButtons(SWITCH_NAME, !this.compact, {
-					maximise: () => this.app.store.dispatchUi({ type: "ui/panel-maximised", panel: "switch0" }),
-					park: () => this.app.store.dispatchUi({ type: "ui/panel-parked", panel: "switch0" }),
+				<span class="window">${windowButtons(DEFAULT_SWITCH, !this.compact, {
+					maximise: () => this.app.store.dispatchUi({ type: "ui/panel-maximised", panel: DEFAULT_SWITCH }),
+					park: () => this.app.store.dispatchUi({ type: "ui/panel-parked", panel: DEFAULT_SWITCH }),
 				})}</span>
 			</div>
 			<div class="body">
