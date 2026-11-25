@@ -333,7 +333,7 @@ describe("<unlab-pane-area> when a name is used again", () => {
 		const host = terminals.host(`${web}:console`);
 		expect(host.mounts).toHaveLength(1);
 		store.dispatchCommand({ type: "cmd/remove", machines: [web], cause: "bar" });
-		store.dispatchRuntime({ type: "vm/stopped", machine: web, attempt: 1 });
+		store.dispatchRuntime({ type: "vm/stopped", machine: web, attempt: 1, clean: true, at: 0 });
 		for (const event of spawnNamed(web)(store.state)) store.dispatchCommand(event);
 		await settle();
 		expect(paneOf(web)).not.toBe(old);

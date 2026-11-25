@@ -1,21 +1,23 @@
 import fc from "fast-check";
 import { describe, expect, test } from "vitest";
 import { identity } from "./identity.ts";
-import { isPlanError, lowestFreePorts, planBootAgain, planLink, takenPorts } from "./machines.ts";
+import { isPlanError, lowestFreePorts, planBoot, planLink, takenPorts } from "./machines.ts";
 import { capacity, keyboardHolder, reconcilePanes, visiblePanes } from "./panes.ts";
 import {
 	address,
 	agentCall,
-	bootAgainEvent,
+	bootEvent,
 	effectsOf,
 	emptyLab,
 	hasFailed,
+	hasHalted,
 	hasStopped,
 	isReady,
 	labWith,
 	linkEvent,
 	logged,
 	machine,
+	power,
 	remove,
 	run,
 	spawnEvent,
@@ -29,6 +31,7 @@ import {
 	MAX_MACHINES,
 	type MachineName,
 	type MachineSpec,
+	type Next,
 	type NicNo,
 	type NicSpec,
 	type PortNo,
@@ -70,6 +73,9 @@ describe("initialState", () => {
 			policies: {
 				machines_list: "run",
 				machines_spawn: "ask",
+				machines_boot: "run",
+				machines_reboot: "run",
+				machines_poweroff: "run",
 				machines_remove: "ask",
 				shell_exec: "run",
 				shell_read: "run",
@@ -105,6 +111,7 @@ describe("spawn", () => {
 			sessions: ["node1:console"],
 			activeSession: "node1:console",
 			nextShell: 1,
+			lastStop: null,
 		});
 		expect(state.machines.node2?.life).toMatchObject({ phase: "booting", plugs: [{ port: 2 }] });
 		expect(state.sessions).toEqual({
@@ -230,7 +237,7 @@ describe("failure", () => {
 		const { state, effects } = update(s, hasFailed("node1", 1, "Out of memory."));
 		expect(machine(state, "node1").life).toEqual({ phase: "failed", attempt: 1, reason: "Out of memory." });
 		expect(effects).toEqual([
-			{ type: "vm/stop", machine: "node1", attempt: 1 },
+			{ type: "vm/stop", machine: "node1", attempt: 1, how: "save" },
 			{ type: "port/detach", port: 1 },
 			{ type: "announce", text: "node1 failed. Out of memory." },
 			{ type: "clock", hz: 1 },
@@ -243,7 +250,7 @@ describe("failure", () => {
 		const { state, effects } = update(s, hasFailed("node1", 1, "The guest powered off."));
 		expect(effects).toEqual([
 			{ type: "link/set", port: 1, machine: "node1", nic: 0, up: false, cause: "runtime" },
-			{ type: "vm/stop", machine: "node1", attempt: 1 },
+			{ type: "vm/stop", machine: "node1", attempt: 1, how: "save" },
 			{ type: "port/detach", port: 1 },
 			{ type: "screen/dispose", session: "node1:sh1" },
 			{ type: "screen/dispose", session: "node1:sh2" },
@@ -266,7 +273,7 @@ describe("failure", () => {
 
 	test("shell numbers are not reused after a failure and a boot again", () => {
 		let s = run(labWith(1), shell("node1"), hasFailed("node1"));
-		s = run(s, bootAgainEvent(s, "node1"), isReady("node1", 2), shell("node1"));
+		s = run(s, bootEvent(s, "node1"), isReady("node1", 2), shell("node1"));
 		expect(machine(s, "node1").sessions).toEqual(["node1:console", "node1:sh2"]);
 	});
 });
@@ -280,7 +287,7 @@ describe("the boot timeout", () => {
 		const { state, effects } = update(s, tick(121_000));
 		expect(machine(state, "node1").life).toEqual({ phase: "failed", attempt: 1, reason: "No prompt after 120 s." });
 		expect(effects).toEqual([
-			{ type: "vm/stop", machine: "node1", attempt: 1 },
+			{ type: "vm/stop", machine: "node1", attempt: 1, how: "save" },
 			{ type: "port/detach", port: 1 },
 			{ type: "announce", text: "node1 failed. No prompt after 120 s." },
 			{ type: "clock", hz: 1 },
@@ -291,7 +298,7 @@ describe("the boot timeout", () => {
 		let s = emptyLab();
 		s = run(s, spawnEvent(s, 1, { at: 0 }), hasFailed("node1"));
 		s = run(s, tick(100_000));
-		s = run(s, bootAgainEvent(s, "node1", 100_000), tick(219_999));
+		s = run(s, bootEvent(s, "node1", 100_000), tick(219_999));
 		expect(machine(s, "node1").life).toMatchObject({ phase: "booting", attempt: 2 });
 		s = run(s, tick(220_000));
 		expect(machine(s, "node1").life).toMatchObject({ phase: "failed", attempt: 2 });
@@ -305,11 +312,130 @@ describe("the boot timeout", () => {
 	});
 });
 
+describe("power", () => {
+	const links = (effects: readonly Effect[]) => effects.filter((e) => e.type === "link/set");
+
+	test("a power off asks the guest, closes its shells, and keeps its plugs and its links until it is gone", () => {
+		const s = run(labWith(2), shell("node1"), { type: "session/opened", session: "node1:sh1" });
+		const asked = update(s, power("off", "node1"));
+		expect(asked.effects).toEqual([
+			{ type: "vm/stop", machine: "node1", attempt: 1, how: "off" },
+			{ type: "screen/dispose", session: "node1:sh1" },
+			{ type: "announce", text: "node1 powering off. sh1 closed with it." },
+		]);
+		expect(machine(asked.state, "node1")).toMatchObject({
+			life: { phase: "stopping", next: "off", plugs: [{ kind: "port", port: 1, link: "up" }] },
+			sessions: ["node1:console"],
+			activeSession: "node1:console",
+		});
+
+		const off = update(asked.state, hasStopped("node1"));
+		expect(off.effects).toEqual([
+			{ type: "link/set", port: 1, machine: "node1", nic: 0, up: false, cause: "power" },
+			{ type: "screen/note", session: "node1:console", text: "node1 is off. sh1 closed with it." },
+			{ type: "announce", text: "node1 off" },
+		]);
+		expect(machine(off.state, "node1").life).toEqual({
+			phase: "off",
+			attempt: 1,
+			plugs: [{ kind: "port", port: 1, link: "up" }],
+		});
+		expect([...takenPorts(off.state)]).toEqual([1, 2]);
+	});
+
+	test("a reboot boots the next attempt once the last one has let go of its disks, with its cables as they were", () => {
+		let s = emptyLab();
+		s = run(s, spawnEvent(s, 1, { net: ["switch0", "switch0"], extra: [1], memMiB: 512 }), isReady("node1"));
+		s = run(s, linkEvent(s, false, { machine: "node1", nic: 1 }));
+		const before = machine(s, "node1");
+		const asked = update(s, power("reboot", "node1"));
+		expect(asked.effects.some((e) => e.type === "vm/boot")).toBe(false);
+		const { state, effects } = update(asked.state, hasStopped("node1", 1, true, 5000));
+		expect(effects.map((e) => e.type)).toEqual(["link/set", "screen/note", "vm/boot", "clock"]);
+		expect(effects).toContainEqual(
+			expect.objectContaining({ type: "vm/boot", attempt: 2, config: expect.objectContaining({ spec: before.spec }) }),
+		);
+		expect(machine(state, "node1").life).toEqual({
+			phase: "booting",
+			attempt: 2,
+			since: 5000,
+			stage: "",
+			plugs: [
+				{ kind: "port", port: 1, link: "up" },
+				{ kind: "port", port: 2, link: "cut" },
+			],
+		});
+		expect(links(effectsOf(state, isReady("node1", 2)))).toEqual([
+			{ type: "link/set", port: 1, machine: "node1", nic: 0, up: true, cause: "power" },
+		]);
+		expect(machine(run(state, tick(125_000)), "node1").life).toMatchObject({ phase: "failed", attempt: 2 });
+	});
+
+	test("a guest that goes down by itself ends as its own command says, with its disks saved first", () => {
+		const s = labWith(1);
+		const down = update(s, hasHalted("node1", "reboot", 1, ["node1:sh4"]));
+		expect(down.effects).toEqual([
+			{ type: "vm/stop", machine: "node1", attempt: 1, how: "save" },
+			{ type: "announce", text: "node1 rebooting. sh4 closed with it." },
+		]);
+		expect(machine(run(down.state, hasStopped("node1")), "node1").life).toMatchObject({ phase: "booting", attempt: 2 });
+		expect(machine(run(s, hasHalted("node1", "off"), hasStopped("node1")), "node1").life.phase).toBe("off");
+	});
+
+	test("a guest that goes down while it boots had no links to take down", () => {
+		const s = run(emptyLab(), spawnEvent(emptyLab(), 1), hasHalted("node1", "off"));
+		const off = update(s, hasStopped("node1"));
+		expect(machine(off.state, "node1").life.phase).toBe("off");
+		expect(links(off.effects)).toEqual([]);
+	});
+
+	test("a machine that was told what comes next does that, whatever its guest goes down for", () => {
+		const s = run(labWith(1), power("off", "node1"), hasHalted("node1", "reboot"), hasStopped("node1"));
+		expect(machine(s, "node1").life.phase).toBe("off");
+	});
+
+	test("a stop the guest did not finish is said, and is remembered until it is booted and stopped again", () => {
+		const s = run(labWith(1), power("off", "node1"));
+		const { state, effects } = update(s, hasStopped("node1", 1, false));
+		const forced = "It did not shut down in 10 s, so it was stopped, and what it had not written to disk may be lost.";
+		expect(effects).toContainEqual({ type: "announce", text: `node1 off. ${forced}` });
+		expect(effects).toContainEqual({ type: "screen/note", session: "node1:console", text: `node1 is off. ${forced}` });
+		expect(machine(state, "node1").lastStop).toBe("forced");
+		const again = run(
+			state,
+			bootEvent(state, "node1"),
+			isReady("node1", 2),
+			power("off", "node1"),
+			hasStopped("node1", 2),
+		);
+		expect(machine(again, "node1").lastStop).toBe("clean");
+	});
+
+	test("a disk that cannot be saved as a machine stops fails it, and it does not boot", () => {
+		const s = run(labWith(1), power("reboot", "node1"));
+		const failed = update(s, hasFailed("node1", 1, "Browser storage is full."));
+		expect(machine(failed.state, "node1").life).toMatchObject({ phase: "failed", reason: "Browser storage is full." });
+		expect(links(failed.effects)).toMatchObject([{ port: 1, up: false }]);
+		expect(update(failed.state, hasStopped("node1")).effects).toEqual([]);
+	});
+
+	test("a machine that stops, or is off, can be removed, and a stop it waited for is hurried", () => {
+		const s = run(labWith(2), power("off", "node1", "node2"), hasStopped("node2"));
+		expect(effectsOf(s, remove("node1"))).toEqual([
+			{ type: "link/set", port: 1, machine: "node1", nic: 0, up: false, cause: "bar" },
+			{ type: "vm/stop", machine: "node1", attempt: 1, how: "drop" },
+		]);
+		const gone = run(s, remove("node1", "node2"), hasStopped("node1"), hasStopped("node2"));
+		expect(gone.rail).toEqual([]);
+		expect([...takenPorts(gone)]).toEqual([]);
+	});
+});
+
 describe("boot again", () => {
 	test("boots the next attempt on the planned port, into the console that is already there", () => {
 		let s = labWith(2);
 		s = run(s, hasFailed("node1"));
-		const { state, effects } = update(s, bootAgainEvent(s, "node1", 5000));
+		const { state, effects } = update(s, bootEvent(s, "node1", 5000));
 		expect(machine(state, "node1").life).toEqual({
 			phase: "booting",
 			attempt: 2,
@@ -345,7 +471,7 @@ describe("rm", () => {
 		expect(machine(state, "node1").life).toEqual({ phase: "removing", attempt: 1, ports: [1] });
 		expect(effects).toEqual([
 			{ type: "link/set", port: 1, machine: "node1", nic: 0, up: false, cause: "agent" },
-			{ type: "vm/stop", machine: "node1", attempt: 1 },
+			{ type: "vm/stop", machine: "node1", attempt: 1, how: "drop" },
 		]);
 	});
 
@@ -489,7 +615,7 @@ describe("the clock", () => {
 		expect(clocks(spawnEvent(s, 1))).toEqual([]);
 		expect(clocks(isReady("node1"), hasFailed("node2"))).toEqual([]);
 		expect(clocks(isReady("node3"))).toEqual([{ type: "clock", hz: 1 }]);
-		expect(clocks(bootAgainEvent(s, "node2"))).toEqual([{ type: "clock", hz: 10 }]);
+		expect(clocks(bootEvent(s, "node2"))).toEqual([{ type: "clock", hz: 10 }]);
 		expect(clocks(remove("node2"))).toEqual([{ type: "clock", hz: 1 }]);
 		expect(clockHz(s)).toBe(1);
 	});
@@ -875,7 +1001,9 @@ type Intent =
 	| { readonly kind: "spawn"; readonly count: number; readonly nets: readonly NicSpec["net"][] }
 	| { readonly kind: "stage" | "ready" | "failed" | "stopped"; readonly pick: number; readonly skew: number }
 	| { readonly kind: "remove" | "shell" | "park" | "unpark" | "maximise" | "paneFocused"; readonly pick: number }
-	| { readonly kind: "bootAgain"; readonly pick: number; readonly port: number }
+	| { readonly kind: "power"; readonly pick: number; readonly next: Next }
+	| { readonly kind: "halted"; readonly pick: number; readonly skew: number; readonly next: Next }
+	| { readonly kind: "boot"; readonly pick: number; readonly port: number }
 	| {
 			readonly kind: "link";
 			readonly pick: number;
@@ -901,12 +1029,17 @@ const intentArb: fc.Arbitrary<Intent> = fc.oneof(
 			nets: fc.array(fc.constantFrom("switch0", "none"), { minLength: 1, maxLength: 4 }),
 		}),
 	},
-	{ weight: 8, arbitrary: fc.record({ kind: kinds("stage", "ready", "ready", "failed", "stopped"), pick, skew }) },
+	{
+		weight: 8,
+		arbitrary: fc.record({ kind: kinds("stage", "ready", "ready", "failed", "stopped", "stopped"), pick, skew }),
+	},
 	{
 		weight: 6,
 		arbitrary: fc.record({ kind: kinds("remove", "shell", "park", "unpark", "maximise", "paneFocused"), pick }),
 	},
-	{ weight: 2, arbitrary: fc.record({ kind: kinds("bootAgain"), pick, port: fc.integer({ min: 0, max: 8 }) }) },
+	{ weight: 4, arbitrary: fc.record({ kind: kinds("power"), pick, next: fc.constantFrom("off", "reboot") }) },
+	{ weight: 3, arbitrary: fc.record({ kind: kinds("halted"), pick, skew, next: fc.constantFrom("off", "reboot") }) },
+	{ weight: 4, arbitrary: fc.record({ kind: kinds("boot"), pick, port: fc.integer({ min: 0, max: 8 }) }) },
 	{
 		weight: 3,
 		arbitrary: fc.record({
@@ -954,6 +1087,12 @@ function eventOf(intent: Intent, s: LabState): LabEvent | null {
 			if (intent.kind === "ready") return isReady(name, attempt);
 			return intent.kind === "failed" ? hasFailed(name, attempt) : hasStopped(name, attempt);
 		}
+		case "halted": {
+			const name = named(intent.pick);
+			return hasHalted(name, intent.next, (s.machines[name]?.life.attempt ?? 1) + intent.skew);
+		}
+		case "power":
+			return power(intent.next, named(intent.pick), named(intent.pick + 1));
 		case "remove":
 			return remove(named(intent.pick), named(intent.pick + 1));
 		case "shell":
@@ -966,12 +1105,12 @@ function eventOf(intent: Intent, s: LabState): LabEvent | null {
 			return { type: "ui/maximise", machine: named(intent.pick) };
 		case "paneFocused":
 			return { type: "ui/pane-focused", machine: named(intent.pick) };
-		case "bootAgain": {
+		case "boot": {
 			const name = named(intent.pick);
-			const planned = planBootAgain(s, name);
-			const wanted = planned === null || isPlanError(planned) ? [] : planned.ports;
-			const stale = [PORT_NUMBERS[intent.port] ?? null];
-			return { type: "cmd/boot-again", machine: name, ports: intent.port === 0 ? wanted : stale, at: s.now };
+			const planned = planBoot(s, [name, named(intent.pick + 1)]);
+			const wanted = isPlanError(planned) ? [] : planned;
+			const stale = [{ machine: name, ports: [PORT_NUMBERS[intent.port] ?? null] }];
+			return { type: "cmd/boot", machines: intent.port === 0 ? wanted : stale, at: s.now };
 		}
 		case "link": {
 			const name = named(intent.pick);
@@ -1053,6 +1192,9 @@ class World {
 				expect(effect.hz, "clock told a rate it already had").not.toBe(this.hz);
 				this.hz = effect.hz;
 				return;
+			case "screen/note":
+				expect(this.screens.has(effect.session), `a note for ${effect.session}, which has no screen`).toBe(true);
+				return;
 			case "pty/close":
 			case "hosts/publish":
 			case "capture/clear":
@@ -1076,7 +1218,7 @@ function checkLab(s: LabState, world: World): void {
 		expect(m.sessions[0]).toBe(`${m.name}:console`);
 		expect(m.sessions).toContain(m.activeSession);
 		for (const id of m.sessions) expect(s.sessions[id]).toMatchObject({ id, machine: m.name });
-		if (m.life.phase === "booting" || m.life.phase === "failed") expect(m.sessions).toHaveLength(1);
+		if (["booting", "stopping", "off", "failed"].includes(m.life.phase)) expect(m.sessions).toHaveLength(1);
 	}
 
 	const plugged = machines.flatMap((m) => {
@@ -1089,7 +1231,8 @@ function checkLab(s: LabState, world: World): void {
 		}
 		return life.plugs.flatMap((plug, nic) => {
 			if (plug.kind === "none") return [];
-			return [{ machine: m.name, nic, port: plug.port, up: life.phase === "ready" && plug.link === "up" }];
+			const live = life.phase === "ready" || (life.phase === "stopping" && life.linked);
+			return [{ machine: m.name, nic, port: plug.port, up: live && plug.link === "up" }];
 		});
 	});
 	expect(new Set(plugged.map((p) => p.port)).size).toBe(plugged.length);
@@ -1120,7 +1263,8 @@ function checkLab(s: LabState, world: World): void {
 const REPEATABLE = new Set<LabEvent["type"]>([
 	"cmd/spawn",
 	"cmd/remove",
-	"cmd/boot-again",
+	"cmd/boot",
+	"cmd/power",
 	"cmd/link",
 	"ui/tab-selected",
 	"ui/bar",

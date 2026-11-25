@@ -24,7 +24,8 @@ export function storeLab(exec: ExecPort = NO_EXEC) {
 	const store = createStore(initialState(IMAGES, { width: 1300, height: 500 }), (effect) => {
 		effects.push(effect);
 		if (effect.type === "vm/stop") {
-			store.dispatchRuntime({ type: "vm/stopped", machine: effect.machine, attempt: effect.attempt });
+			const { machine, attempt } = effect;
+			store.dispatchRuntime({ type: "vm/stopped", machine, attempt, clean: true, at: clock });
 		}
 	});
 	const deps: CommandDeps = {

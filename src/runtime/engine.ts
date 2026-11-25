@@ -21,6 +21,7 @@ import {
 	parseSessionId,
 	type RuntimeEvent,
 	type SessionId,
+	type StopHow,
 } from "../model/index.ts";
 import type { LineMark, Screen, Screens } from "./screens.ts";
 import type { ShellEvent } from "./shell-tracker.ts";
@@ -78,12 +79,19 @@ export interface EngineDeps {
 interface VmEntry {
 	readonly attempt: number;
 	readonly vm: Vm;
-	/** `over` has failed and waits to be stopped. Only booting and ready vms are listened to. */
-	phase: "booting" | "ready" | "over" | "stopping";
+	/**
+	 * `over` has failed and waits to be stopped. `ending` saves its disks, and
+	 * its guest may still be shutting down. Only booting and ready vms take
+	 * anything, and an ending one is still heard.
+	 */
+	phase: "booting" | "ready" | "over" | "ending" | "dropped";
 	/** The table the guest was last given. */
 	hosts: readonly HostEntry[];
 	/** Every prompt this boot's shells print carries it. */
 	readonly promptToken: string;
+	/** Shells the guest took away. It is going down, or it will not say why. */
+	readonly lost: SessionId[];
+	stopped: Promise<void> | null;
 }
 
 /** An injected line, from the call to its result. */
@@ -123,6 +131,12 @@ function isTerminalReply(data: string): boolean {
 const sameHosts = (a: readonly HostEntry[], b: readonly HostEntry[]): boolean =>
 	a.length === b.length && a.every((h, i) => h.ip === b[i].ip && h.name === b[i].name);
 
+/** Why a command that a stop cut off did not return. */
+const STOPPED_FOR: Partial<Record<StopHow, (machine: MachineName) => string>> = {
+	off: (machine) => `${machine} powered off`,
+	reboot: (machine) => `${machine} rebooted`,
+};
+
 const lastLineOf = (output: string): string => output.split("\n").findLast((line) => line.trim() !== "") ?? "";
 
 export function createEngine(deps: EngineDeps): Engine {
@@ -143,6 +157,12 @@ export function createEngine(deps: EngineDeps): Engine {
 		return entry && entry.attempt === ref.attempt && (entry.phase === "booting" || entry.phase === "ready")
 			? entry
 			: undefined;
+	};
+
+	/** The vm a guest's bytes came from, if it is still running or ending. */
+	const heard = (ref: VmRef): VmEntry | undefined => {
+		const entry = vms.get(ref.machine);
+		return listening(ref) ?? (entry?.attempt === ref.attempt && entry.phase === "ending" ? entry : undefined);
 	};
 
 	const readyVm = (machine: MachineName): Vm | undefined => {
@@ -167,7 +187,9 @@ export function createEngine(deps: EngineDeps): Engine {
 		const s = sessions.get(session);
 		if (!s) return;
 		s.quietSince = null;
-		shellEvents(s, s.screen.write(bytes));
+		const events = s.screen.write(bytes);
+		// A prompt that a guest prints as it goes down is not one to type at.
+		if (vms.get(s.machine)?.phase !== "ending") shellEvents(s, events);
 	};
 
 	/** Send to the guest what was typed, pasted or answered by the terminal. */
@@ -177,8 +199,8 @@ export function createEngine(deps: EngineDeps): Engine {
 		if (data.includes("\r")) shellEvents(s, s.screen.submitted());
 	};
 
-	const abandon = (s: SessionEntry) => {
-		s.injection?.fail(new ExecRefused(`${s.id} closed before the command returned.`));
+	const abandon = (s: SessionEntry, why = `${s.id} closed`) => {
+		s.injection?.fail(new ExecRefused(`${why} before the command returned.`));
 	};
 
 	/** Why a line cannot be typed into the session now, or null when it can. */
@@ -192,10 +214,10 @@ export function createEngine(deps: EngineDeps): Engine {
 	};
 
 	/** The machine's worker is gone or going: nothing is waiting on its sessions, and its shells have ended. */
-	const endSessions = (machine: MachineName) => {
+	const endSessions = (machine: MachineName, why?: string) => {
 		for (const s of sessions.values()) {
 			if (s.machine !== machine) continue;
-			abandon(s);
+			abandon(s, why);
 			if (s.tty === "console" || s.state === "closed") continue;
 			s.state = "closed";
 			dispatch({ type: "session/ended", session: s.id });
@@ -217,14 +239,23 @@ export function createEngine(deps: EngineDeps): Engine {
 			dispatch({ type: "vm/ready", ...ref, bootMs });
 		},
 		failed(ref, reason) {
-			const entry = listening(ref);
+			const entry = heard(ref);
 			if (!entry) return;
-			entry.phase = "over";
+			if (entry.phase !== "ending") entry.phase = "over";
 			endSessions(ref.machine);
 			dispatch({ type: "vm/failed", ...ref, reason });
 		},
+		halted(ref, next) {
+			const entry = listening(ref);
+			if (!entry) return;
+			endSessions(ref.machine, STOPPED_FOR[next]?.(ref.machine));
+			dispatch({ type: "vm/halted", ...ref, next, closed: entry.lost });
+		},
+		nicLost(ref, nic, reason) {
+			if (listening(ref)) dispatch({ type: "vm/nic-lost", ...ref, nic, reason });
+		},
 		frame(ref, nic, frame) {
-			if (!listening(ref)) return;
+			if (!heard(ref)) return;
 			for (const [port, plugged] of ports) {
 				if (plugged.machine !== ref.machine || plugged.nic !== nic) continue;
 				sw.receive(port, frame);
@@ -232,7 +263,7 @@ export function createEngine(deps: EngineDeps): Engine {
 			}
 		},
 		consoleBytes(ref, bytes) {
-			if (listening(ref)) output(`${ref.machine}:console`, bytes);
+			if (heard(ref)) output(`${ref.machine}:console`, bytes);
 		},
 		ptyOpened(ref, pty) {
 			const entry = listening(ref);
@@ -246,10 +277,12 @@ export function createEngine(deps: EngineDeps): Engine {
 		ptyBytes(ref, pty, bytes) {
 			if (listening(ref)) output(`${ref.machine}:sh${pty}`, bytes);
 		},
-		ptyExited(ref, pty) {
+		ptyExited(ref, pty, lost) {
 			const s = sessions.get(`${ref.machine}:sh${pty}`);
-			if (!listening(ref) || !s || s.state === "closed") return;
+			const entry = listening(ref);
+			if (!entry || !s || s.state === "closed") return;
 			s.state = "closed";
+			if (lost) entry.lost.push(s.id);
 			abandon(s);
 			dispatch({ type: "session/ended", session: s.id });
 		},
@@ -275,7 +308,7 @@ export function createEngine(deps: EngineDeps): Engine {
 				},
 				resize(cols, rows) {
 					const entry = vms.get(s.machine);
-					if (entry && entry.phase !== "stopping" && s.state === "open") entry.vm.resize(s.tty, cols, rows);
+					if (entry && entry.phase !== "dropped" && s.state === "open") entry.vm.resize(s.tty, cols, rows);
 				},
 			}),
 		};
@@ -314,35 +347,40 @@ export function createEngine(deps: EngineDeps): Engine {
 				const { machine, attempt, config } = effect;
 				const previous = vms.get(machine);
 				if (previous && previous.attempt >= attempt) return;
-				if (previous) {
-					endSessions(machine);
-					void previous.vm.stop();
-				}
+				if (previous) endSessions(machine);
+				const released = previous?.vm.stop("save") ?? Promise.resolve();
 				const console = sessions.get(`${machine}:console`);
 				const size = console?.screen.size ?? DEFAULT_TTY_SIZE;
 				const promptToken = deps.promptToken();
-				console?.screen.expectPromptToken(promptToken);
+				if (console) {
+					console.drafting = false;
+					console.quietSince = null;
+					console.screen.expectPromptToken(promptToken);
+				}
 				const image = deps.image(config.spec.image);
 				const vm = deps.startVm(
-					{ machine, attempt, config, cols: size.cols, rows: size.rows, image, promptToken },
+					{ machine, attempt, config, cols: size.cols, rows: size.rows, image, released, promptToken },
 					sink,
 				);
-				vms.set(machine, { attempt, vm, phase: "booting", hosts: config.hosts, promptToken });
+				const { hosts } = config;
+				vms.set(machine, { attempt, vm, phase: "booting", hosts, promptToken, lost: [], stopped: null });
 				return;
 			}
 			case "vm/stop": {
-				const { machine, attempt } = effect;
+				const { machine, attempt, how } = effect;
 				const entry = vms.get(machine);
 				if (!entry) {
-					dispatch({ type: "vm/stopped", machine, attempt });
+					dispatch({ type: "vm/stopped", machine, attempt, clean: true, at: deps.now() });
 					return;
 				}
-				if (attempt < entry.attempt || entry.phase === "stopping") return;
-				entry.phase = "stopping";
-				endSessions(machine);
-				void entry.vm.stop().then(() => {
+				if (attempt < entry.attempt || entry.phase === "dropped") return;
+				if (how !== "drop" && entry.phase === "ending") return;
+				entry.phase = how === "drop" ? "dropped" : "ending";
+				endSessions(machine, STOPPED_FOR[how]?.(machine));
+				const stopped = entry.vm.stop(how);
+				entry.stopped ??= stopped.then((clean) => {
 					if (vms.get(machine) === entry) vms.delete(machine);
-					dispatch({ type: "vm/stopped", machine, attempt });
+					dispatch({ type: "vm/stopped", machine, attempt, clean, at: deps.now() });
 				});
 				return;
 			}
@@ -358,7 +396,7 @@ export function createEngine(deps: EngineDeps): Engine {
 				sw.attach(port, {
 					deliver(frame) {
 						const entry = vms.get(machine);
-						if (entry && entry.phase !== "stopping") entry.vm.deliver(nic, frame);
+						if (entry && entry.phase !== "dropped") entry.vm.deliver(nic, frame);
 					},
 				});
 				// Reserved, not live: the model raises the link when the machine is ready.
@@ -379,7 +417,7 @@ export function createEngine(deps: EngineDeps): Engine {
 				const s = sessions.get(effect.session);
 				if (!s || s.tty === "console" || s.state !== "closed") return;
 				const entry = vms.get(s.machine);
-				if (!entry || entry.phase === "over" || entry.phase === "stopping") {
+				if (!entry || (entry.phase !== "booting" && entry.phase !== "ready")) {
 					dispatch({ type: "session/ended", session: s.id });
 					return;
 				}
@@ -406,6 +444,9 @@ export function createEngine(deps: EngineDeps): Engine {
 				screens.dispose(effect.session);
 				return;
 			}
+			case "screen/note":
+				sessions.get(effect.session)?.screen.note(effect.text);
+				return;
 			case "hosts/publish":
 				published = effect.hosts;
 				for (const entry of vms.values()) {
@@ -506,7 +547,7 @@ export function createEngine(deps: EngineDeps): Engine {
 			untap();
 			for (const port of ports.keys()) sw.detach(port);
 			ports.clear();
-			for (const entry of vms.values()) void entry.vm.stop();
+			for (const entry of vms.values()) void entry.vm.stop("drop");
 			vms.clear();
 			for (const s of sessions.values()) {
 				abandon(s);

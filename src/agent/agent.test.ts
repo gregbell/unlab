@@ -21,7 +21,13 @@ function storeLab() {
 		initialState([{ name: "alpine", label: "alpine 3.24" }], { width: 1300, height: 500 }),
 		(effect) => {
 			if (effect.type === "vm/stop") {
-				store.dispatchRuntime({ type: "vm/stopped", machine: effect.machine, attempt: effect.attempt });
+				store.dispatchRuntime({
+					type: "vm/stopped",
+					machine: effect.machine,
+					attempt: effect.attempt,
+					clean: true,
+					at: 0,
+				});
 			}
 		},
 	);
@@ -68,6 +74,9 @@ function fakeModelContext() {
 const ALL_TOOLS: readonly ToolName[] = [
 	"machines_list",
 	"machines_spawn",
+	"machines_boot",
+	"machines_reboot",
+	"machines_poweroff",
 	"machines_remove",
 	"shell_exec",
 	"shell_read",
@@ -161,8 +170,11 @@ describe("registration", () => {
 			"Boot machines",
 			"List machines",
 			"Plug in or cut cables",
+			"Power machines off",
+			"Power machines on",
 			"Read a terminal",
 			"Read captured frames",
+			"Reboot machines",
 			"Remove machines",
 			"Run a shell command",
 		]);

@@ -10,13 +10,13 @@ import {
 	nicPortsOf,
 	type Phase,
 	type PortNo,
-	plugsOf,
 	type SessionId,
 	sessionLabel,
 } from "../../model/index.ts";
 import { ip4str, NICS, nicName } from "../../net/index.ts";
 import { defineVerb } from "../define.ts";
 import type { ReportBlock } from "../types.ts";
+import { type CableLink, cableLink } from "./link.ts";
 import { count, diskList } from "./words.ts";
 
 /** One NIC as `machines_list` returns it. */
@@ -27,8 +27,8 @@ export interface ListedNic {
 	readonly address: string | null;
 	readonly prefix: number | null;
 	readonly port: PortNo | null;
-	/** Null unless the machine is ready. */
-	readonly link: "up" | "cut" | "unplugged" | null;
+	/** Null unless the machine is ready or off. */
+	readonly link: CableLink | null;
 }
 
 /** One machine as `machines_list` returns it. */
@@ -50,9 +50,7 @@ export interface ListedMachine {
 
 function listed(m: Machine): ListedMachine {
 	const ports = nicPortsOf(m.life);
-	const plugs = plugsOf(m.life);
 	const nics = NICS.slice(0, m.spec.nics.length).map((nic): ListedNic => {
-		const plug = plugs[nic];
 		const { address } = m.spec.nics[nic];
 		return {
 			name: nicName(nic),
@@ -60,7 +58,7 @@ function listed(m: Machine): ListedMachine {
 			address: address && ip4str(address.ip),
 			prefix: address?.prefix ?? null,
 			port: ports[nic] ?? null,
-			link: m.life.phase !== "ready" || !plug ? null : plug.kind === "port" ? plug.link : "unplugged",
+			link: cableLink(m.life, nic),
 		};
 	});
 	const address = addressOf(m);
@@ -76,14 +74,14 @@ function listed(m: Machine): ListedMachine {
 	};
 }
 
+function cableLine({ port, link }: ListedNic): string {
+	if (port === null) return "unplugged";
+	if (link === null) return `port ${port} reserved`;
+	return link === "off" ? `plugged into port ${port}` : `${link} on port ${port}`;
+}
+
 function nicLine(nic: ListedNic): string {
-	const cable =
-		nic.port === null
-			? "unplugged"
-			: nic.link === null
-				? `port ${nic.port} reserved`
-				: `${nic.link} on port ${nic.port}`;
-	return [nic.address === null ? "no address" : `${nic.address}/${nic.prefix}`, nic.mac, cable].join(" · ");
+	return [nic.address === null ? "no address" : `${nic.address}/${nic.prefix}`, nic.mac, cableLine(nic)].join(" · ");
 }
 
 /** A machine with one NIC is one line. With more, each NIC has its own. */
@@ -101,7 +99,7 @@ function lines(m: ListedMachine): string {
 
 function header(rows: readonly ListedMachine[]): string {
 	if (rows.length === 0) return "no machines yet";
-	const phases: readonly Phase[] = ["ready", "booting", "failed", "removing"];
+	const phases: readonly Phase[] = ["ready", "booting", "stopping", "off", "failed", "removing"];
 	const tally = phases.flatMap((phase) => {
 		const n = rows.filter((r) => r.state === phase).length;
 		return n === 0 ? [] : [`${n} ${phase}`];

@@ -49,6 +49,8 @@ export function saveWorkspace(state: LabState): string {
 					};
 				}),
 				failure: m.life.phase === "failed" ? m.life.reason : undefined,
+				// A stop that a reload cuts short ends as it was going to.
+				off: m.life.phase === "off" || (m.life.phase === "stopping" && m.life.next === "off") ? true : undefined,
 			};
 		});
 	return JSON.stringify({
@@ -168,6 +170,7 @@ export function restoreWorkspace(base: LabState, raw: string | null): Step {
 		nodes.push({
 			identity: id,
 			failure: typeof m.failure === "string" ? m.failure : undefined,
+			off: m.off === true,
 			hue,
 			spec: {
 				image: m.image,

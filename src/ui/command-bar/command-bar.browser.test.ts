@@ -86,7 +86,7 @@ function recordedRun(services: AppServices): CommandService["run"] {
 /** What the engine does once rm's event lands: the machine stops and is gone. */
 function removedByTheRuntime(store: Store, machine: "node3"): void {
 	store.dispatchCommand({ type: "cmd/remove", machines: [machine], cause: "bar" });
-	store.dispatchRuntime({ type: "vm/stopped", machine, attempt: 1 });
+	store.dispatchRuntime({ type: "vm/stopped", machine, attempt: 1, clean: true, at: 0 });
 }
 
 async function mountBar(state: LabState = threeReady(), options: { recorded?: boolean } = {}) {
@@ -186,6 +186,8 @@ describe("<unlab-command-bar> CmdOpen: just opened", () => {
 			"capture",
 			"focus",
 			"boot",
+			"reboot",
+			"poweroff",
 		]);
 		const listbox = the('[role="listbox"]');
 		expect(listbox.offsetHeight).toBe(8 * 32 + 2 * 28);

@@ -3,12 +3,24 @@
 // keeps no lifecycle state; it reports, stamped with the attempt it was started
 // for, and whoever listens decides what a report means.
 
-import { type BootConfig, type HostEntry, type MachineName, type NicNo, nicMac } from "../model/index.ts";
+import {
+	type BootConfig,
+	type HostEntry,
+	type MachineName,
+	type Next,
+	type NicNo,
+	nicMac,
+	SHUTDOWN_MS,
+	type StopHow,
+} from "../model/index.ts";
 import { NICS } from "../net/index.ts";
+import { SYNC_MS } from "./power.ts";
 import type { FromVm, ToVm, VmConfig } from "./protocol.ts";
 
 /** A kernel parked in Atomics.wait may never see `stop`, so the thread is dropped this long after asking. */
 export const STOP_GRACE_MS = 250;
+/** How long a worker has to save its disks. One that does not answer is dropped. */
+export const SAVE_MS = 15_000;
 /** What a console or a shell starts at, until its screen has been measured. */
 export const DEFAULT_TTY_SIZE = { cols: 100, rows: 30 } as const;
 
@@ -26,12 +38,17 @@ export interface VmSink {
 	ready(vm: VmRef, bootMs: number): void;
 	/** One sentence, as the runtime gave it. Reported at most once. */
 	failed(vm: VmRef, reason: string): void;
+	/** The guest shut down. */
+	halted(vm: VmRef, next: Next): void;
+	/** A NIC is gone from the running guest. One sentence. */
+	nicLost(vm: VmRef, nic: NicNo, reason: string): void;
 	/** A frame one of the guest's NICs put on the wire. */
 	frame(vm: VmRef, nic: NicNo, frame: Uint8Array): void;
 	consoleBytes(vm: VmRef, bytes: Uint8Array): void;
 	ptyOpened(vm: VmRef, pty: number): void;
 	ptyBytes(vm: VmRef, pty: number, bytes: Uint8Array): void;
-	ptyExited(vm: VmRef, pty: number): void;
+	/** `lost` when the guest took the shell away, as it does when it goes down. */
+	ptyExited(vm: VmRef, pty: number, lost: boolean): void;
 }
 
 export interface Vm {
@@ -43,8 +60,12 @@ export interface Vm {
 	reconfigure(hosts: readonly HostEntry[]): void;
 	/** A frame from the switch, into one of the guest's NICs. */
 	deliver(nic: NicNo, frame: Uint8Array): void;
-	/** Ask the guest to stop, then drop its thread. Every call returns the same promise. */
-	stop(): Promise<void>;
+	/**
+	 * Stop the guest as `how` says, then drop its thread. Every call returns the
+	 * same promise, and `drop` hurries one that waits. It resolves with whether
+	 * the guest shut down and every disk was saved.
+	 */
+	stop(how: StopHow): Promise<boolean>;
 }
 
 export interface VmBoot {
@@ -56,6 +77,8 @@ export interface VmBoot {
 	readonly rows: number;
 	/** Shared by every machine on the same image. */
 	readonly image: Promise<ArrayBufferLike>;
+	/** The machine's last attempt has let go of its disks. */
+	readonly released: Promise<unknown>;
 	/** This boot's prompt token. */
 	readonly promptToken: string;
 }
@@ -84,9 +107,20 @@ export function startVm(boot: VmBoot, sink: VmSink, deps: VmDeps): Vm {
 	const ref: VmRef = { machine: boot.machine, attempt: boot.attempt };
 	const { identity, spec } = boot.config;
 	const startedAt = deps.now();
-	// Set by the first failure and by stop: after either, the attempt is over and says nothing more.
+	// Set by the first failure and by a drop: after either, the attempt has nothing more to say but that its disks are released.
 	let over = false;
-	let stopped: Promise<void> | undefined;
+	let dropped = false;
+	/** The thread failed, so there may be no one to answer. */
+	let crashed = false;
+	let stopped: PromiseWithResolvers<boolean> | undefined;
+
+	let ended = false;
+	const end = (clean: boolean) => {
+		if (ended) return;
+		ended = true;
+		worker.terminate();
+		stopped?.resolve(clean);
+	};
 
 	const fail = (reason: string) => {
 		if (over) return;
@@ -96,6 +130,10 @@ export function startVm(boot: VmBoot, sink: VmSink, deps: VmDeps): Vm {
 
 	const worker = deps.createWorker(boot.machine, {
 		message(m) {
+			if (m.type === "released") {
+				if (!dropped) end(m.clean);
+				return;
+			}
 			if (over) return;
 			switch (m.type) {
 				case "stage":
@@ -120,7 +158,13 @@ export function startVm(boot: VmBoot, sink: VmSink, deps: VmDeps): Vm {
 					sink.ptyBytes(ref, m.sid, m.bytes);
 					return;
 				case "pty-exit":
-					sink.ptyExited(ref, m.sid);
+					sink.ptyExited(ref, m.sid, m.lost);
+					return;
+				case "nic-lost":
+					sink.nicLost(ref, m.nic, m.reason);
+					return;
+				case "halted":
+					sink.halted(ref, m.next);
 					return;
 				case "exited":
 					fail(m.reason || `The guest exited with code ${m.code}.`);
@@ -133,7 +177,10 @@ export function startVm(boot: VmBoot, sink: VmSink, deps: VmDeps): Vm {
 					m satisfies never;
 			}
 		},
-		error: fail,
+		error(reason) {
+			crashed = true;
+			fail(reason);
+		},
 	});
 
 	const post = (m: ToVm, transfer: Transferable[] = []) => worker.postMessage(m, transfer);
@@ -155,8 +202,8 @@ export function startVm(boot: VmBoot, sink: VmSink, deps: VmDeps): Vm {
 	};
 
 	sink.stage(ref, "fetching image");
-	boot.image.then(
-		(image) => {
+	Promise.all([boot.image, boot.released]).then(
+		([image]) => {
 			if (!over) post({ type: "boot", cfg: { ...cfg, image } });
 		},
 		(e: unknown) => fail(e instanceof Error ? e.message : String(e)),
@@ -184,16 +231,21 @@ export function startVm(boot: VmBoot, sink: VmSink, deps: VmDeps): Vm {
 			const copy = frame.slice();
 			post({ type: "frame", nic, frame: copy }, [copy.buffer]);
 		},
-		stop() {
-			stopped ??= new Promise((resolve) => {
-				over = true;
-				post({ type: "stop" });
-				deps.after(STOP_GRACE_MS, () => {
-					worker.terminate();
-					resolve();
-				});
-			});
-			return stopped;
+		stop(how) {
+			const first = !stopped;
+			stopped ??= Promise.withResolvers();
+			if (how === "drop") {
+				if (!dropped) {
+					dropped = over = true;
+					post({ type: "stop" });
+					deps.after(STOP_GRACE_MS, () => end(false));
+				}
+			} else if (first) {
+				post({ type: "release", how });
+				const save = crashed ? STOP_GRACE_MS : SAVE_MS;
+				deps.after(how === "save" ? save : SHUTDOWN_MS + SYNC_MS + save, () => end(false));
+			}
+			return stopped.promise;
 		},
 	};
 }

@@ -50,7 +50,7 @@ const nics = new MachineNics({
 	macs: data.macs,
 	gateway,
 	toSwitch: (nic, frame) => say({ type: "frame", nic, frame }, [frame.buffer as ArrayBuffer]),
-	lost: (reason) => say({ type: "lost", reason }),
+	lost: (_, reason) => say({ type: "lost", reason }),
 });
 
 try {

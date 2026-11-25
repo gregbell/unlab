@@ -29,7 +29,13 @@ function labOf() {
 	const images = [{ name: "alpine", label: "alpine 3.24" }];
 	const store = createStore(initialState(images, { width: 1300, height: 500 }), (effect) => {
 		if (effect.type === "vm/stop") {
-			store.dispatchRuntime({ type: "vm/stopped", machine: effect.machine, attempt: effect.attempt });
+			store.dispatchRuntime({
+				type: "vm/stopped",
+				machine: effect.machine,
+				attempt: effect.attempt,
+				clean: true,
+				at: 0,
+			});
 		}
 	});
 	const deps: CommandDeps = {
@@ -172,6 +178,8 @@ describe("the artboards, replayed", () => {
 			"capture",
 			"focus",
 			"boot",
+			"reboot",
+			"poweroff",
 		]);
 		expect(view.chosen).toBe(3);
 		expect(view.hint).toBe("tab → spawn");

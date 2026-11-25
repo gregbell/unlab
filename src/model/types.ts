@@ -37,8 +37,8 @@ export interface NicRef {
 // ───────────────────────────── machines ─────────────────────────────
 
 export type Source = "bar" | "button" | "agent";
-/** Who caused something the lab reports in words: capture event rows, announcements. */
-export type Cause = Source | "runtime";
+/** Who or what caused something the lab reports in words: capture event rows, announcements. */
+export type Cause = Source | "runtime" | "power";
 
 export type Plug =
 	| { readonly kind: "none" }
@@ -111,11 +111,15 @@ export type Next = "off" | "reboot";
 
 /**
  * The lifecycle is the type. A failed machine has no plugs, so it cannot hold
- * a port. A removing machine keeps its ports (links already down) until it is
- * gone, so nobody can take them mid-teardown. `plugs` and `ports` have one for
- * each NIC, eth0 first. `attempt` stamps every runtime event and goes up with
- * each boot under one name, so a late message from a replaced worker, or from
- * the last machine of that name, is ignored.
+ * a port. An off machine keeps its cables in, so its ports are its own, but
+ * its links are down. A removing machine keeps its ports (links already down)
+ * until it is gone, so nobody can take them mid-teardown. `plugs` and `ports`
+ * have one for each NIC, eth0 first. `attempt` stamps every runtime event and
+ * goes up with each boot under one name, so a late message from a replaced
+ * worker, or from the last machine of that name, is ignored.
+ *
+ * Stopping lasts until the worker is gone and its disks are saved. A guest
+ * that is asked to stop still has its links until then.
  */
 export type Lifecycle =
 	| {
@@ -125,7 +129,25 @@ export type Lifecycle =
 			readonly stage: string;
 			readonly plugs: readonly Plug[];
 	  }
-	| { readonly phase: "ready"; readonly attempt: number; readonly bootMs: number; readonly plugs: readonly Plug[] }
+	| {
+			readonly phase: "ready";
+			readonly attempt: number;
+			readonly bootMs: number;
+			readonly plugs: readonly Plug[];
+			/** NICs that are gone from the running guest. They are back at its next boot. */
+			readonly lost?: readonly NicNo[];
+	  }
+	| {
+			readonly phase: "stopping";
+			readonly attempt: number;
+			readonly next: Next;
+			readonly plugs: readonly Plug[];
+			/** It had been ready, so its links are up. */
+			readonly linked: boolean;
+			/** The shells that closed because of it. */
+			readonly closed: readonly SessionId[];
+	  }
+	| { readonly phase: "off"; readonly attempt: number; readonly plugs: readonly Plug[] }
 	| { readonly phase: "failed"; readonly attempt: number; readonly reason: string }
 	| { readonly phase: "removing"; readonly attempt: number; readonly ports: NicPorts };
 
@@ -140,6 +162,8 @@ export type Machine = Identity & {
 	readonly activeSession: SessionId;
 	/** The next shell number; sh<k> is never reused on this machine. */
 	readonly nextShell: number;
+	/** How its last stop went: whether the guest shut down, or had to be cut short. Null when it has not stopped with its cables in. */
+	readonly lastStop: "clean" | "forced" | null;
 };
 
 export interface Session {
@@ -192,6 +216,9 @@ export type Policy = "run" | "ask" | "off";
 export type ToolName =
 	| "machines_list"
 	| "machines_spawn"
+	| "machines_boot"
+	| "machines_reboot"
+	| "machines_poweroff"
 	| "machines_remove"
 	| "shell_exec"
 	| "shell_read"
@@ -282,6 +309,12 @@ export interface SpawnPlan {
 	readonly request: SpawnRequest;
 }
 
+export interface BootPlan {
+	readonly machine: MachineName;
+	/** Those an off machine holds. For a failed one the lowest free ports, for the NICs that were spawned plugged in. */
+	readonly ports: NicPorts;
+}
+
 export interface LinkChange extends NicRef {
 	readonly up: boolean;
 	readonly port: PortNo;
@@ -306,7 +339,32 @@ export type RuntimeEvent =
 	| { readonly type: "vm/stage"; readonly machine: MachineName; readonly attempt: number; readonly stage: string }
 	| { readonly type: "vm/ready"; readonly machine: MachineName; readonly attempt: number; readonly bootMs: number }
 	| { readonly type: "vm/failed"; readonly machine: MachineName; readonly attempt: number; readonly reason: string }
-	| { readonly type: "vm/stopped"; readonly machine: MachineName; readonly attempt: number }
+	/** The guest shut down or rebooted by itself. Its worker still has disks to save. */
+	| {
+			readonly type: "vm/halted";
+			readonly machine: MachineName;
+			readonly attempt: number;
+			readonly next: Next;
+			/** Shells the guest ended as it went down. */
+			readonly closed: readonly SessionId[];
+	  }
+	/** The worker is gone, and it has let go of its disks. */
+	| {
+			readonly type: "vm/stopped";
+			readonly machine: MachineName;
+			readonly attempt: number;
+			/** The guest shut down, and every disk was saved. */
+			readonly clean: boolean;
+			readonly at: number;
+	  }
+	| {
+			readonly type: "vm/nic-lost";
+			readonly machine: MachineName;
+			readonly attempt: number;
+			readonly nic: NicNo;
+			/** One sentence. */
+			readonly reason: string;
+	  }
 	| { readonly type: "session/opened"; readonly session: SessionId }
 	| { readonly type: "session/ended"; readonly session: SessionId }
 	| { readonly type: "session/shell"; readonly session: SessionId; readonly shell: "prompt" | "running" }
@@ -317,12 +375,8 @@ export type RuntimeEvent =
 export type CommandEvent =
 	| { readonly type: "cmd/spawn"; readonly plan: SpawnPlan; readonly at: number }
 	| { readonly type: "cmd/remove"; readonly machines: readonly MachineName[]; readonly cause: Cause }
-	| {
-			readonly type: "cmd/boot-again";
-			readonly machine: MachineName;
-			readonly ports: NicPorts;
-			readonly at: number;
-	  }
+	| { readonly type: "cmd/boot"; readonly machines: readonly BootPlan[]; readonly at: number }
+	| { readonly type: "cmd/power"; readonly machines: readonly MachineName[]; readonly next: Next }
 	| { readonly type: "cmd/link"; readonly changes: readonly LinkChange[]; readonly cause: Cause }
 	| { readonly type: "cmd/shell"; readonly machine: MachineName }
 	| {
@@ -384,10 +438,13 @@ export interface BootConfig {
 	readonly hosts: readonly HostEntry[];
 }
 
+/** `drop` loses what is not saved yet. The others save every disk, and `off` and `reboot` have the guest shut down first. */
+export type StopHow = "drop" | "save" | Next;
+
 export type Effect =
 	| { readonly type: "vm/boot"; readonly machine: MachineName; readonly attempt: number; readonly config: BootConfig }
-	/** Stop, terminate after 250 ms, then report vm/stopped. Idempotent. */
-	| { readonly type: "vm/stop"; readonly machine: MachineName; readonly attempt: number }
+	/** Stop the worker as `how` says, then report vm/stopped. Idempotent, and `drop` hurries a slower stop. */
+	| { readonly type: "vm/stop"; readonly machine: MachineName; readonly attempt: number; readonly how: StopHow }
 	/** The machine is gone, and nothing can ask for its disks again. */
 	| { readonly type: "disks/delete"; readonly n: number }
 	| { readonly type: "port/attach"; readonly port: PortNo; readonly machine: MachineName; readonly nic: NicNo }
@@ -405,6 +462,8 @@ export type Effect =
 	| { readonly type: "pty/close"; readonly session: SessionId }
 	| { readonly type: "screen/create"; readonly session: SessionId }
 	| { readonly type: "screen/dispose"; readonly session: SessionId }
+	/** A line from the lab in the terminal of a guest that has ended. */
+	| { readonly type: "screen/note"; readonly session: SessionId; readonly text: string }
 	| { readonly type: "hosts/publish"; readonly hosts: readonly HostEntry[] }
 	| { readonly type: "capture/clear" }
 	/** The one polite live region. */
@@ -418,5 +477,7 @@ export interface Step {
 }
 
 export const BOOT_TIMEOUT_MS = 120_000;
+/** How long a guest that is asked to shut down has for it. */
+export const SHUTDOWN_MS = 10_000;
 export const LOG_LIMIT = 200;
 export const AGENT_IDLE_MS = 5 * 60_000;

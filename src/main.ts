@@ -91,10 +91,8 @@ async function main(): Promise<void> {
 	const store: Store = createStore(
 		restored.state,
 		(effect: Effect) => {
-			if (effect.type === "vm/boot") save();
-			if (effect.type === "vm/stop" && store.state.machines[effect.machine]?.life.phase === "removing") {
-				save();
-			}
+			// Before anything is done that a reload could cut short.
+			if (effect.type === "vm/boot" || effect.type === "vm/stop") save();
 			runtime?.run(effect);
 		},
 		schedule,

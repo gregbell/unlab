@@ -88,14 +88,30 @@ export const selectSubnets: (state: LabState) => string = memo(
 	},
 );
 
+export type StateWord = LinkWord | `booting ${string} s` | "powering off" | "rebooting" | "off" | "failed" | "removing";
+
+function stateWord(machine: Machine, now: number): StateWord {
+	const { life } = machine;
+	switch (life.phase) {
+		case "booting":
+			return bootingFor(life.since, now);
+		case "ready":
+			return machineLink(machine) ?? "unplugged";
+		case "stopping":
+			return life.next === "off" ? "powering off" : "rebooting";
+		default:
+			return life.phase;
+	}
+}
+
 export interface RailRow {
 	readonly name: MachineName;
 	readonly hue: HueNo;
 	readonly phase: Phase;
 	/** `10.88.0.12`, `10.88.0.12 · parked`, `no address`, `did not boot`. */
 	readonly line2: string;
-	/** State always has a word: `booting 1.4 s` while booting, the link state once ready, the phase after. */
-	readonly word: LinkWord | `booting ${string} s` | "failed" | "removing";
+	/** State always has a word: `booting 1.4 s` while booting, the link state once ready, and one of its own in any other. */
+	readonly word: StateWord;
 	readonly focused: boolean;
 	readonly parked: boolean;
 }
@@ -112,10 +128,7 @@ export const selectRail: (state: LabState) => readonly RailRow[] = memo(
 				hue: machine.hue,
 				phase: life.phase,
 				line2: isParked ? `${line2} · parked` : line2,
-				word:
-					life.phase === "booting"
-						? bootingFor(life.since, now)
-						: (machineLink(machine) ?? (life.phase === "ready" ? "unplugged" : life.phase)),
+				word: stateWord(machine, now),
 				focused: name === focused,
 				parked: isParked,
 			};
@@ -156,7 +169,7 @@ export interface MachineDetails {
 	readonly phase: Phase;
 	/** The ports its cables hold or have reserved. The element reads the ports' frame counters with them. */
 	readonly ports: readonly PortNo[];
-	/** One for each NIC, eth0 first. Empty unless the machine is ready. */
+	/** One for each NIC, eth0 first. Empty unless the machine takes them now. */
 	readonly cables: readonly Cable[];
 	/** Why it failed, as the runtime said it. */
 	readonly reason: string | null;
@@ -170,8 +183,9 @@ export interface MachineDetails {
 
 function stateValue(machine: Machine, now: number): string {
 	const { life } = machine;
-	if (life.phase === "booting") return bootingFor(life.since, now);
-	return life.phase === "ready" ? `ready · ${Math.round(life.bootMs)} ms` : life.phase;
+	if (life.phase === "ready") return `ready · ${Math.round(life.bootMs)} ms`;
+	if (life.phase === "off" && machine.lastStop === "forced") return "off · did not shut down";
+	return stateWord(machine, now);
 }
 
 function stateTone(machine: Machine): Pick<DetailRow, "tone"> {
@@ -183,7 +197,10 @@ function linkRow(label: "link" | NicName, { life }: Machine, nic: NicNo): Detail
 	const plug = plugsOf(life)[nic];
 	if (!plug || plug.kind === "none") return { label, value: "unplugged" };
 	if (life.phase === "booting") return { label, value: `port ${plug.port} reserved` };
+	if (life.phase === "ready" && life.lost?.includes(nic))
+		return { label, value: "gone from the guest until it reboots", tone: "down" };
 	if (plug.link === "cut") return { label, value: `cable cut on port ${plug.port}`, tone: "down" };
+	if (life.phase === "off") return { label, value: `plugged into port ${plug.port}` };
 	return { label, value: `connected on port ${plug.port}`, tone: "ok" };
 }
 
@@ -213,8 +230,8 @@ function nicRows(machine: Machine): DetailRow[] {
 }
 
 function cables(machine: Machine): readonly Cable[] {
-	if (machine.life.phase !== "ready") return [];
-	const { plugs } = machine.life;
+	if (!ACCEPTS[machine.life.phase].cables) return [];
+	const plugs = plugsOf(machine.life);
 	return NICS.slice(0, plugs.length).map((nic) => ({
 		label: nicLabel(machine, nic),
 		nic: plugs.length > 1 ? nicName(nic) : null,
@@ -265,10 +282,10 @@ export interface PortHolder {
 
 export interface PortView {
 	readonly port: PortNo;
-	/** In `removing` the link is already down and the port frees when the machine is gone. */
-	readonly state: "empty" | "booting" | "up" | "cut" | "removing";
+	/** In `off` the cable is in and the link is down. In `removing` it is down too and the port frees when the machine is gone. */
+	readonly state: "empty" | "booting" | "up" | "cut" | "stopping" | "off" | "removing";
 	readonly machine: PortHolder | null;
-	/** The word under the socket, one of `boot`, `up`, `cut`, `down`. An empty port shows only its number. */
+	/** The word under the socket, one of `boot`, `up`, `cut`, `stop`, `off`, `down`. An empty port shows only its number. */
 	readonly word: string | null;
 	/** What a click will do, for the button's accessible name. Null when a click does nothing. */
 	readonly actionLabel: string | null;
@@ -284,9 +301,11 @@ function portView(port: PortNo, machine: Machine | undefined): PortView {
 	const plug = plugsOf(life)[nic];
 	if (life.phase === "booting" || !plug)
 		return { port, state: "booting", machine: holder, word: "boot", actionLabel: null };
+	if (life.phase === "stopping") return { port, state: "stopping", machine: holder, word: "stop", actionLabel: null };
 	if (plugWord(plug) === "up") {
 		const actionLabel = `Cut the cable from ${label} to port ${port}`;
-		return { port, state: "up", machine: holder, word: "up", actionLabel };
+		const word = life.phase === "off" ? "off" : "up";
+		return { port, state: word, machine: holder, word, actionLabel };
 	}
 	const actionLabel = `Reconnect the cable from ${label} to port ${port}`;
 	return { port, state: "cut", machine: holder, word: "cut", actionLabel };
@@ -369,6 +388,8 @@ function machinesSegment(machines: readonly Machine[]): StatusSegment {
 	if (total === 0) return { key: "machines", text: "0 machines", tone: "quiet" };
 	const parts = [`${count("ready")} of ${plural(total, "machine")} ready`];
 	if (count("booting") > 0) parts.push(`${count("booting")} booting`);
+	if (count("stopping") > 0) parts.push(`${count("stopping")} stopping`);
+	if (count("off") > 0) parts.push(`${count("off")} off`);
 	if (count("failed") > 0) parts.push(`${count("failed")} failed`);
 	return { key: "machines", text: parts.join(", "), tone: count("failed") > 0 ? "down" : "quiet" };
 }

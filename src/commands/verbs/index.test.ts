@@ -19,7 +19,9 @@ describe("VERBS", () => {
 			["link", "<up | down> <machines>", "plug or cut cables"],
 			["capture", "<filter>", "filter the packet capture"],
 			["focus", "<machine or session> [--main | --max]", "move the keyboard to a console"],
-			["boot", "<machine>", "boot a failed machine again"],
+			["boot", "<machines>", "boot machines that are off or failed"],
+			["reboot", "<machines>", "shut machines down and boot them again"],
+			["poweroff", "<machines>", "shut machines down and keep their disks"],
 		]);
 	});
 
@@ -34,6 +36,9 @@ describe("VERBS", () => {
 			["ls", "machines_list", "run", { readOnlyHint: true }],
 			["exec", "shell_exec", "run", { untrustedContentHint: true }],
 			["link", "link_set", "run", {}],
+			["boot", "machines_boot", "run", {}],
+			["reboot", "machines_reboot", "run", {}],
+			["poweroff", "machines_poweroff", "run", {}],
 		]);
 		expect(registry.commands.filter((c) => c.danger).map((c) => c.name)).toEqual(["rm"]);
 	});
@@ -69,6 +74,7 @@ const lines = fc.oneof(
 	fc
 		.array(fc.constantFrom("icmp", "arp", "node1", "or", "port:2"), { maxLength: 4 })
 		.map((w) => `capture ${w.join(" ")}`),
+	fc.tuple(fc.constantFrom("reboot", "poweroff"), word).map(([verb, w]) => `${verb} ${w}`),
 	fc.constantFrom("ls", "sh node1", "sh node3"),
 );
 

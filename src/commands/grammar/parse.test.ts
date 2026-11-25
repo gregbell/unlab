@@ -151,7 +151,7 @@ describe("machines", () => {
 				machines: ["node1", "node2", "node3"],
 				skipped: [
 					{ name: "node4", reason: "still booting" },
-					{ name: "node5", reason: "did not boot" },
+					{ name: "node5", reason: "failed" },
 				],
 				written: "all",
 			},
@@ -164,7 +164,7 @@ describe("machines", () => {
 				machines: ["node1", "node2", "node3"],
 				skipped: [
 					{ name: "node4", reason: "still booting" },
-					{ name: "node5", reason: "did not boot" },
+					{ name: "node5", reason: "failed" },
 				],
 				written: "node*",
 			},
@@ -233,7 +233,7 @@ describe("machine", () => {
 
 	it("refuses a machine in another phase, saying why", () => {
 		expect(parse("boot node1")).toEqual({
-			message: "boot wants a failed machine here, and node1 is already running. Nothing was changed.",
+			message: "boot wants an off or failed machine here, and node1 is already running. Nothing was changed.",
 			token: 1,
 		});
 	});

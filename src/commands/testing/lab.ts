@@ -1,6 +1,7 @@
 import {
 	type Address,
 	type CommandEvent,
+	DEFAULT_POLICIES,
 	HUES,
 	type ImageInfo,
 	type LabState,
@@ -8,6 +9,7 @@ import {
 	type Machine,
 	type MachineName,
 	type Phase,
+	type Plug,
 	PORTS,
 	type PortNo,
 	type Session,
@@ -21,7 +23,7 @@ export interface MachineFixture {
 	/** Left out, node<n>. */
 	readonly name?: MachineName;
 	readonly phase?: Phase;
-	/** Ready machines only. Plugged machines sit on port n. */
+	/** Ready, stopping and off machines only. Plugged machines sit on port n. */
 	readonly link?: "up" | "cut" | "none";
 	readonly shells?: number;
 	/** Null for a machine with none. Left out, the lab's own choice. */
@@ -38,6 +40,10 @@ function portOf(n: number): PortNo {
 	return PORTS[(n - 1) % PORTS.length];
 }
 
+function plugged(f: MachineFixture, port: PortNo): Plug {
+	return f.link === "none" ? { kind: "none" } : { kind: "port", port, link: f.link ?? "up" };
+}
+
 function life(f: MachineFixture): Lifecycle {
 	const port = portOf(f.n);
 	switch (f.phase ?? "ready") {
@@ -48,8 +54,12 @@ function life(f: MachineFixture): Lifecycle {
 				phase: "ready",
 				attempt: 1,
 				bootMs: 3582,
-				plugs: [f.link === "none" ? { kind: "none" } : { kind: "port", port, link: f.link ?? "up" }],
+				plugs: [plugged(f, port)],
 			};
+		case "stopping":
+			return { phase: "stopping", attempt: 1, next: "off", plugs: [plugged(f, port)], linked: true, closed: [] };
+		case "off":
+			return { phase: "off", attempt: 1, plugs: [plugged(f, port)] };
 		case "failed":
 			return { phase: "failed", attempt: 1, reason: "No prompt after 120 s." };
 		case "removing":
@@ -82,6 +92,7 @@ export function labWith(fixtures: readonly MachineFixture[], images: readonly Im
 			sessions: ids,
 			activeSession: ids[0],
 			nextShell: (f.shells ?? 0) + 1,
+			lastStop: null,
 		};
 		for (const id of ids) {
 			sessions[id] = {
@@ -110,15 +121,7 @@ export function labWith(fixtures: readonly MachineFixture[], images: readonly Im
 		capture: { filter: "", paused: false, selected: null },
 		agent: {
 			webmcp: { kind: "absent" },
-			policies: {
-				machines_list: "run",
-				machines_spawn: "ask",
-				machines_remove: "ask",
-				shell_exec: "run",
-				shell_read: "run",
-				link_set: "run",
-				capture_read: "run",
-			},
+			policies: DEFAULT_POLICIES,
 			paused: false,
 			calls: [],
 			firstCallAt: null,

@@ -9,7 +9,7 @@
 // vm.spawn(), so a machine can have several independent shells.
 
 import { BootError, CowDisk, createKernel, type KernelInstance, NetStack, type Pty } from "unkernel";
-import { type Device, disksOf } from "../model/index.ts";
+import { type Device, disksOf, SHUTDOWN_MS } from "../model/index.ts";
 import { defaultName } from "../net/index.ts";
 import { rootStore } from "./disk-stores.ts";
 import { keepSaved, openExtraDisk } from "./extra-disk.ts";
@@ -17,6 +17,7 @@ import { execAsRoot, hostsScript, setupScript } from "./guest.ts";
 import { MemoryDisk } from "./image.ts";
 import { MachineNics } from "./machine-nics.ts";
 import { alpinePackageSetup, packageBackend } from "./package-repositories.ts";
+import { nextOf, saveDisks, shutDown } from "./power.ts";
 import type { FromVm, PtySpec, ToVm, VmConfig } from "./protocol.ts";
 import { createShellTracker } from "./shell-tracker.ts";
 import { memoryShortage, storageFailure } from "./shortage.ts";
@@ -29,9 +30,16 @@ function fail(message: string, fatal: boolean): void {
 	post({ type: "error", message, fatal });
 }
 
-type Queued = Exclude<ToVm, { type: "boot" | "frame" }>;
+type Queued = Exclude<ToVm, { type: "boot" | "frame" | "release" }>;
+
+/** A guest that goes down ends what it runs first: how long before its kernel, when nothing much is left to write. */
+const GOING_DOWN_MS = 5000;
 
 let vm: KernelInstance | undefined;
+/** Once the kernel has ended and its disks are saved. Whether they were. */
+let saved: Promise<boolean> | undefined;
+/** The kernel has ended. */
+let over = false;
 let nics: MachineNics | undefined;
 /** Shells opened beside the console, by session id. */
 const ptys = new Map<number, Pty>();
@@ -52,12 +60,27 @@ self.addEventListener("message", (ev: MessageEvent<ToVm>) => {
 		nics?.deliver(m.nic, m.frame);
 		return;
 	}
+	if (m.type === "release") {
+		void release(m.how);
+		return;
+	}
 	if (booting) {
 		queued.push(m);
 		return;
 	}
 	handle(m);
 });
+
+async function release(how: Extract<ToVm, { type: "release" }>["how"]): Promise<void> {
+	let clean = true;
+	if (vm) {
+		if (how !== "save") clean = await shutDown(vm, how, SHUTDOWN_MS);
+		// Ends nothing when the guest has shut down.
+		void vm.stop({ code: 0, reason: "powered off" });
+		clean = (await saved) === true && clean;
+	}
+	post({ type: "released", clean });
+}
 
 function handle(m: Queued): void {
 	if (!vm) return;
@@ -117,7 +140,8 @@ async function openPty(spec: PtySpec): Promise<void> {
 	try {
 		pty = await vm.spawn(undefined, undefined, { pty: true, cols: spec.cols, rows: spec.rows, term: "xterm-256color" });
 	} catch (e) {
-		post({ type: "pty-exit", sid: spec.sid, code: null, reason: e instanceof Error ? e.message : String(e) });
+		const reason = e instanceof Error ? e.message : String(e);
+		post({ type: "pty-exit", sid: spec.sid, code: null, reason, lost: false });
 		return;
 	}
 	ptys.set(spec.sid, pty);
@@ -146,9 +170,11 @@ async function openPty(spec: PtySpec): Promise<void> {
 			sid: spec.sid,
 			code: end.type === "exit" ? end.code : null,
 			reason: end.type === "exit" ? "" : end.type === "signal" ? `signal ${end.signal}` : end.type,
+			lost: end.type === "lost",
 		});
 	} catch (e) {
-		post({ type: "pty-exit", sid: spec.sid, code: null, reason: e instanceof Error ? e.message : String(e) });
+		const reason = e instanceof Error ? e.message : String(e);
+		post({ type: "pty-exit", sid: spec.sid, code: null, reason, lost: true });
 	}
 	ptys.delete(spec.sid);
 }
@@ -165,7 +191,11 @@ async function boot(c: VmConfig): Promise<void> {
 		gateway,
 		// A right-sized copy already, so transferring it costs nothing further.
 		toSwitch: (nic, frame) => post({ type: "frame", nic, frame }, [frame.buffer]),
-		lost: (reason) => fail(reason, false),
+		lost: (nic, reason) => {
+			setTimeout(() => {
+				if (!over) post({ type: "nic-lost", nic, reason });
+			}, GOING_DOWN_MS);
+		},
 	});
 
 	const [root, ...extra] = disksOf(c);
@@ -209,6 +239,15 @@ async function boot(c: VmConfig): Promise<void> {
 		return;
 	}
 
+	const kept = vm.kernel.block.disks.filter((disk) => disk instanceof CowDisk);
+	saved = vm.exited.then((exit) => {
+		over = true;
+		const next = nextOf(exit);
+		if (next) post({ type: "halted", next });
+		else if (exit.kind !== "stopped") post({ type: "exited", code: exit.code, reason: exit.reason });
+		return saveDisks(kept);
+	});
+
 	post({ type: "booted", ms: Math.round(performance.now() - t0) });
 
 	const shell = createShellTracker();
@@ -225,7 +264,6 @@ async function boot(c: VmConfig): Promise<void> {
 		const copy = bytes.slice();
 		post({ type: "console", bytes: copy }, [copy.buffer]);
 	});
-	void vm.exited.then((r) => post({ type: "exited", code: r.code, reason: r.reason ?? "" }));
 
 	// The NICs, name, addresses, /etc/hosts and the marked prompt; with a
 	// gateway, udhcpc also brings up 10.0.2.15 and the default route. A machine that
@@ -247,7 +285,10 @@ async function boot(c: VmConfig): Promise<void> {
 			return;
 		}
 	} catch (e) {
-		fail(`setup: ${e instanceof Error ? e.message : String(e)}`, true);
+		// A guest that shuts down while it is set up ends the session it is set up through.
+		const late = new Promise((resolve) => setTimeout(resolve, GOING_DOWN_MS));
+		await Promise.race([vm.exited, late]);
+		if (!over) fail(`setup: ${e instanceof Error ? e.message : String(e)}`, true);
 		return;
 	}
 

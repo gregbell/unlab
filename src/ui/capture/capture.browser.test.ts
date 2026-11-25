@@ -324,7 +324,7 @@ describe("a machine with a long name", () => {
 			spawnNamed(web),
 			ready(),
 			remove(web),
-			{ type: "vm/stopped", machine: web, attempt: 1 },
+			{ type: "vm/stopped", machine: web, attempt: 1, clean: true, at: 0 },
 			spawnNamed(web),
 		);
 		capture.names(selectNames(first));

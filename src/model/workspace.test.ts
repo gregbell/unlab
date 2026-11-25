@@ -1,6 +1,19 @@
 import { expect, test } from "vitest";
 import { addressText } from "./selectors.ts";
-import { address, emptyLab, IMAGES, isReady, labWith, linkEvent, machine, run, spawnEvent, WIDE } from "./testkit.ts";
+import {
+	address,
+	emptyLab,
+	hasStopped,
+	IMAGES,
+	isReady,
+	labWith,
+	linkEvent,
+	machine,
+	power,
+	run,
+	spawnEvent,
+	WIDE,
+} from "./testkit.ts";
 import { initialState } from "./update.ts";
 import { restoreWorkspace, saveWorkspace } from "./workspace.ts";
 
@@ -30,6 +43,20 @@ test("each NIC comes back on its own port, cut or unplugged as it was", () => {
 		},
 	});
 	expect(machine(state, "node1").spec.nics).toEqual([{ net: "switch0", address: address("10.88.0.11/24") }]);
+});
+
+test("a machine that is off, or was stopping to be, comes back off with its cables; one that was rebooting boots", () => {
+	let s = labWith(3);
+	s = run(s, linkEvent(s, false, "node1"), power("off", "node1"), hasStopped("node1"));
+	s = run(s, power("off", "node2"), power("reboot", "node3"));
+	const { state, effects } = restoreWorkspace(initialState(IMAGES, WIDE), saveWorkspace(s));
+	expect(state.rail.map((name) => machine(state, name).life)).toMatchObject([
+		{ phase: "off", plugs: [{ kind: "port", port: 1, link: "cut" }] },
+		{ phase: "off", plugs: [{ kind: "port", port: 2, link: "up" }] },
+		{ phase: "booting", plugs: [{ kind: "port", port: 3, link: "up" }] },
+	]);
+	expect(effects.flatMap((e) => (e.type === "vm/boot" ? [e.machine] : []))).toEqual(["node3"]);
+	expect(effects.flatMap((e) => (e.type === "port/attach" ? [e.port] : []))).toEqual([1, 2, 3]);
 });
 
 test("a machine comes back with the addresses and the gateway it was given", () => {

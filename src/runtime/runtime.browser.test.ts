@@ -193,7 +193,10 @@ describe.skipIf(!haveImage)("real kernels", () => {
 		);
 
 		const stopAsked = performance.now();
-		run({ type: "vm/stop", machine: "node1", attempt: 1 }, { type: "vm/stop", machine: "node2", attempt: 1 });
+		run(
+			{ type: "vm/stop", machine: "node1", attempt: 1, how: "drop" },
+			{ type: "vm/stop", machine: "node2", attempt: 1, how: "drop" },
+		);
 		await expect(busy).rejects.toThrow("node1:sh1 closed before the command returned.");
 		await until("node1 stopped", (e) => e.type === "vm/stopped" && e.machine === "node1", 5_000);
 		await until("node2 stopped", (e) => e.type === "vm/stopped" && e.machine === "node2", 5_000);

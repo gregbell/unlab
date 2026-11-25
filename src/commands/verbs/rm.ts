@@ -34,7 +34,7 @@ export const rm = defineVerb({
 	name: "rm",
 	about: "remove machines and their disks",
 	danger: true,
-	phases: ["booting", "ready", "failed"],
+	phases: ["booting", "ready", "stopping", "off", "failed"],
 	grammar: { names: slots.machines() },
 	plan(a, lab) {
 		const machines: Machine[] = [];
