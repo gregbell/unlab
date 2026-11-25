@@ -42,15 +42,18 @@ a guest console, or use `exec` in the bar to address a guest by name.
 | `spawn 1 alpine --addr 10.1.0.1/24`          | Add a machine with an address you choose. With `--nics`, give each interface an address or `none`: `--nics 2 --addr 10.1.0.1/24,none`. |
 | `spawn 1 alpine --no-gateway`                | Add a machine on the switch but without the package gateway. DHCP on its `eth0` then goes to the other machines.                       |
 | `exec node1 -- ping -c 1 10.88.0.12`         | Send one ping from node1 and read the exit code from its shell.                                                                        |
-| `link down node2`                            | Cut node2's cables. Reconnect them with `link up node2`. Name one of several with `node2:eth1`.                                        |
+| `link down node2`                            | Cut node2's cables, whether it is on or off. Reconnect them with `link up node2`. Name one of several with `node2:eth1`.               |
 | `capture arp or node2`                       | Open the Wire view with a filter for ARP or traffic involving node2. `node2:eth1` keeps one interface's frames.                        |
 | `sh node2`                                   | Open another shell on node2.                                                                                                           |
 | `focus node2 --max`                          | Maximise or restore its pane. Use `--main` to promote it to the main pane.                                                             |
-| `boot node2`                                 | Retry a failed boot.                                                                                                                   |
+| `reboot node2`                               | Shut the machine down and boot it again, with its disks, name, addresses, and cables. `reboot` typed in the guest does the same.       |
+| `poweroff node2`                             | Shut the machine down and leave it off. It keeps its disks and its ports, and uses no memory.                                          |
+| `boot node2`                                 | Boot a machine that is off, or retry a failed boot.                                                                                    |
 | `rm node2`                                   | Remove the machine and delete its disks, after a confirmation that lists them.                                                         |
 
 Commands that accept multiple machines can take a list (`node1,node3`), a glob
-(`node*`), or `all`. Globs and `all` select ready machines.
+(`node*`), or `all`. Globs and `all` select the machines that the command can act
+on, such as the ready ones for `exec` and the ones that are off or failed for `boot`.
 
 ## Use the lab with an AI agent
 
@@ -132,7 +135,7 @@ When you are done, turn remote debugging off.
 ### Connect a browser extension
 
 1. [Open the lab](https://gregbell.github.io/unlab/) in Chrome. The bottom right
-   reads `webmcp: 7 tools registered`.
+   reads `webmcp: 10 tools registered`.
 2. To see a call without an agent, click that text, then click **try a call**. The
    call and its result appear in the panel.
 3. Install
@@ -154,15 +157,18 @@ The agent panel sets each tool to `run`, `ask me`, or `off`. A call to an
 `ask me` tool waits until you approve or deny it. **pause tools** hides all of
 them. Your choices survive a reload.
 
-| Tool              | What it does                            | Default  |
-| ----------------- | --------------------------------------- | -------- |
-| `machines_list`   | List machines, addresses, links, disks. | `run`    |
-| `machines_spawn`  | Boot machines.                          | `ask me` |
-| `machines_remove` | Remove machines and delete their disks. | `ask me` |
-| `shell_exec`      | Run a command in a guest's shell.       | `run`    |
-| `shell_read`      | Read what a guest's terminal shows.     | `run`    |
-| `link_set`        | Cut or reconnect a machine's cables.    | `run`    |
-| `capture_read`    | Read captured frames from the switch.   | `run`    |
+| Tool                | What it does                             | Default  |
+| ------------------- | ---------------------------------------- | -------- |
+| `machines_list`     | List machines, addresses, links, disks.  | `run`    |
+| `machines_spawn`    | Boot machines.                           | `ask me` |
+| `machines_boot`     | Boot machines that are off or failed.    | `run`    |
+| `machines_reboot`   | Reboot machines.                         | `run`    |
+| `machines_poweroff` | Shut machines down and keep their disks. | `run`    |
+| `machines_remove`   | Remove machines and delete their disks.  | `ask me` |
+| `shell_exec`        | Run a command in a guest's shell.        | `run`    |
+| `shell_read`        | Read what a guest's terminal shows.      | `run`    |
+| `link_set`          | Cut or reconnect a machine's cables.     | `run`    |
+| `capture_read`      | Read captured frames from the switch.    | `run`    |
 
 Commands run inside the guests, not on your computer. Guest output can contain
 text that tries to instruct the agent, so unlab marks it as untrusted.
@@ -203,9 +209,14 @@ a separate window opens when you wanted your own browser, reconnect `unlab` in
   never formats or mounts one. Alpine partitions it with `fdisk`. Neither image has
   a formatter for a file system its kernel mounts, so install one first: on Alpine,
   `sudo apk add e2fsprogs`.
-- Reloading the page boots each machine from its own IndexedDB-backed disks. Switch
-  ports and cable connections survive a reload. Shell processes and packet captures
-  start fresh. One tab at a time owns the lab.
+- A machine that is shut down or rebooted saves everything its guest has written to a
+  disk first. Its programs, and settings that only its memory held, are gone. Shells
+  opened beside the console close, and the console says so. A guest that does not shut
+  down within 10 seconds is stopped, and the lab says that too.
+- Reloading the page boots each machine from its own IndexedDB-backed disks, except
+  those that are off, which stay off. Switch ports and cable connections survive a
+  reload. Shell processes and packet captures start fresh. One tab at a time owns the
+  lab.
 - A machine that the browser has no memory or storage left for fails with a sentence
   that says which. Remove a machine or free some space, then use `boot`.
 
