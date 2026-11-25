@@ -232,3 +232,7 @@ Stories 1.1, 1.2, 8.1 and 8.2 are met a part at a time, with each step.
 
 | Story | Box | Test |
 | --- | --- | --- |
+| 8.1 | A lab saved before phase 2 opens as one `switch0` | `e2e/saved-labs.spec.ts`: a lab saved before there were several switches opens on one, with a machine called switch1 as it was |
+| 8.1 | A lab saved before phase 2 opens as one `switch0`, from each version | `src/commands/saved-labs.test.ts`: version %i opens as one switch0, with its machines, ports, cuts and names as they were |
+| 8.2 | `spawn 2 alpine`, today's `--net` values and the README's first ping | `e2e/first-run.spec.ts`: a first visit boots two alpine machines, pings the peer and restores the lab on reload; `e2e/network.spec.ts`: pings show in the dock; cutting a cable by its port floods, flushes and reconnects; `e2e/nics.spec.ts`: a NIC left unplugged takes no port, and a machine that needs more ports than are free is refused |
+| 8.2 | A lab with one switch looks as it does now, for named switches | `src/ui/switch/switch.browser.test.ts`: reads switch0, its subnet and the link count in its header; `src/ui/rail/rail.browser.test.ts`: names switch0 at its foot while there is no dock, and drops it once a machine exists; `.audit/phase2/surface.mjs` on 24c38d9 and on this slice prints the same |
