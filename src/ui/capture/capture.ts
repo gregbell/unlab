@@ -4,9 +4,9 @@ import { html, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { live } from "lit/directives/live.js";
 import { createRef, type Ref, ref } from "lit/directives/ref.js";
 import { repeat } from "lit/directives/repeat.js";
-import type { CaptureRow, FrameRow, LinkRow, RouteEnd } from "../../capture/index.ts";
-import { selectNames, type UiEvent } from "../../model/index.ts";
-import { compileFilter, EVERYONE, toPcap } from "../../net/index.ts";
+import type { CaptureRow, CaptureView, FrameRow, LinkRow, RouteEnd } from "../../capture/index.ts";
+import { andList, type SwitchName, selectNames, type UiEvent } from "../../model/index.ts";
+import { compileFilter, EVERYONE, type PcapFrame, toPcap } from "../../net/index.ts";
 import { clearIcon, pauseIcon, resumeIcon, Select, UnlabElement, windowButtons } from "../base/index.ts";
 import { FollowCapture } from "./follow.ts";
 
@@ -29,6 +29,42 @@ function endText(end: RouteEnd): string {
 		case "machine":
 			return end.nic ? `${end.name}:${end.nic}` : end.name;
 	}
+}
+
+/** What to save of the capture, and under what name. */
+interface Saved {
+	readonly frames: Iterable<PcapFrame>;
+	readonly name: string;
+	/** What the button adds to its name, when it is not all that was captured. */
+	readonly title: string | null;
+}
+
+/**
+ * A filter that names a switch or a cable says where to look, so what is saved
+ * is what it shows, and one cable's file has each frame once. Any other filter
+ * is for reading, and every frame is saved, once for each switch that carried it.
+ */
+function saved(capture: CaptureView, switches: readonly SwitchName[]): Saved {
+	const { scope } = capture.filter;
+	if (scope.kind === "everywhere") {
+		const [first, ...others] = switches;
+		const name = others.length === 0 ? `unlab-${first}.pcap` : "unlab.pcap";
+		return { frames: capture.frames(), name, title: null };
+	}
+	const what = scope.kind === "places" ? "filtered" : scope.switch + (scope.port === null ? "" : `-port${scope.port}`);
+	return { frames: capture.matched(), name: `unlab-${what}.pcap`, title: "Save the frames shown" };
+}
+
+/** `lan 3 → 4,5`. */
+function viaText(row: FrameRow): string {
+	return `${row.switch} ${row.in} → ${row.out?.join(",") || "none"}`;
+}
+
+/** The one thing in words: `On lan, in by port 3 and out of ports 4 and 5.` */
+function viaTitle(row: FrameRow): string {
+	const out = row.out ?? [];
+	const went = out.length === 0 ? "out of none" : `out of ${out.length === 1 ? "port" : "ports"} ${andList(out)}`;
+	return `On ${row.switch}, in by port ${row.in} and ${went}.`;
 }
 
 /**
@@ -109,7 +145,7 @@ export class UnlabCapture extends UnlabElement {
 				<button type="button" class="button" title="Clear" @click=${() => this.#dispatch({ type: "ui/capture-clear" })}>
 					${clearIcon}<span class="label">clear</span>
 				</button>
-				${full ? html`<button type="button" class="button" @click=${this.#save}>save .pcap</button>` : nothing}
+				${full ? html`<button type="button" class="button" title=${saved(capture, this.#switches.value).title ?? nothing} @click=${this.#save}>save .pcap</button>` : nothing}
 				<span class="window">${windowButtons("capture", full, {
 					maximise: () => this.#dispatch({ type: "ui/panel-maximised", panel: "capture" }),
 					park: () => this.#dispatch({ type: "ui/panel-parked", panel: "capture" }),
@@ -141,12 +177,13 @@ export class UnlabCapture extends UnlabElement {
 
 	#dockList(): TemplateResult {
 		const rows = this.app.capture.tail(DOCK_ROWS);
-		return html`<div class="rows">
+		const via = this.#showsVia(rows);
+		return html`<div class="rows" data-via=${via}>
 			<div class="track" role="list" aria-label="Newest frames">
 				${repeat(
 					rows,
 					(row) => row.seq,
-					(row) => this.#row(row, { role: "listitem" }),
+					(row) => this.#row(row, { role: "listitem" }, via),
 				)}
 			</div>
 		</div>`;
@@ -161,7 +198,8 @@ export class UnlabCapture extends UnlabElement {
 		const rows = capture.window(first, fits + 2 * OVERSCAN);
 		const selected = this.#ui.value.selected;
 		const active = selected !== null && rows.some((r) => r.seq === selected) ? `frame-${selected}` : nothing;
-		return html`<div class="rows" ${ref(this.#scroller)} @scroll=${this.#onScroll}>
+		const via = this.#showsVia(rows);
+		return html`<div class="rows" data-via=${via} ${ref(this.#scroller)} @scroll=${this.#onScroll}>
 			<div
 				class="track"
 				role="listbox"
@@ -172,22 +210,31 @@ export class UnlabCapture extends UnlabElement {
 				@keydown=${this.#onKey}
 			>
 				<div class="row heading" aria-hidden="true">
-					<span>time</span><span>proto</span><span>route</span><span>len</span><span>info</span>
+					<span>time</span><span>proto</span>${via ? html`<span>switch</span>` : nothing}<span>route</span><span>len</span><span>info</span>
 				</div>
 				${repeat(
 					rows,
 					(row) => row.seq,
 					(row, i) =>
-						this.#row(row, {
-							role: "option",
-							top: (first + i + 1) * ROW,
-							position: first + i + 1,
-							size: total,
-							selected: row.seq === selected,
-						}),
+						this.#row(
+							row,
+							{
+								role: "option",
+								top: (first + i + 1) * ROW,
+								position: first + i + 1,
+								size: total,
+								selected: row.seq === selected,
+							},
+							via,
+						),
 				)}
 			</div>
 		</div>`;
+	}
+
+	/** Where each frame was carried is a column of its own in a lab of several switches, or for what a switch that is gone carried. */
+	#showsVia(rows: readonly CaptureRow[]): boolean {
+		return this.#switches.value.length > 1 || rows.some((row) => row.kind === "frame" && row.switch);
 	}
 
 	#row(
@@ -199,6 +246,7 @@ export class UnlabCapture extends UnlabElement {
 			readonly size?: number;
 			readonly selected?: boolean;
 		},
+		via: boolean,
 	): TemplateResult {
 		const style = at.top === undefined ? nothing : `top: ${at.top}px`;
 		const position = at.position ?? nothing;
@@ -219,6 +267,7 @@ export class UnlabCapture extends UnlabElement {
 		>
 			<span class="time">${row.time}</span>
 			<span class="proto">${row.proto}</span>
+			${via ? html`<span class="via" title=${row.switch ? viaTitle(row) : nothing}>${row.switch ? viaText(row) : nothing}</span>` : nothing}
 			<span class="route" title=${`${endText(row.from)} → ${endText(row.to)}`}
 				>${this.#end(row.from)} <span>→</span> ${this.#end(row.to)}</span
 			>
@@ -272,14 +321,14 @@ export class UnlabCapture extends UnlabElement {
 		this.#dispatch({ type: "ui/frame-selected", seq });
 	}
 
-	/** The whole buffer, ignoring the filter, timestamped on the wall clock. */
+	/** Timestamped on the wall clock. */
 	readonly #save = (): void => {
-		const bytes = toPcap(this.app.capture.frames(), Date.now() - this.app.store.state.now);
+		const { frames, name } = saved(this.app.capture, this.#switches.value);
+		const bytes = toPcap(frames, Date.now() - this.app.store.state.now);
 		const url = URL.createObjectURL(new Blob([new Uint8Array(bytes)], { type: "application/vnd.tcpdump.pcap" }));
 		const link = document.createElement("a");
 		link.href = url;
-		const [first, ...others] = this.#switches.value;
-		link.download = others.length === 0 ? `unlab-${first}.pcap` : "unlab.pcap";
+		link.download = name;
 		link.click();
 		setTimeout(() => URL.revokeObjectURL(url), 10_000);
 	};

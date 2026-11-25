@@ -194,16 +194,27 @@ describe("several switches", () => {
 		made.appendFrame({ switch: lan, from: 1, to: 0b100, flood: "unknown", frame: ping(1, 2) });
 		made.appendFrame({ switch: lan, from: 1, to: 0, flood: "group", frame: arpRequest(1, 2) });
 		made.appendLink({ port: { switch: lan, port: 3 }, machine: "node2", nic: 0, up: false, cause: "bar" });
-		return made.tail(4).map((row) => [row.switch, row.kind === "frame" ? row.note : row.text]);
+		return made
+			.tail(4)
+			.map((row) => (row.kind === "frame" ? [row.switch, row.in, row.out, row.note] : [row.switch, row.text]));
 	};
 
-	test("are named by their rows, with the ports", () => {
+	test("are named by their rows, with the port that a frame came in by and those it went out of", () => {
 		expect(log()).toEqual([
-			["switch0", "flooded to switch0 ports 2 and 3"],
-			["lan", "unknown destination, flooded to lan port 3"],
-			["lan", "flooded, no other lan port is up"],
+			["switch0", 1, [2, 3], "flooded to switch0 ports 2 and 3"],
+			["lan", 1, [3], "unknown destination, flooded to lan port 3"],
+			["lan", 1, [], "flooded, no other lan port is up"],
 			["lan", "lan port 3 link down"],
 		]);
+	});
+
+	test("are in the order that they carried the frames, which can all have one time", () => {
+		const made = createCaptureLog({ schedule: (fn) => fn(), now: () => 0, rowNames: { switchLabel: (on) => on } });
+		const carried = [lan, "switch0", lan, lan, "switch0"] as const;
+		for (const on of carried) made.appendFrame({ switch: on, from: 1, to: 2, flood: null, frame: ping(1, 2) });
+		for (const rows of [made.tail(5), made.window(0, 5)]) {
+			expect(rows.map((row) => [row.seq, row.time, row.switch])).toEqual(carried.map((on, i) => [i + 1, "0.00", on]));
+		}
 	});
 });
 

@@ -94,8 +94,12 @@ export interface CaptureView {
 	/** The position of seq in the filtered view, or -1. */
 	indexOf(seq: number): number;
 	entry(seq: number): CaptureEntry | null;
-	/** Every frame in the buffer, ignoring the filter: Save .pcap and capture_read. */
+	/** The one that the view is filtered by. */
+	readonly filter: CaptureFilter;
+	/** Every frame in the buffer, ignoring the filter. */
 	frames(): Iterable<FrameEntry>;
+	/** Every frame in the filtered view. */
+	matched(): Iterable<FrameEntry>;
 	subscribe(fn: () => void): () => void;
 }
 
@@ -286,6 +290,15 @@ export function createCaptureLog(opts: CaptureOptions): CaptureLog {
 			return -1;
 		},
 		entry: (seq) => at(seq) ?? null,
+		get filter() {
+			return filter;
+		},
+		*matched() {
+			for (let i = 0; i < matchLen; i++) {
+				const e = at(matchAt(i));
+				if (e?.kind === "frame") yield e;
+			}
+		},
 		*frames() {
 			for (let seq = first; seq < next; seq++) {
 				const e = ring[seq % limit];
