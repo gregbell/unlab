@@ -395,6 +395,19 @@ describe("<unlab-capture mode=full>", () => {
 		expect(Math.max(...tops) - Math.min(...tops)).toBeLessThan(6);
 	});
 
+	it("shows the ports whatever the switch is called", async () => {
+		const long = parseSwitchName(LONG_NAME) as SwitchName;
+		const { element } = await mountCapture(
+			"full",
+			(c) => c.frame(ping(1, 2), 1, [2, 3], "unknown", long),
+			lab(spawn(1), ready(), addSwitch(long)),
+		);
+		const [name, ports] = [...part(element, ".row.frame .via").children] as HTMLElement[];
+		expect([text(name), text(ports)]).toEqual([LONG_NAME, "1 → 2,3"]);
+		expect(ports.scrollWidth).toBeLessThanOrEqual(ports.clientWidth);
+		expect(name.scrollWidth).toBeGreaterThan(name.clientWidth);
+	});
+
 	it("has no such column in a lab of one, unless a switch that is gone carried something", async () => {
 		const { element } = await mountCapture("full", twelvePings);
 		expect(text(part(element, ".heading"))).toBe("timeprotorouteleninfo");

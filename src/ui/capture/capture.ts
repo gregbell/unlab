@@ -55,12 +55,7 @@ function saved(capture: CaptureView, switches: readonly SwitchName[]): Saved {
 	return { frames: capture.matched(), name: `unlab-${what}.pcap`, title: "Save the frames shown" };
 }
 
-/** `lan 3 → 4,5`. */
-function viaText(row: FrameRow): string {
-	return `${row.switch} ${row.in} → ${row.out?.join(",") || "none"}`;
-}
-
-/** The one thing in words: `On lan, in by port 3 and out of ports 4 and 5.` */
+/** `On lan, in by port 3 and out of ports 4 and 5.` */
 function viaTitle(row: FrameRow): string {
 	const out = row.out ?? [];
 	const went = out.length === 0 ? "out of none" : `out of ${out.length === 1 ? "port" : "ports"} ${andList(out)}`;
@@ -237,6 +232,14 @@ export class UnlabCapture extends UnlabElement {
 		return this.#switches.value.length > 1 || rows.some((row) => row.kind === "frame" && row.switch);
 	}
 
+	/** `lan 3 → 4,5`. */
+	#via(row: FrameRow): TemplateResult {
+		if (!row.switch) return html`<span class="via"></span>`;
+		return html`<span class="via" title=${viaTitle(row)}
+			><span>${row.switch}</span> <span>${row.in} → ${row.out?.join(",") || "none"}</span></span
+		>`;
+	}
+
 	#row(
 		row: CaptureRow,
 		at: {
@@ -267,7 +270,7 @@ export class UnlabCapture extends UnlabElement {
 		>
 			<span class="time">${row.time}</span>
 			<span class="proto">${row.proto}</span>
-			${via ? html`<span class="via" title=${row.switch ? viaTitle(row) : nothing}>${row.switch ? viaText(row) : nothing}</span>` : nothing}
+			${via ? this.#via(row) : nothing}
 			<span class="route" title=${`${endText(row.from)} → ${endText(row.to)}`}
 				>${this.#end(row.from)} <span>→</span> ${this.#end(row.to)}</span
 			>

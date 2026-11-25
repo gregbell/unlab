@@ -27,6 +27,7 @@ function lab() {
 	return {
 		log,
 		filter: (filter: string) => store.dispatchUi({ type: "ui/capture-filter", filter }),
+		pause: (paused: boolean) => store.dispatchUi({ type: "ui/capture-pause", paused }),
 		spawn(text: string): MachineName {
 			const name = parseChosenName(text);
 			if (isNameFault(name)) throw new Error(name.kind);
@@ -108,4 +109,19 @@ test("a name that nothing had is read once something takes it, and until then th
 	expect(l.shown()).toEqual([1]);
 	l.addSwitch(lan);
 	expect(l.shown()).toEqual([]);
+	l.filter("");
+	l.filter("web");
+	expect(l.shown()).toEqual([1]);
+	l.spawn("web");
+	expect(l.shown()).toEqual([]);
+});
+
+test("pausing the lab's capture pauses the log", () => {
+	const l = lab();
+	l.pause(true);
+	l.frame("switch0", 1, 2);
+	expect(l.shown()).toEqual([]);
+	l.pause(false);
+	l.frame("switch0", 1, 2);
+	expect(l.shown()).toHaveLength(1);
 });

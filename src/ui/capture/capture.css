@@ -225,7 +225,14 @@
 			gap: 1ch;
 		}
 
-		.route > * {
+		/* So do a switch and its ports. */
+		.via {
+			display: grid;
+			grid-template-columns: minmax(0, max-content) minmax(0, max-content);
+			gap: 1ch;
+		}
+
+		:is(.route, .via) > * {
 			overflow: hidden;
 			text-overflow: ellipsis;
 			white-space: nowrap;
