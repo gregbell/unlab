@@ -13,11 +13,7 @@ export const capture = defineVerb({
 	plan(a, lab) {
 		const compiled = compileFilter(a.filter, selectNames(lab));
 		if (compiled.ok) return { filter: a.filter };
-		const said = compiled.error.message.replace(/^Capture /, "capture ");
-		return refuse(
-			`${said} A term is a protocol, a machine, a NIC (node2:eth1), an address, a MAC or port:N.`,
-			"filter",
-		);
+		return refuse(compiled.error.message.replace(/^Capture /, "capture "), "filter");
 	},
 	describe: (plan) => (plan.filter === "" ? "show every frame in Wire" : `show frames matching ${plan.filter} in Wire`),
 	async execute(plan, ctx, deps) {

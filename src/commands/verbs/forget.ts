@@ -1,5 +1,5 @@
 import { type Checkpoint, type CheckpointName, type Machine, type MachineName, sizeText } from "../../model/index.ts";
-import { defineVerb, Refusal, refuse } from "../define.ts";
+import { defineVerb, machineNow, Refusal, refuse } from "../define.ts";
 import * as slots from "../grammar/slots.ts";
 import { checkpointOf } from "./checkpoint.ts";
 
@@ -21,9 +21,9 @@ export const forget = defineVerb({
 	phases: ["booting", "ready", "stopping", "off", "restoring", "failed"],
 	grammar: { machine: slots.machine(), checkpoint: slots.checkpoint() },
 	example: { machine: "node2", checkpoint: "before" },
-	plan(a, lab): Plan | Refusal<"machine" | "checkpoint"> {
-		const machine = lab.machines[a.machine];
-		if (!machine) return refuse(`${a.machine} is gone.`, "machine");
+	plan(a, _lab, ctx): Plan | Refusal<"machine" | "checkpoint"> {
+		const machine = machineNow(a.machine, ctx, "machine");
+		if (machine instanceof Refusal) return machine;
 		const checkpoint = checkpointOf(machine, a.checkpoint);
 		if (checkpoint instanceof Refusal) return checkpoint;
 		if (machine.life.phase === "restoring" && machine.life.from.set === checkpoint.set) {

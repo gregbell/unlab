@@ -31,7 +31,7 @@ export type {
 } from "./define.ts";
 export { defineVerb, Refusal, refuse } from "./define.ts";
 export type { Parsed } from "./grammar/parse.ts";
-export { noField, slotSchema } from "./grammar/schema.ts";
+export { noField, slotSchema, written } from "./grammar/schema.ts";
 export type { ArgsOf, Flag, Grammar, Options, ReadContext, Selection, Slot, Value, Variant } from "./grammar/slots.ts";
 export * as slots from "./grammar/slots.ts";
 export { tokenize } from "./grammar/tokenize.ts";

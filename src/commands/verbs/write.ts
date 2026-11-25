@@ -1,5 +1,5 @@
 import type { MachineName } from "../../model/index.ts";
-import { defineVerb, refuse } from "../define.ts";
+import { defineVerb, machineNow, Refusal, refuse } from "../define.ts";
 import * as slots from "../grammar/slots.ts";
 import { lineError } from "../types.ts";
 import { count } from "./words.ts";
@@ -30,7 +30,7 @@ function textFault(text: string): string | null {
 	const bytes = bytesOf(text);
 	if (bytes > MAX_TEXT_BYTES) return `text has ${bytes} bytes, and write takes at most ${MAX_TEXT_BYTES}.`;
 	if (text.isWellFormed()) return null;
-	return "text has half of a surrogate pair in it, which is no character and cannot be written as UTF-8.";
+	return "text has half of a surrogate pair in it, which is no character, so leave it out.";
 }
 
 export const write = defineVerb({
@@ -50,8 +50,9 @@ export const write = defineVerb({
 		),
 	},
 	example: { machine: "node1", path: "/etc/motd", mode: "644", text: "hello" },
-	plan({ machine, path, owner, mode, text }, lab) {
-		if (lab.machines[machine]?.life.phase !== "ready") return refuse(`${machine} is no longer ready.`, "machine");
+	plan({ machine, path, owner, mode, text }, _lab, ctx) {
+		const ready = machineNow(machine, ctx, "machine");
+		if (ready instanceof Refusal) return ready;
 		const fault = textFault(text);
 		if (fault !== null) return refuse(fault, "text");
 		return { machine, file: { path, owner, mode, text } };

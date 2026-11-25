@@ -76,7 +76,7 @@ describe("tool input as a bar line", () => {
 	it("leaves bad values to the parser, so the agent gets the verb's own sentence", () => {
 		const line = toolOf(spawn).toLine({ count: 2, image: "alpne" });
 		expect(parseLine(registry, String(line), lab)).toMatchObject({
-			message: "No image called alpne. You have alpine, debian. Nothing was changed.",
+			message: "No image is called alpne, so use alpine or debian. Nothing was changed.",
 		});
 	});
 
@@ -88,7 +88,7 @@ describe("tool input as a bar line", () => {
 			message: expect.stringContaining("count must be one word"),
 		});
 		expect(toolOf(exec).toLine({ targets: "all", command: "ls\nrm -rf /" })).toEqual({
-			message: "command must be a string on one line. Nothing was changed.",
+			message: String.raw`command must be a string on one line, not "ls\nrm -rf /". Nothing was changed.`,
 		});
 	});
 

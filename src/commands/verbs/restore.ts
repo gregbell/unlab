@@ -6,7 +6,7 @@ import {
 	planRestore,
 	type RestorePlan,
 } from "../../model/index.ts";
-import { defineVerb, Refusal, refuse } from "../define.ts";
+import { defineVerb, machineNow, Refusal, refuse } from "../define.ts";
 import * as slots from "../grammar/slots.ts";
 import { busySaving, checkpointOf } from "./checkpoint.ts";
 import { whenSettled } from "./power.ts";
@@ -32,15 +32,15 @@ export const restore = defineVerb({
 	phases: ["ready", "off", "failed"],
 	grammar: { machine: slots.machine(), checkpoint: slots.checkpoint() },
 	example: { machine: "node2", checkpoint: "before" },
-	plan(a, lab): Plan | Refusal<"machine" | "checkpoint"> {
-		const machine = lab.machines[a.machine];
-		if (!machine) return refuse(`${a.machine} is gone.`, "machine");
+	plan(a, lab, ctx): Plan | Refusal<"machine" | "checkpoint"> {
+		const machine = machineNow(a.machine, ctx, "machine");
+		if (machine instanceof Refusal) return machine;
 		const busy = busySaving(machine);
 		if (busy) return busy;
 		const checkpoint = checkpointOf(machine, a.checkpoint);
 		if (checkpoint instanceof Refusal) return checkpoint;
 		const restore = planRestore(lab, a.machine, checkpoint.set);
-		if (!restore) return refuse(`${a.machine} is no longer ready, off or failed.`, "machine");
+		if (!restore) throw new Error(`${a.machine} takes a restore, and there is no plan for one`);
 		return isPlanError(restore) ? refuse(planErrorSentence(restore), "machine") : { machine, checkpoint, restore };
 	},
 	describe({ machine, checkpoint }) {

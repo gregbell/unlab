@@ -128,7 +128,9 @@ export function lineError(message: string, token?: number, fix?: string): LineEr
 /** Why a yes to `asked` is not a yes to `now`, or null when they ask the same of the same machines. */
 export function changedSinceAsked(asked: ConfirmText, now: ConfirmText): LineError | null {
 	if (JSON.stringify(asked) === JSON.stringify(now)) return null;
-	return lineError(`What this does to ${asked.machines.map((m) => m.name).join(", ")} has changed since it was asked.`);
+	return lineError(
+		`What this does to ${asked.machines.map((m) => m.name).join(", ")} has changed since it was asked, so ask again.`,
+	);
 }
 
 export function isLineError(value: object): value is LineError {

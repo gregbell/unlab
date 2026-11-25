@@ -22,7 +22,9 @@ describe("reboot and poweroff", () => {
 		await lab.run("poweroff node2");
 		expect(lab.store.state.machines.node2?.life).toMatchObject({ phase: "off", plugs: [{ port: 2 }] });
 		for (const line of ["poweroff node2", "reboot node2", "exec node2 -- ls"]) {
-			expect(lab.parse(line)).toMatchObject({ message: expect.stringContaining("Skipped node2: off.") });
+			expect(lab.parse(line)).toMatchObject({
+				message: expect.stringContaining("a ready machine here, and node2 is off."),
+			});
 		}
 		expect(lab.parse("sh node2")).toMatchObject({
 			message: "sh wants a ready machine here, and node2 is off. Nothing was changed.",

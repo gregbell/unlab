@@ -1,6 +1,7 @@
 import type {
 	CommandEvent,
 	LabState,
+	Machine,
 	MachineName,
 	Phase,
 	Policy,
@@ -13,7 +14,7 @@ import { complete } from "./grammar/complete.ts";
 import { format as formatLine, type Shown, shown, signature as signatureOf } from "./grammar/format.ts";
 import { isPlain, type Parsed, parse } from "./grammar/parse.ts";
 import { lineFromInput, toolSchema } from "./grammar/schema.ts";
-import { type ArgsOf, endsLine, type Grammar, type ReadContext } from "./grammar/slots.ts";
+import { type ArgsOf, endsLine, type Grammar, Miss, type ReadContext, readMachine } from "./grammar/slots.ts";
 import { type Example, type ExampleOf, type Manual, manualOf } from "./manual.ts";
 import {
 	type Completion,
@@ -98,6 +99,12 @@ export class Refusal<K extends string = string> {
 
 export function refuse<K extends string = never>(message: string, at?: K): Refusal<K> {
 	return new Refusal(message, at);
+}
+
+/** The machine, unless the lab has changed since its name was read and the verb does not take it now. */
+export function machineNow<K extends string>(name: MachineName, ctx: ReadContext, at: K): Machine | Refusal<K> {
+	const machine = readMachine(name, ctx);
+	return machine instanceof Miss ? refuse(String(machine.message), at) : machine;
 }
 
 export interface ApprovedRunContext extends RunContext {
@@ -207,7 +214,7 @@ interface VerbBase<N extends string, G extends Grammar, P> {
 	/** The lifecycle phases the verb's machine arguments accept. Only ready machines take commands unless a verb says otherwise. */
 	readonly phases?: readonly Phase[];
 	/** Pure. The only place the verb decides anything. */
-	plan(args: ArgsOf<G>, lab: LabState): P | Refusal<Extract<keyof G, string>>;
+	plan(args: ArgsOf<G>, lab: LabState, ctx: ReadContext): P | Refusal<Extract<keyof G, string>>;
 	/** The preview's `will …` text. */
 	describe(plan: P, lab: LabState): string;
 	/** Dispatches the plan, waits until its effect is visible, and reports. */
@@ -274,7 +281,7 @@ export function defineVerb<N extends string, G extends Grammar, P>(
 	const brief = (line: string) => shown(def.grammar, line);
 
 	const planned = (args: Args, lab: LabState, tokenOf?: Parsed<Args>["tokenOf"]): Planned => {
-		const plan = def.plan(args, lab);
+		const plan = def.plan(args, lab, context(lab));
 		if (!(plan instanceof Refusal)) return { ok: true, plan };
 		return { ok: false, error: lineError(plan.message, plan.at === undefined ? undefined : tokenOf?.[plan.at]) };
 	};

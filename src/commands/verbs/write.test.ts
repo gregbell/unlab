@@ -119,7 +119,7 @@ describe("write", () => {
 		expect(refused("~/motd")).toBe("write wants a path that starts with /, such as /etc/motd, not ~/motd.");
 		expect(refused("/etc/")).toBe("/etc/ names a directory, so give the path of a file in it, such as /etc/motd.");
 		expect(refused("/")).toBe("/ names a directory, so give the path of a file in it, such as /motd.");
-		expect(refused("/etc/../motd")).toBe("write wants a path with no . or .. in it, not /etc/../motd.");
+		expect(refused("/etc/../motd")).toBe("/etc/../motd has a part that is only dots, so give the path without it.");
 		expect(refused("/a\x07b")).toBe("write wants a path with no control characters.");
 		expect(refused(`/${"é".repeat(2048)}`)).toBe("A path has at most 4095 bytes, and that is 4097.");
 		expect(toolOf(lab).toLine({ machine: "node1", path: "", text: "a" })).toMatchObject({
@@ -154,7 +154,7 @@ describe("write", () => {
 		);
 		expect(refused("a\ud800b")).toMatch(/^text has half of a surrogate pair .*Nothing was changed\.$/);
 		expect(toolOf(lab).toLine({ machine: "node1", path: "/a", text: 5 })).toMatchObject({
-			message: "text must be a string. Nothing was changed.",
+			message: "text must be a string, not 5. Nothing was changed.",
 		});
 		expect(toolOf(lab).toLine({ machine: "node1", path: "/a" })).toMatchObject({
 			message: 'write needs the text field, such as "hello". Nothing was changed.',

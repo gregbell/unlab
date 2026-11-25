@@ -133,7 +133,7 @@ describe("restore", () => {
 		await lab.run("poweroff node1");
 		expect(confirm(lab, "restore node1 before")).toMatchObject({ detail: gone });
 		expect(message(lab, "restore node1 after")).toBe(
-			"node1 has no checkpoint called after. It has before. Nothing was changed.",
+			"node1 has no checkpoint called after, so use before. Nothing was changed.",
 		);
 	});
 });

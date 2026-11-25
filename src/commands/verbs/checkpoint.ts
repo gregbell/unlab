@@ -7,10 +7,9 @@ import {
 	savingOf,
 	sizeText,
 } from "../../model/index.ts";
-import { defineVerb, type Refusal, refuse } from "../define.ts";
+import { defineVerb, machineNow, Refusal, refuse } from "../define.ts";
 import * as slots from "../grammar/slots.ts";
 import { lineError } from "../types.ts";
-import { andList } from "./words.ts";
 
 export interface CheckpointData {
 	readonly machine: MachineName;
@@ -29,8 +28,14 @@ export function checkpointOf(machine: Machine, name: CheckpointName) {
 	const { checkpoints } = machine.sets;
 	const found = checkpoints.find((checkpoint) => checkpoint.name === name);
 	if (found) return found;
-	const has = checkpoints.length === 0 ? "none" : andList(checkpoints.map((checkpoint) => checkpoint.name));
-	return refuse(`${machine.name} has no checkpoint called ${name}. It has ${has}.`, "checkpoint");
+	const instead =
+		checkpoints.length === 0
+			? "or any other, so save one first with checkpoint"
+			: `so use ${slots.list(
+					checkpoints.map((checkpoint) => checkpoint.name),
+					"or",
+				)}`;
+	return refuse(`${machine.name} has no checkpoint called ${name}, ${instead}.`, "checkpoint");
 }
 
 /** The set is being saved by the machine that was asked to. */
@@ -48,11 +53,9 @@ export const checkpoint = defineVerb({
 	phases: ["ready", "off"],
 	grammar: { machine: slots.machine(), checkpoint: slots.newCheckpoint() },
 	example: { machine: "node2", checkpoint: "before" },
-	plan(a, lab) {
-		const machine = lab.machines[a.machine];
-		if (machine?.life.phase !== "ready" && machine?.life.phase !== "off") {
-			return refuse(`${a.machine} is no longer ready or off.`, "machine");
-		}
+	plan(a, _lab, ctx) {
+		const machine = machineNow(a.machine, ctx, "machine");
+		if (machine instanceof Refusal) return machine;
 		const busy = busySaving(machine);
 		if (busy) return busy;
 		if (machine.sets.checkpoints.some(({ name }) => name === a.checkpoint)) {

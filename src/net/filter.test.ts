@@ -145,7 +145,10 @@ describe("filter terms", () => {
 	});
 
 	test.each(["node2:", "node2:eth4", "node2:eth01", "node2:sh1", "node0:eth1", ":eth1"])("%s is no NIC", (term) => {
-		expect(compileFilter(term, NAMES)).toMatchObject({ ok: false, error: { message: `Capture cannot read ${term}.` } });
+		expect(compileFilter(term, NAMES)).toMatchObject({
+			ok: false,
+			error: { message: expect.stringMatching(/^Capture cannot read \S+, so use a protocol/) },
+		});
 	});
 
 	test("matching ignores case", () => {
@@ -257,7 +260,13 @@ describe("filter errors", () => {
 	};
 
 	test("an unreadable term names its token and where it sits", () => {
-		expect(error("arp nod3")).toMatchObject({ token: "nod3", start: 4, end: 8, message: "Capture cannot read nod3." });
+		expect(error("arp nod3")).toMatchObject({
+			token: "nod3",
+			start: 4,
+			end: 8,
+			message:
+				"Capture cannot read nod3, so use a protocol, a machine, a NIC (node2:eth1), an address, a MAC or port:N.",
+		});
 		expect(error("  ICMP   Bogus ")).toMatchObject({ token: "Bogus", start: 9, end: 14 });
 	});
 

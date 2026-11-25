@@ -1,5 +1,5 @@
-import { isPlanError, type Machine, planBoot } from "../../model/index.ts";
-import { defineVerb, refuse } from "../define.ts";
+import { isPlanError, type Machine, planBoot, savingOf } from "../../model/index.ts";
+import { defineVerb, machineNow, Refusal, refuse } from "../define.ts";
 import * as slots from "../grammar/slots.ts";
 import { whenSettled } from "./power.ts";
 import { andList, imageLabel, planErrorSentence, ports, skippedPart } from "./words.ts";
@@ -14,16 +14,16 @@ export const boot = defineVerb({
 	phases: ["off", "failed"],
 	grammar: { names: slots.machines() },
 	example: { names: "node2" },
-	plan(a, lab) {
+	plan(a, lab, ctx) {
+		const machines: Machine[] = [];
+		for (const name of a.names.machines) {
+			const machine = machineNow(name, ctx, "names");
+			if (machine instanceof Refusal) return machine;
+			if (savingOf(machine.life)) return refuse(`${name} is saving a checkpoint, so wait until it is done.`, "names");
+			machines.push(machine);
+		}
 		const plans = planBoot(lab, a.names.machines);
 		if (isPlanError(plans)) return refuse(planErrorSentence(plans), "names");
-		const machines = plans.flatMap(({ machine }) => lab.machines[machine] ?? []);
-		const busy = a.names.machines.find(
-			(name) => lab.machines[name]?.life.phase === "off" && !plans.some((p) => p.machine === name),
-		);
-		if (busy) return refuse(`${busy} is saving a checkpoint, so wait until it is done.`, "names");
-		const running = a.names.machines.find((name) => !plans.some(({ machine }) => machine === name));
-		if (running) return refuse(`${running} is not off, and it has not failed.`, "names");
 		return { plans, machines, skipped: a.names.skipped };
 	},
 	describe({ plans, machines, skipped }, lab) {

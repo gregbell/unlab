@@ -27,7 +27,7 @@ describe("spawn", () => {
 		});
 		await lab.lab(1);
 		expect(lab.parsed("spawn 1 alpine").validate(lab.store.state)).toEqual({
-			message: "The lab has no room for another machine. Remove one with rm first. Nothing was changed.",
+			message: "The lab has no room for another machine, so remove one with rm first. Nothing was changed.",
 			token: 1,
 		});
 	});
@@ -39,7 +39,7 @@ describe("spawn", () => {
 			token: 1,
 		});
 		expect(lab.parse("spawn 2 alpne")).toEqual({
-			message: "No image called alpne. You have alpine, debian. Nothing was changed.",
+			message: "No image is called alpne, so use alpine or debian. Nothing was changed.",
 			token: 2,
 			fix: "spawn 2 alpine",
 		});
@@ -77,7 +77,7 @@ describe("spawn", () => {
 		await lab.lab(5);
 		expect(lab.parsed("spawn 1 alpine --nics 4").validate(lab.store.state)).toEqual({
 			message:
-				"switch0 has 3 free ports, and this takes 4. Add --no-net to boot unplugged, or leave some NICs out with --net switch0,none. Nothing was changed.",
+				"switch0 has 3 free ports and this takes 4, so add --no-net to boot unplugged, or leave some NICs out with --net switch0,none. Nothing was changed.",
 			token: 1,
 		});
 		expect(
@@ -90,7 +90,7 @@ describe("spawn", () => {
 		const lab = storeLab();
 		const refusal = (line: string) => lab.parsed(line).validate(lab.store.state);
 		expect(refusal("spawn 1 alpine --nics 5")).toEqual({
-			message: "A machine has 1 to 4 NICs. Nothing was changed.",
+			message: "--nics wants 1 to 4 NICs, not 5. Nothing was changed.",
 			token: 3,
 		});
 		expect(refusal("spawn 1 alpine --net switch0,none")).toEqual({
@@ -148,7 +148,7 @@ describe("spawn", () => {
 		const lab = storeLab();
 		const line = lab.parsed("spawn 1 alpine --mem 4097");
 		expect(line.validate(lab.store.state)).toEqual({
-			message: "A machine has at most 4096 MiB of memory. Nothing was changed.",
+			message: "--mem wants at most 4096 MiB of memory, not 4097. Nothing was changed.",
 			token: 3,
 		});
 		expect(lab.parsed("spawn 1 alpine --mem 4096").validate(lab.store.state)).toBeNull();

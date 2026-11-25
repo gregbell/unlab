@@ -112,7 +112,7 @@ test("deny, abort, off and pause, each as the handoff says", async ({ page }) =>
 	await expect(panel.locator(".call").last()).toContainText("withdrawn by the agent");
 
 	expect(await call(page, "machines_remove", { names: "node9" })).toEqual({
-		error: expect.stringContaining("No machine called node9."),
+		error: expect.stringContaining("No machine is called node9, so use"),
 	});
 
 	await panel.getByRole("combobox", { name: "Policy for machines_list" }).selectOption("off");
@@ -128,7 +128,7 @@ test("deny, abort, off and pause, each as the handoff says", async ({ page }) =>
 test("a yes removes only what it was asked about: not a machine that took the name, nor one that gained a shell", async ({
 	page,
 }) => {
-	const changed = { error: "What this does to web has changed since it was asked. Nothing was changed." };
+	const changed = { error: "What this does to web has changed since it was asked, so ask again. Nothing was changed." };
 	await page.goto("/");
 	await expect(page.getByRole("heading", { name: "Your Linux lab in a tab." })).toBeVisible();
 	const ready = expect(page.getByText("1 of 1 machine ready"));

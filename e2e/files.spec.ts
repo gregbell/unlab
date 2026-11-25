@@ -259,7 +259,7 @@ test("a machine that is not ready is refused with its state", async ({ page }) =
 		.toBe("write wants a ready machine here, and node2 is being restored. Nothing was changed.");
 	expect(await call(page, "machines_poweroff", { names: "node1" })).toHaveProperty("data");
 	expect(await said("node1")).toBe("write wants a ready machine here, and node1 is off. Nothing was changed.");
-	expect(await said("node9")).toMatch(/^No machine called node9\./);
+	expect(await said("node9")).toMatch(/^No machine is called node9, so use /);
 });
 
 /** The guest's next write waits before it starts, as one on a busy guest does. */

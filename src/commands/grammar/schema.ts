@@ -52,6 +52,17 @@ export function toolSchema(grammar: Grammar): JsonSchema {
 	};
 }
 
+/** A value as the input has it, or the start of a long one. */
+export function written(value: unknown): string {
+	let text: string;
+	try {
+		text = JSON.stringify(value) ?? String(value);
+	} catch {
+		text = String(value);
+	}
+	return text.length > 60 ? `${text.slice(0, 59)}…` : text;
+}
+
 const WORD = /^(?!-)(?:\\[\\\s]|\S)+$/;
 
 type Words = { readonly ok: true; readonly words: readonly string[] } | { readonly ok: false; readonly error: string };
@@ -60,7 +71,7 @@ function word(key: string, value: unknown, { quote = String }: Pick<Value<unknow
 	const given = typeof value === "number" && Number.isFinite(value) ? String(value) : value;
 	const text = typeof given === "string" ? quote(given) : given;
 	if (typeof text === "string" && WORD.test(text)) return { ok: true, words: [text] };
-	return { ok: false, error: `${key} must be one word that does not start with -, not ${JSON.stringify(value)}.` };
+	return { ok: false, error: `${key} must be one word that does not start with -, not ${written(value)}.` };
 }
 
 /** An example's value for the field, as it would be written in the tool's input. */
@@ -78,25 +89,25 @@ function slotWords(key: string, slot: Slot, value: unknown): Words {
 			const bare = slot.variants.find((v) => "constant" in v && Object.is(v.constant, value));
 			if (bare) return { ok: true, words: [bare.flag] };
 			const valued = slot.variants.find((v) => "value" in v);
-			const options = slot.variants.map((v) => ("constant" in v ? JSON.stringify(v.constant) : v.flag));
-			if (!valued) return { ok: false, error: `${key} must be one of ${options.join(", ")}.` };
+			const options = [slot.default, ...slot.variants.map((v) => ("constant" in v ? v.constant : v.flag))].map(written);
+			if (!valued) return { ok: false, error: `${key} must be ${list(options, "or")}, not ${written(value)}.` };
 			const w = word(key, value, valued.value);
 			return w.ok ? { ok: true, words: [valued.flag, ...w.words] } : w;
 		}
 		case "rest": {
-			if (typeof value !== "string") return { ok: false, error: `${key} must be a string.` };
+			if (typeof value !== "string") return { ok: false, error: `${key} must be a string, not ${written(value)}.` };
 			const words = value.split(/\s+/).filter((w) => w !== "");
 			const flagLike = words.find((w) => w.startsWith("--"));
-			if (flagLike) return { ok: false, error: `${key} cannot contain ${flagLike}.` };
+			if (flagLike) return { ok: false, error: `${key} cannot contain ${flagLike}, so leave it out.` };
 			return { ok: true, words };
 		}
 		case "passthrough":
 			if (typeof value !== "string" || /[\r\n]/.test(value)) {
-				return { ok: false, error: `${key} must be a string on one line.` };
+				return { ok: false, error: `${key} must be a string on one line, not ${written(value)}.` };
 			}
 			return { ok: true, words: ["--", value] };
 		case "verbatim":
-			if (typeof value !== "string") return { ok: false, error: `${key} must be a string.` };
+			if (typeof value !== "string") return { ok: false, error: `${key} must be a string, not ${written(value)}.` };
 			return { ok: true, words: ["--", value] };
 	}
 }

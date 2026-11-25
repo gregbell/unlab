@@ -11,7 +11,7 @@ export const reboot = defineVerb({
 	danger: false,
 	grammar: { names: slots.machines() },
 	example: { names: "node2" },
-	plan: (a, lab) => planStop(a.names, lab),
+	plan: (a, _lab, ctx) => planStop(a.names, ctx),
 	describe: (plan) => describeStop("reboot", plan),
 	async execute(plan, ctx, deps) {
 		const names = plan.machines.map((m) => m.name);

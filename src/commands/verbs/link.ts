@@ -15,7 +15,7 @@ import {
 	plugsOf,
 } from "../../model/index.ts";
 import { nicName } from "../../net/index.ts";
-import { defineVerb, refuse } from "../define.ts";
+import { defineVerb, machineNow, Refusal, refuse } from "../define.ts";
 import * as slots from "../grammar/slots.ts";
 import { andList, planErrorSentence, ports, skippedPart } from "./words.ts";
 
@@ -81,7 +81,11 @@ export const link = defineVerb({
 	phases: ["ready", "off"],
 	grammar: { link: slots.choice("up plugs the cables in, down cuts them.", ["up", "down"]), machines: slots.cables() },
 	example: { link: "down", machines: "node2" },
-	plan(a, lab) {
+	plan(a, lab, ctx) {
+		for (const { machine } of a.machines.nics) {
+			const now = machineNow(machine, ctx, "machines");
+			if (now instanceof Refusal) return now;
+		}
 		const up = a.link === "up";
 		const changes = planLink(lab, a.machines.nics, up);
 		if (isPlanError(changes)) return refuse(planErrorSentence(changes), "machines");

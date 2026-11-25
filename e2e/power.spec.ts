@@ -170,7 +170,7 @@ test("a machine that is off holds no memory, keeps its ports, name and disks, an
 		await expect(rail(page, "node2")).toContainText("off");
 		await expect(page.locator(".port[data-port='2']")).toContainText("cut");
 		await typed(page, "exec node2 -- ls");
-		await expect(page.locator("unlab-command-bar")).toContainText("Skipped node2: off.");
+		await expect(page.locator("unlab-command-bar")).toContainText("node2 is off.");
 		await page.keyboard.press("Escape");
 	};
 	await off();
@@ -253,20 +253,20 @@ test("an agent's power calls return once the machine is where it was going, and 
 		data: [{ name: "node1", state: "off" }],
 	});
 	expect(await call(page, "shell_exec", { targets: "node1", command: "true" })).toEqual({
-		error: "exec has no machine to type into. Skipped node1: off. Nothing was changed.",
+		error: "exec wants a ready machine here, and node1 is off. Nothing was changed.",
 	});
 	expect(await call(page, "machines_poweroff", { names: "node1" })).toEqual({
-		error: "poweroff has no machine to act on. Skipped node1: off. Nothing was changed.",
+		error: "poweroff wants a ready machine here, and node1 is off. Nothing was changed.",
 	});
 	expect(await call(page, "machines_boot", { names: "all" })).toMatchObject({
-		result: "node1 ready · skipped node2: already running",
+		result: "node1 ready · skipped node2: ready",
 	});
 	expect(await root(page, 1, "cat /root/kept")).toBe("kept");
 
 	await start(page, "reboot", "machines_reboot", { names: "node1" });
 	await expect(rail(page, "node1")).toContainText("booting");
 	expect(await call(page, "shell_exec", { targets: "node1", command: "true" })).toEqual({
-		error: expect.stringMatching(/^exec has no machine to type into\. Skipped node1: (stopping|still booting)\./),
+		error: expect.stringMatching(/^exec wants a ready machine here, and node1 is (stopping|still booting)\./),
 	});
 	await page.evaluate(() => window.running?.get("reboot")?.controller.abort());
 	await expect(finish(page, "reboot")).rejects.toThrow(/abort/i);
@@ -360,7 +360,7 @@ test("a kernel that crashes is a failed machine, and a full-screen program leave
 	const [machine] = (await listed(page)) as unknown as { state: string; reason: string }[];
 	expect(machine).toMatchObject({ state: "failed", reason: expect.stringContaining("Attempted to kill init") });
 	expect(await call(page, "shell_exec", { targets: "node1", command: "true" })).toEqual({
-		error: "exec has no machine to type into. Skipped node1: failed. Nothing was changed.",
+		error: "exec wants a ready machine here, and node1 has failed. Nothing was changed.",
 	});
 	await typed(page, "boot node1");
 	await status(page, "1 of 1 machine ready");

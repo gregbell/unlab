@@ -101,7 +101,7 @@ describe("rm", () => {
 		const lab = storeLab();
 		await lab.lab(3);
 		expect(lab.parse("rm node7")).toEqual({
-			message: "No machine called node7. You have node1, node2, node3. Nothing was changed.",
+			message: "No machine is called node7, so use node1, node2 or node3. Nothing was changed.",
 			token: 1,
 		});
 		expect(lab.parse("rm")).toEqual({ message: "rm needs machines such as node1,node3 or all. Nothing was changed." });
@@ -131,7 +131,7 @@ describe("rm", () => {
 		await lab.run("spawn 1 alpine --name web");
 		expect(await asked.line.run({ source: "agent", signal: lab.signal, approval: asked.approval })).toEqual({
 			kind: "failed",
-			error: { message: "What this does to web has changed since it was asked. Nothing was changed." },
+			error: { message: "What this does to web has changed since it was asked, so ask again. Nothing was changed." },
 		});
 		expect(lab.store.state.machines[web]).toMatchObject({ n: 2, life: { phase: "booting" } });
 	});

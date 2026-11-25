@@ -142,15 +142,21 @@ export interface CableSelection {
 
 const NETWORKS: readonly NicSpec["net"][] = ["switch0", "none"];
 
-const PHASE_WORDS: Readonly<Record<Phase, { readonly skipped: string; readonly sentence: string }>> = {
-	booting: { skipped: "still booting", sentence: "is still booting" },
-	ready: { skipped: "already running", sentence: "is already running" },
-	stopping: { skipped: "stopping", sentence: "is stopping" },
-	restoring: { skipped: "being restored", sentence: "is being restored" },
-	off: { skipped: "off", sentence: "is off" },
-	failed: { skipped: "failed", sentence: "has failed" },
-	removing: { skipped: "being removed", sentence: "is being removed" },
+/** The state a machine is in, as a reason to leave it out. */
+export const PHASE_REASON: Readonly<Record<Phase, string>> = {
+	booting: "still booting",
+	ready: "ready",
+	stopping: "stopping",
+	restoring: "being restored",
+	off: "off",
+	failed: "failed",
+	removing: "being removed",
 };
+
+/** `node1 is still booting`, `node1 has failed`, `node1 has no eth3` */
+export function because({ name, reason }: { readonly name: string; readonly reason: string }): string {
+	return `${name} ${reason === "failed" ? "has failed" : reason.startsWith("no ") ? `has ${reason}` : `is ${reason}`}`;
+}
 
 export function list(words: readonly string[], conjunction: string): string {
 	if (words.length < 2) return words.join("");
@@ -165,17 +171,21 @@ function findMachine(lab: LabState, text: string): Machine | undefined {
 	return machinesOf(lab).find((m) => m.name === text);
 }
 
-function youHave(lab: LabState): string {
-	const names = lab.rail;
-	return names.length === 0 ? "The lab has no machines yet." : `You have ${names.join(", ")}.`;
+/** What there is in place of what was named. */
+function soUse(lab: LabState): string {
+	return lab.rail.length === 0 ? "and the lab has none yet, so spawn one first" : `so use ${list(lab.rail, "or")}`;
 }
 
-function noMachine(lab: LabState, text: string): string {
-	return `No machine called ${text}. ${youHave(lab)}`;
+export function noMachine(lab: LabState, text: string): string {
+	return `No machine is called ${text}, ${soUse(lab)}.`;
+}
+
+export function noMatch(lab: LabState, glob: string): string {
+	return `No machine matches ${glob}, ${soUse(lab)}.`;
 }
 
 function phaseNoun(phases: readonly Phase[]): string {
-	if (phases.length > 2) return "a machine";
+	if (phases.length > 3) return "a machine that is not being removed";
 	return `${phases[0] === "off" ? "an" : "a"} ${list(phases, "or")} machine`;
 }
 
@@ -206,14 +216,19 @@ function allowed(m: Machine, ctx: ReadContext): boolean {
 	return ctx.phases.includes(m.life.phase);
 }
 
-function readMachine(text: string, ctx: ReadContext): Machine | Miss {
+/** Nothing that was named is in a state that the verb takes. */
+export function wrongState(ctx: ReadContext, skipped: Selection["skipped"]): Miss {
+	const why =
+		skipped.length === 0
+			? `The lab has no machine for ${ctx.verb} yet, so spawn one first.`
+			: `${ctx.verb} wants ${phaseNoun(ctx.phases)} here, and ${list(skipped.map(because), "and")}.`;
+	return new Miss(why, undefined, false);
+}
+
+export function readMachine(text: string, ctx: ReadContext): Machine | Miss {
 	const m = findMachine(ctx.lab, text);
 	if (!m) return new Miss(noMachine(ctx.lab, text));
-	if (!allowed(m, ctx)) {
-		const why = `${ctx.verb} wants ${phaseNoun(ctx.phases)} here, and ${m.name} ${PHASE_WORDS[m.life.phase].sentence}.`;
-		return new Miss(why, undefined, false);
-	}
-	return m;
+	return allowed(m, ctx) ? m : wrongState(ctx, [{ name: m.name, reason: PHASE_REASON[m.life.phase] }]);
 }
 
 const POSITIVE_INTEGER = /^[1-9][0-9]*$/;
@@ -256,6 +271,12 @@ export function choice<const C extends string>(about: string, choices: readonly 
 	};
 }
 
+export function noImage(lab: LabState, text: string): string {
+	const names = lab.images.map((i) => i.name);
+	const why = `No image is called ${text}`;
+	return names.length === 0 ? `${why}, and the lab has none.` : `${why}, so use ${list(names, "or")}.`;
+}
+
 export function image(): Value<string> {
 	return {
 		kind: "positional",
@@ -265,9 +286,7 @@ export function image(): Value<string> {
 			"alpine, debian or lab: Alpine with iproute2, tcpdump, curl, dig, ssh, nginx, strace, sfdisk and mkfs installed, for use offline.",
 		read(text, { lab }) {
 			if (lab.images.some((i) => i.name === text)) return text;
-			const names = lab.images.map((i) => i.name);
-			const have = names.length === 0 ? "No images are available." : `You have ${names.join(", ")}.`;
-			return new Miss(`No image called ${text}. ${have}`);
+			return new Miss(noImage(lab, text));
 		},
 		suggest(_typed, { lab }) {
 			return lab.images.map((i) => ({ insert: i.name, label: i.name, detail: i.label }));
@@ -322,7 +341,7 @@ export function newName(): Value<MachineName | null> {
 		label: "name",
 		noun: "a name such as web-1",
 		about:
-			"A name for the machine, which is also its hostname: lowercase letters, digits and hyphens, such as web-1. Left out, node and a number.",
+			"The machine's name and hostname: lowercase letters, digits and hyphens, such as web-1. Left out, node and a number. Needs count 1.",
 		read(text) {
 			const name = parseChosenName(text);
 			return isNameFault(name) ? new Miss(nameFault(text, name), undefined, false) : name;
@@ -397,7 +416,7 @@ function pathFault(path: string, verb: string): string | null {
 	if (/[\p{Cc}\p{Cs}]/u.test(path)) return `${verb} wants a path with no control characters.`;
 	if (path.endsWith("/")) return `${path} names a directory, so give the path of a file in it, such as ${path}motd.`;
 	if (path.split("/").some((part) => part === "." || part === "..")) {
-		return `${verb} wants a path with no . or .. in it, not ${path}.`;
+		return `${path} has a part that is only dots, so give the path without it.`;
 	}
 	const bytes = new TextEncoder().encode(path).length;
 	return bytes > MAX_PATH ? `A path has at most ${MAX_PATH} bytes, and that is ${bytes}.` : null;
@@ -475,7 +494,7 @@ export function target(): Value<MachineName | SessionId> {
 			const session = m.sessions.find((s) => s === text);
 			if (session) return session;
 			const has = m.sessions.map((s) => s.slice(m.name.length + 1));
-			return new Miss(`${m.name} has no session called ${text.slice(colon + 1)}. It has ${has.join(", ")}.`);
+			return new Miss(`${m.name} has no session called ${text.slice(colon + 1)}, so use ${list(has, "or")}.`);
 		},
 		suggest(_typed, ctx) {
 			return machinesOf(ctx.lab)
@@ -501,16 +520,10 @@ function matchMachines(lab: LabState, part: string, span: Miss["part"]): readonl
 	if (part === ALL_MACHINES) return all;
 	if (part.includes("*")) {
 		const matched = all.filter((m) => globMatch(part, m.name));
-		return matched.length > 0 ? matched : new Miss(`No machine matches ${part}. ${youHave(lab)}`, span);
+		return matched.length > 0 ? matched : new Miss(noMatch(lab, part), span);
 	}
 	const m = findMachine(lab, part);
 	return m ? [m] : new Miss(noMachine(lab, part), span);
-}
-
-function nothingToActOn(ctx: ReadContext, skipped: Selection["skipped"]): Miss {
-	const why =
-		skipped.length === 0 ? youHave(ctx.lab) : `Skipped ${skipped.map((s) => `${s.name}: ${s.reason}`).join("; ")}.`;
-	return new Miss(`${ctx.verb} has no machine to act on. ${why}`, undefined, false);
 }
 
 /** Each part of a comma list, with where it sits in the token. */
@@ -545,11 +558,11 @@ export function machines(): Value<Selection> {
 					if (allowed(m, ctx)) {
 						if (!picked.includes(m.name)) picked.push(m.name);
 					} else if (!skipped.some((s) => s.name === m.name)) {
-						skipped.push({ name: m.name, reason: PHASE_WORDS[m.life.phase].skipped });
+						skipped.push({ name: m.name, reason: PHASE_REASON[m.life.phase] });
 					}
 				}
 			}
-			if (picked.length === 0) return nothingToActOn(ctx, skipped);
+			if (picked.length === 0) return wrongState(ctx, skipped);
 			return { machines: picked, skipped, written: text };
 		},
 		suggest(typed, ctx) {
@@ -595,31 +608,27 @@ export function cables(): Value<CableSelection> {
 				if (matched instanceof Miss) return matched;
 				const nic = asked === null ? null : parseNicName(asked);
 				if (asked !== null && nic === null && named !== matched[0]?.name) {
-					return new Miss(
-						`No NIC is called ${asked}. A machine has ${list(NICS.map(nicName), "or")}.`,
-						{ start, end },
-						false,
-					);
+					return new Miss(`No NIC is called ${asked}, so use ${list(NICS.map(nicName), "or")}.`, { start, end }, false);
 				}
 				for (const m of matched) {
 					const has = nicsOf(ctx.lab, m.name);
 					const refs = asked === null ? has : has.filter((ref) => ref.nic === nic);
 					if (!allowed(m, ctx)) {
-						skip(m.name, PHASE_WORDS[m.life.phase].skipped);
+						skip(m.name, PHASE_REASON[m.life.phase]);
 					} else if (refs.length > 0) {
 						for (const ref of refs) picked.set(`${ref.machine}:${ref.nic}`, ref);
 					} else if (named === m.name) {
 						const names = list(
 							has.map((ref) => nicName(ref.nic)),
-							"and",
+							"or",
 						);
-						return new Miss(`${m.name} has no NIC called ${asked}. It has ${names}.`, { start, end }, false);
+						return new Miss(`${m.name} has no NIC called ${asked}, so use ${names}.`, { start, end }, false);
 					} else {
 						skip(m.name, `no ${asked}`);
 					}
 				}
 			}
-			if (picked.size === 0) return nothingToActOn(ctx, skipped);
+			if (picked.size === 0) return wrongState(ctx, skipped);
 			return { nics: [...picked.values()], skipped, written: text };
 		},
 		suggest(typed, ctx) {

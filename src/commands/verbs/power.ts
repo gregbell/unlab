@@ -1,6 +1,6 @@
 import { FORCED_STOP, type LabState, type Machine, type MachineName, type Phase, savingOf } from "../../model/index.ts";
-import { type CommandDeps, type Refusal, refuse } from "../define.ts";
-import type { Selection } from "../grammar/slots.ts";
+import { type CommandDeps, machineNow, Refusal, refuse } from "../define.ts";
+import type { ReadContext, Selection } from "../grammar/slots.ts";
 import type { Result, RunContext } from "../types.ts";
 import { andList, count, skippedPart } from "./words.ts";
 
@@ -22,12 +22,12 @@ export interface PowerPlan<M extends Planned = Planned> {
 
 export function planStop(
 	{ machines: names, skipped }: Selection,
-	lab: LabState,
+	ctx: ReadContext,
 ): PowerPlan<Machine> | Refusal<"names"> {
 	const machines: Machine[] = [];
 	for (const name of names) {
-		const machine = lab.machines[name];
-		if (machine?.life.phase !== "ready") return refuse(`${name} is no longer ready.`, "names");
+		const machine = machineNow(name, ctx, "names");
+		if (machine instanceof Refusal) return machine;
 		const saving = savingOf(machine.life);
 		if (saving) return refuse(`${name} is saving checkpoint ${saving.name}, so wait until it is done.`, "names");
 		machines.push(machine);

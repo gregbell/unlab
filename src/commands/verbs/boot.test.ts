@@ -20,7 +20,7 @@ describe("boot", () => {
 		await lab.run("poweroff node2");
 		lab.runtime({ type: "vm/failed", machine: "node3", attempt: 1, reason: "Kernel panic." });
 		expect(lab.parsed("boot all").preview(lab.store.state)).toMatchObject({
-			will: "boot node2 and node3 · alpine 3.24 · 256 MiB each · plugged into switch0 on ports 2 and 3 · skipped node1: already running",
+			will: "boot node2 and node3 · alpine 3.24 · 256 MiB each · plugged into switch0 on ports 2 and 3 · skipped node1: ready",
 		});
 		await lab.run("boot all");
 		expect(["node1", "node2", "node3"].map((name) => lab.store.state.machines[name as "node1"]?.life)).toMatchObject([
@@ -34,7 +34,7 @@ describe("boot", () => {
 		const lab = storeLab();
 		await lab.lab(1);
 		expect(lab.parse("boot node1")).toEqual({
-			message: "boot has no machine to act on. Skipped node1: already running. Nothing was changed.",
+			message: "boot wants an off or failed machine here, and node1 is ready. Nothing was changed.",
 			token: 1,
 		});
 	});

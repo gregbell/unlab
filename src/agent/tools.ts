@@ -9,6 +9,7 @@ import {
 	isLineError,
 	type JsonSchema,
 	type LineError,
+	noField,
 	type ParsedLine,
 	parseLine,
 	type Registry,
@@ -17,6 +18,7 @@ import {
 	slots,
 	type ToolAnnotations,
 	type ToolFace,
+	written,
 } from "../commands/index.ts";
 import {
 	DEFAULT_POLICIES,
@@ -90,13 +92,7 @@ function capitalised(text: string): string {
 
 /** The call as the agent made it, for a call whose input never became a line. */
 function asCalled(name: ToolName, input: unknown): string {
-	let text: string;
-	try {
-		text = JSON.stringify(input) ?? String(input);
-	} catch {
-		text = String(input);
-	}
-	return `${name}(${text.length > 60 ? `${text.slice(0, 59)}…` : text})`;
+	return `${name}(${written(input)})`;
 }
 
 /** One line for the panel: `exit 0 · hello`, `removed node3`, `2 machines · 2 ready`. */
@@ -188,11 +184,11 @@ type Fields =
 function fieldsOf(name: ToolName, input: unknown, known: readonly string[]): Fields {
 	if (input === undefined || input === null) return { ok: true, fields: new Map() };
 	if (typeof input !== "object" || Array.isArray(input)) {
-		return { ok: false, error: `${name} wants its input as an object of fields.` };
+		return { ok: false, error: `${name} wants its input as an object of fields, not ${written(input)}.` };
 	}
 	const fields = new Map(Object.entries(input));
 	const unknown = [...fields.keys()].find((key) => !known.includes(key));
-	if (unknown !== undefined) return { ok: false, error: `${name} has no field called ${unknown}.` };
+	if (unknown !== undefined) return { ok: false, error: noField(name, unknown, known) };
 	return { ok: true, fields };
 }
 
@@ -205,7 +201,7 @@ function wholeNumber(
 ): number | { readonly error: string } {
 	if (value === undefined) return fallback;
 	if (typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= max) return value;
-	return { error: `${name} wants ${key} as a whole number from 1 to ${max}, not ${JSON.stringify(value)}.` };
+	return { error: `${name} wants ${key} as a whole number from 1 to ${max}, not ${written(value)}.` };
 }
 
 /** A session as given, or a machine's active session. */
@@ -241,7 +237,7 @@ function shellRead(screens: SessionScreens): AgentTool {
 			if (!parsed.ok) return { ok: false, line: asCalled(name, input), error: parsed.error };
 			const machine = parsed.fields.get("machine");
 			if (typeof machine !== "string") {
-				return { ok: false, line: asCalled(name, input), error: `${name} needs the machine field, such as node2.` };
+				return { ok: false, line: asCalled(name, input), error: `${name} needs the machine field, such as "node2".` };
 			}
 			const lines = wholeNumber(name, "lines", parsed.fields.get("lines"), SHELL_LINES, SHELL_MAX);
 			if (typeof lines !== "number") return { ok: false, line: asCalled(name, input), error: lines.error };
@@ -252,10 +248,10 @@ function shellRead(screens: SessionScreens): AgentTool {
 				phases: ["booting", "ready", "stopping", "off", "restoring", "failed"],
 			});
 			if (read instanceof slots.Miss) {
-				return { ok: false, line, error: read.message ?? `${name} wants a machine or session, not ${machine}.` };
+				return { ok: false, line, error: read.message ?? `${name} wants ${target.noun}, not ${machine}.` };
 			}
 			const session = sessionOf(read, lab);
-			if (session === undefined) return { ok: false, line, error: `${machine} is already gone.` };
+			if (session === undefined) return { ok: false, line, error: `${machine} is gone, so list the machines again.` };
 			return {
 				ok: true,
 				line,
@@ -296,15 +292,18 @@ function captureRead(capture: Pick<CaptureView, "frames">): AgentTool {
 			if (!parsed.ok) return { ok: false, line: asCalled(name, input), error: parsed.error };
 			const source = parsed.fields.get("filter") ?? "";
 			if (typeof source !== "string") {
-				return { ok: false, line: asCalled(name, input), error: `${name} wants filter as a string.` };
+				return {
+					ok: false,
+					line: asCalled(name, input),
+					error: `${name} wants filter as a string, not ${written(source)}.`,
+				};
 			}
 			const limit = wholeNumber(name, "limit", parsed.fields.get("limit"), CAPTURE_LIMIT, CAPTURE_MAX);
 			if (typeof limit !== "number") return { ok: false, line: asCalled(name, input), error: limit.error };
 			const line = `${name}(${JSON.stringify(source)}, ${limit})`;
 			const compiled = compileFilter(source, selectNames(lab));
 			if (!compiled.ok) {
-				const terms = "A term is a protocol, a machine, a NIC (node2:eth1), an address, a MAC or port:N.";
-				return { ok: false, line, error: `${compiled.error.message} ${terms}` };
+				return { ok: false, line, error: compiled.error.message };
 			}
 			const { filter } = compiled;
 			const matching = source.trim() === "" ? "" : ` matching ${source.trim()}`;
