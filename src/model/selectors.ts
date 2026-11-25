@@ -19,10 +19,11 @@ import {
 	savingOf,
 } from "./machines.ts";
 import { keyboardHolder, parkedPanes, visiblePanes } from "./panes.ts";
-import { portLabel } from "./switches.ts";
+import { portLabel, switchLabel } from "./switches.ts";
 import { type Tiling, tile } from "./tiling.ts";
 import {
 	AGENT_IDLE_MS,
+	DEFAULT_SWITCH,
 	type HueNo,
 	type LabState,
 	type LogEntry,
@@ -220,6 +221,8 @@ export interface MachineDetails {
 	readonly ports: readonly PortRef[];
 	/** One for each NIC, eth0 first. Empty unless the machine takes them now. */
 	readonly cables: readonly Cable[];
+	/** The switch that `link up` plugs an unplugged NIC into, to name when the lab has several. */
+	readonly plugsInto: SwitchName | null;
 	/** Why it failed, or could not save the last checkpoint, as the runtime said it. */
 	readonly reason: string | null;
 	readonly accepts: Accepts;
@@ -317,6 +320,7 @@ export const selectDetails: (state: LabState) => MachineDetails | null = memo(
 			phase: machine.life.phase,
 			ports: portsOf(machine.life),
 			cables: cables(machine),
+			plugsInto: switchLabel({ switches }, DEFAULT_SWITCH),
 			reason: machine.life.phase === "failed" ? machine.life.reason : (machine.unsaved?.reason ?? null),
 			accepts: ACCEPTS[machine.life.phase],
 			rows: [

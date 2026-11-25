@@ -1,16 +1,21 @@
 import { describe, expect, test } from "vitest";
 import { port0 } from "../../test/support/ports.ts";
+import { planBoot, planLink, planPlug, planRestore, portsOf } from "./machines.ts";
 import { planSwitch, portLabel } from "./switches.ts";
 import {
+	bootEvent,
+	checkpoint,
 	effectsOf,
 	emptyLab,
 	hasFailed,
 	hasStopped,
 	IMAGES,
 	isReady,
+	isSaved,
 	labWith,
 	linkEvent,
 	machine,
+	plugEvent,
 	power,
 	remove,
 	run,
@@ -19,7 +24,17 @@ import {
 	WIDE,
 	withSwitches,
 } from "./testkit.ts";
-import type { CommandEvent, LabState, SwitchName } from "./types.ts";
+import type {
+	CommandEvent,
+	LabState,
+	MachineName,
+	NicNo,
+	NicRef,
+	Place,
+	PortNo,
+	PortRef,
+	SwitchName,
+} from "./types.ts";
 import { initialState, update } from "./update.ts";
 import { restoreWorkspace, saveWorkspace } from "./workspace.ts";
 
@@ -85,6 +100,9 @@ describe("adding a switch", () => {
 	});
 });
 
+/** A link change because a cable was put in or taken out. */
+const replugged = { cause: "bar", plug: true } as const;
+
 describe("removing a switch", () => {
 	/** node1 on switch0, node2 on lan and switch0, node3 on lan. All ready. */
 	const wired = (): LabState => {
@@ -99,9 +117,9 @@ describe("removing a switch", () => {
 		const after = run(s, removed(lan));
 		expect(after.switches).toEqual(["switch0"]);
 		expect(effectsOf(s, removed(lan))).toEqual([
-			{ type: "link/set", port: { switch: "lan", port: 1 }, machine: "node2", nic: 0, up: false, cause: "bar" },
+			{ type: "link/set", port: { switch: "lan", port: 1 }, machine: "node2", nic: 0, up: false, ...replugged },
 			{ type: "port/detach", port: { switch: "lan", port: 1 } },
-			{ type: "link/set", port: { switch: "lan", port: 2 }, machine: "node3", nic: 0, up: false, cause: "bar" },
+			{ type: "link/set", port: { switch: "lan", port: 2 }, machine: "node3", nic: 0, up: false, ...replugged },
 			{ type: "port/detach", port: { switch: "lan", port: 2 } },
 			{ type: "switch/remove", switch: "lan" },
 			{ type: "announce", text: "lan removed" },
@@ -164,6 +182,16 @@ describe("removing a switch", () => {
 		]);
 	});
 
+	test("leaves a NIC that link up plugged in again to boot there, after a failure and a reload", () => {
+		const back = run(wired(), removed(lan));
+		const s = run(back, linkEvent(back, true, "node3"));
+		expect(machine(s, "node3").spec.nics).toMatchObject([{ net: "switch0" }]);
+		const booted = (state: LabState) => run(state, bootEvent(state, "node3")).machines.node3?.life;
+		const failed = run(s, hasFailed("node3"));
+		expect(booted(failed)).toMatchObject({ plugs: [{ port: port0(3), link: "up" }] });
+		expect(booted(reloaded(failed))).toMatchObject({ plugs: [{ port: port0(3), link: "up" }] });
+	});
+
 	test("comes back empty under the same name", () => {
 		const s = added(run(wired(), removed(lan)), lan);
 		expect(s.switches).toEqual(["switch0", "lan"]);
@@ -179,6 +207,139 @@ describe("removing a switch", () => {
 			spec: { nics: [{ net: "none" }, { net: "switch0" }] },
 			life: { plugs: [{ kind: "none" }, { port: port0(2), link: "up" }] },
 		});
+	});
+});
+
+describe("moving a cable", () => {
+	/** node1 and node2 on switch0, the router node3 on switch0 and on none. All ready, with lan empty. */
+	const wired = (): LabState => {
+		let s = added(labWith(2), lan);
+		s = run(s, spawnEvent(s, 1, { net: ["switch0", "none"] }));
+		return run(s, isReady("node3"));
+	};
+	const eth = (machine: MachineName, nic: NicNo = 0): NicRef => ({ machine, nic });
+	const on = (name: SwitchName, port: PortNo): PortRef => ({ switch: name, port });
+	const anywhere = (name: SwitchName): Place => ({ switch: name, port: null });
+
+	test("takes it out of its port, link down first, and puts it in the other with its link up", () => {
+		const s = wired();
+		const moved = plugEvent(s, eth("node1"), anywhere(lan));
+		expect(effectsOf(s, moved)).toEqual([
+			{ type: "link/set", port: port0(1), machine: "node1", nic: 0, up: false, ...replugged },
+			{ type: "port/detach", port: port0(1) },
+			{ type: "port/attach", port: on(lan, 1), machine: "node1", nic: 0 },
+			{ type: "link/set", port: on(lan, 1), machine: "node1", nic: 0, up: true, ...replugged },
+			{ type: "announce", text: "node1 plugged into lan port 1" },
+		]);
+		const after = run(s, moved);
+		expect(machine(after, "node1").life).toEqual({
+			...machine(s, "node1").life,
+			plugs: [{ kind: "port", port: on(lan, 1), link: "up" }],
+		});
+		expect(machine(after, "node1").sessions).toBe(machine(s, "node1").sessions);
+		expect([after.machines.node2, after.machines.node3]).toEqual([s.machines.node2, s.machines.node3]);
+	});
+
+	test("takes the lowest free port, or the one that is named, on its own switch too", () => {
+		let s = wired();
+		s = run(s, plugEvent(s, eth("node1"), on(lan, 3)), plugEvent(s, eth("node2"), anywhere(lan)));
+		expect(planPlug(s, eth("node3", 1), anywhere(lan))).toEqual({ ...eth("node3", 1), to: on(lan, 2) });
+		expect(planPlug(s, eth("node3", 1), anywhere("switch0"))).toEqual({ ...eth("node3", 1), to: port0(1) });
+		s = run(s, plugEvent(s, eth("node1"), on(lan, 8)));
+		expect(portsOf(machine(s, "node1").life)).toEqual([on(lan, 8)]);
+	});
+
+	test("changes nothing when it is there already, whichever free port is lower", () => {
+		const s = run(wired(), remove("node1"), hasStopped("node1"));
+		for (const to of [anywhere("switch0"), port0(2)]) {
+			const step = update(s, plugEvent(s, eth("node2"), to));
+			expect(step.state).toBe(s);
+			expect(step.effects).toEqual([]);
+		}
+		const none = update(s, plugEvent(s, eth("node3", 1), null));
+		expect(none).toEqual({ state: s, effects: [] });
+	});
+
+	test("moves a cut cable as it is, with nothing said of a link that stays down", () => {
+		let s = wired();
+		s = run(s, linkEvent(s, false, "node1"));
+		expect(effectsOf(s, plugEvent(s, eth("node1"), on(lan, 4)))).toEqual([
+			{ type: "port/detach", port: port0(1) },
+			{ type: "port/attach", port: on(lan, 4), machine: "node1", nic: 0 },
+			{ type: "announce", text: "node1 plugged into lan port 4" },
+		]);
+		s = run(s, plugEvent(s, eth("node1"), on(lan, 4)));
+		expect(machine(s, "node1").life).toMatchObject({ plugs: [{ port: on(lan, 4), link: "cut" }] });
+		expect(planLink(s, ["node1"], true)).toMatchObject([{ port: on(lan, 4), newPort: false }]);
+	});
+
+	test("puts a new cable in a NIC that had none, and takes one out", () => {
+		let s = wired();
+		s = run(s, plugEvent(s, eth("node3", 1), anywhere(lan)));
+		expect(machine(s, "node3")).toMatchObject({
+			life: { plugs: [{ port: port0(3) }, { port: on(lan, 1), link: "up" }] },
+			spec: { nics: [{ net: "switch0" }, { net: "lan" }] },
+		});
+		const out = plugEvent(s, eth("node3"), null);
+		expect(effectsOf(s, out)).toEqual([
+			{ type: "link/set", port: port0(3), machine: "node3", nic: 0, up: false, ...replugged },
+			{ type: "port/detach", port: port0(3) },
+			{ type: "announce", text: "node3:eth0 unplugged" },
+		]);
+		s = run(s, out);
+		expect(machine(s, "node3")).toMatchObject({
+			life: { plugs: [{ kind: "none" }, { port: on(lan, 1) }] },
+			spec: { nics: [{ net: "none" }, { net: "lan" }] },
+		});
+	});
+
+	test("refuses a port that is taken, whatever its machine is doing, and a switch with none free", () => {
+		let s = wired();
+		const taken = (by: NicRef, port: PortRef) => ({ kind: "port-taken", port, by });
+		expect(planPlug(s, eth("node1"), port0(3))).toEqual(taken(eth("node3"), port0(3)));
+		expect(planPlug(s, eth("node3", 1), port0(3))).toEqual(taken(eth("node3"), port0(3)));
+		s = run(s, remove("node2"));
+		expect(planPlug(s, eth("node1"), port0(2))).toEqual(taken(eth("node2"), port0(2)));
+		s = run(s, spawnEvent(s, 2, { net: [lan, lan, lan, lan] }));
+		expect(planPlug(s, eth("node1"), anywhere(lan))).toEqual({ kind: "no-ports", switch: "lan", free: 0, wanted: 1 });
+		expect(planPlug(s, eth("node1"), on(wan, 1))).toMatchObject({ kind: "no-ports", switch: "wan" });
+		const stale = update(s, { type: "cmd/plug", plan: { ...eth("node1"), to: on(lan, 1) }, cause: "bar" });
+		expect(stale).toEqual({ state: s, effects: [] });
+	});
+
+	test("is not for a NIC that is not there", () => {
+		const s = wired();
+		for (const nic of [eth("node1", 1), eth("node9")]) {
+			const event: CommandEvent = { type: "cmd/plug", plan: { ...nic, to: on(lan, 1) }, cause: "bar" };
+			expect(update(s, event)).toEqual({ state: s, effects: [] });
+		}
+	});
+
+	test("of a machine that is off changes the port that its boot finds it in", () => {
+		let s = run(wired(), power("off", "node1"), hasStopped("node1"));
+		expect(effectsOf(s, plugEvent(s, eth("node1"), on(lan, 2))).filter(({ type }) => type === "link/set")).toEqual([]);
+		s = run(s, plugEvent(s, eth("node1"), on(lan, 2)));
+		s = run(s, bootEvent(s, "node1"));
+		expect(effectsOf(s, isReady("node1", 2)).filter(({ type }) => type === "link/set")).toMatchObject([
+			{ port: on(lan, 2), up: true },
+		]);
+	});
+
+	test("is where a failed machine boots, what a restore keeps, and what a reload brings back", () => {
+		let s = wired();
+		s = run(s, plugEvent(s, eth("node1"), on(lan, 4)), plugEvent(s, eth("node2"), null));
+		expect(portsOf(machine(reloaded(s), "node1").life)).toEqual([on(lan, 4)]);
+		expect(portsOf(machine(reloaded(s), "node2").life)).toEqual([]);
+		const failed = run(s, hasFailed("node1"), hasFailed("node2"));
+		for (const state of [failed, reloaded(failed)]) {
+			expect(planBoot(state, ["node1", "node2"])).toEqual([
+				{ machine: "node1", ports: [on(lan, 1)] },
+				{ machine: "node2", ports: [null] },
+			]);
+		}
+		s = run(s, checkpoint("node1", "before"), isSaved("node1", 1));
+		expect(planRestore(s, "node1", 1)).toMatchObject({ ports: [on(lan, 4)] });
+		expect(planRestore(run(s, hasFailed("node1")), "node1", 1)).toMatchObject({ ports: [on(lan, 1)] });
 	});
 });
 
@@ -214,6 +375,14 @@ describe("a reload", () => {
 		const s = added(labWith(1), wan, null, lan);
 		expect(reloaded(s).switches).toEqual(["switch0", "wan", "switch1", "lan"]);
 		expect(reloaded(added(emptyLab(), lan)).switches).toEqual(["switch0", "lan"]);
+	});
+
+	test("opens a lab whose plugged NIC was saved with no network on the switch that it is in, for its later boots", () => {
+		const saved = JSON.parse(saveWorkspace(labWith(1)));
+		saved.nodes[0].nics[0].net = "none";
+		const s = restoreWorkspace(initialState(IMAGES, WIDE), JSON.stringify(saved)).state;
+		const failed = run(s, hasFailed("node1"));
+		expect(run(failed, bootEvent(failed, "node1")).machines.node1?.life).toMatchObject({ plugs: [{ port: port0(1) }] });
 	});
 
 	test("refuses a ninth switch, and one with a name that no one could have chosen", () => {

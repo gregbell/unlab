@@ -7,6 +7,7 @@ import {
 	type GiB,
 	isNameFault,
 	type LabState,
+	lowestFreePorts,
 	MAX_EXTRA_DISKS,
 	MAX_EXTRA_GIB,
 	MAX_NAME,
@@ -18,6 +19,7 @@ import {
 	type NicSpec,
 	nicsOf,
 	type Phase,
+	type Place,
 	PORTS,
 	parseCheckpointName,
 	parseChosenName,
@@ -25,6 +27,7 @@ import {
 	parseSwitchName,
 	plugsOf,
 	portLabel,
+	portName,
 	type SessionId,
 	type SwitchName,
 	sizeText,
@@ -154,8 +157,9 @@ export function readNetwork(text: string, lab: LabState): NicSpec["net"] | null 
 	return networksOf(lab).find((network) => network === text) ?? null;
 }
 
-export function noNetwork({ verb, lab }: Pick<ReadContext, "verb" | "lab">, text: string): string {
-	return `${verb} wants ${list(networksOf(lab), "or")} after --net, not ${text}.`;
+/** `part` is the one that is not there, whatever else the list names. */
+export function noNetwork({ verb, lab }: Pick<ReadContext, "verb" | "lab">, part: string): string {
+	return `${verb} wants ${list(networksOf(lab), "or")} after --net, not ${part || "nothing"}.`;
 }
 
 /** The state a machine is in, as a reason to leave it out. */
@@ -416,7 +420,7 @@ export function addedSwitch(): Value<SwitchName> {
 				.map((name) => ({
 					insert: name,
 					label: name,
-					detail: `${takenPorts(lab, name).size} of ${PORTS.length} ports taken`,
+					detail: portsTaken(lab, name),
 				})),
 		format: (name) => name,
 		schema: { type: "string" },
@@ -689,11 +693,7 @@ export function cables(): Value<CableSelection> {
 					} else if (refs.length > 0) {
 						for (const ref of refs) picked.set(`${ref.machine}:${ref.nic}`, ref);
 					} else if (named === m.name) {
-						const names = list(
-							has.map((ref) => nicName(ref.nic)),
-							"or",
-						);
-						return new Miss(`${m.name} has no NIC called ${asked}, so use ${names}.`, { start, end }, false);
+						return new Miss(noNic(m.name, String(asked), has), { start, end }, false);
 					} else {
 						skip(m.name, `no ${asked}`);
 					}
@@ -727,6 +727,112 @@ export function cables(): Value<CableSelection> {
 	};
 }
 
+/** One NIC, named by itself or by a machine that has no other. */
+export function readNic(text: string, ctx: ReadContext): { readonly machine: Machine; readonly nic: NicNo } | Miss {
+	if (text === ALL_MACHINES || /[*,]/.test(text)) {
+		return new Miss(`${ctx.verb} takes one NIC at a time, such as node2 or node2:eth1, not ${text}.`, undefined, false);
+	}
+	const colon = text.indexOf(":");
+	const end = colon < 0 ? text.length : colon;
+	const machine = readMachine(text.slice(0, end), ctx);
+	if (machine instanceof Miss) return new Miss(machine.message, { start: 0, end }, machine.fixable);
+	const has = nicsOf(ctx.lab, machine.name);
+	if (colon < 0) {
+		const [only, ...more] = has;
+		if (more.length === 0) return { machine, nic: only.nic };
+		const names = list(
+			has.map(({ nic }) => `${machine.name}:${nicName(nic)}`),
+			"or",
+		);
+		return new Miss(`${machine.name} has ${has.length} NICs, so use ${names}.`, undefined, false);
+	}
+	const asked = text.slice(colon + 1);
+	const named = has.find(({ nic }) => nicName(nic) === asked);
+	return named ? { machine, nic: named.nic } : new Miss(noNic(machine.name, asked, has), undefined, false);
+}
+
+function noNic(machine: MachineName, asked: string, has: readonly NicRef[]): string {
+	const names = list(
+		has.map(({ nic }) => nicName(nic)),
+		"or",
+	);
+	return asked === ""
+		? `${machine}: names no NIC, so use ${names}.`
+		: `${machine} has no NIC called ${asked}, so use ${names}.`;
+}
+
+export function nic(): Value<string> {
+	return {
+		kind: "positional",
+		label: "nic",
+		noun: "a NIC such as node2:eth1, or a machine that has one",
+		about: "A NIC (node2:eth1), or the name of a machine that has only one (node2).",
+		read(text, ctx) {
+			const read = readNic(text, ctx);
+			return read instanceof Miss ? read : text;
+		},
+		suggest(_typed, ctx) {
+			return machinesOf(ctx.lab)
+				.filter((m) => allowed(m, ctx))
+				.flatMap((m) =>
+					nicsOf(ctx.lab, m.name).map(({ nic }, _at, { length }): Suggestion => {
+						const insert = length === 1 ? m.name : `${m.name}:${nicName(nic)}`;
+						return { insert, label: insert, detail: plugDetail(ctx.lab, m, nic), hue: m.hue };
+					}),
+				);
+		},
+		format: (written) => written,
+		schema: { type: "string" },
+	};
+}
+
+/** A switch, or one of its ports as `portName` writes it. */
+export function readPlace(text: string, lab: LabState): Place | Miss {
+	const colon = text.indexOf(":");
+	const end = colon < 0 ? text.length : colon;
+	const named = text.slice(0, end);
+	const on = lab.switches.find((name) => name === named);
+	if (!on) {
+		const why =
+			named === "none"
+				? "none is no switch, so use unplug to take the cable out."
+				: `${named === "" ? `${text} names no switch` : `No switch is called ${named}`}, so use ${list(lab.switches, "or")}.`;
+		return new Miss(why, { start: 0, end }, named !== "none");
+	}
+	if (colon < 0) return { switch: on, port: null };
+	const port = PORTS.find((no) => String(no) === text.slice(colon + 1));
+	if (port) return { switch: on, port };
+	const [first, last] = [PORTS[0], PORTS[PORTS.length - 1]].map((no) => portName({ switch: on, port: no }));
+	return new Miss(`${text} is no port, so use one from ${first} to ${last}.`, undefined, false);
+}
+
+const portsTaken = (lab: LabState, on: SwitchName): string =>
+	`${takenPorts(lab, on).size} of ${PORTS.length} ports taken`;
+
+/** Where a cable goes. */
+export function place(): Value<string> {
+	return {
+		kind: "positional",
+		label: "switch[:port]",
+		noun: "a switch or a port such as lan:3",
+		about: "A switch (lan) for its lowest free port, or one of its ports (lan:3).",
+		read(text, { lab }) {
+			const read = readPlace(text, lab);
+			return read instanceof Miss ? read : text;
+		},
+		suggest(typed, { lab }) {
+			const on = lab.switches.find((name) => typed.startsWith(`${name}:`));
+			if (!on) return lab.switches.map((name) => ({ insert: name, label: name, detail: portsTaken(lab, name) }));
+			return lowestFreePorts(lab, on, PORTS.length).map((port) => {
+				const insert = portName({ switch: on, port });
+				return { insert, label: insert, detail: "free" };
+			});
+		},
+		format: (written) => written,
+		schema: { type: "string" },
+	};
+}
+
 /** What each NIC is plugged into: one answer for all of them, or a comma list with one for each. */
 export function networks(): Value<string> {
 	return {
@@ -736,7 +842,7 @@ export function networks(): Value<string> {
 		about: `A switch or none for every NIC, or a comma list with one for each, eth0 first, such as ${DEFAULT_SWITCH},none. A NIC with none boots unplugged.`,
 		read(text, ctx) {
 			for (const { part, ...span } of listParts(text)) {
-				if (readNetwork(part, ctx.lab) === null) return new Miss(noNetwork(ctx, text), span);
+				if (readNetwork(part, ctx.lab) === null) return new Miss(noNetwork(ctx, part), span);
 			}
 			return text;
 		},

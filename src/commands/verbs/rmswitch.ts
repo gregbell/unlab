@@ -22,7 +22,7 @@ const label = ({ machine, nic }: HeldPort): string => nicLabel(machine, nic);
 export const rmswitch = defineVerb({
 	name: "rmswitch",
 	about: "remove a switch and unplug what is in it",
-	description: `Remove a switch. The NICs plugged into it are left unplugged, also after a reload, and their machines run on. link up then plugs such a NIC into ${DEFAULT_SWITCH}, as it does any NIC that is unplugged. ${DEFAULT_SWITCH} itself cannot be removed. Returns the NICs that were unplugged.`,
+	description: `Remove a switch. The NICs plugged into it are left unplugged, also after a reload, and their machines run on. link up then plugs such a NIC into ${DEFAULT_SWITCH}, as it does any NIC that is unplugged, and plug into any switch. ${DEFAULT_SWITCH} itself cannot be removed. Returns the NICs that were unplugged.`,
 	danger: true,
 	grammar: { switch: slots.addedSwitch() },
 	example: { switch: "lan" },

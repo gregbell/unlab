@@ -131,6 +131,7 @@ const TABLE: Readonly<Record<Phase, Readonly<Record<Column, Outcome>>>> = {
 		"cmd/restore": "ignored",
 		"cmd/forget": "untouched",
 		"cmd/link": "ignored",
+		"cmd/plug": "ignored",
 		"cmd/shell": "ignored",
 		"cmd/focus": "untouched",
 		"cmd/capture": "untouched",
@@ -163,6 +164,7 @@ const TABLE: Readonly<Record<Phase, Readonly<Record<Column, Outcome>>>> = {
 		"cmd/restore": "restoring",
 		"cmd/forget": "untouched",
 		"cmd/link": "ready",
+		"cmd/plug": "ready",
 		"cmd/shell": "ready",
 		"cmd/focus": "untouched",
 		"cmd/capture": "untouched",
@@ -195,6 +197,7 @@ const TABLE: Readonly<Record<Phase, Readonly<Record<Column, Outcome>>>> = {
 		"cmd/restore": "ignored",
 		"cmd/forget": "untouched",
 		"cmd/link": "ignored",
+		"cmd/plug": "ignored",
 		"cmd/shell": "ignored",
 		"cmd/focus": "untouched",
 		"cmd/capture": "untouched",
@@ -227,6 +230,7 @@ const TABLE: Readonly<Record<Phase, Readonly<Record<Column, Outcome>>>> = {
 		"cmd/restore": "restoring",
 		"cmd/forget": "untouched",
 		"cmd/link": "off",
+		"cmd/plug": "off",
 		"cmd/shell": "ignored",
 		"cmd/focus": "untouched",
 		"cmd/capture": "untouched",
@@ -259,6 +263,7 @@ const TABLE: Readonly<Record<Phase, Readonly<Record<Column, Outcome>>>> = {
 		"cmd/restore": "ignored",
 		"cmd/forget": "ignored",
 		"cmd/link": "ignored",
+		"cmd/plug": "ignored",
 		"cmd/shell": "ignored",
 		"cmd/focus": "untouched",
 		"cmd/capture": "untouched",
@@ -291,6 +296,7 @@ const TABLE: Readonly<Record<Phase, Readonly<Record<Column, Outcome>>>> = {
 		"cmd/restore": "restoring",
 		"cmd/forget": "untouched",
 		"cmd/link": "ignored",
+		"cmd/plug": "ignored",
 		"cmd/shell": "ignored",
 		"cmd/focus": "untouched",
 		"cmd/capture": "untouched",
@@ -323,6 +329,7 @@ const TABLE: Readonly<Record<Phase, Readonly<Record<Column, Outcome>>>> = {
 		"cmd/restore": "ignored",
 		"cmd/forget": "ignored",
 		"cmd/link": "ignored",
+		"cmd/plug": "ignored",
 		"cmd/shell": "ignored",
 		"cmd/focus": "untouched",
 		"cmd/capture": "untouched",
@@ -392,6 +399,8 @@ function eventFor(column: Column, s: LabState, name: MachineName, attempt: numbe
 				changes: [{ machine: name, nic: 0, up: false, port: port0(1), newPort: false }],
 				cause: "bar",
 			};
+		case "cmd/plug":
+			return { type: "cmd/plug", plan: { machine: name, nic: 0, to: port0(5) }, cause: "bar" };
 		case "cmd/shell":
 			return { type: "cmd/shell", machine: name };
 		case "cmd/focus":
@@ -631,6 +640,8 @@ describe("ports", () => {
 		]);
 		s = run(s, linkEvent(s, true, "node2"));
 		expect(machine(s, "node2").life).toMatchObject({ plugs: [{ kind: "port", port: port0(1), link: "up" }] });
+		s = run(s, hasFailed("node2"), remove("node3"), hasStopped("node3"));
+		expect(planBoot(s, ["node2"])).toEqual([{ machine: "node2", ports: [port0(1)] }]);
 	});
 });
 

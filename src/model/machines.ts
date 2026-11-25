@@ -40,8 +40,11 @@ import {
 	type NicRef,
 	type NicSpec,
 	type Phase,
+	type Place,
 	type PlanError,
 	type Plug,
+	type PlugPlan,
+	type PlugPlanError,
 	PORTS,
 	type PortNo,
 	type PortRef,
@@ -189,7 +192,7 @@ export function nameBook(state: Pick<LabState, "machines" | "rail" | "departed">
 	return { addresses, names: new Map([...holders].map(([name, n]) => [n, name])) };
 }
 
-export function isPlanError(plan: object | null): plan is PlanError {
+export function isPlanError(plan: object | null): plan is PlanError | PlugPlanError {
 	return plan !== null && "kind" in plan;
 }
 
@@ -323,6 +326,24 @@ export function planLink(
 	});
 }
 
+/** Where the NIC's cable would go: the port that it is in, when that is in the place already. */
+export function planPlug(
+	state: LabState,
+	{ machine, nic }: NicRef,
+	{ switch: on, port }: Place,
+): (PlugPlan & { readonly to: PortRef }) | PlugPlanError {
+	const noPorts: PlugPlanError = { kind: "no-ports", switch: on, free: 0, wanted: 1 };
+	if (!state.switches.includes(on)) return noPorts;
+	const held = heldPorts(state, on);
+	const own = held.find((other) => other.machine.name === machine && other.nic === nic);
+	const to = port ?? own?.port ?? lowestFreePorts(state, on, 1)[0];
+	if (to === undefined) return noPorts;
+	const by = held.find((other) => other.port === to);
+	return by && by !== own
+		? { kind: "port-taken", port: { switch: on, port: to }, by: { machine: by.machine.name, nic: by.nic } }
+		: { machine, nic, to: { switch: on, port: to } };
+}
+
 /** Those of the machines that are off or failed. */
 export function planBoot(state: LabState, names: readonly MachineName[]): readonly BootPlan[] | PlanError {
 	const machines = [...new Set(names)]
@@ -415,7 +436,9 @@ export function unplugAll(state: LabState, on: SwitchName, cause: Cause): Step {
 		const asked = spec.nics.some(({ net }) => net === on);
 		if (held.length === 0 && !asked) continue;
 		effects.push(
-			...linksDown(machine, cause).filter((effect) => effect.type === "link/set" && onSwitch(on)(effect.port)),
+			...linksDown(machine, cause).flatMap((effect): Effect[] =>
+				effect.type === "link/set" && onSwitch(on)(effect.port) ? [{ ...effect, plug: true }] : [],
+			),
 		);
 		for (const port of held) effects.push({ type: "port/detach", port });
 		const nics = spec.nics.map((nic): NicSpec => (nic.net === on ? { ...nic, net: "none" } : nic));
@@ -894,6 +917,19 @@ export function link(state: LabState, changes: readonly LinkChange[], cause: Cau
 	return result;
 }
 
+/** The machine with one NIC's cable as given, now and for its later boots. Null for a NIC that takes no change. */
+function rewired(machine: Machine, nic: NicNo, plug: Plug): Machine | null {
+	const { life, spec } = machine;
+	if ((life.phase !== "ready" && life.phase !== "off") || !life.plugs[nic]) return null;
+	const net = plug.kind === "port" ? plug.port.switch : "none";
+	const at = <T>(list: readonly T[], change: (old: T) => T) => list.map((old, i) => (i === nic ? change(old) : old));
+	return {
+		...machine,
+		life: { ...life, plugs: at(life.plugs, () => plug) },
+		spec: { ...spec, nics: at(spec.nics, (old) => ({ ...old, net })) },
+	};
+}
+
 function linkOne(state: LabState, change: LinkChange, cause: Cause): Step {
 	const machine = state.machines[change.machine];
 	if (machine?.life.phase !== "ready" && machine?.life.phase !== "off") return step(state);
@@ -905,11 +941,9 @@ function linkOne(state: LabState, change: LinkChange, cause: Cause): Step {
 		: plug.kind === "port" && samePort(plug.port, port) && (plug.link === "up") !== up;
 	if (!fits) return step(state);
 
-	const set: Plug = { kind: "port", port, link: up ? "up" : "cut" };
-	const next = put(state, {
-		...machine,
-		life: { ...machine.life, plugs: machine.life.plugs.map((other, i) => (i === nic ? set : other)) },
-	});
+	const changed = rewired(machine, nic, { kind: "port", port, link: up ? "up" : "cut" });
+	if (!changed) return step(state);
+	const next = put(state, changed);
 	const label = nicLabel(machine, nic);
 	const effects: Effect[] = [];
 	if (change.newPort) effects.push({ type: "port/attach", port, machine: machine.name, nic });
@@ -922,6 +956,41 @@ function linkOne(state: LabState, change: LinkChange, cause: Cause): Step {
 		{ type: "announce", text: `${label} link ${up ? "up" : "down"}` },
 	);
 	return step(next, effects);
+}
+
+/**
+ * Puts one NIC's cable where the plan says, or takes it out. What runs goes on.
+ * A cable that moves is as it was, cut or not, and a new one is whole. Ignored
+ * unless that is still the plan, or when the cable is there already.
+ */
+export function plug(state: LabState, plan: PlugPlan, cause: Cause): Step {
+	const { machine: name, nic, to } = plan;
+	const machine = state.machines[name];
+	const old = machine && plugsOf(machine.life)[nic];
+	if (!machine || !old || (to !== null && isPlanError(planPlug(state, plan, to)))) return step(state);
+	const from = old.kind === "port" ? old.port : null;
+	if (to === null ? from === null : from !== null && samePort(from, to)) return step(state);
+	const set: Plug = to === null ? UNPLUGGED : { kind: "port", port: to, link: old.kind === "port" ? old.link : "up" };
+	const changed = rewired(machine, nic, set);
+	if (!changed) return step(state);
+
+	const link = (port: PortRef, up: boolean): Effect => {
+		return { type: "link/set", port, machine: name, nic, up, cause, plug: true };
+	};
+	const linked = machine.life.phase === "ready";
+	const effects: Effect[] = [];
+	if (old.kind === "port") {
+		// The link first, so the switch forgets what it had learned there and the capture says so.
+		if (linked && old.link === "up") effects.push(link(old.port, false));
+		effects.push({ type: "port/detach", port: old.port });
+	}
+	if (set.kind === "port") {
+		effects.push({ type: "port/attach", port: set.port, machine: name, nic });
+		if (linked && set.link === "up") effects.push(link(set.port, true));
+	}
+	const label = nicLabel(machine, nic);
+	const said = to === null ? "unplugged" : `plugged into ${to.switch} port ${to.port}`;
+	return step(put(state, changed), [...effects, { type: "announce", text: `${label} ${said}` }]);
 }
 
 /** `sh<k>` on a ready machine. The number is per machine and never reused. */

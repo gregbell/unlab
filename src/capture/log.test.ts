@@ -251,6 +251,17 @@ describe("a machine with several NICs", () => {
 	});
 });
 
+test("a cable that is moved is unplugged and plugged in, and not cut or reconnected", () => {
+	const { log } = setup();
+	const moved = { machine: "node1", nic: 0, cause: "agent", plug: true } as const;
+	log.appendLink({ ...moved, port: port0(1), up: false });
+	log.appendLink({ ...moved, port: port0(5), up: true });
+	expect(log.tail(2)).toMatchObject([
+		{ text: "port 1 link down", cause: "Cable to node1 unplugged by the agent." },
+		{ text: "port 5 link up", cause: "Cable to node1 plugged in by the agent." },
+	]);
+});
+
 test("a link the lab raises is a machine plugging in at boot, not a reconnect", () => {
 	const { log } = setup();
 	log.appendLink({ port: port0(1), machine: "node1", nic: 0, up: true, cause: "runtime" });

@@ -19,6 +19,11 @@ export function switchLabel({ switches }: Pick<LabState, "switches">, on: Switch
 	return switches.length === 1 && switches[0] === on ? null : on;
 }
 
+/** How a command names a port, and how it is named where someone is told what to type. No other name has that form. */
+export function portName({ switch: on, port }: PortRef): `${SwitchName}:${PortNo}` {
+	return `${on}:${port}`;
+}
+
 /** `port 3`, or `lan port 3` by a label that there is. */
 export function portText(label: SwitchName | null, port: PortNo): string {
 	return label === null ? `port ${port}` : `${label} port ${port}`;

@@ -37,15 +37,10 @@ export interface FrameEntry {
 	readonly noReply: boolean;
 }
 
-export interface LinkEntry {
+export interface LinkEntry extends LinkEvent {
 	readonly kind: "link";
 	readonly seq: number;
 	readonly t: number;
-	readonly port: PortRef;
-	readonly machine: MachineName;
-	readonly nic: NicNo;
-	readonly up: boolean;
-	readonly cause: Cause;
 	readonly names: NameBook;
 }
 
@@ -66,6 +61,8 @@ export interface LinkEvent {
 	readonly nic: NicNo;
 	readonly up: boolean;
 	readonly cause: Cause;
+	/** The cable was put in the port or taken out of it, and not cut or reconnected. */
+	readonly plug?: true;
 }
 
 export interface CaptureCounters {
@@ -311,9 +308,9 @@ export function createCaptureLog(opts: CaptureOptions): CaptureLog {
 			changed();
 		},
 
-		appendLink({ port, machine, nic, up, cause }) {
+		appendLink({ port, machine, nic, up, cause, plug }) {
 			if (paused) return;
-			push({ kind: "link", seq: next, t: now(), port, machine, nic, up, cause, names: names() });
+			push({ kind: "link", seq: next, t: now(), port, machine, nic, up, cause, plug, names: names() });
 			changed();
 		},
 

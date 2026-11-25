@@ -60,6 +60,8 @@ describe("<unlab-agent-panel>", () => {
 			"shell_read(machine, lines)",
 			"file_write(machine, path, owner, mode, text)",
 			"link_set(link, machines)",
+			"cable_plug(nic, to)",
+			"cable_unplug(nic)",
 			"capture_read(filter, limit)",
 		]);
 		const spawnPolicy = page.getByRole("combobox", { name: "Policy for machines_spawn" }).element();
@@ -208,7 +210,7 @@ describe("<unlab-agent-panel>", () => {
 		expect(text(element.querySelector(".about"))).toBe(
 			"This tab has no WebMCP, so no agent can call these yet. In Chrome or Edge 150 or later, open chrome://flags/#enable-webmcp-testing, choose Enabled and relaunch. Or let an agent open the lab in its own Chrome: connect an agent.",
 		);
-		expect(element.querySelectorAll(".tool")).toHaveLength(18);
+		expect(element.querySelectorAll(".tool")).toHaveLength(20);
 		expect(page.getByRole("button", { name: "try a call" }).elements()).toEqual([]);
 
 		const copy = page.getByRole("button", { name: "copy address" }).element();

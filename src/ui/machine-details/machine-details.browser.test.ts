@@ -2,6 +2,7 @@ import "./machine-details.ts";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { page } from "vitest/browser";
 import {
+	addSwitch,
 	fail,
 	focus,
 	lab,
@@ -13,6 +14,7 @@ import {
 	spawn,
 	spawnAt,
 	stopped,
+	switchNamed,
 	tick,
 	tokenColor,
 	unmountAll,
@@ -136,6 +138,22 @@ describe("<unlab-machine-details>", () => {
 		expect(facts().map(([label]) => label)).not.toContain("frames");
 		await action("plug in").click();
 		expect(runs).toEqual([{ line: "link up node1", source: "button" }]);
+	});
+
+	it("names the switch that it plugs a NIC into when the lab has several", async () => {
+		const state = lab(
+			addSwitch(switchNamed("lan")),
+			spawn(1, "none"),
+			spawn(1, "none", "none"),
+			ready(),
+			focus("node1"),
+		);
+		const { runs, store, settle } = await mount("unlab-machine-details", { state });
+		await action("plug into switch0").click();
+		store.dispatchCommand({ type: "cmd/focus", target: "node2", mode: "plain" });
+		await settle();
+		await action("plug eth1 into switch0").click();
+		expect(runs.map((run) => run.line)).toEqual(["link up node1", "link up node2:eth1"]);
 	});
 
 	it("tells a machine's NICs apart, counts the frames of them all, and cuts, reconnects or plugs in each", async () => {

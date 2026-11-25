@@ -73,10 +73,13 @@ const fixtures: readonly MachineFixture[] = [
 const plain = labWith(fixtures, images);
 const lab = withCheckpoint(plain, "node2");
 
+const switched = withSwitch(plain, "lan");
+
 const LABS: Readonly<Record<string, LabState>> = {
 	checkpoint: plain,
 	boot: labWith([{ n: 1 }, { n: 2, phase: "off" }], images),
-	rmswitch: withSwitch(plain, "lan"),
+	rmswitch: switched,
+	plug: switched,
 };
 
 /** The labs that the examples make sense in: `boot` wants node2 off, and `checkpoint` a name that is free. */
@@ -175,7 +178,7 @@ const NAME_SHAPE =
 const long = "w".repeat(64);
 const path = `/${"a".repeat(4095)}`;
 
-type Row = readonly [line: string, sentence: string, tool?: readonly [string, object]];
+type Row = readonly [line: string, sentence: string, tool?: readonly [string, object], on?: LabState];
 
 const spawnOption = (flag: string, field: string, value: string, sentence: string): Row => [
 	`spawn 1 alpine ${flag} ${value}`,
@@ -198,6 +201,12 @@ const link = (machines: string, sentence: string, dir = "up"): Row => [
 	`link ${dir} ${machines}`,
 	sentence,
 	["link_set", { link: dir, machines }],
+];
+const plugIn = (nic: string, to: string, sentence: string, on?: LabState): Row => [
+	`plug ${nic} ${to}`,
+	sentence,
+	["cable_plug", { nic, to }],
+	on,
 ];
 const saved = (verb: string, tool: string, machine: string, checkpoint: string, sentence: string): Row => [
 	`${verb} ${machine} ${checkpoint}`,
@@ -275,6 +284,8 @@ const ROWS: readonly Row[] = [
 		"No switch is called lan, and switch0, the only one, cannot be removed.",
 		["switch_remove", { switch: "lan" }],
 	],
+	spawnOption("--net", "net", "switch0,wan", "spawn wants switch0 or none after --net, not wan."),
+	spawnOption("--net", "net", "switch0,", "spawn wants switch0 or none after --net, not nothing."),
 	spawnOption("--net", "net", "none,none", "--net names 2 NICs, so add --nics 2."),
 	spawnOption(
 		"--addr",
@@ -366,6 +377,27 @@ const ROWS: readonly Row[] = [
 		"node*:eth3",
 		"link wants a ready or off machine here, and node1 has no eth3, node2 has no eth3, node3 has no eth3 and node5 is still booting.",
 	),
+	plugIn("nodx", "switch0", `No machine is called nodx, ${MACHINES}`),
+	plugIn("node1:eth1", "switch0", "node1 has no NIC called eth1, so use eth0."),
+	plugIn("node1:", "switch0", "node1: names no NIC, so use eth0."),
+	plugIn("all", "switch0", "plug takes one NIC at a time, such as node2 or node2:eth1, not all."),
+	plugIn("node1,web", "switch0", "plug takes one NIC at a time, such as node2 or node2:eth1, not node1,web."),
+	plugIn("node1", "lan", "No switch is called lan, so use switch0."),
+	plugIn("node1", "wan:3", "No switch is called wan, so use switch0 or lan.", switched),
+	plugIn("node1", "node2", "No switch is called node2, so use switch0 or lan.", switched),
+	plugIn("node1", ":3", ":3 names no switch, so use switch0 or lan.", switched),
+	plugIn("node1", "none", "none is no switch, so use unplug to take the cable out."),
+	...["lan:9", "lan:0", "lan:03", "lan:", "lan:3:3", "lan:eth0"].map((to) =>
+		plugIn("node1", to, `${to} is no port, so use one from lan:1 to lan:8.`, switched),
+	),
+	plugIn("node1", "switch0:2", "switch0:2 is taken by node2, so use switch0:6.", switched),
+	["unplug nodx", `No machine is called nodx, ${MACHINES}`, ["cable_unplug", { nic: "nodx" }]],
+	["unplug node1:eth1", "node1 has no NIC called eth1, so use eth0.", ["cable_unplug", { nic: "node1:eth1" }]],
+	[
+		"unplug node*",
+		"unplug takes one NIC at a time, such as node2 or node2:eth1, not node*.",
+		["cable_unplug", { nic: "node*" }],
+	],
 	[
 		"capture bogus",
 		"capture cannot read bogus, so use a protocol, a machine, a NIC (node2:eth1), an address, a MAC or port:N.",
@@ -417,11 +449,11 @@ const ROWS: readonly Row[] = [
 ];
 
 describe("a line that cannot run", () => {
-	it.each(ROWS.map(([line, sentence, tool]) => ({ line, sentence, tool })))(
+	it.each(ROWS.map(([line, sentence, tool, on = lab]) => ({ line, sentence, tool, on })))(
 		"$line",
-		async ({ line, sentence, tool }) => {
-			expect(sentenceOf(bar(line, lab))).toBe(sentence);
-			if (tool) expect(await agent(tool[0], tool[1], lab)).toBe(bar(line, lab));
+		async ({ line, sentence, tool, on }) => {
+			expect(sentenceOf(bar(line, on))).toBe(sentence);
+			if (tool) expect(await agent(tool[0], tool[1], on)).toBe(bar(line, on));
 		},
 	);
 
@@ -541,6 +573,8 @@ describe("a machine that is not in a state for it", () => {
 		["poweroff node*", READY, ["machines_poweroff", { names: "node*" }]],
 		["link down node1", ["ready", "off"], ["link_set", { link: "down", machines: "node1" }]],
 		["link up node1:eth0", ["ready", "off"], ["link_set", { link: "up", machines: "node1:eth0" }]],
+		["plug node1 switch0:8", ["ready", "off"], ["cable_plug", { nic: "node1", to: "switch0:8" }]],
+		["unplug node1:eth0", ["ready", "off"], ["cable_unplug", { nic: "node1:eth0" }]],
 		["checkpoint node1 after", ["ready", "off"], ["checkpoint_save", { machine: "node1", checkpoint: "after" }]],
 		["boot node1", ["off", "failed"], ["machines_boot", { names: "node1" }]],
 		[

@@ -2,7 +2,7 @@ import fc from "fast-check";
 import { describe, expect, test } from "vitest";
 import { port0 } from "../../test/support/ports.ts";
 import { identity } from "./identity.ts";
-import { isPlanError, lowestFreePorts, planBoot, planLink, takenPorts } from "./machines.ts";
+import { isPlanError, lowestFreePorts, planBoot, planLink, planPlug, takenPorts } from "./machines.ts";
 import { parkedPanels, visiblePanels } from "./panels.ts";
 import { capacity, keyboardHolder, reconcilePanes, visiblePanes } from "./panes.ts";
 import { planSwitch } from "./switches.ts";
@@ -42,6 +42,7 @@ import {
 	type NicSpec,
 	type PanelName,
 	PORTS,
+	type PortNo,
 	type PortRef,
 	type SessionId,
 	type SwitchName,
@@ -97,6 +98,8 @@ describe("initialState", () => {
 				shell_read: "run",
 				file_write: "run",
 				link_set: "run",
+				cable_plug: "run",
+				cable_unplug: "run",
 				capture_read: "run",
 			},
 			paused: false,
@@ -1036,6 +1039,13 @@ type Intent =
 			readonly up: boolean;
 			readonly planned: boolean;
 	  }
+	| {
+			readonly kind: "plug";
+			readonly pick: number;
+			readonly nic: NicNo;
+			readonly on: SwitchName | null;
+			readonly port: PortNo | null;
+	  }
 	| { readonly kind: "sessionOpened" | "sessionEnded" | "tab"; readonly pick: number; readonly tab: number }
 	| { readonly kind: "focus"; readonly pick: number; readonly mode: "plain" | "main" | "max" }
 	| { readonly kind: "resize"; readonly width: number; readonly height: number }
@@ -1084,6 +1094,16 @@ const intentArb: fc.Arbitrary<Intent> = fc.oneof(
 			nic: fc.constantFrom(null, null, 0, 1, 3),
 			up: fc.boolean(),
 			planned: fc.boolean(),
+		}),
+	},
+	{
+		weight: 6,
+		arbitrary: fc.record({
+			kind: kinds("plug"),
+			pick,
+			nic: fc.constantFrom<NicNo>(0, 0, 0, 1, 1, 3),
+			on: fc.constantFrom(LAN, LAN, "switch0", switchNamed("wan"), null),
+			port: fc.constantFrom<PortNo | null>(null, null, 1, 2, 3),
 		}),
 	},
 	{
@@ -1172,6 +1192,13 @@ function eventOf(intent: Intent, s: LabState): LabEvent | null {
 				changes: [{ machine: name, nic: intent.nic ?? 0, up: intent.up, port: port0(3), newPort: intent.up }],
 				cause: "button",
 			};
+		}
+		case "plug": {
+			const nic = { machine: named(intent.pick), nic: intent.nic };
+			if (intent.on === null) return { type: "cmd/plug", plan: { ...nic, to: null }, cause: "bar" };
+			const planned = planPlug(s, nic, { switch: intent.on, port: intent.port });
+			const stale = { ...nic, to: { switch: intent.on, port: intent.port ?? 4 } };
+			return { type: "cmd/plug", plan: isPlanError(planned) ? stale : planned, cause: "bar" };
 		}
 		case "sessionOpened":
 		case "sessionEnded":
@@ -1291,6 +1318,11 @@ function checkLab(s: LabState, world: World): void {
 		});
 	});
 	expect(new Set(plugged.map((p) => portKey(p.port))).size).toBe(plugged.length);
+	for (const { life, spec } of machines) {
+		if (life.phase === "failed" || life.phase === "removing") continue;
+		const on = life.plugs.map((plug) => (plug.kind === "port" ? plug.port.switch : "none"));
+		expect(spec.nics.map(({ net }) => net)).toEqual(on);
+	}
 	for (const on of s.switches) {
 		const held = plugged.flatMap(({ port }) => (port.switch === on ? [port.port] : []));
 		expect([...takenPorts(s, on)].sort()).toEqual(held.sort());
@@ -1334,6 +1366,7 @@ const REPEATABLE = new Set<LabEvent["type"]>([
 	"cmd/boot",
 	"cmd/power",
 	"cmd/link",
+	"cmd/plug",
 	"ui/tab-selected",
 	"ui/bar",
 ]);

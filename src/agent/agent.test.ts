@@ -95,6 +95,8 @@ const ALL_TOOLS: readonly ToolName[] = [
 	"shell_read",
 	"file_write",
 	"link_set",
+	"cable_plug",
+	"cable_unplug",
 	"capture_read",
 ];
 
@@ -186,6 +188,7 @@ describe("registration", () => {
 			"Delete a checkpoint",
 			"Explain the lab's verbs",
 			"List machines",
+			"Plug a NIC into a switch",
 			"Plug in or cut cables",
 			"Power machines off",
 			"Power machines on",
@@ -198,6 +201,7 @@ describe("registration", () => {
 			"Restore a checkpoint",
 			"Run a shell command",
 			"Save a checkpoint",
+			"Unplug a NIC",
 			"Write a file",
 		]);
 		const long = [...context.tools.values()].flatMap(({ name, description, inputSchema }) => [

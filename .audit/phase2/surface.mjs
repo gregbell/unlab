@@ -212,6 +212,27 @@ if (unreadable > 0) {
 }
 
 async function severalSwitches() {
+	const PLUGS = [
+		"link up web",
+		"plug web lan:1",
+		"plug web lan",
+		"unplug node3:eth0",
+		"plug web lan",
+		"plug web lan",
+		"plug web lan:1",
+		"plug web lan:9",
+		"plug web wan:1",
+		"plug web none",
+		"plug node3 switch0",
+		"plug node3:eth7 switch0",
+		"plug all switch0",
+		"link down node2:eth1",
+		"plug node2:eth1 switch1:8",
+		"unplug node2:eth1",
+		"unplug node2:eth1",
+		"topology",
+		"ls",
+	];
 	const lab = storeLab();
 	const capture = createCaptureLog({
 		schedule: (fn) => fn(),
@@ -251,6 +272,7 @@ async function severalSwitches() {
 		"boot node2",
 		"rm node2",
 		"rm all",
+		...PLUGS,
 		"rmswitch lam",
 		"rmswitch lan",
 		"rmswitch switch1",
@@ -271,7 +293,7 @@ async function severalSwitches() {
 			}),
 		);
 	}
-	for (const line of ["spawn 1 alpine --net ", "spawn 1 alpine --nics 2 --net lan,", "rmswitch ", "mkswitch ", "link up node2:"]) {
+	for (const line of ["spawn 1 alpine --net ", "spawn 1 alpine --nics 2 --net lan,", "rmswitch ", "mkswitch ", "link up node2:", "plug ", "plug web ", "plug web switch1:", "unplug "]) {
 		several(`complete ${line}`, completeLine(lab.registry, line, line.length, lab.store.state));
 	}
 	const lan = lab.store.state.switches.at(-1);
@@ -296,9 +318,12 @@ async function severalSwitches() {
 		["topology_read", {}],
 		["machines_list", {}],
 		["link_set", { link: "down", machines: "web" }],
+		["cable_plug", { nic: "web", to: "switch1:4" }],
+		["cable_unplug", { nic: "web" }],
 		["capture_read", {}],
 	]) {
-		const prepared = tools.find((tool) => tool.name === name).prepare(input, lab.store.state);
+		const prepared = tools.find((tool) => tool.name === name)?.prepare(input, lab.store.state);
+		if (!prepared) continue;
 		const asks = prepared.ok && name === "switch_remove";
 		several(`${name} ${JSON.stringify(input)}`, prepared.ok && !asks ? await prepared.run(signal) : prepared);
 	}

@@ -105,7 +105,7 @@ describe("spawn", () => {
 			message: "A machine has 1 to 4 NICs, and --net names 5. Nothing was changed.",
 		});
 		expect(lab.parse("spawn 1 alpine --nics 2 --net switch0,switc0")).toEqual({
-			message: "spawn wants switch0 or none after --net, not switch0,switc0. Nothing was changed.",
+			message: "spawn wants switch0 or none after --net, not switc0. Nothing was changed.",
 			token: 6,
 			fix: "spawn 1 alpine --nics 2 --net switch0,switch0",
 		});

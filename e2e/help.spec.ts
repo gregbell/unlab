@@ -65,13 +65,13 @@ test("help lists and explains the verbs, and lab_help and the tools themselves s
 	await openLab(page);
 	const all = await helped(page, "help");
 	expect(all.rows.map(([verb]) => verb)).toEqual(
-		"spawn rm ls exec write sh link mkswitch rmswitch topology capture focus boot reboot poweroff checkpoint restore forget help".split(
+		"spawn rm ls exec write sh link plug unplug mkswitch rmswitch topology capture focus boot reboot poweroff checkpoint restore forget help".split(
 			" ",
 		),
 	);
-	expect(all.header).toBe("19 verbs");
+	expect(all.header).toBe("21 verbs");
 	expect(await call(page, "lab_help", {})).toMatchObject({
-		result: "19 verbs",
+		result: "21 verbs",
 		data: all.rows.map(([verb, about]) => ({ verb, about })),
 	});
 
@@ -190,6 +190,8 @@ test("what cannot run is refused in one sentence, the same in the bar and throug
 			{ count: 1, image: "alpine", net: "lan" },
 			"spawn wants switch0 or none after --net, not lan.",
 		],
+		["plug node1 lan:3", "cable_plug", { nic: "node1", to: "lan:3" }, "No switch is called lan, so use switch0."],
+		["unplug node1:eth1", "cable_unplug", { nic: "node1:eth1" }, "node1 has no NIC called eth1, so use eth0."],
 		["mkswitch Lan", "switch_add", { name: "Lan" }, "mkswitch wants lowercase letters, so use lan."],
 		[
 			"rmswitch switch0",
@@ -233,7 +235,7 @@ test("what cannot run is refused in one sentence, the same in the bar and throug
 			"help spwan",
 			"lab_help",
 			{ verb: "spwan" },
-			"No verb is called spwan, so use spawn, rm, ls, exec, write, sh, link, mkswitch, rmswitch, topology, capture, focus, boot, reboot, poweroff, checkpoint, restore, forget or help.",
+			"No verb is called spwan, so use spawn, rm, ls, exec, write, sh, link, plug, unplug, mkswitch, rmswitch, topology, capture, focus, boot, reboot, poweroff, checkpoint, restore, forget or help.",
 		],
 	];
 	for (const [line, tool, input, sentence] of rows) {
@@ -269,6 +271,8 @@ test("the bar completes and previews each verb and option as it does spawn", asy
 			"forget",
 			"write",
 			"help",
+			"plug",
+			"unplug",
 			"mkswitch",
 			"rmswitch",
 			"topology",
@@ -289,6 +293,12 @@ test("the bar completes and previews each verb and option as it does spawn", asy
 		["mkswitch", null, "add switch1"],
 		["mkswitch wan", null, "add wan"],
 		["rmswitch ", "lan", "remove lan"],
+		["plug ", "node1:eth1"],
+		["plug node1:eth1 ", "lan"],
+		["plug node1:eth1 lan:", "lan:8"],
+		["plug node1:eth1 lan:8", null, "move node1:eth1 from switch0 port 2 to lan port 8"],
+		["unplug ", "web"],
+		["unplug web", null, "unplug web from switch0 port 3 · web is off"],
 		["topology", null, "list 2 switches"],
 		["spawn 1 alpine --nics 2 --net switch0,", "none"],
 		["spawn 1 alpine --nics 2 --net switch0,none", null, "eth1 unplugged"],

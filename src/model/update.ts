@@ -12,6 +12,7 @@ import {
 	machineList,
 	nicLost,
 	openShell,
+	plug,
 	power,
 	ready,
 	remove,
@@ -89,6 +90,8 @@ export const DEFAULT_POLICIES: Readonly<Record<ToolName, Policy>> = {
 	shell_read: "run",
 	file_write: "run",
 	link_set: "run",
+	cable_plug: "run",
+	cable_unplug: "run",
 	capture_read: "run",
 };
 
@@ -201,6 +204,8 @@ function reduce(state: LabState, event: LabEvent): Step {
 			return forget(state, event.machine, event.set);
 		case "cmd/link":
 			return link(state, event.changes, event.cause);
+		case "cmd/plug":
+			return plug(state, event.plan, event.cause);
 		case "cmd/shell":
 			return shell(state, event.machine);
 		case "cmd/focus":
