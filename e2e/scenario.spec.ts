@@ -1,7 +1,7 @@
 import { expect, type Page, test } from "@playwright/test";
 import { chromiumExecutable } from "../test/support/chromium.ts";
 import { root, shell } from "./lab.ts";
-import { call, finish, start } from "./webmcp.ts";
+import { call, finish, registered, start } from "./webmcp.ts";
 
 test.use({
 	launchOptions: { executablePath: chromiumExecutable(), args: ["--enable-features=WebMCP"] },
@@ -126,6 +126,7 @@ test("a reload brings each machine back with its disks, NICs, name, addresses, p
 	]);
 
 	await page.reload();
+	await expect.poll(() => registered(page)).toContain("machines_list");
 	await states(page, "ready", "off", "ready");
 	expect(await machines(page)).toEqual(before);
 	expect(await root(page, "gw", "hostname; nproc; cat /sys/class/net/eth1/address; cat /root/note")).toMatch(
