@@ -54,6 +54,7 @@ interface FakeScreen extends Screen {
 	readonly io: ScreenIo;
 	readonly written: Uint8Array[];
 	readonly made: FakeMark[];
+	readonly notes: string[];
 	text(): string;
 	/** What the next mark's rows will read as. */
 	printed: string;
@@ -70,12 +71,14 @@ function fakeScreens() {
 			const tracker = createShellTracker();
 			const written: Uint8Array[] = [];
 			const made: FakeMark[] = [];
+			const notes: string[] = [];
 			let size = { cols: 100, rows: 30 };
 			const screen: FakeScreen = {
 				session,
 				io,
 				written,
 				made,
+				notes,
 				printed: "",
 				cut: false,
 				text: () => written.map((b) => new TextDecoder().decode(b)).join(""),
@@ -91,6 +94,9 @@ function fakeScreens() {
 				resizeTo(cols, rows) {
 					size = { cols, rows };
 					io.resize(cols, rows);
+				},
+				note(text) {
+					notes.push(text);
 				},
 				write(b) {
 					written.push(b);

@@ -193,6 +193,7 @@ export function createShellTracker(): ShellTracker {
 
 		expectToken(next) {
 			token = next;
+			state = "ground";
 			phase = "unknown";
 			echoed = false;
 			queued = 0;

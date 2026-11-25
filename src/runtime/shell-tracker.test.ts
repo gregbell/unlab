@@ -227,6 +227,14 @@ describe("createShellTracker", () => {
 		expect(t.scan(bytes(`${ESC}]0;title${ESC}]133;A${BEL}`))).toEqual([{ kind: "phase", phase: "prompt" }]);
 	});
 
+	it("a new boot starts over in the middle of a sequence the last one left", () => {
+		const t = createShellTracker();
+		t.scan(bytes(`${ESC}]133;`));
+		t.expectToken("00ff");
+		expect(t.scan(bytes(`A;unlab=00ff${BEL}`)), "what the last boot began is not finished").toEqual([]);
+		expect(t.scan(bytes(osc("133;A;unlab=00ff")))).toEqual([{ kind: "phase", phase: "prompt" }]);
+	});
+
 	it("finds the same marks however the stream is chunked", () => {
 		const piece = fc.oneof(
 			fc.constantFrom("A", "B", "C", "D", "D;0", "D;1", "D;127").map((b) => osc(`133;${b}`)),
