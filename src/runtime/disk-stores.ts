@@ -6,6 +6,7 @@ import { MAX_EXTRA_DISKS } from "../model/index.ts";
 const PREFIX = "kwdisk:";
 /** unkernel adds the version to the root disk's store itself. */
 const VERSION = "-v1";
+const DATABASE = /^kwdisk:unlab-node(\d+)[-.]/;
 
 export const rootStore = (n: number): string => `unlab-node${n}`;
 
@@ -21,4 +22,20 @@ function drop(database: string): void {
 export function deleteMachineDisks(n: number): void {
 	drop(`${PREFIX}${rootStore(n)}${VERSION}`);
 	for (let k = 1; k <= MAX_EXTRA_DISKS; k++) drop(`${PREFIX}${extraStore(n, k)}`);
+}
+
+/**
+ * Deletes the disks of machines that are gone and whose deletion a crash or a
+ * reload cut short. Waits only to see which there are: a disk opened after
+ * that waits for its own deletion.
+ */
+export async function sweepDisks(machines: ReadonlySet<number>): Promise<void> {
+	try {
+		for (const { name = "" } of await indexedDB.databases()) {
+			const n = DATABASE.exec(name)?.[1];
+			if (n !== undefined && !machines.has(Number(n))) drop(name);
+		}
+	} catch (error) {
+		console.error("Could not look for disks that no machine has", error);
+	}
 }
