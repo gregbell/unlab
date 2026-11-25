@@ -115,6 +115,7 @@ interface SwitchEntry {
 	readonly sw: LabSwitch;
 	/** Whose cable is in each port. */
 	readonly cables: Map<PortNo, NicRef>;
+	readonly untap: () => void;
 }
 
 /** A copy of disks that no guest has open, or that waits until none has. */
@@ -183,8 +184,9 @@ export function createEngine(deps: EngineDeps): Engine {
 	const switchOf = (name: SwitchName): SwitchEntry => {
 		const known = switches.get(name);
 		if (known) return known;
-		const entry: SwitchEntry = { sw: deps.newSwitch(name), cables: new Map() };
-		entry.sw.onTap((e) => capture.appendFrame({ switch: name, ...e }));
+		const sw = deps.newSwitch(name);
+		const untap = sw.onTap((e) => capture.appendFrame({ switch: name, ...e }));
+		const entry: SwitchEntry = { sw, cables: new Map(), untap };
 		switches.set(name, entry);
 		return entry;
 	};
@@ -729,6 +731,10 @@ export function createEngine(deps: EngineDeps): Engine {
 		dispose() {
 			clock?.stop();
 			clock = null;
+			for (const { sw, cables, untap } of switches.values()) {
+				untap();
+				for (const port of cables.keys()) sw.detach(port);
+			}
 			switches.clear();
 			for (const job of jobs.values()) job.drop();
 			for (const [machine, entry] of vms) {

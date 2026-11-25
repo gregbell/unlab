@@ -1059,6 +1059,7 @@ describe("dispose", () => {
 		expect(t.intervals[0].cancelled).toBe(true);
 		expect(t.screens.disposed).toEqual(["node1:console", "node2:console"]);
 
+		t.sw.attach(1, { deliver() {} });
 		t.sw.receive(1, arpRequest(1, 2));
 		expect(t.capture.size).toBe(0);
 		expect(t.events).toEqual([]);
