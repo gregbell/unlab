@@ -67,5 +67,5 @@ export function complete(grammar: Grammar, line: string, caret: number, ctx: Rea
 	if (!positional) return offer(options, null);
 	const [key, slot] = positional;
 	const value = slot.kind === "optional" ? slot.value : slot;
-	return offer(value.kind === "positional" ? value.suggest(typed, ctx) : [], slotOf(key));
+	return offer(value.suggest?.(typed, ctx) ?? [], slotOf(key));
 }

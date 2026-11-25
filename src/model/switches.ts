@@ -52,7 +52,10 @@ export function planSwitch(state: LabState, chosen: SwitchName | null): SwitchPl
 /** Ignored unless that is still the plan. */
 export function addSwitch(state: LabState, { name }: SwitchPlan): Step {
 	if ("kind" in planSwitch(state, name)) return step(state);
-	return step({ ...state, switches: [...state.switches, name] }, [{ type: "announce", text: `${name} added` }]);
+	const departedSwitches = state.departedSwitches.filter((gone) => gone !== name);
+	return step({ ...state, switches: [...state.switches, name], departedSwitches }, [
+		{ type: "announce", text: `${name} added` },
+	]);
 }
 
 /** The links go down first, so the capture says which cables were in. */
@@ -60,7 +63,11 @@ export function removeSwitch(state: LabState, name: SwitchName, cause: Cause): S
 	if (name === DEFAULT_SWITCH || !state.switches.includes(name)) return step(state);
 	const { state: alone, effects } = unplugAll(state, name, cause);
 	const [first, ...others] = alone.switches;
-	const next: LabState = { ...alone, switches: [first, ...others.filter((other) => other !== name)] };
+	const next: LabState = {
+		...alone,
+		switches: [first, ...others.filter((other) => other !== name)],
+		departedSwitches: [...state.departedSwitches, name],
+	};
 	return step(showSwitch(next, next.shownSwitch), [
 		...effects,
 		{ type: "switch/remove", switch: name },

@@ -80,7 +80,7 @@ export function parse<G extends Grammar>(
 	const flags = flagTable(grammar);
 	const values: Record<string, unknown> = {};
 	const tokenOf: Record<string, number> = {};
-	const restWords: string[] = [];
+	const rest: number[] = [];
 	let next = 0;
 
 	const fail = (message: string, index?: number, expected?: readonly string[], part?: Miss["part"]): LineError => {
@@ -136,7 +136,7 @@ export function parse<G extends Grammar>(
 		const [key, slot] = positional;
 		tokenOf[key] ??= i;
 		if (slot.kind === "rest") {
-			restWords.push(token.text);
+			rest.push(i);
 			continue;
 		}
 		const value = read(slot.kind === "optional" ? slot.value : slot, token, i, "here");
@@ -155,9 +155,16 @@ export function parse<G extends Grammar>(
 			case "optional":
 				values[key] ??= null;
 				break;
-			case "rest":
-				values[key] = restWords.join(" ");
+			case "rest": {
+				const text = rest.map((i) => tokens[i].text).join(" ");
+				const fault = slot.check?.(text, ctx);
+				if (fault) {
+					const before = text.slice(0, fault.start).split(" ").length - 1;
+					return fail(fault.message, rest[before], fault.instead);
+				}
+				values[key] = text;
 				break;
+			}
 			case "options":
 				if (!(key in values)) {
 					values[key] = slot.default;

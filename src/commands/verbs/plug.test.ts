@@ -122,6 +122,22 @@ describe("plug", () => {
 		expect(await only.run("plug node3 switch0")).toMatchObject({ data: { port: 6 } });
 	});
 
+	it("suggests only the switches that have a free port", async () => {
+		const lab = await wired();
+		await lab.run("mkswitch wan");
+		await spawned(lab, "spawn 2 alpine --nics 4 --net lan");
+		await spawned(lab, "spawn 2 alpine --nics 4 --net wan");
+		const suggested = () => [refused(lab, "plug node1 lan"), refused(lab, "plug node1 lan:7")];
+		expect(suggested()).toEqual([
+			"lan has no free port, so use switch0, or free a port with unplug. Nothing was changed.",
+			"lan:7 is taken by node5:eth2 and lan has no free port, so use switch0, or free a port with unplug. Nothing was changed.",
+		]);
+		await lab.run("unplug node7:eth3");
+		expect(suggested()[0]).toBe(
+			"lan has no free port, so use switch0 or wan, or free a port with unplug. Nothing was changed.",
+		);
+	});
+
 	it("is refused when the lab has changed since the line was read", async () => {
 		const lab = await wired();
 		const line = lab.parsed("plug node1 lan:1");
@@ -200,14 +216,15 @@ describe("unplug", () => {
 });
 
 describe("a port's name", () => {
-	it("is none of a machine's, a NIC's, a switch's or a capture filter's", async () => {
+	it("is none of a machine's, a NIC's or a switch's, and a capture filter's for its cable", async () => {
 		const lab = await wired();
-		for (const line of ["rm lan:3", "link down lan:3", "sh lan:3", "focus lan:3", "plug lan:3 lan", "capture lan:3"]) {
+		for (const line of ["rm lan:3", "link down lan:3", "sh lan:3", "focus lan:3", "plug lan:3 lan"]) {
 			expect(refused(lab, line), line).toMatch(/Nothing was changed\.$/);
 		}
 		for (const line of ["mkswitch lan:3", "spawn 1 alpine --name lan:3", "spawn 1 alpine --net lan:3"]) {
 			expect(refused(lab, line), line).toMatch(/Nothing was changed\.$/);
 		}
+		expect(refused(lab, "capture lan:3")).toBeNull();
 		// A filter reads port:3 as any switch's port 3, so no switch can be called port.
 		expect(refused(lab, "mkswitch port")).toContain("port already means something in the lab");
 		for (const line of ["plug node1 node2", "plug node1 node2:eth0", "plug node1 port:3"]) {
@@ -215,11 +232,15 @@ describe("a port's name", () => {
 		}
 	});
 
-	it("is not a filter's, after a machine that had the switch's name has gone", async () => {
+	it("is the switch's, after a machine that had its name has gone", async () => {
 		const lab = storeLab();
 		await spawned(lab, "spawn 1 alpine --name lan");
 		lab.store.dispatchCommand({ type: "cmd/remove", machines: lab.store.state.rail, cause: "bar" });
-		await lab.run("mkswitch lan");
 		expect(refused(lab, "capture lan:3")).toContain("capture cannot read lan:3");
+		const [machine] = lab.store.state.rail;
+		lab.runtime({ type: "vm/stopped", machine, attempt: 1, clean: true, at: 0 });
+		await lab.run("mkswitch lan");
+		expect(refused(lab, "capture lan:3")).toBeNull();
+		expect(refused(lab, "plug lan:3 lan")).toContain("No machine is called lan");
 	});
 });

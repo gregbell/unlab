@@ -133,12 +133,23 @@ describe("removing a switch", () => {
 		for (const name of s.rail) expect(machine(after, name).sessions).toBe(machine(s, name).sessions);
 	});
 
-	test("says nothing of a link that was not up: a cut one, one of a machine that boots, and one that is off", () => {
+	test("says of a link that was not up why: a cut one, one of a machine that boots, and one that is off", () => {
 		let s = wired();
 		s = run(s, linkEvent(s, false, { machine: "node2", nic: 0 }), power("off", "node3"), hasStopped("node3"));
 		s = run(s, spawnEvent(s, 1, { net: lan }));
 		const effects = effectsOf(s, removed(lan));
 		expect(effects.filter(({ type }) => type === "link/set")).toEqual([]);
+		expect(effects.filter(({ type }) => type === "capture/dead-cable")).toMatchObject([
+			{ port: { port: 1 }, machine: "node2", nic: 0, cause: "bar", dead: { way: "out", cut: true, machine: null } },
+			{ port: { port: 2 }, machine: "node3", nic: 0, cause: "bar", dead: { way: "out", cut: false, machine: "off" } },
+			{
+				port: { port: 3 },
+				machine: "node4",
+				nic: 0,
+				cause: "bar",
+				dead: { way: "out", cut: false, machine: "booting" },
+			},
+		]);
 		expect(effects.filter(({ type }) => type === "port/detach")).toHaveLength(3);
 		s = run(s, removed(lan));
 		expect(effectsOf(s, isReady("node4")).filter(({ type }) => type === "link/set")).toEqual([]);
@@ -260,12 +271,16 @@ describe("moving a cable", () => {
 		expect(none).toEqual({ state: s, effects: [] });
 	});
 
-	test("moves a cut cable as it is, with nothing said of a link that stays down", () => {
+	test("moves a cut cable as it is, and says that it went from one port to the other", () => {
 		let s = wired();
 		s = run(s, linkEvent(s, false, "node1"));
+		const cut = { machine: "node1", nic: 0, cause: "bar" };
+		const dead = { cut: true, machine: null };
 		expect(effectsOf(s, plugEvent(s, eth("node1"), on(lan, 4)))).toEqual([
+			{ type: "capture/dead-cable", port: port0(1), ...cut, dead: { way: "out", ...dead } },
 			{ type: "port/detach", port: port0(1) },
 			{ type: "port/attach", port: on(lan, 4), machine: "node1", nic: 0 },
+			{ type: "capture/dead-cable", port: on(lan, 4), ...cut, dead: { way: "in", ...dead } },
 			{ type: "announce", text: "node1 plugged into lan port 4" },
 		]);
 		s = run(s, plugEvent(s, eth("node1"), on(lan, 4)));
@@ -317,7 +332,16 @@ describe("moving a cable", () => {
 
 	test("of a machine that is off changes the port that its boot finds it in", () => {
 		let s = run(wired(), power("off", "node1"), hasStopped("node1"));
-		expect(effectsOf(s, plugEvent(s, eth("node1"), on(lan, 2))).filter(({ type }) => type === "link/set")).toEqual([]);
+		const effects = effectsOf(s, plugEvent(s, eth("node1"), on(lan, 2)));
+		expect(effects.filter(({ type }) => type === "link/set")).toEqual([]);
+		expect(effects.filter(({ type }) => type === "capture/dead-cable")).toMatchObject([
+			{ port: port0(1), dead: { way: "out", cut: false, machine: "off" } },
+			{ port: on(lan, 2), dead: { way: "in", cut: false, machine: "off" } },
+		]);
+		const out = effectsOf(s, plugEvent(s, eth("node1"), null));
+		expect(out.filter(({ type }) => type === "capture/dead-cable")).toMatchObject([
+			{ port: port0(1), dead: { way: "out", machine: "off" } },
+		]);
 		s = run(s, plugEvent(s, eth("node1"), on(lan, 2)));
 		s = run(s, bootEvent(s, "node1"));
 		expect(effectsOf(s, isReady("node1", 2)).filter(({ type }) => type === "link/set")).toMatchObject([

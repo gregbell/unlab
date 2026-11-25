@@ -1257,6 +1257,13 @@ class World {
 				this.ports.set(key, { machine: effect.machine, nic: effect.nic, up: effect.up });
 				return;
 			}
+			case "capture/dead-cable":
+				expect(this.ports.get(portKey(effect.port)), `${portKey(effect.port)} said to have a dead cable`).toEqual({
+					machine: effect.machine,
+					nic: effect.nic,
+					up: false,
+				});
+				return;
 			case "screen/create":
 				expect(this.screens.has(effect.session), `${effect.session} created twice`).toBe(false);
 				this.screens.add(effect.session);

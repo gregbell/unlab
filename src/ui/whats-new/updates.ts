@@ -14,6 +14,13 @@ export interface Update {
 export const UPDATES: readonly Update[] = [
 	{
 		date: "2026-11-25",
+		title: "Follow a packet from switch to switch",
+		detail:
+			"Filter the capture by a switch, or by one cable, and save that cable as a .pcap. With several switches, each row says where the frame came in and went out.",
+		example: "capture switch0:1",
+	},
+	{
+		date: "2026-11-25",
 		title: "SSH into a machine, and the internet in it",
 		detail:
 			"Run npx unlab.run in a terminal. It opens shells in your machines, copies files, runs lab commands, and gives machines the internet through your computer.",

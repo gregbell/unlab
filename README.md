@@ -60,6 +60,7 @@ every command, and `help spawn` explains one, with its options and an example.
 | `write node1 /etc/motd --mode 644 -- hello`  | Put a text in a file on the machine, as root, with the directories it needs. `--owner user:group` sets whose it is.                    |
 | `link down node2`                            | Cut node2's cables, whether it is on or off. Reconnect them with `link up node2`. Name one of several with `node2:eth1`.               |
 | `capture arp or node2`                       | Maximise the capture with a filter for ARP or traffic involving node2. `node2:eth1` keeps one interface's frames.                      |
+| `capture lan:3 icmp`                         | Show the pings that crossed one cable, the one in port 3 of `lan`. `lan` alone is all that the switch carried.                         |
 | `sh node2`                                   | Open another shell on node2.                                                                                                           |
 | `focus node2 --max`                          | Maximise or restore its pane. Use `--main` to promote it to the main pane.                                                             |
 | `reboot node2`                               | Shut the machine down and boot it again, with its disks, name, addresses, and cables. `reboot` typed in the guest does the same.       |
@@ -70,6 +71,15 @@ every command, and `help spawn` explains one, with its options and an example.
 | `forget node2 before`                        | Delete the checkpoint and free its storage, after a confirmation.                                                                      |
 | `rm node2`                                   | Remove the machine and delete its disks and its checkpoints, after a confirmation that lists them.                                     |
 | `help reboot`                                | Explain a command. `help` alone lists them all.                                                                                        |
+
+In a capture filter, terms that follow one another must all match, and `or`
+starts an alternative. A term is a protocol, a machine, an interface, an address,
+a MAC, a switch, a cable such as `lan:3`, or `port:3` for that port of every
+switch. A machine or an interface is matched on every switch that its frames went
+through, so a ping across routers shows each hop, in order. With several switches,
+each row says which one carried the frame and the ports it came in by and went out
+of. **save .pcap** saves everything captured, or only the frames shown when the
+filter names a switch or a cable.
 
 Commands that accept multiple machines can take a list (`node1,node3`), a glob
 (`node*`), or `all`. Globs and `all` select the machines that the command can act

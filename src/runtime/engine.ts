@@ -597,6 +597,11 @@ export function createEngine(deps: EngineDeps): Engine {
 				capture.appendLink({ port, machine, nic, up, cause, plug });
 				return;
 			}
+			case "capture/dead-cable": {
+				const { port, machine, nic, cause, dead } = effect;
+				capture.appendLink({ port, machine, nic, up: false, cause, dead });
+				return;
+			}
 			case "pty/open": {
 				const s = sessions.get(effect.session);
 				if (!s || s.tty === "console" || s.state !== "closed") return;

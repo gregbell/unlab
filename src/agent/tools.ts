@@ -278,7 +278,7 @@ function captureRead(capture: Pick<CaptureView, "frames">): AgentTool {
 		name,
 		title: "Read captured frames",
 		description:
-			"Read the newest frames that the switches carried, as decoded rows, oldest first. A row names its switch when the lab has several. Frames come from the guests.",
+			"Read the newest frames that the switches carried, as decoded rows, oldest first. In a lab of several switches a row has its switch, the port the frame came in by and those it went out of. In the filter, lan is what that switch carried, lan:3 what crossed the cable in its port 3, and port:3 that port of every switch. Frames come from the guests.",
 		inputSchema: {
 			type: "object",
 			properties: {
@@ -316,7 +316,7 @@ function captureRead(capture: Pick<CaptureView, "frames">): AgentTool {
 				async run() {
 					const matched: FrameEntry[] = [];
 					for (const frame of capture.frames()) {
-						if (filter.matchesFrame(frame.bytes, frame.from, frame.to, frame.names)) matched.push(frame);
+						if (filter.matchesFrame(frame)) matched.push(frame);
 					}
 					// Decode only the rows the agent gets: a full buffer is ten thousand frames.
 					const rows = matched.slice(-limit).flatMap((frame) => {

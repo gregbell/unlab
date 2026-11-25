@@ -163,6 +163,21 @@
 			}
 		}
 
+		.rows[data-via="true"] {
+			--columns: 56px 40px 112px 160px minmax(0, 1fr);
+		}
+
+		:scope[mode="full"] .rows[data-via="true"] {
+			--columns: 62px 40px 128px 176px 34px minmax(0, 1fr);
+			--track-min: 840px;
+		}
+
+		@container (width < 480px) {
+			:scope[mode="dock"] .rows[data-via="true"] .track {
+				--columns: 50px 34px 84px 118px minmax(0, 1fr);
+			}
+		}
+
 		.track:focus-visible {
 			outline-offset: -2px;
 		}
@@ -210,13 +225,21 @@
 			gap: 1ch;
 		}
 
-		.route > * {
+		/* So do a switch and its ports. */
+		.via {
+			display: grid;
+			grid-template-columns: minmax(0, max-content) minmax(0, max-content);
+			gap: 1ch;
+		}
+
+		:is(.route, .via) > * {
 			overflow: hidden;
 			text-overflow: ellipsis;
 			white-space: nowrap;
 		}
 
 		.time,
+		.via,
 		.len,
 		.everyone {
 			color: var(--text-3);
@@ -239,7 +262,7 @@
 			background: var(--line);
 		}
 
-		.row[aria-selected="true"] :is(.time, .len, .everyone) {
+		.row[aria-selected="true"] :is(.time, .via, .len, .everyone) {
 			color: var(--text-2);
 		}
 

@@ -5,13 +5,20 @@ import {
 	arpRequest,
 	eth,
 	ipv4Packet,
-	NAMES,
+	NAMES as ONE_SWITCH,
 	ping,
 	tcpSegment,
 	udpSegment,
 } from "../../test/support/frames.ts";
-import { port0 } from "../../test/support/ports.ts";
-import { type Cause, DEFAULT_SWITCH, type MachineName, type PortNo } from "../model/index.ts";
+import {
+	type Cause,
+	DEFAULT_SWITCH,
+	type MachineName,
+	type PortNo,
+	type PortRef,
+	parseSwitchName,
+	type SwitchName,
+} from "../model/index.ts";
 import { type CaptureFilter, compileFilter, type Flood, MATCH_ALL, NICS, type NicNo } from "../net/index.ts";
 import { createCaptureLog, type SwitchedFrame } from "./log.ts";
 
@@ -49,11 +56,19 @@ const TERMS = [
 	"port:2",
 	"port:3",
 	"port:4",
+	"switch0",
+	"lan",
+	"switch0:2",
+	"lan:1",
+	"lan:2",
 ];
 
+const lan = parseSwitchName("lan") as SwitchName;
+const NAMES = { ...ONE_SWITCH, switches: new Set([DEFAULT_SWITCH, lan]) };
+const carrier = fc.constantFrom<SwitchName>(DEFAULT_SWITCH, lan);
 const port = fc.integer({ min: 1, max: 4 }) as fc.Arbitrary<PortNo>;
 const switched: fc.Arbitrary<SwitchedFrame> = fc.record({
-	switch: fc.constant(DEFAULT_SWITCH),
+	switch: carrier,
 	from: port,
 	to: fc.integer({ min: 0, max: 15 }),
 	flood: fc.constantFrom<Flood | null>(null, "group", "unknown"),
@@ -65,7 +80,7 @@ const filterSource = fc
 
 type Op =
 	| { op: "frame"; frame: SwitchedFrame }
-	| { op: "link"; port: PortNo; n: number; nic: NicNo; up: boolean; cause: Cause }
+	| { op: "link"; at: { port: PortRef; machine: MachineName; nic: NicNo }; up: boolean; cause: Cause }
 	| { op: "filter"; source: string }
 	| { op: "pause"; paused: boolean }
 	| { op: "clear" }
@@ -77,9 +92,11 @@ const operation: fc.Arbitrary<Op> = fc.oneof(
 		weight: 2,
 		arbitrary: fc.record({
 			op: fc.constant("link" as const),
-			port,
-			n: fc.integer({ min: 1, max: 4 }),
-			nic: fc.constantFrom(...NICS),
+			at: fc.record({
+				port: fc.record({ switch: carrier, port }),
+				machine: fc.integer({ min: 1, max: 4 }).map(node),
+				nic: fc.constantFrom(...NICS),
+			}),
 			up: fc.boolean(),
 			cause: fc.constantFrom<Cause>("bar", "button", "agent", "runtime"),
 		}),
@@ -92,7 +109,7 @@ const operation: fc.Arbitrary<Op> = fc.oneof(
 
 type Kept =
 	| { seq: number; kind: "frame"; frame: SwitchedFrame }
-	| { seq: number; kind: "link"; port: PortNo; machine: MachineName; nic: NicNo };
+	| { seq: number; kind: "link"; port: PortRef; machine: MachineName; nic: NicNo };
 
 function compile(source: string): CaptureFilter {
 	const r = compileFilter(source, NAMES);
@@ -125,8 +142,8 @@ test("the incremental match index agrees with filtering the whole buffer", () =>
 						if (!paused) keep({ seq: seq++, kind: "frame", frame: o.frame });
 						break;
 					case "link":
-						log.appendLink({ port: port0(o.port), machine: node(o.n), nic: o.nic, up: o.up, cause: o.cause });
-						if (!paused) keep({ seq: seq++, kind: "link", port: o.port, machine: node(o.n), nic: o.nic });
+						log.appendLink({ ...o.at, up: o.up, cause: o.cause });
+						if (!paused) keep({ seq: seq++, kind: "link", ...o.at });
 						break;
 					case "filter":
 						filter = compile(o.source);
@@ -148,8 +165,8 @@ test("the incremental match index agrees with filtering the whole buffer", () =>
 
 				const expected = buffer.filter((k) =>
 					k.kind === "frame"
-						? filter.matchesFrame(k.frame.frame, k.frame.from, k.frame.to, NAMES)
-						: filter.matchesLink(k.port, k.machine, k.nic, NAMES),
+						? filter.matchesFrame({ ...k.frame, bytes: k.frame.frame, names: NAMES })
+						: filter.matchesLink({ ...k, names: NAMES }),
 				);
 				expect(log.window(0, log.matchCount).map((r) => r.seq)).toEqual(expected.map((k) => k.seq));
 				expect(log.matchedFrames).toBe(expected.filter((k) => k.kind === "frame").length);
@@ -174,7 +191,7 @@ test("100 000 appends into a full ring with a filter stay cheap and notify once 
 		schedule: (fn) => queue.push(fn),
 		names: () => NAMES,
 	});
-	log.setFilter(compile("icmp node2 or arp port:3"));
+	log.setFilter(compile("icmp node2 or arp port:3 or lan:2"));
 	const frames = FRAMES.map((frame, i) => ({
 		switch: DEFAULT_SWITCH,
 		from: ((i % 4) + 1) as PortNo,

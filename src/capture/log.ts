@@ -5,7 +5,7 @@
 // filter change rebuilds it once. Subscribers hear at most once per scheduled
 // flush, whatever the frame rate.
 
-import type { Cause, MachineName, PortNo, PortRef, SwitchName } from "../model/index.ts";
+import type { Cause, DeadCable, MachineName, PortNo, PortRef, SwitchName } from "../model/index.ts";
 import {
 	arpAddrs,
 	type CaptureFilter,
@@ -63,6 +63,8 @@ export interface LinkEvent {
 	readonly cause: Cause;
 	/** The cable was put in the port or taken out of it, and not cut or reconnected. */
 	readonly plug?: true;
+	/** That was done to a cable whose link was down, and stays down. */
+	readonly dead?: DeadCable;
 }
 
 export interface CaptureCounters {
@@ -94,8 +96,12 @@ export interface CaptureView {
 	/** The position of seq in the filtered view, or -1. */
 	indexOf(seq: number): number;
 	entry(seq: number): CaptureEntry | null;
-	/** Every frame in the buffer, ignoring the filter: Save .pcap and capture_read. */
+	/** The one that the view is filtered by. */
+	readonly filter: CaptureFilter;
+	/** Every frame in the buffer, ignoring the filter. */
 	frames(): Iterable<FrameEntry>;
+	/** Every frame in the filtered view. */
+	matched(): Iterable<FrameEntry>;
 	subscribe(fn: () => void): () => void;
 }
 
@@ -129,9 +135,17 @@ export const NO_REPLY_MS = 1000;
 
 type StoredFrame = Omit<FrameEntry, "noReply"> & { noReply: boolean };
 type Stored = StoredFrame | LinkEntry;
+/** What a machine asked of an address, however often. */
+interface Question {
+	readonly key: string;
+	/** Requests that still wait for an answer or for the sweep. */
+	open: number;
+	/** The tick of the latest reply. */
+	answered: number;
+}
 interface OpenRequest {
 	readonly frame: StoredFrame;
-	readonly key: string;
+	readonly question: Question;
 	/** Its place among ARP frames: a reply with a later tick answers it. */
 	readonly tick: number;
 }
@@ -159,11 +173,28 @@ export function createCaptureLog(opts: CaptureOptions): CaptureLog {
 	let revision = 0;
 	const counters = { in: 0, delivered: 0, flooded: 0 };
 
-	// Requests in arrival order, and the tick of the latest reply to each question.
-	const pending: OpenRequest[] = [];
+	// Requests in arrival order, and what they asked. Only those still in the ring, so there are never more than it
+	// holds: a sweep can be a minute away, and a storm would fill the page's memory with the others.
+	const pending: (OpenRequest | undefined)[] = new Array(limit);
 	let pendingHead = 0;
-	const replies = new Map<string, number>();
+	let pendingLen = 0;
+	const questions = new Map<string, Question>();
 	let arpTick = 0;
+	const ask = (frame: StoredFrame, key: string) => {
+		const question = questions.get(key) ?? { key, open: 0, answered: 0 };
+		questions.set(key, question);
+		question.open++;
+		for (let old = oldest(); old && old.frame.seq < first; old = oldest()) settle(old);
+		pending[(pendingHead + pendingLen) % limit] = { frame, question, tick: arpTick };
+		pendingLen++;
+	};
+	const oldest = (): OpenRequest | undefined => pending[pendingHead];
+	const settle = ({ question }: OpenRequest) => {
+		pending[pendingHead] = undefined;
+		pendingHead = (pendingHead + 1) % limit;
+		pendingLen--;
+		if (--question.open === 0) questions.delete(question.key);
+	};
 
 	const listeners = new Set<() => void>();
 	let scheduled = false;
@@ -181,10 +212,7 @@ export function createCaptureLog(opts: CaptureOptions): CaptureLog {
 
 	const at = (seq: number): Stored | undefined => (seq >= first && seq < next ? ring[seq % limit] : undefined);
 	const matchAt = (i: number): number => matches[(matchHead + i) % limit];
-	const passes = (e: Stored): boolean =>
-		e.kind === "frame"
-			? filter.matchesFrame(e.bytes, e.from, e.to, e.names)
-			: filter.matchesLink(e.port.port, e.machine, e.nic, e.names);
+	const passes = (e: Stored): boolean => (e.kind === "frame" ? filter.matchesFrame(e) : filter.matchesLink(e));
 	const index = (e: Stored) => {
 		if (!passes(e)) return;
 		matches[(matchHead + matchLen) % limit] = e.seq;
@@ -264,6 +292,15 @@ export function createCaptureLog(opts: CaptureOptions): CaptureLog {
 			return -1;
 		},
 		entry: (seq) => at(seq) ?? null,
+		get filter() {
+			return filter;
+		},
+		*matched() {
+			for (let i = 0; i < matchLen; i++) {
+				const e = at(matchAt(i));
+				if (e?.kind === "frame") yield e;
+			}
+		},
 		*frames() {
 			for (let seq = first; seq < next; seq++) {
 				const e = ring[seq % limit];
@@ -283,7 +320,10 @@ export function createCaptureLog(opts: CaptureOptions): CaptureLog {
 			const arp = frame.length >= 42 && frame[12] === ETH_ARP >> 8 && frame[13] === (ETH_ARP & 255);
 			const addrs = arp ? arpAddrs(frame) : null;
 			if (addrs) arpTick++;
-			if (addrs?.op === 2) replies.set(arpKey(addrs.tpa, addrs.spa), arpTick);
+			if (addrs?.op === 2) {
+				const question = questions.get(arpKey(addrs.tpa, addrs.spa));
+				if (question) question.answered = arpTick;
+			}
 
 			if (paused) {
 				changed();
@@ -301,16 +341,14 @@ export function createCaptureLog(opts: CaptureOptions): CaptureLog {
 				names: names(),
 				noReply: false,
 			};
-			if (addrs?.op === 1 && addrs.spa !== addrs.tpa) {
-				pending.push({ frame: e, key: arpKey(addrs.spa, addrs.tpa), tick: arpTick });
-			}
 			push(e);
+			if (addrs?.op === 1 && addrs.spa !== addrs.tpa) ask(e, arpKey(addrs.spa, addrs.tpa));
 			changed();
 		},
 
-		appendLink({ port, machine, nic, up, cause, plug }) {
+		appendLink({ port, machine, nic, up, cause, plug, dead }) {
 			if (paused) return;
-			push({ kind: "link", seq: next, t: now(), port, machine, nic, up, cause, plug, names: names() });
+			push({ kind: "link", seq: next, t: now(), port, machine, nic, up, cause, plug, dead, names: names() });
 			changed();
 		},
 
@@ -327,19 +365,11 @@ export function createCaptureLog(opts: CaptureOptions): CaptureLog {
 
 		sweep(t) {
 			let marked = false;
-			while (pendingHead < pending.length && t - pending[pendingHead].frame.t >= NO_REPLY_MS) {
-				const r = pending[pendingHead++];
-				if ((replies.get(r.key) ?? 0) > r.tick) continue;
+			for (let r = oldest(); r && t - r.frame.t >= NO_REPLY_MS; r = oldest()) {
+				settle(r);
+				if (r.question.answered > r.tick) continue;
 				r.frame.noReply = true;
 				if (at(r.frame.seq) === r.frame) marked = true;
-			}
-			if (pendingHead === pending.length) {
-				pending.length = 0;
-				pendingHead = 0;
-				replies.clear();
-			} else if (pendingHead > 1024) {
-				pending.splice(0, pendingHead);
-				pendingHead = 0;
 			}
 			if (marked) changed();
 		},
@@ -351,9 +381,10 @@ export function createCaptureLog(opts: CaptureOptions): CaptureLog {
 			matchHead = 0;
 			matchLen = 0;
 			matchedFrames = 0;
-			pending.length = 0;
+			pending.fill(undefined);
 			pendingHead = 0;
-			replies.clear();
+			pendingLen = 0;
+			questions.clear();
 			changed();
 		},
 	};

@@ -1,9 +1,13 @@
+import { setFlagsFromString } from "node:v8";
+import { runInNewContext } from "node:vm";
 import { describe, expect, test } from "vitest";
 import {
+	arpPacket,
 	arpReply,
 	arpRequest,
 	BROADCAST,
 	eth,
+	ip,
 	ipv4Packet,
 	mac,
 	NAMES,
@@ -190,16 +194,27 @@ describe("several switches", () => {
 		made.appendFrame({ switch: lan, from: 1, to: 0b100, flood: "unknown", frame: ping(1, 2) });
 		made.appendFrame({ switch: lan, from: 1, to: 0, flood: "group", frame: arpRequest(1, 2) });
 		made.appendLink({ port: { switch: lan, port: 3 }, machine: "node2", nic: 0, up: false, cause: "bar" });
-		return made.tail(4).map((row) => [row.switch, row.kind === "frame" ? row.note : row.text]);
+		return made
+			.tail(4)
+			.map((row) => (row.kind === "frame" ? [row.switch, row.in, row.out, row.note] : [row.switch, row.text]));
 	};
 
-	test("are named by their rows, with the ports", () => {
+	test("are named by their rows, with the port that a frame came in by and those it went out of", () => {
 		expect(log()).toEqual([
-			["switch0", "flooded to switch0 ports 2 and 3"],
-			["lan", "unknown destination, flooded to lan port 3"],
-			["lan", "flooded, no other lan port is up"],
+			["switch0", 1, [2, 3], "flooded to switch0 ports 2 and 3"],
+			["lan", 1, [3], "unknown destination, flooded to lan port 3"],
+			["lan", 1, [], "flooded, no other lan port is up"],
 			["lan", "lan port 3 link down"],
 		]);
+	});
+
+	test("are in the order that they carried the frames, which can all have one time", () => {
+		const made = createCaptureLog({ schedule: (fn) => fn(), now: () => 0, rowNames: { switchLabel: (on) => on } });
+		const carried = [lan, "switch0", lan, lan, "switch0"] as const;
+		for (const on of carried) made.appendFrame({ switch: on, from: 1, to: 2, flood: null, frame: ping(1, 2) });
+		for (const rows of [made.tail(5), made.window(0, 5)]) {
+			expect(rows.map((row) => [row.seq, row.time, row.switch])).toEqual(carried.map((on, i) => [i + 1, "0.00", on]));
+		}
 	});
 });
 
@@ -259,6 +274,26 @@ test("a cable that is moved is unplugged and plugged in, and not cut or reconnec
 	expect(log.tail(2)).toMatchObject([
 		{ text: "port 1 link down", cause: "Cable to node1 unplugged by the agent." },
 		{ text: "port 5 link up", cause: "Cable to node1 plugged in by the agent." },
+	]);
+});
+
+test("a cable that is moved while its link is down says why, and that it stays down", () => {
+	const { log } = setup();
+	const move = (way: "in" | "out", cut: boolean, machine: "off" | "booting" | "restoring" | null) =>
+		log.appendLink({ port: port0(2), machine: "node1", nic: 0, up: false, cause: "bar", dead: { way, cut, machine } });
+	move("out", true, null);
+	move("in", true, null);
+	move("out", false, "off");
+	move("in", true, "off");
+	move("out", false, "booting");
+	move("out", false, "restoring");
+	expect(log.tail(6).map((row) => (row.kind === "link" ? [row.text, row.up, row.cause] : []))).toEqual([
+		["port 2 link down", false, "Cut cable to node1 unplugged by you."],
+		["port 2 link down", false, "Cut cable to node1 plugged in by you."],
+		["port 2 link down", false, "Cable to node1, which is off, unplugged by you."],
+		["port 2 link down", false, "Cut cable to node1, which is off, plugged in by you."],
+		["port 2 link down", false, "Cable to node1, which is booting, unplugged by you."],
+		["port 2 link down", false, "Cable to node1, which is being restored, unplugged by you."],
 	]);
 });
 
@@ -346,6 +381,19 @@ describe("annotations", () => {
 		expect(notes(log)).toEqual(["flooded to port 2"]);
 	});
 
+	test("a question asked again is answered from the reply on, and again only by another", () => {
+		const { log, frame, at } = setup();
+		frame(arpRequest(1, 2), 1, bit(2), "group");
+		frame(arpRequest(1, 2), 1, bit(2), "group");
+		at(500);
+		frame(arpReply(2, 1), 2, bit(1));
+		frame(arpRequest(1, 2), 1, bit(2), "group");
+		log.sweep(1400);
+		at(1450);
+		log.sweep(1500);
+		expect(notes(log)).toEqual(["flooded to port 2", "flooded to port 2", null, "flooded to port 2 · no reply"]);
+	});
+
 	test("a request evicted or cleared before its sweep is forgotten", () => {
 		const { log, frame } = setup(2);
 		frame(arpRequest(1, 9), 1, 0, "group");
@@ -355,6 +403,45 @@ describe("annotations", () => {
 		log.clear();
 		log.sweep(5000);
 		expect(log.size).toBe(0);
+	});
+});
+
+describe("a storm of ARP with no sweep, as in a tab that is hidden", () => {
+	setFlagsFromString("--expose-gc");
+	const collect = runInNewContext("gc") as () => void;
+
+	test("keeps no request that has left the buffer", async () => {
+		const { log, frame } = setup(100);
+		const held = Array.from({ length: 1000 }, () => {
+			const bytes = arpRequest(1, 9);
+			frame(bytes, 1, bit(2), "group");
+			return new WeakRef(bytes);
+		});
+		// A WeakRef is held to the end of the task that made it.
+		await new Promise((resolve) => setTimeout(resolve));
+		collect();
+		expect(held.filter((ref) => ref.deref()).length).toBe(100);
+		log.sweep(1000);
+		expect(notes(log)).toEqual(new Array(100).fill("flooded to port 2 · no reply"));
+	});
+
+	test("grows with neither the questions nor the replies", () => {
+		const { log, frame } = setup(100);
+		const used = () => {
+			collect();
+			return process.memoryUsage().heapUsed;
+		};
+		const storm = (from: number) => {
+			for (let i = from; i < from + 50_000; i++) {
+				frame(arpRequest(1, 9, 0x0b000000 + i), 1, bit(2), "group");
+				frame(eth(mac(1), mac(2), 0x0806, arpPacket(2, mac(2), 0x0c000000 + i, mac(1), ip(1))), 2, bit(1));
+			}
+		};
+		storm(0);
+		const before = used();
+		storm(50_000);
+		expect((used() - before) / 2 ** 20).toBeLessThan(4);
+		expect(log.size).toBe(100);
 	});
 });
 

@@ -3,17 +3,19 @@
 // engine wire the app's: filter and pause follow the store, and the
 // `capture/clear` effect clears it.
 
-import { type CaptureLog, createCaptureLog } from "../../src/capture/index.ts";
+import { type CaptureLog, createCaptureLog, followLab } from "../../src/capture/index.ts";
 import {
 	type Cause,
 	DEFAULT_SWITCH,
 	type Effect,
+	type LabState,
 	type MachineName,
 	type PortNo,
 	type ReadStore,
-	selectNames,
+	type SwitchName,
+	switchLabel,
 } from "../../src/model/index.ts";
-import { compileFilter, type Flood, type NameBook, type NicNo } from "../../src/net/index.ts";
+import type { Flood, NameBook, NicNo } from "../../src/net/index.ts";
 import { NAMES } from "./frames.ts";
 
 export interface TestCapture {
@@ -22,7 +24,9 @@ export interface TestCapture {
 	at(ms: number): void;
 	/** Who is who from now on: node1 to node8 until it is set. */
 	names(names: NameBook): void;
-	frame(bytes: Uint8Array, from: PortNo, to?: readonly PortNo[], flood?: Flood | null): void;
+	/** Rows name their switch from now on as they do in that lab. */
+	switches(lab: Pick<LabState, "switches">): void;
+	frame(bytes: Uint8Array, from: PortNo, to?: readonly PortNo[], flood?: Flood | null, on?: SwitchName): void;
 	link(port: PortNo, machine: MachineName, up: boolean, cause?: Cause, nic?: NicNo): void;
 	/** Pass as `mount`'s `onEffect`. */
 	readonly onEffect: (effect: Effect) => void;
@@ -33,7 +37,14 @@ export interface TestCapture {
 export function testCapture(limit?: number): TestCapture {
 	let now = 0;
 	let names: NameBook = NAMES;
-	const log = createCaptureLog({ limit, schedule: (fn) => fn(), now: () => now, names: () => names });
+	let lab: Pick<LabState, "switches"> = { switches: [DEFAULT_SWITCH] };
+	const log = createCaptureLog({
+		limit,
+		schedule: (fn) => fn(),
+		now: () => now,
+		names: () => names,
+		rowNames: { switchLabel: (on) => switchLabel(lab, on) },
+	});
 	return {
 		log,
 		at(ms) {
@@ -42,9 +53,12 @@ export function testCapture(limit?: number): TestCapture {
 		names(next) {
 			names = next;
 		},
-		frame(bytes, from, to = [], flood = null) {
+		switches(next) {
+			lab = next;
+		},
+		frame(bytes, from, to = [], flood = null, on = DEFAULT_SWITCH) {
 			const mask = to.reduce((m, p) => m | (1 << (p - 1)), 0);
-			log.appendFrame({ switch: DEFAULT_SWITCH, from, to: mask, flood, frame: bytes });
+			log.appendFrame({ switch: on, from, to: mask, flood, frame: bytes });
 		},
 		link(port, machine, up, cause = "button", nic = 0) {
 			log.appendLink({ port: { switch: DEFAULT_SWITCH, port }, machine, nic, up, cause });
@@ -53,19 +67,7 @@ export function testCapture(limit?: number): TestCapture {
 			if (effect.type === "capture/clear") log.clear();
 		},
 		follow(store) {
-			let { filter, paused } = store.state.capture;
-			store.subscribe(() => {
-				const next = store.state.capture;
-				if (next.filter !== filter) {
-					filter = next.filter;
-					const compiled = compileFilter(filter, selectNames(store.state));
-					if (compiled.ok) log.setFilter(compiled.filter);
-				}
-				if (next.paused !== paused) {
-					paused = next.paused;
-					log.setPaused(paused);
-				}
-			});
+			followLab(log, store);
 		},
 	};
 }

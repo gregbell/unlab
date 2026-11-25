@@ -11,6 +11,7 @@ export const ip = (n: number): number => (0x0a580000 + 10 + n) >>> 0;
 export const NAMES = {
 	addresses: new Map([1, 2, 3, 4, 5, 6, 7, 8].map((n) => [ip(n), { n, nic: 0 as const }])),
 	names: new Map([1, 2, 3, 4, 5, 6, 7, 8].map((n) => [n, `node${n}` as const])),
+	switches: new Set(["switch0"]),
 };
 
 function u16(v: number): number[] {

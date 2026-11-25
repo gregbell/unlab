@@ -100,8 +100,9 @@ export function addressText(machine: Pick<Machine, "spec">): string {
 
 /** Who is who in the lab now, for naming what a frame's bytes point at. */
 export const selectNames: (state: LabState) => NameBook = memo(
-	(s) => [s.machines, s.rail, s.departed],
-	(machines, rail, departed) => nameBook({ machines, rail, departed }),
+	(s) => [s.machines, s.rail, s.departed, s.switches, s.departedSwitches],
+	(machines, rail, departed, switches, departedSwitches) =>
+		nameBook({ machines, rail, departed, switches, departedSwitches }),
 );
 
 /**

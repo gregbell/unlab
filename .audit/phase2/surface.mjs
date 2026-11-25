@@ -75,6 +75,8 @@ const COMPLETED = [
 	"link down node1:",
 	"rm ",
 	"capture port:",
+	"capture ",
+	"capture arp or switch0:",
 ];
 const LINES = [
 	"spawn 2 alpine",
@@ -106,6 +108,10 @@ const LINES = [
 	"capture port:2",
 	"capture port:9",
 	"capture switch0",
+	"capture switch0:2 arp",
+	"capture switch0:9",
+	"capture lan:2",
+	"capture arp bogus",
 	"focus node3",
 	"sh node1",
 	"rm node1",
@@ -174,7 +180,7 @@ for (const filter of ["port:1", "port:2", "port:3 arp", "node2", "arp or port:2"
 	print(`filter ${filter}`, capture.tail(20).map((row) => row.seq));
 }
 const tool = toolTable(lab.registry, reads).find(({ name }) => name === "capture_read");
-for (const input of [{}, { filter: "port:2", limit: 2 }, { filter: "port:9" }]) {
+for (const input of [{}, { filter: "port:2", limit: 2 }, { filter: "port:9" }, { filter: "switch0:2" }, { filter: "lan" }]) {
 	const prepared = tool.prepare(input, lab.store.state);
 	print(`capture_read ${JSON.stringify(input)}`, prepared.ok ? await prepared.run(signal) : prepared);
 }
@@ -296,6 +302,11 @@ async function severalSwitches() {
 	for (const line of ["spawn 1 alpine --net ", "spawn 1 alpine --nics 2 --net lan,", "rmswitch ", "mkswitch ", "link up node2:", "plug ", "plug web ", "plug web switch1:", "unplug "]) {
 		several(`complete ${line}`, completeLine(lab.registry, line, line.length, lab.store.state));
 	}
+	for (const line of ["capture ", "capture arp or l", "capture web:", "capture switch1:", "capture lan:"]) {
+		several(`complete ${line}`, completeLine(lab.registry, line, line.length, lab.store.state));
+	}
+	const FILTERS = ["switch1", "switch1:2", "switch0:2 arp", "lan", "lan:3", "lan:9", "wan:1", "node9:3", "bogus"];
+	for (const filter of FILTERS) several(`capture ${filter}`, await ran(lab, `capture ${filter}`));
 	const lan = lab.store.state.switches.at(-1);
 	capture.appendFrame({ switch: lan, from: 1, to: 0b110, flood: "group", frame: arpRequest(1, 2) });
 	capture.appendFrame({ switch: lan, from: 2, to: 0b1, flood: null, frame: arpReply(2, 1) });
@@ -321,6 +332,9 @@ async function severalSwitches() {
 		["cable_plug", { nic: "web", to: "switch1:4" }],
 		["cable_unplug", { nic: "web" }],
 		["capture_read", {}],
+		["capture_read", { filter: "switch1:2" }],
+		["capture_read", { filter: "switch0" }],
+		["capture_read", { filter: "switch1:9" }],
 	]) {
 		const prepared = tools.find((tool) => tool.name === name)?.prepare(input, lab.store.state);
 		if (!prepared) continue;

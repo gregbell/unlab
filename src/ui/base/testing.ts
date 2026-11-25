@@ -36,7 +36,7 @@ import {
 	update,
 	type WebMcp,
 } from "../../model/index.ts";
-import { isAddressFault, parseAddress } from "../../net/index.ts";
+import { isAddressFault, MATCH_ALL, parseAddress } from "../../net/index.ts";
 import type { AgentService, AppServices, SwitchReadout, TerminalService } from "../services.ts";
 import { servicesContext } from "./context.ts";
 
@@ -230,7 +230,9 @@ const EMPTY_CAPTURE: CaptureView = {
 	window: () => [],
 	indexOf: () => -1,
 	entry: () => null,
+	filter: MATCH_ALL,
 	frames: () => [],
+	matched: () => [],
 	subscribe: () => () => {},
 };
 

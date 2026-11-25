@@ -23,8 +23,11 @@ function compile(source: string, names: NameBook = NAMES) {
 	if (!r.ok) throw new Error(`expected ${source} to compile: ${r.error.message}`);
 	const { filter } = r;
 	return {
-		matchesFrame: (f: Uint8Array, from: number, to: number) => filter.matchesFrame(f, from, to, names),
-		matchesLink: (port: number, machine: MachineName, nic: NicNo) => filter.matchesLink(port, machine, nic, names),
+		matchesFrame: (bytes: Uint8Array, from: number, to: number, on = "switch0") =>
+			filter.matchesFrame({ switch: on, from, to, bytes, names }),
+		matchesLink: (port: number, machine: MachineName, nic: NicNo, on = "switch0") =>
+			filter.matchesLink({ port: { switch: on, port }, machine, nic, names }),
+		scope: filter.scope,
 	};
 }
 
@@ -43,7 +46,9 @@ describe("filter terms", () => {
 			expect(f.matchesFrame(ping(1, 2), 1, bit(2))).toBe(true);
 			expect(f.matchesLink(3, "node3", 0)).toBe(true);
 		}
-		expect(MATCH_ALL.matchesFrame(arpRequest(1, 2), 1, 0, NAMES)).toBe(true);
+		expect(MATCH_ALL.matchesFrame({ switch: "switch0", from: 1, to: 0, bytes: arpRequest(1, 2), names: NAMES })).toBe(
+			true,
+		);
 	});
 
 	test("protocols", () => {
@@ -158,6 +163,114 @@ describe("filter terms", () => {
 	});
 });
 
+describe("terms that say where a frame was", () => {
+	const THREE: NameBook = { ...NAMES, switches: new Set(["switch0", "lan", "wan"]) };
+	/** The same ping, carried by switch0 from port 1 to 3, by lan from 3 to 4, and by lan from 2 to every other port. */
+	const at = [
+		["switch0", 1, bit(3)],
+		["lan", 3, bit(4)],
+		["lan", 2, bit(1) | bit(3)],
+	] as const;
+	const matching = (source: string) => {
+		const f = compile(source, THREE);
+		return at.map(([on, from, to]) => f.matchesFrame(ping(1, 2), from, to, on));
+	};
+
+	test("a switch is the frames that it carried", () => {
+		expect(matching("switch0")).toEqual([true, false, false]);
+		expect(matching("LAN")).toEqual([false, true, true]);
+		expect(matching("wan")).toEqual([false, false, false]);
+	});
+
+	test("a cable is the frames that came or went by its port, on its switch", () => {
+		expect(matching("lan:3")).toEqual([false, true, true]);
+		expect(matching("Lan:4")).toEqual([false, true, false]);
+		expect(matching("switch0:3")).toEqual([true, false, false]);
+		expect(matching("switch0:2")).toEqual([false, false, false]);
+	});
+
+	test("port:N is that port of every switch, and a machine or NIC is itself on all of them", () => {
+		expect(matching("port:3")).toEqual([true, true, true]);
+		expect(matching("port:4")).toEqual([false, true, false]);
+		expect(matching("node2")).toEqual([true, true, true]);
+		expect(matching("node2:eth0")).toEqual([true, true, true]);
+	});
+
+	test("combine with every other term, and with each other", () => {
+		expect(matching("lan port:3 icmp")).toEqual([false, true, true]);
+		expect(matching("lan:3 lan:1")).toEqual([false, false, true]);
+		expect(matching("lan switch0")).toEqual([false, false, false]);
+		expect(matching("lan:4 or switch0:1 node1")).toEqual([true, true, false]);
+		expect(matching("lan arp or switch0 icmp")).toEqual([true, false, false]);
+	});
+
+	test("keep the link rows of their switch or port", () => {
+		const links = (source: string) =>
+			(["switch0", "lan"] as const).flatMap((on) =>
+				[2, 3].map((port) => compile(source, THREE).matchesLink(port, "node3", 0, on)),
+			);
+		expect(links("lan")).toEqual([false, false, true, true]);
+		expect(links("lan:3")).toEqual([false, false, false, true]);
+		expect(links("port:3")).toEqual([false, true, false, true]);
+		expect(links("lan arp")).toEqual([false, false, true, true]);
+	});
+
+	test("win over a machine that is gone, which keeps its NICs", () => {
+		const book: NameBook = { ...THREE, names: new Map([[2, "lan" as MachineName]]) };
+		const bare = compile("lan", book);
+		expect(bare.matchesFrame(ping(1, 2), 1, bit(2), "switch0")).toBe(false);
+		expect(bare.matchesFrame(ping(1, 3), 1, bit(2), "lan")).toBe(true);
+		expect(compile("lan:eth0", book).matchesFrame(ping(1, 2), 1, bit(2), "switch0")).toBe(true);
+		expect(compile("lan:1", book).matchesFrame(ping(1, 3), 1, bit(2), "lan")).toBe(true);
+	});
+
+	test("hide no MAC that starts with a switch's name", () => {
+		const book: NameBook = { ...NAMES, switches: new Set(["switch0", "fe"]) };
+		const frame = eth(mac(1), Uint8Array.of(0xfe, 0x54, 0, 0x88, 0, 12), 0x0800, []);
+		expect(compile("fe:54:00:88:00:0c", book).matchesFrame(frame, 1, 0)).toBe(true);
+		expect(compile("fe:5", book).matchesFrame(frame, 5, 0, "fe")).toBe(true);
+	});
+
+	test("a filter says whether it is one place, or names any", () => {
+		const scope = (source: string) => compile(source, THREE).scope;
+		for (const source of ["", "arp", "node2 or node2:eth1", "port:3"]) {
+			expect(scope(source), source).toEqual({ kind: "everywhere" });
+		}
+		expect(scope("lan")).toEqual({ kind: "place", switch: "lan", port: null });
+		expect(scope("  lan:3 ")).toEqual({ kind: "place", switch: "lan", port: 3 });
+		for (const source of ["lan:3 icmp", "lan or wan", "arp or lan:3", "lan port:3"]) {
+			expect(scope(source), source).toEqual({ kind: "places" });
+		}
+	});
+
+	const refusal = (source: string, names = THREE) => {
+		const r = compileFilter(source, names);
+		if (r.ok) throw new Error(`expected ${source} to fail`);
+		return r.error;
+	};
+
+	test.each(["lan:0", "lan:9", "lan:", "lan:03", "lan:eth0", "lan:1:2"])("%s is no port", (term) => {
+		const message = `${term} is no port, so use one from lan:1 to lan:8.`;
+		expect(refusal(`arp ${term}`)).toEqual({ token: term, start: 4, end: 4 + term.length, message });
+	});
+
+	test("a switch that is not there is refused with those that are", () => {
+		expect(refusal("lam:3").message).toBe("No switch is called lam, so use switch0, lan or wan.");
+		expect(refusal("arp or Lam:3")).toMatchObject({ token: "Lam:3", start: 7, end: 12 });
+		expect(refusal("node2:3").message).toContain("a switch (lan), a cable (lan:3), an address");
+	});
+
+	test("a lab of one switch is told of no other", () => {
+		for (const term of ["lam:3", "lan", "bogus", "node2:3", "port:9"]) {
+			expect(refusal(term, NAMES).message, term).toBe(
+				`Capture cannot read ${term}, so use a protocol, a machine, a NIC (node2:eth1), an address, a MAC or port:N.`,
+			);
+		}
+		expect(refusal("switch0:9", NAMES).message).toBe("switch0:9 is no port, so use one from switch0:1 to switch0:8.");
+		expect(compile("switch0:2").matchesFrame(ping(1, 2), 1, bit(2))).toBe(true);
+	});
+});
+
 describe("filter combinators", () => {
 	test("a space means and", () => {
 		const f = compile("icmp node3");
@@ -207,7 +320,7 @@ describe("link rows", () => {
 
 describe("a chosen name", () => {
 	const called = (...names: [number, string][]): NameBook => ({
-		addresses: NAMES.addresses,
+		...NAMES,
 		names: new Map(names.map(([n, name]) => [n, name as MachineName])),
 	});
 	const before = called([2, "web"], [3, "fe"]);
@@ -303,6 +416,7 @@ interface Described {
 	readonly dstMac: Uint8Array;
 	readonly srcIp: number;
 	readonly dstIp: number;
+	readonly on: string;
 	readonly from: number;
 	readonly to: number;
 }
@@ -366,9 +480,11 @@ function oracle(term: string, d: Described): boolean {
 	const macEnd = (m: Uint8Array) => sameMac(d.srcMac, m) || sameMac(d.dstMac, m);
 	const kinds = PROTO_KINDS[t];
 	if (kinds) return kinds.includes(d.kind);
-	if (t.startsWith("port:")) {
-		const p = Number(t.slice(5));
-		return d.from === p || (d.to & (1 << (p - 1))) !== 0;
+	const place = /^(port|switch0|lan)(?::(\d))?$/.exec(t);
+	if (place) {
+		const [, on, p] = place;
+		const there = on === "port" || d.on === on;
+		return there && (p === undefined || d.from === Number(p) || d.to.toString(2).at(-Number(p)) === "1");
 	}
 	if (t.startsWith("node")) {
 		const n = Number(t.slice(4));
@@ -392,7 +508,13 @@ const termPool = [
 	"port:2",
 	"port:3",
 	"port:4",
+	"switch0",
+	"lan",
+	"lan:1",
+	"lan:4",
+	"switch0:2",
 ];
+const TWO: NameBook = { ...NAMES, switches: new Set(["switch0", "lan"]) };
 
 const described = fc.record({
 	kind: fc.constantFrom<Kind>("arp-request", "arp-reply", "icmp", "tcp", "udp", "dhcp", "dns", "ipv6"),
@@ -400,6 +522,7 @@ const described = fc.record({
 	dstMac: fc.constantFrom(...macs, BROADCAST),
 	srcIp: fc.constantFrom(...ips),
 	dstIp: fc.constantFrom(...ips),
+	on: fc.constantFrom("switch0", "lan"),
 	from: fc.integer({ min: 1, max: 4 }),
 	to: fc.integer({ min: 0, max: 15 }),
 });
@@ -409,10 +532,10 @@ const filterGroups = fc.array(fc.array(term, { minLength: 1, maxLength: 3 }), { 
 test("the compiled predicate agrees with the filter's meaning", () => {
 	fc.assert(
 		fc.property(filterGroups, fc.array(described, { minLength: 1, maxLength: 20 }), (groups, frames) => {
-			const f = compile(groups.map((g) => g.join(" ")).join(" or "));
+			const f = compile(groups.map((g) => g.join(" ")).join(" or "), TWO);
 			for (const d of frames) {
 				const want = groups.some((g) => g.every((t) => oracle(t, d)));
-				if (f.matchesFrame(build(d), d.from, d.to) !== want) return false;
+				if (f.matchesFrame(build(d), d.from, d.to, d.on) !== want) return false;
 			}
 			return true;
 		}),

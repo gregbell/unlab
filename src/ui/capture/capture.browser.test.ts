@@ -3,8 +3,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { testCapture } from "../../../test/support/capture.ts";
 import { arpReply, arpRequest, mac, ping, routedPing } from "../../../test/support/frames.ts";
-import { selectNames } from "../../model/index.ts";
+import { parseSwitchName, type SwitchName, selectNames } from "../../model/index.ts";
 import {
+	addSwitch,
 	LONG_NAME,
 	lab,
 	mount,
@@ -26,11 +27,18 @@ afterEach(() => {
 
 const threeUp = lab(spawn(3), ready());
 
-async function mountCapture(mode: CaptureMode, fill: (c: ReturnType<typeof testCapture>) => void = () => {}) {
+const lan = parseSwitchName("lan") as SwitchName;
+
+async function mountCapture(
+	mode: CaptureMode,
+	fill: (c: ReturnType<typeof testCapture>) => void = () => {},
+	state = threeUp,
+) {
 	const capture = testCapture();
+	capture.switches(state);
 	fill(capture);
 	const mounted = await mount("unlab-capture", {
-		state: threeUp,
+		state,
 		capture: capture.log,
 		onEffect: capture.onEffect,
 		prepare: (el) => el.setAttribute("mode", mode),
@@ -45,6 +53,39 @@ function twelvePings(c: ReturnType<typeof testCapture>): void {
 		c.at(seq * 1000);
 		c.frame(ping(1, 2, seq), 1, [2]);
 	}
+}
+
+function viaRows(c: ReturnType<typeof testCapture>): void {
+	c.frame(ping(1, 2), 1, [2]);
+	c.frame(ping(1, 2), 3, [4, 5], "unknown", lan);
+	c.frame(ping(1, 2), 3, [], null, lan);
+}
+
+/** Clicks Save and reads what the browser is given: its name, and of each frame the ping's number. */
+function downloads() {
+	const given: { name: string; blob: Blob }[] = [];
+	let last: Blob | null = null;
+	vi.spyOn(URL, "createObjectURL").mockImplementation((blob) => {
+		last = blob instanceof Blob ? blob : null;
+		return "blob:unlab-test";
+	});
+	vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (this: HTMLAnchorElement) {
+		if (last) given.push({ name: this.download, blob: last });
+	});
+	return async () => {
+		given.length = 0;
+		await userEvent.click(page.getByRole("button", { name: "save .pcap" }));
+		expect(given).toHaveLength(1);
+		const [{ name, blob }] = given;
+		const file = new DataView(await blob.arrayBuffer());
+		expect(file.getUint32(0, true)).toBe(0xa1b2c3d4);
+		const seqs: (number | "arp")[] = [];
+		for (let at = 24; at < file.byteLength; at += 16 + file.getUint32(at + 8, true)) {
+			const frame = at + 16;
+			seqs.push(file.getUint16(frame + 12) === 0x0806 ? "arp" : file.getUint16(frame + 40));
+		}
+		return { name, seqs };
+	};
 }
 
 const rows = (element: HTMLElement) => [...element.querySelectorAll<HTMLElement>(".row:not(.heading)")];
@@ -293,23 +334,91 @@ describe("<unlab-capture mode=full>", () => {
 		expect(element.querySelectorAll("[aria-selected=true]")).toHaveLength(1);
 	});
 
-	it("saves every frame in the buffer as a pcap file, ignoring the filter", async () => {
-		const blobs: Blob[] = [];
-		vi.spyOn(URL, "createObjectURL").mockImplementation((blob) => {
-			if (blob instanceof Blob) blobs.push(blob);
-			return "blob:unlab-test";
-		});
-		vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+	it("saves every frame in the buffer as a pcap file, ignoring a filter that names no switch or cable", async () => {
+		const save = downloads();
 		const { settle } = await mountCapture("full", twelvePings);
-		await userEvent.fill(page.getByRole("textbox", { name: "filter" }), "arp");
-		await settle();
-		await userEvent.click(page.getByRole("button", { name: "save .pcap" }));
+		for (const filter of ["", "arp", "node2:eth1", "port:3"]) {
+			await userEvent.fill(page.getByRole("textbox", { name: "filter" }), filter);
+			await settle();
+			expect(await save(), filter).toEqual({
+				name: "unlab-switch0.pcap",
+				seqs: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+			});
+		}
+	});
 
-		expect(blobs).toHaveLength(1);
-		const bytes = new Uint8Array(await (blobs[0] ?? new Blob()).arrayBuffer());
-		expect([...bytes.subarray(0, 4)]).toEqual([0xd4, 0xc3, 0xb2, 0xa1]);
-		const frameBytes = ping(1, 2, 1).length;
-		expect(bytes.length).toBe(24 + 12 * (16 + frameBytes));
+	it("saves what is shown, named for the place, when the filter names a switch or a cable", async () => {
+		const save = downloads();
+		const { settle } = await mountCapture(
+			"full",
+			(c) => {
+				c.frame(ping(1, 2, 1), 1, [2]);
+				c.frame(ping(1, 2, 2), 3, [4], null, lan);
+				c.frame(ping(2, 1, 3, 0), 4, [3], null, lan);
+				c.link(3, "node1", false);
+				c.frame(ping(1, 2, 4), 5, [4], null, lan);
+				c.frame(arpRequest(1, 2), 3, [4, 5], "group", lan);
+			},
+			lab(spawn(1), ready(), addSwitch(lan)),
+		);
+		const button = page.getByRole("button", { name: "save .pcap" });
+		for (const [filter, name, seqs] of [
+			["lan", "unlab-lan.pcap", [2, 3, 4, "arp"]],
+			["lan:3", "unlab-lan-port3.pcap", [2, 3, "arp"]],
+			["lan:3 icmp", "unlab-filtered.pcap", [2, 3]],
+			["lan:5 or switch0", "unlab-filtered.pcap", [1, 4, "arp"]],
+			["lan:8", "unlab-lan-port8.pcap", []],
+		] as const) {
+			await userEvent.fill(page.getByRole("textbox", { name: "filter" }), filter);
+			await settle();
+			expect(await save(), filter).toEqual({ name, seqs });
+			await expect.element(button).toHaveAttribute("title", "Save the frames shown");
+		}
+		await userEvent.fill(page.getByRole("textbox", { name: "filter" }), "port:3");
+		await settle();
+		await expect.element(button).not.toHaveAttribute("title");
+		expect(await save()).toEqual({ name: "unlab.pcap", seqs: [1, 2, 3, 4, "arp"] });
+	});
+
+	it("has a column for the switch and the ports, in a lab of several", async () => {
+		const { element } = await mountCapture("full", viaRows, lab(spawn(1), ready(), addSwitch(lan)));
+		expect(text(part(element, ".heading"))).toContain("switch");
+		const via = rows(element).map((row) => text(row.querySelector(".via")));
+		expect(via).toEqual(["switch0 1 → 2", "lan 3 → 4,5", "lan 3 → none"]);
+		const titles = [...element.querySelectorAll(".via")].map((cell) => cell.getAttribute("title"));
+		expect(titles).toEqual([
+			"On switch0, in by port 1 and out of port 2.",
+			"On lan, in by port 3 and out of ports 4 and 5.",
+			"On lan, in by port 3 and out of none.",
+		]);
+		const tops = [...rows(element)[1].children].map((cell) => cell.getBoundingClientRect().top);
+		expect(Math.max(...tops) - Math.min(...tops)).toBeLessThan(6);
+	});
+
+	it("shows the ports whatever the switch is called", async () => {
+		const long = parseSwitchName(LONG_NAME) as SwitchName;
+		const { element } = await mountCapture(
+			"full",
+			(c) => c.frame(ping(1, 2), 1, [2, 3], "unknown", long),
+			lab(spawn(1), ready(), addSwitch(long)),
+		);
+		const [name, ports] = [...part(element, ".row.frame .via").children] as HTMLElement[];
+		expect([text(name), text(ports)]).toEqual([LONG_NAME, "1 → 2,3"]);
+		expect(ports.scrollWidth).toBeLessThanOrEqual(ports.clientWidth);
+		expect(name.scrollWidth).toBeGreaterThan(name.clientWidth);
+	});
+
+	it("has no such column in a lab of one, unless a switch that is gone carried something", async () => {
+		const { element } = await mountCapture("full", twelvePings);
+		expect(text(part(element, ".heading"))).toBe("timeprotorouteleninfo");
+		expect(element.querySelector(".via")).toBeNull();
+		unmountAll();
+		const gone = await mountCapture("full", viaRows);
+		expect(rows(gone.element).map((row) => text(row.querySelector(".via")))).toEqual([
+			"",
+			"lan 3 → 4,5",
+			"lan 3 → none",
+		]);
 	});
 });
 

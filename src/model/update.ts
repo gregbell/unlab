@@ -108,6 +108,7 @@ export function initialState(
 		machines: {},
 		rail: [],
 		departed: {},
+		departedSwitches: [],
 		switches: [DEFAULT_SWITCH],
 		shownSwitch: DEFAULT_SWITCH,
 		sessions: {},
