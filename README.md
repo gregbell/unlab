@@ -422,6 +422,11 @@ The SSH programs in [public/ssh](public/ssh/) are built from pinned releases by
 `npm run cli` builds it, and
 `node cli/dist/cli.mjs --origin http://localhost:5173` takes that lab's pages.
 
+To release the CLI, raise `version` in [cli/package.json](cli/package.json), merge it, then tag that commit
+`cli-v` and the version, as in `git tag cli-v0.1.2 && git push origin cli-v0.1.2`. The
+[CLI workflow](.github/workflows/cli.yml) tests it and publishes it to npm with provenance. That needs the repository
+secret `NPM_TOKEN` in its `npm` environment: a granular npm token that may publish `unlab.run`.
+
 ## How it works
 
 Each guest runs in its own worker. When Linux sends an Ethernet frame, the

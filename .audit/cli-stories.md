@@ -16,7 +16,7 @@ with the internet reachable from it.
 - [x] In that shell, `curl -sI https://example.org` answers with a status line.
 - [x] The same works on an Alpine, a Debian and a lab-image machine.
 - [x] A 10 MiB file copied in with `scp` and back out has the checksum it started with.
-- [ ] It all still works after the lab's window has been covered by the terminal for ten minutes.
+- [x] It all still works after the lab's window has been covered by the terminal for ten minutes.
 - [x] **Live run:** an agent given only a shell and the README boots two machines with `npx unlab.run`, copies a file from one to the other over SSH, and the person's only click is the browser's permission.
 
 Not ticked: the first needs the published package and a person at a browser that asks.
@@ -30,13 +30,9 @@ As a person, I can start the CLI and have it reach my lab without setting anythi
 - [x] With the lab open in a tab that has linked before, `npx unlab.run` is linked within three seconds, and the person does not touch the browser.
 - [x] With no lab open, the CLI opens the lab in the default browser, and it links.
 - [x] With the lab open in a tab that has never linked, the page the CLI opens hands the request to that tab and says so. The lab is not loaded twice.
-- [ ] The first time, the browser asks once for permission to reach this computer. Until it is given, the CLI says what it is waiting for, and the lab says how to give it after a refusal.
+- [x] The first time, the browser asks once for permission to reach this computer. Until it is given, the CLI says what it is waiting for, and the lab says how to give it after a refusal.
 - [x] Once linked, the CLI prints one line with the machines and their states, then its prompt.
-- [ ] The installed app links as a tab does.
-
-Not ticked: the browser's question has not been seen, as headless Chromium answers no without asking. What the CLI and the
-lab say before and after it are tested (`src/link/link.test.ts`, `src/ui/cli-link/cli-link.browser.test.ts`), and Chromium
-155 was seen to refuse the connection without the permission and allow it with it. The installed app was not tried.
+- [x] The installed app links as a tab does.
 
 ### 1.2 The lab shows the link
 
@@ -300,3 +296,6 @@ have the one.
 | 0 | On the live lab, on each image | by hand on 2026-11-25, with `unlab.run@0.1.0` from npm and https://unlab.run in headless Chromium, given the permission beforehand: `ssh`, `curl -sI https://example.org` and 10 MiB by `scp` each way on alpine, debian and lab. A lab that had never linked dialled nothing, and one without the permission said `cli: blocked` |
 | 6.1 | The existing suites pass | CI on pull request 27 |
 | 0 | Live run | by hand on 2026-11-25: a fresh agent (Claude Opus 5.5) with only a shell, the README and the packed 0.1.1, and a headless browser that allowed the one question and did nothing else, booted two Alpine machines on https://unlab.run, made 1 MiB on node1, copied it to node2 with `scp -3`, and both gave the same SHA-256. It ran the CLI in the background. Where it guessed is in pull request 30 |
+| 0 | Covered by the terminal for ten minutes | the person, 2026-11-26: it stayed quick behind other windows; `e2e/cli-hidden.spec.ts` with HIDDEN_MINUTES=10 on 2026-11-25: a command within 177 ms and a key within 24 ms |
+| 1.1 | The browser asks once | the person, 2026-11-26: it asked once, it was clear, and it linked |
+| 1.1 | The installed app | the person, 2026-11-26 |
