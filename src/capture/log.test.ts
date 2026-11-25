@@ -180,11 +180,11 @@ describe("rows", () => {
 
 describe("several switches", () => {
 	const lan = parseSwitchName("lan") as SwitchName;
-	const log = (several: boolean) => {
+	const log = () => {
 		const made = createCaptureLog({
 			schedule: (fn) => fn(),
 			now: () => 0,
-			rowNames: { switchLabel: (on) => (several || on !== "switch0" ? on : null) },
+			rowNames: { switchLabel: (on) => on },
 		});
 		made.appendFrame({ switch: "switch0", from: 1, to: 0b110, flood: "group", frame: arpRequest(1, 2) });
 		made.appendFrame({ switch: lan, from: 1, to: 0b100, flood: "unknown", frame: ping(1, 2) });
@@ -194,17 +194,12 @@ describe("several switches", () => {
 	};
 
 	test("are named by their rows, with the ports", () => {
-		expect(log(true)).toEqual([
+		expect(log()).toEqual([
 			["switch0", "flooded to switch0 ports 2 and 3"],
 			["lan", "unknown destination, flooded to lan port 3"],
 			["lan", "flooded, no other lan port is up"],
 			["lan", "lan port 3 link down"],
 		]);
-	});
-
-	test("that are gone are still named by the rows of their frames, and the one that is left is not", () => {
-		expect(log(false).map(([on]) => on)).toEqual([undefined, "lan", "lan", "lan"]);
-		expect(log(false)[0][1]).toBe("flooded to ports 2 and 3");
 	});
 });
 

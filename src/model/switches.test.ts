@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { port0 } from "../../test/support/ports.ts";
-import { planSwitch } from "./switches.ts";
+import { planSwitch, portLabel } from "./switches.ts";
 import {
 	effectsOf,
 	emptyLab,
@@ -192,6 +192,20 @@ describe("the switch on the page", () => {
 		expect(run(s, removed(lan)).shownSwitch).toBe("wan");
 		expect(run(s, removed(wan)).shownSwitch).toBe("switch0");
 		expect(run(s, removed(wan), { type: "ui/switch-shown", switch: wan }).shownSwitch).toBe("switch0");
+	});
+});
+
+describe("a port's label", () => {
+	test("has the switch when there are several, and for one that is gone", () => {
+		const port = { switch: lan, port: 3 } as const;
+		const both = added(emptyLab(), lan);
+		expect([portLabel(emptyLab(), port0(3)), portLabel(both, port0(3)), portLabel(both, port)]).toEqual([
+			"port 3",
+			"switch0 port 3",
+			"lan port 3",
+		]);
+		const gone = run(both, removed(lan));
+		expect([portLabel(gone, port0(3)), portLabel(gone, port)]).toEqual(["port 3", "lan port 3"]);
 	});
 });
 
