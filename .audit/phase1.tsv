@@ -37,3 +37,4 @@ ts	phase	decision	why	evidence	result
 2026-11-25T06:39:31Z	files	text on stdin of a root script, temp file then rename, 1 MiB limit	argv holds 64 KiB; old file stays whole on any failure	31 broken behaviours red; e2e/files.spec.ts 11 green after rebase	reviewed diff
 2026-11-25T06:39:31Z	files	policy run for file_write	same reach as shell_exec, which runs	src/model/update.ts	default, user can set ask
 2026-11-25T06:39:31Z	files	open: typing straight after starting cat on Debian showed ahalf sentence	seen before any write, cause not traced	worker report	open item
+2026-11-25T06:07:31Z	lab-image	merged PR 15	CI green	Actions run 45556494730; CI boot ms alpine 2739,2264,2349,2255 lab 2979,2374,2384,2370	merged

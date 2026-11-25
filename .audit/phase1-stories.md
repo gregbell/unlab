@@ -121,3 +121,9 @@
 | 6.1 | the lab's own /etc/hosts block and a write of that file | e2e/files.spec.ts: a host table that comes while an agent writes /etc/hosts is in it afterwards |
 | 6.1 | approvals, the agent panel and the recent lines stay readable | e2e/files.spec.ts: a text of several lines is readable where a person approves it, and left out of the lists of lines |
 | 1.4 (part) | a command sent to a machine that is not ready says which state it is in | e2e/files.spec.ts: a machine that is not ready is refused with its state |
+| 0 | given only the page and the lab's tools, an agent builds a machine with two NICs and a second disk, using the addresses the page chose, and one more machine on each of its two subnets | e2e/scenario.spec.ts: an agent builds a routed network with the page's addresses, and the router's second disk outlives a reboot |
+| 0 | a ping from one end machine to the other crosses the two-NIC machine | e2e/scenario.spec.ts: the same test (the ping fails once the router stops forwarding) |
+| 0 | the agent reboots the two-NIC machine and finds a file it wrote to the second disk intact | e2e/scenario.spec.ts: the same test |
+| 8.1 | each machine returns after a reload with its disks, NICs, name, addresses, power state, checkpoints and cables | e2e/scenario.spec.ts: a reload brings each machine back with its disks, NICs, name, addresses, power, checkpoints and cables |
+| 8.2 | spawn 2 alpine and the README's first ping behave as today | e2e/first-run.spec.ts: a first visit boots two alpine, debian machines, pings the peer and restores the lab on reload; e2e/network.spec.ts; e2e/lab.ts openWithTwoMachines types `spawn 2 alpine` |
+| 8.2 | existing suites pass | CI on every PR: npm run check, test:integration, test:browser, test:e2e |
