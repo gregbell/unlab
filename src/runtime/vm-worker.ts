@@ -305,8 +305,7 @@ async function boot(c: VmConfig): Promise<void> {
 			gateway: c.gateway,
 			promptToken: c.promptToken,
 		});
-		const prepareApk = c.gateway && c.distro === "alpine";
-		const r = await execAsRoot(vm, prepareApk ? `${alpinePackageSetup}\n${setup}` : setup);
+		const r = await execAsRoot(vm, c.gateway ? `${alpinePackageSetup}\n${setup}` : setup);
 		if (r.exitCode !== 0) {
 			fail(`setup: ${String(r.stderr).trim() || `exit ${r.exitCode}`}`, true);
 			return;

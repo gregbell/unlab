@@ -17,6 +17,14 @@
       "size": 72843264,
       "sha256": "93988579bcdb3af804b7a0b7d48bb2dc8a49556522667681aae09b51c9fca2eb",
       "image": "debian-13.7-abeed3a39d8a188d"
+    },
+    {
+      "name": "lab",
+      "file": "lab.erofs",
+      "size": 16297984,
+      "sha256": "2a2f31d43734a20e8e58ffffcb71efde402682402cadeabce34e2bd72b07f53c",
+      "image": "lab-1",
+      "release": "https://github.com/gregbell/unlab/releases/download/lab-image-1/"
     }
   ]
 }

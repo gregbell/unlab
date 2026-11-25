@@ -1,6 +1,7 @@
-// Mirror the distro images unkernel.dev serves, byte for byte.
+// Mirror the images that machines boot, byte for byte: the distros unkernel.dev
+// serves, and the lab image (see lab-image.ts).
 //
-// The images live as assets on the GitHub release that matches the installed
+// The distros live as assets on the GitHub release that matches the installed
 // unkernel package's version, indexed by distros.json with a size and a
 // SHA-256 for each. That release is what unkernel.dev builds its own
 // /distros/<name>-<hash>.erofs from, so pinning the package pins the images:
@@ -9,6 +10,7 @@
 import { createHash } from "node:crypto";
 import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
+import { LAB_IMAGE } from "./lab-image.ts";
 
 const RELEASE_REPO = "pithings/unkernel";
 const ROOT = new URL("../", import.meta.url);
@@ -21,6 +23,8 @@ interface IndexEntry {
 	sha256: string;
 	/** The upstream build id, e.g. alpine-3.24.4-0efe379209f9a99a. */
 	image: string;
+	/** Where it is downloaded from, when that is not unkernel's release. */
+	release?: string;
 }
 
 interface Index {
@@ -47,11 +51,14 @@ async function main(): Promise<void> {
 	const indexRes = await fetch(new URL("distros.json", base));
 	if (!indexRes.ok) throw new Error(`distros.json: HTTP ${indexRes.status}`);
 	const index = (await indexRes.json()) as Index;
+	const { abi, ...lab } = LAB_IMAGE;
+	if (abi !== index.abi) throw new Error(`The lab image was built for abi ${abi}, and unkernel is at ${index.abi}.`);
+	const images: IndexEntry[] = [...index.distros, lab];
 
 	await mkdir(OUT, { recursive: true });
-	const picked = index.distros.filter((d) => wanted.size === 0 || wanted.has(d.name));
+	const picked = images.filter((d) => wanted.size === 0 || wanted.has(d.name));
 	if (!picked.length)
-		throw new Error(`no such distro: ${[...wanted].join(", ")} (have ${index.distros.map((d) => d.name).join(", ")})`);
+		throw new Error(`no such distro: ${[...wanted].join(", ")} (have ${images.map((d) => d.name).join(", ")})`);
 
 	for (const d of picked) {
 		const out = new URL(d.file, OUT);
@@ -60,14 +67,14 @@ async function main(): Promise<void> {
 			console.log(`  ${d.name.padEnd(7)} already mirrored (${d.image})`);
 			continue;
 		}
-		const url = new URL(d.file, base);
+		const url = new URL(d.file, d.release ?? base);
 		process.stdout.write(`  ${d.name.padEnd(7)} downloading ${(d.size / 1e6).toFixed(1)} MB ... `);
 		const res = await fetch(url);
 		if (!res.ok) throw new Error(`${d.file}: HTTP ${res.status}`);
 		const bytes = new Uint8Array(await res.arrayBuffer());
-		if (bytes.length !== d.size) throw new Error(`${d.file}: got ${bytes.length} bytes, distros.json says ${d.size}`);
+		if (bytes.length !== d.size) throw new Error(`${d.file}: got ${bytes.length} bytes, it is pinned at ${d.size}`);
 		const sum = createHash("sha256").update(bytes).digest("hex");
-		if (sum !== d.sha256) throw new Error(`${d.file}: SHA-256 ${sum}, distros.json says ${d.sha256}`);
+		if (sum !== d.sha256) throw new Error(`${d.file}: SHA-256 ${sum}, it is pinned at ${d.sha256}`);
 		// Written through a temporary name: a half-written image must never be
 		// left behind for the dev server to hand out.
 		const tmp = new URL(`${d.file}.part`, OUT);
@@ -79,7 +86,7 @@ async function main(): Promise<void> {
 	// The manifest lists every image actually mirrored, not just the ones this
 	// run asked for: fetching one distro must not un-list the others.
 	const present: IndexEntry[] = [];
-	for (const d of index.distros) {
+	for (const d of images) {
 		const f = await stat(new URL(d.file, OUT)).catch(() => null);
 		if (f?.size === d.size) present.push(d);
 	}
@@ -88,7 +95,14 @@ async function main(): Promise<void> {
 		release: base,
 		abi: index.abi,
 		base: index.base,
-		distros: present.map((d) => ({ name: d.name, file: d.file, size: d.size, sha256: d.sha256, image: d.image })),
+		distros: present.map(({ name, file, size, sha256, image, release }) => ({
+			name,
+			file,
+			size,
+			sha256,
+			image,
+			release,
+		})),
 	};
 	await writeFile(new URL("distros.json", OUT), `${JSON.stringify(manifest, null, 2)}\n`);
 	console.log(`wrote public/distros/distros.json (${present.map((d) => d.name).join(", ")})`);

@@ -123,7 +123,6 @@ describe("boot", () => {
 					macs: ["52:54:00:88:00:0d"],
 					addresses: [{ ip: 0x0a58000d, prefix: 24 }],
 					image,
-					distro: "alpine",
 					memoryMiB: 256,
 					cpus: 1,
 					disks: { root: "4", extra: [] },
