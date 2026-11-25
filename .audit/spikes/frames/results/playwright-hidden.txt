@@ -1,0 +1,4 @@
+default arguments visibilityState=visible 100 ms timers late by 0,0,1,0,0,1,0,0
+default arguments focus emulation off: visibilityState=visible late by 1,0,1,0
+throttling arguments removed visibilityState=visible 100 ms timers late by 0,0,0,1,0,0,0,1
+throttling arguments removed focus emulation off: visibilityState=visible late by 1,0,1,1

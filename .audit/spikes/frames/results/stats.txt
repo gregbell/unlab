@@ -1,0 +1,25 @@
+p=0.2 n=1000: P(outside three points) = 1.58e-2, one in 6.3e+1
+p=0.2 n=2000: P(outside three points) = 7.23e-4, one in 1.4e+3
+p=0.2 n=4000: P(outside three points) = 2.01e-6, one in 5.0e+5
+p=0.2 n=10000: P(outside three points) = 8.64e-14, one in 1.2e+13
+p=0.36 n=1000: P(outside three points) = 4.44e-2, one in 2.3e+1
+p=0.36 n=2000: P(outside three points) = 4.82e-3, one in 2.1e+2
+p=0.36 n=4000: P(outside three points) = 7.19e-5, one in 1.4e+4
+p=0.36 n=10000: P(outside three points) = 3.88e-10, one in 2.6e+9
+p=0.5 n=1000: P(outside three points) = 5.37e-2, one in 1.9e+1
+p=0.5 n=2000: P(outside three points) = 6.80e-3, one in 1.5e+2
+p=0.5 n=4000: P(outside three points) = 1.38e-4, one in 7.2e+3
+p=0.5 n=10000: P(outside three points) = 1.84e-9, one in 5.4e+8
+p=0.2 n=1000 d=0.03: 1.58e-2
+p=0.2 n=1000 d=0.04: 1.37e-3
+p=0.2 n=1000 d=0.05: 6.90e-5
+p=0.2 n=1000 d=0.06: 2.12e-6
+a cable that loses 0.15 passes n=1000 with probability 4.38e-2
+a cable that loses 0.25 passes n=1000 with probability 7.63e-2
+a cable that loses 0.36 passes n=1000 with probability 5.18e-19
+a cable that loses 0.15 passes n=10000 with probability 1.96e-8
+a cable that loses 0.25 passes n=10000 with probability 1.68e-6
+a cable that loses 0.36 passes n=10000 with probability 2.72e-173
+Math.random: 3133 of 200000 runs of 1000 outside (1.57%)
+sfc32(seed): 3074 of 200000 runs of 1000 outside (1.54%)
+sfc32 seeds 1..5, lost of the first 1000: 192 193 198 192 194

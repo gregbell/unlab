@@ -1,0 +1,5 @@
+run 0 B/main mesh+pair flush=true
+   hops/s 513524  paints/s 60  page timer gap max 84 p50 4 ms (n=2439)  page.evaluate max 5 ms  guest echo 37 ms  ping during: 20/20 p50 7.315 max 13.695 dup 0
+   RSS 569 -> 1702 1856 2155 2320 2090 2395 2431 2723 2869 2585 2951 2658 MB each 5 s  looped/s 513508  CPU DedicatedWorker 0.97, chromium MAIN 0.96, ThreadPoolForeg 0.14, ThreadPoolForeg 0.12, ThreadPoolForeg 0.10, ThreadPoolForeg 0.09, ThreadPoolForeg 0.09, ThreadPoolForeg 0.09  waiting 3069 maxDrain 16.0  dropped {"loss":0,"mtu":0,"rate":0,"full":1594465,"cut":0,"storm":0} nicDropped [0,0,0]
+   vms [{"type":"probe","id":4,"got":27,"rx":0,"maxRx":0,"rxDropped":0},{"type":"probe","id":5,"got":27,"rx":0,"maxRx":0,"rxDropped":0},"no answer in 2 s"]
+   after cut: last looped frame 0 ms , frames 400-500 ms later 0; ping 3/3 max 0.76 ms, done 1000 ms after the cut; echo 31 ms; capture {"in":31756915,"delivered":71442398,"flooded":31756799,"skipped":0}
