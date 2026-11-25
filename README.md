@@ -7,7 +7,7 @@ WebAssembly. `unlab` connects those machines to a virtual Ethernet switch so you
 play with networking between linux boxes right in a tab. Send a ping, pull a
 cable, and see what happens to the packets.
 
-**[Open the live lab](https://gregbell.github.io/unlab/)** ·
+**[Open the live lab](https://unlab.run/)** ·
 [Run locally](#run-locally) · [Contribute](#contribute)
 
 To open unlab in its own window, choose **Install** in Chrome’s address bar.
@@ -92,7 +92,7 @@ You also need Node.js 22.12 or later.
 
 2. Start a new Claude Code session and ask:
 
-   > Open https://gregbell.github.io/unlab/ and use its WebMCP tools to boot two
+   > Open https://unlab.run/ and use its WebMCP tools to boot two
    > Alpine machines and check that they can ping each other.
 
 3. A Chrome window opens on the lab. When the agent asks to boot the machines, the
@@ -142,7 +142,7 @@ When you are done, turn remote debugging off.
 
 ### Connect a browser extension
 
-1. [Open the lab](https://gregbell.github.io/unlab/) in Chrome. The bottom right
+1. [Open the lab](https://unlab.run/) in Chrome. The bottom right
    reads `webmcp: 13 tools registered`.
 2. To see a call without an agent, click that text, then click **try a call**. The
    call and its result appear in the panel.
@@ -328,7 +328,7 @@ executable.
 ### Turn WebMCP on for visitors
 
 With an origin trial token, visitors to a deployed lab do not need the Chrome
-flag. Register the site's origin for the
+flag. Register `https://unlab.run` for the
 [WebMCP origin trial](https://developer.chrome.com/origintrials/#/register_trial/4163014905550602241),
 then set the repository variable `UNLAB_ORIGIN_TRIAL_TOKENS` to the token. The
 Pages workflow adds it to the page. Separate several tokens with spaces. Each
