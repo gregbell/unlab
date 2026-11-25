@@ -15,6 +15,7 @@ describe("VERBS", () => {
 			["rm", "<machines>", "remove machines and their disks"],
 			["ls", "", "list machines, addresses, links and disks"],
 			["exec", "<machines> -- <command>", "run a shell command in each console"],
+			["write", "<machine> <path> [--owner user[:group]] [--mode mode] -- <text>", "put a text in a file on a machine"],
 			["sh", "<machine>", "open another shell on a machine"],
 			["link", "<up | down> <machines>", "plug or cut cables"],
 			["capture", "<filter>", "filter the packet capture"],
@@ -38,6 +39,7 @@ describe("VERBS", () => {
 			["rm", "machines_remove", "ask", { consequentialHint: true }],
 			["ls", "machines_list", "run", { readOnlyHint: true }],
 			["exec", "shell_exec", "run", { untrustedContentHint: true }],
+			["write", "file_write", "run", { untrustedContentHint: true }],
 			["link", "link_set", "run", {}],
 			["boot", "machines_boot", "run", {}],
 			["reboot", "machines_reboot", "run", {}],
@@ -82,6 +84,13 @@ const lines = fc.oneof(
 		.map((w) => `capture ${w.join(" ")}`),
 	fc.tuple(fc.constantFrom("reboot", "poweroff"), word).map(([verb, w]) => `${verb} ${w}`),
 	fc.constantFrom("ls", "sh node1", "sh node3"),
+	fc
+		.tuple(
+			fc.constantFrom("/etc/motd", String.raw`/a\ b`, String.raw`/a\\b`, "//x"),
+			fc.constantFrom("", " --mode 600", " --owner root:adm --mode 755"),
+			fc.string({ unit: "binary" }),
+		)
+		.map(([path, options, text]) => `write node2 ${path}${options} -- ${text}`),
 );
 
 describe("the round trip", () => {

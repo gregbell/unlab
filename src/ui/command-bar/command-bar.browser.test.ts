@@ -63,6 +63,7 @@ function recordedRun(services: AppServices): CommandService["run"] {
 			dispatch: () => {},
 			until: (predicate, signal) => services.store.until(predicate, signal),
 			now: () => clock,
+			files: { write: () => Promise.reject(new Error("This test has no file port.")) },
 			exec: {
 				inject: async (session) => {
 					clock = 1000;
@@ -181,6 +182,7 @@ describe("<unlab-command-bar> CmdOpen: just opened", () => {
 			"rm",
 			"ls",
 			"exec",
+			"write",
 			"sh",
 			"link",
 			"capture",

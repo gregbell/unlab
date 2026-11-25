@@ -108,6 +108,15 @@ function summarise(result: Exclude<Result, { kind: "failed" }>): string {
 	return result.header;
 }
 
+/** The most of a text that an approval shows. */
+const EXCERPT_MAX = 10_000;
+
+/** The start of a text, as it is, and how much more there is. */
+function excerpt(text: string): string {
+	if (text.length <= EXCERPT_MAX) return text;
+	return `${text.slice(0, EXCERPT_MAX)}…\n(${text.length - EXCERPT_MAX} more characters are not shown)`;
+}
+
 interface Asked {
 	readonly preview: string;
 	readonly actionLabel: string;
@@ -130,7 +139,7 @@ function ask(line: ParsedLine, lab: LabState): Asked | LineError {
 	if (isLineError(preview)) return preview;
 	const [action = line.verb] = preview.will.split(" · ");
 	return {
-		preview: `Will ${preview.will}.`,
+		preview: [`Will ${preview.will}.`, ...(line.shown.text === null ? [] : [excerpt(line.shown.text)])].join("\n"),
 		actionLabel: capitalised(action),
 		run: (signal) => line.run({ source: "agent", signal }),
 	};
@@ -147,14 +156,15 @@ function verbTool(registry: Registry, tool: ToolFace): AgentTool {
 			const text = tool.toLine(input);
 			if (typeof text !== "string") return { ok: false, line: asCalled(tool.name, input), error: text.message };
 			const line = parseLine(registry, text, lab);
-			if (isLineError(line)) return { ok: false, line: text, error: line.message };
+			if (isLineError(line)) return { ok: false, line: tool.shown(text).line, error: line.message };
+			const called = line.shown.line;
 			const invalid = line.validate(lab);
-			if (invalid) return { ok: false, line: line.line, error: invalid.message };
+			if (invalid) return { ok: false, line: called, error: invalid.message };
 			const asked = ask(line, lab);
-			if (isLineError(asked)) return { ok: false, line: line.line, error: asked.message };
+			if (isLineError(asked)) return { ok: false, line: called, error: asked.message };
 			return {
 				ok: true,
-				line: line.line,
+				line: called,
 				preview: asked.preview,
 				actionLabel: asked.actionLabel,
 				async run(signal) {

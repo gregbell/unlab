@@ -2,6 +2,7 @@
 // a kernel owns its thread (it blocks in Atomics.wait while idle), so a busy
 // machine must never be able to stall another one or the page.
 
+import type { FileOutcome, GuestFile } from "../commands/index.ts";
 import type { Address, DiskCopy, Disks, HostEntry, Next, StopHow } from "../model/index.ts";
 import type { NicNo } from "../net/index.ts";
 
@@ -62,6 +63,8 @@ export type ToVm =
 	| { type: "pty-close"; sid: number }
 	/** Save the guest's disks as they are. Answered with `copy`s. */
 	| { type: "checkpoint"; copy: DiskCopy }
+	/** Put a file in the guest. Answered with `wrote`. */
+	| { type: "write"; id: number; name: string; file: GuestFile }
 	/** Stop the kernel, for a thread that is about to be dropped. */
 	| { type: "stop" }
 	/** Save every disk, once the guest has shut down when it is asked to. Answered with `released`. */
@@ -80,6 +83,7 @@ export type FromVm =
 	/** Nothing of the machine is left to save. `clean` when the guest shut down and every disk was saved. */
 	| { type: "released"; clean: boolean }
 	| { type: "copy"; report: CopyReport }
+	| { type: "wrote"; id: number; outcome: FileOutcome }
 	/** A NIC is gone from a guest that runs on. */
 	| { type: "nic-lost"; nic: NicNo; reason: string }
 	| { type: "pty-ready"; sid: number; pid: number; pts: number }

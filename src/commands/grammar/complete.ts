@@ -1,7 +1,7 @@
 import type { Completion, Suggestion } from "../types.ts";
 import { signature } from "./format.ts";
 import { flagTable, positionalsOf } from "./parse.ts";
-import type { Grammar, ReadContext, Value } from "./slots.ts";
+import { endsLine, type Grammar, type ReadContext, type Value } from "./slots.ts";
 import { tokenize } from "./tokenize.ts";
 
 /**
@@ -13,15 +13,14 @@ export function complete(grammar: Grammar, line: string, caret: number, ctx: Rea
 	const { tokens, passthrough } = tokenize(line);
 	const keys = Object.keys(grammar);
 	const slotOf = (key: string) => keys.indexOf(key);
-	const passthroughEntry = Object.entries(grammar).find(([, slot]) => slot.kind === "passthrough");
-	const passthroughKey = passthroughEntry?.[0];
+	const tailKey = Object.entries(grammar).find(([, slot]) => endsLine(slot))?.[0];
 
 	const dashes = passthrough === null ? undefined : tokens[tokens.length - 1];
 	if (dashes && caret > dashes.end) {
 		return {
 			replace: { start: caret, end: caret },
 			suggestions: [],
-			slot: passthroughKey ? slotOf(passthroughKey) : null,
+			slot: tailKey ? slotOf(tailKey) : null,
 		};
 	}
 
@@ -61,7 +60,7 @@ export function complete(grammar: Grammar, line: string, caret: number, ctx: Rea
 	const options: Suggestion[] = [...flags.values()]
 		.filter((f) => !used.has(f.key))
 		.map(({ variant: v }) => ({ insert: v.flag, label: "value" in v ? `${v.flag} ${v.value.label}` : v.flag }));
-	if (passthroughEntry) options.push({ insert: "--", label: signature(grammar)[slotOf(passthroughEntry[0])] });
+	if (tailKey) options.push({ insert: "--", label: signature(grammar)[slotOf(tailKey)] });
 	if (typed.startsWith("-")) return offer(options, null);
 
 	const positional = positionals[next];

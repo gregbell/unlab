@@ -1,5 +1,5 @@
 import { type JsonSchema, type LineError, lineError } from "../types.ts";
-import type { Grammar, Options, Slot } from "./slots.ts";
+import { endsLine, type Grammar, type Options, type Slot, type Value } from "./slots.ts";
 
 function optionsSchema(slot: Options<unknown>): JsonSchema {
 	const shapes = slot.variants.map((v): JsonSchema => {
@@ -26,8 +26,12 @@ function slotSchema(slot: Slot): JsonSchema {
 			return { type: "string", description: `The ${slot.label}, as typed after the verb in the command bar.` };
 		case "passthrough":
 			return { type: "string", description: `The ${slot.label}, passed on untouched.` };
+		case "verbatim":
+			return { type: "string", description: `The whole ${slot.label}, kept exactly as it is, its line ends too.` };
 	}
 }
+
+const isRequired = (slot: Slot): boolean => slot.kind === "positional" || endsLine(slot);
 
 /** The agent tool's input schema. Advisory: `lineFromInput` checks every field itself. */
 export function toolSchema(grammar: Grammar): JsonSchema {
@@ -35,17 +39,18 @@ export function toolSchema(grammar: Grammar): JsonSchema {
 	return {
 		type: "object",
 		properties: Object.fromEntries(entries.map(([key, slot]) => [key, slotSchema(slot)])),
-		required: entries.filter(([, slot]) => slot.kind === "positional" || slot.kind === "passthrough").map(([k]) => k),
+		required: entries.filter(([, slot]) => isRequired(slot)).map(([k]) => k),
 		additionalProperties: false,
 	};
 }
 
-const WORD = /^[^\s-]\S*$/;
+const WORD = /^(?!-)(?:\\[\\\s]|\S)+$/;
 
 type Words = { readonly ok: true; readonly words: readonly string[] } | { readonly ok: false; readonly error: string };
 
-function word(key: string, value: unknown): Words {
-	const text = typeof value === "number" && Number.isFinite(value) ? String(value) : value;
+function word(key: string, value: unknown, { quote = String }: Pick<Value<unknown>, "quote">): Words {
+	const given = typeof value === "number" && Number.isFinite(value) ? String(value) : value;
+	const text = typeof given === "string" ? quote(given) : given;
 	if (typeof text === "string" && WORD.test(text)) return { ok: true, words: [text] };
 	return { ok: false, error: `${key} must be one word that does not start with -, not ${JSON.stringify(value)}.` };
 }
@@ -53,7 +58,7 @@ function word(key: string, value: unknown): Words {
 function slotWords(key: string, slot: Slot, value: unknown): Words {
 	switch (slot.kind) {
 		case "positional":
-			return word(key, value);
+			return word(key, value, slot);
 		case "options": {
 			if (Object.is(value, slot.default)) return { ok: true, words: [] };
 			const bare = slot.variants.find((v) => "constant" in v && Object.is(v.constant, value));
@@ -61,7 +66,7 @@ function slotWords(key: string, slot: Slot, value: unknown): Words {
 			const valued = slot.variants.find((v) => "value" in v);
 			const options = slot.variants.map((v) => ("constant" in v ? JSON.stringify(v.constant) : v.flag));
 			if (!valued) return { ok: false, error: `${key} must be one of ${options.join(", ")}.` };
-			const w = word(key, value);
+			const w = word(key, value, valued.value);
 			return w.ok ? { ok: true, words: [valued.flag, ...w.words] } : w;
 		}
 		case "rest": {
@@ -75,6 +80,9 @@ function slotWords(key: string, slot: Slot, value: unknown): Words {
 			if (typeof value !== "string" || /[\r\n]/.test(value)) {
 				return { ok: false, error: `${key} must be a string on one line.` };
 			}
+			return { ok: true, words: ["--", value] };
+		case "verbatim":
+			if (typeof value !== "string") return { ok: false, error: `${key} must be a string.` };
 			return { ok: true, words: ["--", value] };
 	}
 }
@@ -97,13 +105,12 @@ export function lineFromInput(verb: string, grammar: Grammar, input: unknown): s
 	for (const [key, slot] of Object.entries(grammar)) {
 		const value = fields.get(key);
 		if (value === undefined) {
-			if (slot.kind === "positional" || slot.kind === "passthrough")
-				return lineError(`${verb} needs the ${key} field.`);
+			if (isRequired(slot)) return lineError(`${verb} needs the ${key} field.`);
 			continue;
 		}
 		const w = slotWords(key, slot, value);
 		if (!w.ok) return lineError(w.error);
-		(slot.kind === "passthrough" ? tail : words).push(...w.words);
+		(endsLine(slot) ? tail : words).push(...w.words);
 	}
 	return [...words, ...tail].join(" ");
 }

@@ -1,10 +1,19 @@
-import type { CommandEvent, LabState, Phase, Policy, SessionId, Source, ToolName } from "../model/index.ts";
+import type {
+	CommandEvent,
+	LabState,
+	MachineName,
+	Phase,
+	Policy,
+	SessionId,
+	Source,
+	ToolName,
+} from "../model/index.ts";
 import type { Approval } from "./approval.ts";
 import { complete } from "./grammar/complete.ts";
-import { format as formatLine, signature as signatureOf } from "./grammar/format.ts";
+import { format as formatLine, type Shown, shown, signature as signatureOf } from "./grammar/format.ts";
 import { type Parsed, parse } from "./grammar/parse.ts";
 import { lineFromInput, toolSchema } from "./grammar/schema.ts";
-import type { ArgsOf, Grammar, ReadContext } from "./grammar/slots.ts";
+import { type ArgsOf, endsLine, type Grammar, type ReadContext } from "./grammar/slots.ts";
 import {
 	type Completion,
 	type ConfirmText,
@@ -43,6 +52,30 @@ export interface ExecPort {
 	inject(session: SessionId, line: string, source: Source, signal: AbortSignal): Promise<ExecOutcome>;
 }
 
+/** A file as it is to be in a guest. */
+export interface GuestFile {
+	readonly path: string;
+	readonly text: string;
+	/** Null for what it has, or for a new file root's. */
+	readonly owner: string | null;
+	/** Null for what it has, or for a new file 644. */
+	readonly mode: string | null;
+}
+
+export type FileOutcome =
+	/** Its path once links are followed, and what it has now. It is on the machine's disk. */
+	| { readonly kind: "written"; readonly path: string; readonly owner: string; readonly mode: string }
+	/** Nothing in the guest was changed. One sentence. */
+	| { readonly kind: "refused"; readonly reason: string }
+	/** The guest did not say what it did. The file is as it was or as it was to be. One sentence. */
+	| { readonly kind: "unsure"; readonly reason: string };
+
+/** The runtime puts files in guests for `write`, and no terminal sees it. */
+export interface FilePort {
+	/** Rejects only with the signal's reason when aborted. A write that has begun then goes on. */
+	write(machine: MachineName, file: GuestFile, signal: AbortSignal): Promise<FileOutcome>;
+}
+
 /** What a command needs from the lab. The store satisfies it; tests pass a fake. */
 export interface CommandDeps {
 	state(): LabState;
@@ -51,6 +84,7 @@ export interface CommandDeps {
 	until(predicate: (state: LabState) => boolean, signal: AbortSignal): Promise<LabState>;
 	now(): number;
 	readonly exec: ExecPort;
+	readonly files: FilePort;
 }
 
 /** A plan's "no", in the verb's words. `at` names the argument the carets go under. */
@@ -95,12 +129,16 @@ export interface ToolFace {
 	readonly inputSchema: JsonSchema;
 	/** Tool input as a bar line, to go through `parseLine` like anything typed. */
 	toLine(input: unknown): string | LineError;
+	/** Any line of the verb, as the panel shows it. */
+	shown(line: string): Shown;
 }
 
 interface LineBase {
 	readonly verb: string;
-	/** The line in canonical bar grammar, as it will be logged. */
+	/** The line in canonical bar grammar. */
 	readonly line: string;
+	/** The line as it will be logged. */
+	readonly shown: Shown;
 	readonly tokens: Tokenized;
 	readonly args: unknown;
 	readonly assumed: readonly string[];
@@ -204,7 +242,7 @@ function checkGrammar(verb: string, grammar: Grammar): void {
 		throw new Error(`defineVerb(${verb}): ${problem}`);
 	};
 	if (rest >= 0 && rest !== positional.length - 1) fail("free text must be the last positional argument");
-	if (slots.filter((s) => s.kind === "passthrough").length > 1) fail("only one argument can follow --");
+	if (slots.filter(endsLine).length > 1) fail("only one argument can follow --");
 	if (new Set(flags).size !== flags.length || flags.includes("--")) fail("each option flag must be unique and not --");
 }
 
@@ -223,6 +261,7 @@ export function defineVerb<N extends string, G extends Grammar, P>(
 	const phases = def.phases ?? ["ready"];
 	const context = (lab: LabState): ReadContext => ({ verb: def.name, lab, phases });
 	const format = (args: Args) => formatLine(def.name, def.grammar, args);
+	const brief = (line: string) => shown(def.grammar, line);
 
 	const planned = (args: Args, lab: LabState, tokenOf?: Parsed<Args>["tokenOf"]): Planned => {
 		const plan = def.plan(args, lab);
@@ -260,6 +299,7 @@ export function defineVerb<N extends string, G extends Grammar, P>(
 		annotations: spec.annotations ?? {},
 		inputSchema: toolSchema(def.grammar),
 		toLine: (input) => lineFromInput(def.name, def.grammar, input),
+		shown: brief,
 	});
 
 	const cache = new WeakMap<CommandDeps, Command<Args, boolean>>();
@@ -267,7 +307,7 @@ export function defineVerb<N extends string, G extends Grammar, P>(
 		const run = async (args: Args, ctx: RunContext & { readonly approval?: Approval }): Promise<Result> => {
 			const line = format(args);
 			const log = (outcome: "ok" | "failed") =>
-				deps.dispatch({ type: "cmd/logged", line, source: ctx.source, at: deps.now(), outcome });
+				deps.dispatch({ type: "cmd/logged", line: brief(line).line, source: ctx.source, at: deps.now(), outcome });
 			let result: Result;
 			const p = approved(args, line, ctx.approval, deps.state());
 			if (p.ok) {
@@ -299,6 +339,7 @@ export function defineVerb<N extends string, G extends Grammar, P>(
 		const lineOf = (tokenized: Tokenized, parsed: Parsed<Args>) => ({
 			verb: def.name,
 			line: format(parsed.args),
+			shown: brief(format(parsed.args)),
 			tokens: tokenized,
 			args: parsed.args,
 			assumed: parsed.assumed,

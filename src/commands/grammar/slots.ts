@@ -70,6 +70,8 @@ export interface Value<T> {
 	/** Full-token inserts for what is typed so far; the engine filters them by prefix. */
 	suggest(typed: string, ctx: ReadContext): readonly Suggestion[];
 	format(value: T): string;
+	/** How a tool's text is written as one word. Left out, it has to be one. */
+	quote?(text: string): string;
 	readonly schema: JsonSchema;
 }
 
@@ -98,7 +100,13 @@ export interface Passthrough {
 	readonly label: string;
 }
 
-export type Slot = Value<unknown> | Options<unknown> | Rest | Passthrough;
+/** Everything after a bare `--` and one space, whatever it is, and it can be nothing. */
+export interface Verbatim {
+	readonly kind: "verbatim";
+	readonly label: string;
+}
+
+export type Slot = Value<unknown> | Options<unknown> | Rest | Passthrough | Verbatim;
 export type Grammar = Readonly<Record<string, Slot>>;
 
 type SlotValue<S> = S extends Value<infer T> ? T : S extends Options<infer T> ? T : string;
@@ -358,6 +366,87 @@ export function checkpoint(): Value<CheckpointName> {
 			),
 		format: (name) => name,
 		schema: { type: "string", description: CHECKPOINT },
+	};
+}
+
+const MAX_PATH = 4095;
+/** The last number is for no one, and a guest would wrap what is over it round to another's. */
+const MAX_ID = 2 ** 32 - 2;
+
+/** A space is written `\ `, and a backslash `\\`, as a shell would. */
+const quotePath = (path: string): string => path.replace(/[\\\s]/g, "\\$&");
+
+function pathFault(path: string, verb: string): string | null {
+	if (!path.startsWith("/")) return `${verb} wants a path that starts with /, such as /etc/motd, not ${path}.`;
+	if (/[\p{Cc}\p{Cs}]/u.test(path)) return `${verb} wants a path with no control characters.`;
+	if (path.endsWith("/")) return `${path} names a directory, so give the path of a file in it, such as ${path}motd.`;
+	if (path.split("/").some((part) => part === "." || part === "..")) {
+		return `${verb} wants a path with no . or .. in it, not ${path}.`;
+	}
+	const bytes = new TextEncoder().encode(path).length;
+	return bytes > MAX_PATH ? `A path has at most ${MAX_PATH} bytes, and that is ${bytes}.` : null;
+}
+
+/** Where a file goes in a guest, from its root. */
+export function filePath(): Value<string> {
+	return {
+		kind: "positional",
+		label: "path",
+		noun: "a path",
+		read(text, { verb }) {
+			const path = text.replace(/\\([\\\s])/g, "$1");
+			const fault = pathFault(path, verb);
+			return fault === null ? path.replace(/\/+/g, "/") : new Miss(fault, undefined, false);
+		},
+		suggest: () => [],
+		format: quotePath,
+		quote: quotePath,
+		schema: {
+			type: "string",
+			description: "The file's path from /, such as /etc/motd. Directories on the way that are missing are made.",
+		},
+	};
+}
+
+/** Null is what no option says: a file that is there keeps its owner, and a new one is root's. */
+export function owner(): Value<string | null> {
+	return {
+		kind: "positional",
+		label: "user[:group]",
+		noun: "a user, or user:group",
+		read(text) {
+			const accounts = text.split(":");
+			const read = accounts.every((name) => /^\w[\w.-]*$/.test(name) && !(Number(name) > MAX_ID));
+			if (read && accounts.length <= 2) return text;
+			const why = `--owner wants a user or user:group, such as root or www-data:adm, not ${text}.`;
+			return new Miss(why, undefined, false);
+		},
+		suggest: () => ["root", "user"].map((name) => ({ insert: name, label: name })),
+		format: String,
+		schema: {
+			type: "string",
+			description:
+				"Its user, or user:group. A user alone brings their own group. Left out, a file keeps its owner, and a new one is root's.",
+		},
+	};
+}
+
+/** Null is what no option says: a file that is there keeps its mode, and a new one has 644. */
+export function fileMode(): Value<string | null> {
+	return {
+		kind: "positional",
+		label: "mode",
+		noun: "a mode such as 644",
+		read(text) {
+			if (/^[0-7]{3,4}$/.test(text)) return text;
+			return new Miss(`--mode wants three or four octal digits, such as 644, not ${text}.`, undefined, false);
+		},
+		suggest: () => ["644", "600", "755"].map((mode) => ({ insert: mode, label: mode })),
+		format: String,
+		schema: {
+			type: "string",
+			description: "Its mode in octal, such as 600 or 755. Left out, a file keeps its mode, and a new one has 644.",
+		},
 	};
 }
 
@@ -686,4 +775,13 @@ export function text(label: string): Rest {
 
 export function passthrough(label: string): Passthrough {
 	return { kind: "passthrough", label };
+}
+
+export function verbatim(label: string): Verbatim {
+	return { kind: "verbatim", label };
+}
+
+/** The slot takes what follows `--`. */
+export function endsLine(slot: Slot): slot is Passthrough | Verbatim {
+	return slot.kind === "passthrough" || slot.kind === "verbatim";
 }

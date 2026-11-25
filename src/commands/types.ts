@@ -11,7 +11,7 @@ export interface Tokenized {
 	readonly line: string;
 	/** A bare `--`, when present, is the last token. */
 	readonly tokens: readonly Token[];
-	/** Everything after a bare `--`, untouched apart from the spaces that separate it from `--`. */
+	/** Everything after a bare `--` and the one space that separates it from it, untouched. */
 	readonly passthrough: string | null;
 }
 

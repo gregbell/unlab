@@ -47,6 +47,7 @@ a guest console, or use `exec` in the bar to address a guest by name.
 | `spawn 1 alpine --addr 10.1.0.1/24`          | Add a machine with an address you choose. With `--nics`, give each interface an address or `none`: `--nics 2 --addr 10.1.0.1/24,none`. |
 | `spawn 1 alpine --no-gateway`                | Add a machine on the switch but without the package gateway. DHCP on its `eth0` then goes to the other machines.                       |
 | `exec node1 -- ping -c 1 10.88.0.12`         | Send one ping from node1 and read the exit code from its shell.                                                                        |
+| `write node1 /etc/motd --mode 644 -- hello`  | Put a text in a file on the machine, as root, with the directories it needs. `--owner user:group` sets whose it is.                    |
 | `link down node2`                            | Cut node2's cables, whether it is on or off. Reconnect them with `link up node2`. Name one of several with `node2:eth1`.               |
 | `capture arp or node2`                       | Open the Wire view with a filter for ARP or traffic involving node2. `node2:eth1` keeps one interface's frames.                        |
 | `sh node2`                                   | Open another shell on node2.                                                                                                           |
@@ -178,6 +179,7 @@ them. Your choices survive a reload.
 | `checkpoint_remove`  | Delete a checkpoint.                     | `ask me` |
 | `shell_exec`         | Run a command in a guest's shell.        | `run`    |
 | `shell_read`         | Read what a guest's terminal shows.      | `run`    |
+| `file_write`         | Put a text in a file on a machine.       | `run`    |
 | `link_set`           | Cut or reconnect a machine's cables.     | `run`    |
 | `capture_read`       | Read captured frames from the switch.    | `run`    |
 
@@ -233,6 +235,13 @@ a separate window opens when you wanted your own browser, reconnect `unlab` in
   not saved. The machine's other checkpoints stay. It takes about 20 seconds for each
   GiB, and room for another copy of the disks while it runs. One that a reload
   cuts short starts again, and one that fails leaves the disks as they were.
+- `write` and `file_write` replace a whole file, or leave it as it was, and the file
+  is on the machine's disk when they are done. The text is written byte for byte, in
+  UTF-8 and up to 1 MiB. The bar is one line, so a text of several lines comes from
+  an agent. A file that is there keeps its owner and mode unless you give them, and
+  a new one is root's with mode 644. New directories have mode 755 and belong to
+  the `--owner` or to root. A link is followed. Write a space in a path as `\ `, and
+  a backslash as `\\`. No terminal sees it, and the log leaves long texts out.
 - Reloading the page boots each machine from its own IndexedDB-backed disks, except
   those that are off, which stay off. Switch ports and cable connections survive a
   reload. Shell processes and packet captures start fresh. One tab at a time owns the

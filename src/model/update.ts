@@ -65,7 +65,7 @@ import {
  * Every tool runs at once except spawn, which adds to the lab, and those that
  * take from it: remove, and going back to a checkpoint or deleting one. Power
  * does neither: the disks and the cables stay, and a guest can be rebooted from
- * the shell that `shell_exec` types into.
+ * the shell that `shell_exec` types into. A file can be written from it too.
  */
 export const DEFAULT_POLICIES: Readonly<Record<ToolName, Policy>> = {
 	machines_list: "run",
@@ -79,6 +79,7 @@ export const DEFAULT_POLICIES: Readonly<Record<ToolName, Policy>> = {
 	checkpoint_remove: "ask",
 	shell_exec: "run",
 	shell_read: "run",
+	file_write: "run",
 	link_set: "run",
 	capture_read: "run",
 };

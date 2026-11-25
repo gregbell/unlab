@@ -82,6 +82,7 @@ describe("initialState", () => {
 				checkpoint_remove: "ask",
 				shell_exec: "run",
 				shell_read: "run",
+				file_write: "run",
 				link_set: "run",
 				capture_read: "run",
 			},

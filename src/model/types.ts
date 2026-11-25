@@ -281,6 +281,7 @@ export type ToolName =
 	| "checkpoint_remove"
 	| "shell_exec"
 	| "shell_read"
+	| "file_write"
 	| "link_set"
 	| "capture_read";
 

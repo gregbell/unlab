@@ -13,6 +13,7 @@ import { restore } from "./restore.ts";
 import { rm } from "./rm.ts";
 import { sh } from "./sh.ts";
 import { spawn } from "./spawn.ts";
+import { write } from "./write.ts";
 
 export type { CheckpointData } from "./checkpoint.ts";
 export type { ExecData, ExecRun } from "./exec.ts";
@@ -22,7 +23,8 @@ export type { ListedMachine } from "./ls.ts";
 export type { PowerState } from "./power.ts";
 export type { RemoveData } from "./rm.ts";
 export { DEFAULT_CPUS, MULTICPU_BLOCKER, type SpawnData } from "./spawn.ts";
-export { boot, capture, checkpoint, exec, focus, forget, link, ls, poweroff, reboot, restore, rm, sh, spawn };
+export { MAX_TEXT_BYTES, type WriteData } from "./write.ts";
+export { boot, capture, checkpoint, exec, focus, forget, link, ls, poweroff, reboot, restore, rm, sh, spawn, write };
 
 /** The one verb list, in the order the bar's verbs group shows them. */
 export const VERBS: readonly AnyVerb[] = [
@@ -30,6 +32,7 @@ export const VERBS: readonly AnyVerb[] = [
 	rm,
 	ls,
 	exec,
+	write,
 	sh,
 	link,
 	capture,
