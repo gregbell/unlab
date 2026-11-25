@@ -5,6 +5,7 @@ import { identity } from "./identity.ts";
 import { isPlanError, lowestFreePorts, planBoot, planLink, takenPorts } from "./machines.ts";
 import { parkedPanels, visiblePanels } from "./panels.ts";
 import { capacity, keyboardHolder, reconcilePanes, visiblePanes } from "./panes.ts";
+import { planSwitch } from "./switches.ts";
 import {
 	address,
 	agentCall,
@@ -33,6 +34,7 @@ import {
 	type LabState,
 	LOG_LIMIT,
 	MAX_MACHINES,
+	MAX_SWITCHES,
 	type MachineName,
 	type MachineSpec,
 	type Next,
@@ -42,6 +44,7 @@ import {
 	PORTS,
 	type PortRef,
 	type SessionId,
+	type SwitchName,
 } from "./types.ts";
 import { clockHz, initialState, update } from "./update.ts";
 
@@ -79,11 +82,14 @@ describe("initialState", () => {
 			policies: {
 				lab_help: "run",
 				machines_list: "run",
+				topology_read: "run",
 				machines_spawn: "ask",
 				machines_boot: "run",
 				machines_reboot: "run",
 				machines_poweroff: "run",
 				machines_remove: "ask",
+				switch_add: "run",
+				switch_remove: "ask",
 				checkpoint_save: "run",
 				checkpoint_restore: "ask",
 				checkpoint_remove: "ask",
@@ -1019,6 +1025,7 @@ type Intent =
 	| { readonly kind: "spawn"; readonly count: number; readonly nets: readonly NicSpec["net"][] }
 	| { readonly kind: "stage" | "ready" | "failed" | "stopped"; readonly pick: number; readonly skew: number }
 	| { readonly kind: "remove" | "shell" | "park" | "unpark" | "maximise" | "paneFocused"; readonly pick: number }
+	| { readonly kind: "addSwitch" | "removeSwitch" | "showSwitch"; readonly name: SwitchName | null }
 	| { readonly kind: "power"; readonly pick: number; readonly next: Next }
 	| { readonly kind: "halted"; readonly pick: number; readonly skew: number; readonly next: Next }
 	| { readonly kind: "boot"; readonly pick: number; readonly port: number }
@@ -1058,6 +1065,13 @@ const intentArb: fc.Arbitrary<Intent> = fc.oneof(
 	{
 		weight: 6,
 		arbitrary: fc.record({ kind: kinds("remove", "shell", "park", "unpark", "maximise", "paneFocused"), pick }),
+	},
+	{
+		weight: 3,
+		arbitrary: fc.record({
+			kind: kinds("addSwitch", "removeSwitch", "showSwitch"),
+			name: fc.constantFrom(LAN, LAN, switchNamed("wan"), "switch0", null),
+		}),
 	},
 	{ weight: 4, arbitrary: fc.record({ kind: kinds("power"), pick, next: fc.constantFrom("off", "reboot") }) },
 	{ weight: 3, arbitrary: fc.record({ kind: kinds("halted"), pick, skew, next: fc.constantFrom("off", "reboot") }) },
@@ -1099,7 +1113,8 @@ function eventOf(intent: Intent, s: LabState): LabEvent | null {
 				const wanted = count * intent.nets.filter((net) => net === on).length;
 				return lowestFreePorts(s, on, wanted).length === wanted;
 			});
-			if (count === 0 || !fits) return null;
+			const there = intent.nets.every((net) => net === "none" || s.switches.includes(net));
+			if (count === 0 || !fits || !there) return null;
 			return spawnEvent(s, count, { net: intent.nets });
 		}
 		case "stage":
@@ -1116,6 +1131,14 @@ function eventOf(intent: Intent, s: LabState): LabEvent | null {
 			const name = named(intent.pick);
 			return hasHalted(name, intent.next, (s.machines[name]?.life.attempt ?? 1) + intent.skew);
 		}
+		case "addSwitch": {
+			const plan = planSwitch(s, intent.name);
+			return { type: "cmd/switch-add", plan: "kind" in plan ? { name: intent.name ?? LAN } : plan };
+		}
+		case "removeSwitch":
+			return { type: "cmd/switch-remove", switch: intent.name ?? LAN, cause: "bar" };
+		case "showSwitch":
+			return { type: "ui/switch-shown", switch: intent.name ?? LAN };
 		case "power":
 			return power(intent.next, named(intent.pick), named(intent.pick + 1));
 		case "remove":
@@ -1224,6 +1247,9 @@ class World {
 			case "screen/note":
 				expect(this.screens.has(effect.session), `a note for ${effect.session}, which has no screen`).toBe(true);
 				return;
+			case "switch/remove":
+				expect([...this.ports.keys()].filter((key) => key.startsWith(`${effect.switch}:`))).toEqual([]);
+				return;
 			case "pty/close":
 			case "hosts/publish":
 			case "capture/clear":
@@ -1271,6 +1297,12 @@ function checkLab(s: LabState, world: World): void {
 		expect(lowestFreePorts(s, on, 8)).toHaveLength(8 - held.length);
 	}
 	expect(plugged.filter(({ port }) => !s.switches.includes(port.switch))).toEqual([]);
+	const asked = machines.flatMap((m) => m.spec.nics.map(({ net }) => net));
+	expect(asked.filter((net) => net !== "none" && !s.switches.includes(net))).toEqual([]);
+	expect(s.switches[0]).toBe("switch0");
+	expect(new Set([...s.switches, ...s.rail]).size).toBe(s.switches.length + s.rail.length);
+	expect(s.switches.length).toBeLessThanOrEqual(MAX_SWITCHES);
+	expect(s.switches).toContain(s.shownSwitch);
 
 	expect([...s.panes.order].sort()).toEqual([...s.rail].sort());
 	const visible = visiblePanes(s.panes);
@@ -1296,6 +1328,9 @@ function checkLab(s: LabState, world: World): void {
 const REPEATABLE = new Set<LabEvent["type"]>([
 	"cmd/spawn",
 	"cmd/remove",
+	"cmd/switch-add",
+	"cmd/switch-remove",
+	"ui/switch-shown",
 	"cmd/boot",
 	"cmd/power",
 	"cmd/link",

@@ -33,6 +33,13 @@
 			font-weight: 500;
 		}
 
+		/* A long name is cut short before the buttons are pushed out. */
+		select.title {
+			min-width: 0;
+			max-width: 24ch;
+			text-overflow: ellipsis;
+		}
+
 		.window {
 			display: flex;
 			flex: none;
@@ -223,6 +230,14 @@
 		.note {
 			margin-top: auto;
 			padding: 12px var(--gutter) 10px;
+		}
+
+		.counters {
+			padding: 0 var(--gutter) 10px;
+		}
+
+		.note,
+		.counters {
 			color: var(--text-3);
 			font-size: var(--fs-status);
 		}

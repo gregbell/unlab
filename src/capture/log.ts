@@ -16,7 +16,7 @@ import {
 	type NicNo,
 	NO_NAMES,
 } from "../net/index.ts";
-import { type CaptureRow, captureRow, type HasSeveralNics } from "./rows.ts";
+import { type CaptureRow, captureRow, PLAIN_NAMES, type RowNames } from "./rows.ts";
 
 export interface FrameEntry {
 	readonly kind: "frame";
@@ -124,8 +124,8 @@ export interface CaptureOptions {
 	readonly now: () => number;
 	/** Who is who in the lab now. Default no one. */
 	readonly names?: () => NameBook;
-	/** Rows name a NIC of these machines, and of any other machine's only past eth0. Default none. */
-	readonly severalNics?: HasSeveralNics;
+	/** A row names eth0 of a machine that has others, and a switch of several. Default neither. */
+	readonly rowNames?: Partial<RowNames>;
 }
 
 export const NO_REPLY_MS = 1000;
@@ -143,7 +143,8 @@ const arpKey = (asker: number, asked: number): string => `${asker}>${asked}`;
 
 export function createCaptureLog(opts: CaptureOptions): CaptureLog {
 	const limit = opts.limit ?? 10_000;
-	const { schedule, now, severalNics, names = () => NO_NAMES } = opts;
+	const { schedule, now, names = () => NO_NAMES } = opts;
+	const rowNames: RowNames = { ...PLAIN_NAMES, ...opts.rowNames };
 
 	const ring: (Stored | undefined)[] = new Array(limit);
 	let first = 1;
@@ -227,7 +228,7 @@ export function createCaptureLog(opts: CaptureOptions): CaptureLog {
 		const out: CaptureRow[] = [];
 		for (let i = start; i < end; i++) {
 			const e = at(matchAt(i));
-			if (e) out.push(captureRow(e, severalNics));
+			if (e) out.push(captureRow(e, rowNames));
 		}
 		return out;
 	};

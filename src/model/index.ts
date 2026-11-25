@@ -27,6 +27,8 @@ export {
 	andList,
 	FORCED_STOP,
 	firstFreeHues,
+	type HeldPort,
+	heldPorts,
 	hostsFor,
 	isPlanError,
 	lowestFreePorts,
@@ -45,10 +47,11 @@ export {
 	severalNics,
 	takenPorts,
 } from "./machines.ts";
-export { parkedPanels, visiblePanels } from "./panels.ts";
+export { panelLabel, parkedPanels, visiblePanels } from "./panels.ts";
 export { capacity, gridFor, parkedPanes, visiblePanes } from "./panes.ts";
 export * from "./selectors.ts";
 export { createStore, type ReadStore, type Schedule, type Store } from "./store.ts";
+export { planSwitch, portLabel, portText, switchLabel } from "./switches.ts";
 export { type Tile, type Tiling, tile } from "./tiling.ts";
 export * from "./types.ts";
 export { clockHz, DEFAULT_POLICIES, initialState, update } from "./update.ts";

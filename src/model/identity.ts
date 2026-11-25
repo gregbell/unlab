@@ -56,13 +56,13 @@ export function parseCheckpointName(text: string): CheckpointName | null {
 	return HOSTNAME.test(text) && text.length <= MAX_NAME ? (text as string as CheckpointName) : null;
 }
 
-/** Why a text is not a name that someone can give a machine. */
+/** Why a text is not a name that someone can give a machine or a switch. */
 export type NameFault =
 	| { readonly kind: "unreadable" }
 	| { readonly kind: "too-long"; readonly length: number }
 	/** `node<n>`, which the lab gives out. */
 	| { readonly kind: "lab" }
-	/** It means something else where machines are named. */
+	/** It means something else where machines and switches are named. */
 	| { readonly kind: "word" };
 
 /** What the images' own /etc/hosts calls the guest it is in, which would come before another machine's address. */
@@ -88,14 +88,16 @@ export function parseChosenName(text: string): MachineName | NameFault {
 	return isWord(text) ? { kind: "word" } : text;
 }
 
-export function isNameFault(read: MachineName | NameFault): read is NameFault {
+export function isNameFault(read: string | NameFault): read is NameFault {
 	return typeof read !== "string";
 }
 
-/** A switch's name is beside machines' names, and beside `none` where a NIC's network is named. */
-export function parseSwitchName(text: string): SwitchName | null {
+/** A switch's name is beside machines' names, so it keeps their rule, and beside `none` where a NIC's network is named. */
+export function parseSwitchName(text: string): SwitchName | NameFault {
 	if (text === DEFAULT_SWITCH) return text;
-	return isNameFault(parseChosenName(text)) || text === "none" ? null : (text as string as SwitchName);
+	const name = parseChosenName(text);
+	if (isNameFault(name)) return name;
+	return text === "none" ? { kind: "word" } : (text as string as SwitchName);
 }
 
 export interface SessionAddress {

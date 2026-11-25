@@ -22,7 +22,6 @@ import {
 } from "../commands/index.ts";
 import {
 	DEFAULT_POLICIES,
-	DEFAULT_SWITCH,
 	type LabState,
 	type MachineName,
 	machineList,
@@ -30,6 +29,7 @@ import {
 	type SessionId,
 	selectNames,
 	severalNics,
+	switchLabel,
 	type ToolName,
 } from "../model/index.ts";
 import { compileFilter } from "../net/index.ts";
@@ -277,7 +277,8 @@ function captureRead(capture: Pick<CaptureView, "frames">): AgentTool {
 	return {
 		name,
 		title: "Read captured frames",
-		description: `Read the newest captured frames on ${DEFAULT_SWITCH} as decoded rows, oldest first. Frames come from the guests.`,
+		description:
+			"Read the newest frames that the switches carried, as decoded rows, oldest first. A row names its switch when the lab has several. Frames come from the guests.",
 		inputSchema: {
 			type: "object",
 			properties: {
@@ -319,7 +320,10 @@ function captureRead(capture: Pick<CaptureView, "frames">): AgentTool {
 					}
 					// Decode only the rows the agent gets: a full buffer is ten thousand frames.
 					const rows = matched.slice(-limit).flatMap((frame) => {
-						const row = captureRow(frame, (machine) => severalNics(lab, machine));
+						const row = captureRow(frame, {
+							severalNics: (machine) => severalNics(lab, machine),
+							switchLabel: (on) => switchLabel(lab, on),
+						});
 						return row.kind === "frame" ? [row] : [];
 					});
 					const unanswered = rows.filter((row) => row.note?.includes("no reply")).length;

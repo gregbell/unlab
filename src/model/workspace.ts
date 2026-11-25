@@ -9,7 +9,7 @@ import {
 	parseDefaultName,
 } from "../net/index.ts";
 import { FIRST_SETS, MAX_EXTRA_DISKS, parseGiB } from "./disks.ts";
-import { identity, parseCheckpointName, parseMachineName, parseSwitchName } from "./identity.ts";
+import { identity, isNameFault, parseCheckpointName, parseMachineName, parseSwitchName } from "./identity.ts";
 import { type BootNode, bootMachines, machineList, plugsOf, samePort } from "./machines.ts";
 import { addPanes, focusPane, keyboardHolder, parkPane, toggleMaximise } from "./panes.ts";
 import {
@@ -21,6 +21,7 @@ import {
 	HUES,
 	type Identity,
 	type LabState,
+	MAX_SWITCHES,
 	type NicSpec,
 	PANELS,
 	type PanelName,
@@ -62,6 +63,7 @@ export function saveWorkspace(state: LabState): string {
 		version: VERSION,
 		nextN: state.nextN,
 		switches: state.switches,
+		shown: state.shownSwitch,
 		nodes,
 		panels: state.panels.open,
 		order: state.panes.order,
@@ -84,9 +86,12 @@ interface SavedNic {
 }
 
 function readSwitches(saved: unknown): LabState["switches"] {
-	if (!Array.isArray(saved) || saved[0] !== DEFAULT_SWITCH || new Set(saved).size !== saved.length) return invalid();
-	const others = saved.slice(1).map((name: unknown) => (typeof name === "string" ? parseSwitchName(name) : null));
-	return [DEFAULT_SWITCH, ...others.map((name) => name ?? invalid())];
+	if (!Array.isArray(saved) || saved.length > MAX_SWITCHES || new Set(saved).size !== saved.length) return invalid();
+	const [first, ...others] = saved.map((saved: unknown) => {
+		const name = typeof saved === "string" ? parseSwitchName(saved) : invalid();
+		return isNameFault(name) ? invalid() : name;
+	});
+	return first === DEFAULT_SWITCH ? [DEFAULT_SWITCH, ...others] : invalid();
 }
 
 function readSwitch(saved: unknown, switches: LabState["switches"]): SwitchName {
@@ -284,7 +289,8 @@ export function restoreWorkspace(base: LabState, raw: string | null): Step {
 		saved.nextN <= Math.max(0, ...nodes.map((n) => n.identity.n))
 	)
 		return invalid();
-	const { state, effects } = bootMachines({ ...base, switches }, nodes, saved.nextN, 0);
+	const shownSwitch = switches.find((name) => name === saved.shown) ?? DEFAULT_SWITCH;
+	const { state, effects } = bootMachines({ ...base, switches, shownSwitch }, nodes, saved.nextN, 0);
 	const order = Array.isArray(saved.order) ? saved.order : [];
 	const sorted = [...state.rail].sort((a, b) => order.indexOf(a) - order.indexOf(b));
 	let panes = addPanes(base.panes, sorted);

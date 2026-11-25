@@ -1,5 +1,6 @@
 import {
 	ACCEPTS,
+	DEFAULT_SWITCH,
 	isPlanError,
 	type LabState,
 	type Lifecycle,
@@ -13,12 +14,13 @@ import {
 	type PortNo,
 	planLink,
 	plugsOf,
+	type SwitchName,
 	samePort,
 } from "../../model/index.ts";
 import { nicName } from "../../net/index.ts";
 import { defineVerb, machineNow, Refusal, refuse } from "../define.ts";
 import * as slots from "../grammar/slots.ts";
-import { andList, planErrorSentence, ports, skippedPart } from "./words.ts";
+import { andList, planErrorSentence, portOf, portsOn, skippedPart } from "./words.ts";
 
 /** `off` for a cable that is in, on a machine that is off: its link comes up when the machine boots. */
 export type CableLink = "up" | "cut" | "unplugged" | "off";
@@ -27,6 +29,8 @@ export type CableLink = "up" | "cut" | "unplugged" | "off";
 export interface CableState {
 	readonly machine: MachineName;
 	readonly nic: NicName;
+	/** The port's, when the lab has several. */
+	readonly switch?: SwitchName;
 	readonly port: PortNo | null;
 	readonly link: CableLink;
 }
@@ -42,7 +46,7 @@ export function cableLink(life: Lifecycle, nic: NicNo): CableLink | null {
 function cable(lab: LabState, { machine, nic }: NicRef): CableState | null {
 	const life = lab.machines[machine]?.life;
 	const link = life ? cableLink(life, nic) : null;
-	return life && link ? { machine, nic: nicName(nic), port: nicPortsOf(life)[nic]?.port ?? null, link } : null;
+	return life && link ? { machine, nic: nicName(nic), ...portOf(lab, nicPortsOf(life)[nic]), link } : null;
 }
 
 /** The cable as a person names it: `node2`, or `node2:eth1` when the machine has more than one. */
@@ -77,8 +81,7 @@ function kindOf(change: LinkChange): Kind {
 export const link = defineVerb({
 	name: "link",
 	about: "plug or cut cables",
-	description:
-		"Plug in (up) or cut (down) the switch cables of machines or of single NICs. Returns the port and link state per NIC. A cable already as asked is left alone. A machine that is off can be unplugged or plugged in; its link comes up when it boots.",
+	description: `Plug in (up) or cut (down) the switch cables of machines or of single NICs. Returns the port and link state per NIC, with the port's switch when the lab has several. A cable already as asked is left alone. A NIC that is unplugged goes into the lowest free port of ${DEFAULT_SWITCH}. A machine that is off can be unplugged or plugged in; its link comes up when it boots.`,
 	danger: false,
 	phases: ["ready", "off"],
 	grammar: { link: slots.choice("up plugs the cables in, down cuts them.", ["up", "down"]), machines: slots.cables() },
@@ -99,7 +102,16 @@ export const link = defineVerb({
 		const parts = KINDS.flatMap((kind) => {
 			const group = plan.changes.filter((c) => kindOf(c) === kind);
 			if (group.length === 0) return [];
-			return [PHRASE[kind](names(group), ports(group.map((c) => c.port.port)), group.length > 1)];
+			return [
+				PHRASE[kind](
+					names(group),
+					portsOn(
+						lab,
+						group.map((c) => c.port),
+					),
+					group.length > 1,
+				),
+			];
 		});
 		if (plan.unchanged.length > 0) {
 			const are = plan.unchanged.length === 1 ? "is" : "are";

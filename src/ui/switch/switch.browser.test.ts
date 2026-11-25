@@ -1,7 +1,11 @@
 import "./switch.ts";
+import axe from "axe-core";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { page } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
+import { testCapture } from "../../../test/support/capture.ts";
+import { ping } from "../../../test/support/frames.ts";
 import {
+	addSwitch,
 	LONG_NAME,
 	lab,
 	link,
@@ -12,6 +16,7 @@ import {
 	spawn,
 	spawnNamed,
 	stopped,
+	switchNamed,
 	tokenColor,
 	unmountAll,
 } from "../base/testing.ts";
@@ -184,6 +189,116 @@ describe("<unlab-switch>", () => {
 		expect(element.textContent).toContain("Click a cable");
 		const table = part(element, "unlab-mac-table").getBoundingClientRect();
 		expect(table.left).toBeGreaterThan(column(8).getBoundingClientRect().right);
+	});
+});
+
+describe("a lab with several switches", () => {
+	const lan = switchNamed("lan");
+	/** node1 on switch0, node2 on lan with its cable cut, and nothing on wan. */
+	const several = () =>
+		lab(addSwitch(lan), addSwitch(switchNamed("wan")), spawn(1), spawn(1, lan), ready(), link("down", "node2"));
+	const chooser = () => page.getByRole("combobox", { name: "Switch" });
+	const held = () =>
+		[...document.querySelectorAll("unlab-switch .port:has(.face)")].map(
+			(port) => `${(port as HTMLElement).dataset.port} ${port.querySelector(".name")?.textContent}`,
+		);
+
+	it("chooses in its title which one it shows, by keyboard", async () => {
+		const { element, store, settle } = await mount("unlab-switch", {
+			state: several(),
+			prepare: (el) => el.setAttribute("compact", ""),
+		});
+		await expect.element(chooser()).toHaveValue("switch0");
+		expect(held()).toEqual(["1 node1"]);
+		expect(part(element, ".links").textContent).toBe("1 of 1 links up");
+
+		await userEvent.tab();
+		await expect.element(chooser()).toHaveFocus();
+		await userEvent.keyboard("{ArrowDown}");
+		await settle();
+		expect(store.state.shownSwitch).toBe("lan");
+		expect(held()).toEqual(["1 node2"]);
+		expect(part(element, ".links").textContent).toBe("0 of 1 links up");
+		await expect
+			.element(page.getByRole("button", { name: /cable/ }))
+			.toHaveAccessibleName("Reconnect the cable from node2 to lan port 1");
+		await expect.element(chooser()).toHaveFocus();
+
+		await userEvent.selectOptions(chooser(), "wan");
+		await settle();
+		expect(held()).toEqual([]);
+		expect(part(element, ".subnet").textContent).toBe("L2 · no addresses");
+	});
+
+	it("counts the frames of the one it shows, and has its MAC table beside it", async () => {
+		const capture = testCapture();
+		const totals = new Map([
+			["switch0", { in: 3, delivered: 5, flooded: 2 }],
+			["lan", { in: 1, delivered: 0, flooded: 1 }],
+		]);
+		const { element, store, settle } = await mount("unlab-switch", {
+			state: several(),
+			capture: capture.log,
+			switch: {
+				totals: (of) => totals.get(of) ?? { in: 0, delivered: 0, flooded: 0 },
+				macTable: (of) => (of === lan ? [{ mac: "52:54:00:88:00:0c", port: 1, seen: 0, flushed: false }] : []),
+			},
+		});
+		const counters = () => part(element, ".counters").textContent;
+		expect(counters()).toBe("3 in · 5 delivered · 2 flooded");
+		expect(element.textContent).toContain("switch0 mac address table");
+		expect(element.textContent).toContain("Nothing learned yet.");
+		store.dispatchUi({ type: "ui/switch-shown", switch: lan });
+		await settle();
+		expect(counters()).toBe("1 in · 0 delivered · 1 flooded");
+		expect(element.textContent).toContain("lan mac address table");
+		expect(part(element, "tbody").textContent).toContain("52:54:00:88:00:0c");
+
+		totals.set("lan", { in: 2, delivered: 0, flooded: 2 });
+		capture.frame(ping(1, 2), 1);
+		await expect.poll(counters).toBe("2 in · 0 delivered · 2 flooded");
+	});
+
+	it("names its buttons for the panel, whichever it shows", async () => {
+		await mount("unlab-switch", { state: several() });
+		for (const name of ["Maximise switches", "Park switches"]) {
+			await expect.element(page.getByRole("button", { name })).toBeVisible();
+		}
+	});
+
+	it("shows switch0 again when the one it showed is removed, and is as it was when no other is left", async () => {
+		const { element, store, settle } = await mount("unlab-switch", { state: several() });
+		store.dispatchUi({ type: "ui/switch-shown", switch: lan });
+		store.dispatchCommand({ type: "cmd/switch-remove", switch: lan, cause: "bar" });
+		await settle();
+		await expect.element(chooser()).toHaveValue("switch0");
+		store.dispatchCommand({ type: "cmd/switch-remove", switch: switchNamed("wan"), cause: "bar" });
+		await settle();
+		expect(element.querySelector("select, .counters")).toBeNull();
+		expect(part(element, ".title").textContent).toBe("switch0");
+		await expect.element(page.getByRole("button", { name: "Park switch0" })).toBeVisible();
+	});
+
+	it.each([420, 240])("keeps its header on one line at %ipx, with a long name in it", async (width) => {
+		const { element, store, settle } = await mount("unlab-switch", {
+			state: lab(addSwitch(switchNamed(LONG_NAME)), spawn(2), ready()),
+			prepare: (el) => {
+				el.setAttribute("compact", "");
+				el.style.width = `${width}px`;
+			},
+		});
+		store.dispatchUi({ type: "ui/switch-shown", switch: switchNamed(LONG_NAME) });
+		await settle();
+		const header = part(element, ".header");
+		expect(header.getBoundingClientRect().height).toBe(35);
+		for (const button of header.querySelectorAll("button"))
+			expect(button.getBoundingClientRect().right).toBeLessThanOrEqual(header.getBoundingClientRect().right);
+	});
+
+	it("passes axe", async () => {
+		const { element } = await mount("unlab-switch", { state: several() });
+		const results = await axe.run(element);
+		expect(results.violations.map((v) => v.id)).toEqual([]);
 	});
 });
 

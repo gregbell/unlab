@@ -2,8 +2,8 @@
 // decoded groups, the switch's decision in words, and the hex dump with the
 // bytes that name a machine marked by machine.
 
-import type { FrameEntry } from "../../capture/index.ts";
-import { type MachineName, PORTS, type PortNo, type PortRef } from "../../model/index.ts";
+import type { FrameEntry, RowNames } from "../../capture/index.ts";
+import { PORTS, type PortNo, type PortRef, portText } from "../../model/index.ts";
 import {
 	arpAddrs,
 	BROADCAST_MAC,
@@ -72,10 +72,9 @@ export interface FrameDetail {
 }
 
 /** The lab as it is now, for naming what a frame's bytes point at. */
-export interface LabNames {
+export interface LabNames extends RowNames {
 	/** Which machine holds a port, if any. */
 	holder(port: PortRef): Named | null;
-	severalNics(machine: MachineName): boolean;
 }
 
 const ICMP_TYPES: Readonly<Record<number, string>> = {
@@ -261,9 +260,12 @@ function sentence(...parts: Words): Words {
 	return out;
 }
 
+/** `port 3`, or `lan port 3` in a lab with several switches. */
+const portWord = (e: FrameEntry, port: PortNo, names: LabNames): string => portText(names.switchLabel(e.switch), port);
+
 const atPort = (e: FrameEntry, port: PortNo, names: LabNames): Words => {
 	const holder = names.holder({ switch: e.switch, port });
-	return holder ? [holder, ` on port ${port}`] : [`port ${port}`];
+	return holder ? [holder, ` on ${portWord(e, port, names)}`] : [portWord(e, port, names)];
 };
 
 /** The destination by name if the lab can name it, else its raw MAC. */
@@ -286,7 +288,7 @@ function did(e: FrameEntry, names: LabNames): Words[] {
 				sentence(
 					`${e.switch} did not deliver it: the address it learned for `,
 					...destination(e, names),
-					` leads back to port ${e.from} or to a port that is down.`,
+					` leads back to ${portWord(e, e.from, names)} or to a port that is down.`,
 				),
 			];
 		}
@@ -294,7 +296,7 @@ function did(e: FrameEntry, names: LabNames): Words[] {
 			sentence(
 				`${e.switch} had learned `,
 				...destination(e, names),
-				` on port ${only}, so it forwarded the frame there only.`,
+				` on ${portWord(e, only, names)}, so it forwarded the frame there only.`,
 			),
 		];
 	}
@@ -317,9 +319,11 @@ function did(e: FrameEntry, names: LabNames): Words[] {
 		return holder ? [{ port: p, holder }] : [];
 	});
 	if (missed.length === 0) return [first];
+	const label = names.switchLabel(e.switch);
+	const on = label === null ? "Port" : `${label} port`;
 	const portWords = missed.map((m) => [String(m.port)]);
 	const second = sentence(
-		missed.length === 1 ? "Port " : "Ports ",
+		missed.length === 1 ? `${on} ` : `${on}s `,
 		...list(portWords),
 		missed.length === 1 ? " was down, so " : " were down, so ",
 		...list(missed.map((m) => [m.holder])),
@@ -331,7 +335,7 @@ function did(e: FrameEntry, names: LabNames): Words[] {
 export function frameDetail(e: FrameEntry, names: LabNames): FrameDetail {
 	return {
 		title: `frame ${e.seq}`,
-		summary: `${e.bytes.length} bytes · ${(e.t / 1000).toFixed(2)} s · in on port ${e.from}`,
+		summary: `${e.bytes.length} bytes · ${(e.t / 1000).toFixed(2)} s · in on ${portWord(e, e.from, names)}`,
 		groups: groups(e, names),
 		did: did(e, names),
 		dump: dump(e),

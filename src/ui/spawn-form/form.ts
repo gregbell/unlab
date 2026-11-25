@@ -14,6 +14,7 @@ import {
 	type NicSpec,
 	PORTS,
 	planSpawn,
+	portLabel,
 	type SpawnRequest,
 	takenPorts,
 } from "../../model/index.ts";
@@ -120,7 +121,7 @@ function machinesOf(choice: SpawnChoice, lab: LabState): readonly NewMachine[] {
 		name: identity.name,
 		hue,
 		address: spec.nics[0].address ? addressStr(spec.nics[0].address) : "no address",
-		port: port === null ? "unplugged" : `port ${port.port}`,
+		port: port === null ? "unplugged" : portLabel(lab, port),
 	}));
 }
 

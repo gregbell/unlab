@@ -32,6 +32,8 @@ export interface AgentService {
 /** Live figures the switches own; read on render, never copied into state. */
 export interface SwitchReadout {
 	counters(port: PortRef): { readonly rxFrames: number; readonly txFrames: number } | undefined;
+	/** The whole switch's, since it was added. */
+	totals(of: SwitchName): { readonly in: number; readonly delivered: number; readonly flooded: number };
 	macTable(of: SwitchName): readonly {
 		readonly mac: string;
 		readonly port: PortNo;

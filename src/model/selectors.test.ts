@@ -3,6 +3,7 @@ import { port0 } from "../../test/support/ports.ts";
 import { ACCEPTS } from "./machines.ts";
 import {
 	selectAgentIndicator,
+	selectAllLinks,
 	selectBarHistory,
 	selectDetails,
 	selectFocused,
@@ -68,10 +69,10 @@ describe("chosen addresses", () => {
 	});
 
 	test("name the switch's subnet, and how many once there are several", () => {
-		expect(selectSubnets(emptyLab())).toBe("10.88.0.0/24");
-		expect(selectSubnets(labWith(2))).toBe("10.88.0.0/24");
-		expect(selectSubnets(s)).toBe("10.1.0.0/16");
-		expect(selectSubnets(run(s, spawnEvent(s, 1)))).toBe("2 subnets");
+		expect(selectSubnets("switch0")(emptyLab())).toBe("10.88.0.0/24");
+		expect(selectSubnets("switch0")(labWith(2))).toBe("10.88.0.0/24");
+		expect(selectSubnets("switch0")(s)).toBe("10.1.0.0/16");
+		expect(selectSubnets("switch0")(run(s, spawnEvent(s, 1)))).toBe("2 subnets");
 	});
 });
 
@@ -475,7 +476,7 @@ describe("the status line", () => {
 	test("words its segments as the handoff does", () => {
 		expect(texts(busy())).toEqual({
 			left: ["3 of 4 ready, 1 booting", "5 sessions"],
-			right: ["webmcp: 15 tools, agent active"],
+			right: ["webmcp: 18 tools, agent active"],
 		});
 	});
 
@@ -510,7 +511,7 @@ describe("the status line", () => {
 		expect(texts(s).right[0]).toBe("webmcp: 2 calls waiting for you");
 		s = run(s, { type: "agent/settled", id: 2, status: "denied", result: "Denied by the user." });
 		s = run(s, { type: "agent/settled", id: 3, status: "aborted", result: null });
-		expect(texts(s).right[0]).toBe("webmcp: 15 tools, agent active");
+		expect(texts(s).right[0]).toBe("webmcp: 18 tools, agent active");
 		expect(tone(s, "webmcp")).toBe("quiet");
 	});
 
@@ -537,15 +538,15 @@ describe("the status line", () => {
 
 	test("a tool switched off is not counted, and an idle agent is called idle", () => {
 		let s = run(busy(), { type: "ui/policy", tool: "shell_exec", policy: "off" });
-		expect(texts(s).right[0]).toBe("webmcp: 14 tools, agent active");
+		expect(texts(s).right[0]).toBe("webmcp: 17 tools, agent active");
 		s = run(s, tick(s.now + AGENT_IDLE_MS));
-		expect(texts(s).right[0]).toBe("webmcp: 14 tools, agent idle");
+		expect(texts(s).right[0]).toBe("webmcp: 17 tools, agent idle");
 	});
 
 	test("an empty lab", () => {
 		expect(texts(emptyLab())).toEqual({
 			left: ["0 machines", "0 sessions"],
-			right: ["webmcp: 15 tools registered"],
+			right: ["webmcp: 18 tools registered"],
 		});
 	});
 
@@ -640,6 +641,32 @@ describe("a lab with several switches", () => {
 		expect(shown(lan)).toEqual([[1, "node2:eth0", "cut"]]);
 		expect(selectLinks("switch0")(s)).toEqual({ up: 2, total: 2, cut: 0 });
 		expect(selectLinks(lan)(s)).toEqual({ up: 0, total: 1, cut: 1 });
+	});
+
+	test("names the switch beside each port, and a lab with one does not", () => {
+		const label = (state: LabState) => selectPorts(lan)(state)[0].actionLabel;
+		expect(label(s)).toBe("Reconnect the cable from node2:eth0 to lan port 1");
+		expect(selectPorts("switch0")(s)[0].actionLabel).toBe("Cut the cable from node1 to switch0 port 1");
+		const links = (state: LabState, name: MachineName) =>
+			selectDetails(run(state, { type: "cmd/focus", target: name, mode: "plain" }))?.rows.flatMap(({ label, value }) =>
+				["link", "eth0", "eth1"].includes(label) ? [value] : [],
+			);
+		expect(links(s, "node2")).toEqual(["cable cut on lan port 1", "connected on switch0 port 2"]);
+		expect(links(s, "node1")).toEqual(["connected on switch0 port 1"]);
+		expect(links(run(s, { type: "cmd/switch-remove", switch: lan, cause: "bar" }), "node1")).toEqual([
+			"connected on port 1",
+		]);
+	});
+
+	test("has the subnets of the NICs in each, and every link of the lab together", () => {
+		expect(selectSubnets(lan)(s)).toBe("10.88.0.0/24");
+		const routed = run(s, spawnEvent(s, 1, { net: [lan, "none"], addr: ["10.1.0.1/24", "10.2.0.1/24"] }));
+		expect(selectSubnets(lan)(routed)).toBe("2 subnets");
+		expect(selectSubnets("switch0")(routed)).toBe("10.88.0.0/24");
+		const empty = withSwitches(labWith(1), lan);
+		expect(selectSubnets(lan)(empty)).toBe("no addresses");
+		expect(selectAllLinks(s)).toEqual({ up: 2, total: 3, cut: 1 });
+		expect(selectAllLinks(s)).toBe(selectAllLinks(run(s, tick(s.now + 1000))));
 	});
 
 	test("remembers each switch by itself", () => {

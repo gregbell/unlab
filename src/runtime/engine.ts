@@ -17,6 +17,7 @@ import {
 	type Effect,
 	type HostEntry,
 	type MachineName,
+	type NicNo,
 	type NicRef,
 	type PortNo,
 	type PortRef,
@@ -29,7 +30,7 @@ import {
 import type { CopyJob, CopyReport } from "./protocol.ts";
 import type { LineMark, Screen, Screens } from "./screens.ts";
 import type { ShellEvent } from "./shell-tracker.ts";
-import type { LabSwitch, MacEntry, PortCounters } from "./switch.ts";
+import type { LabSwitch, MacEntry, PortCounters, SwitchCounters } from "./switch.ts";
 import { DEFAULT_TTY_SIZE, type StartVm, type Tty, type Vm, type VmRef, type VmSink } from "./vm.ts";
 
 export type { ExecOutcome, ExecPort };
@@ -48,6 +49,8 @@ export class ExecRefused extends Error {
 export interface RuntimeReads {
 	macTable(of: SwitchName): readonly MacEntry[];
 	counters(port: PortRef): PortCounters | undefined;
+	/** The whole switch's. */
+	totals(of: SwitchName): SwitchCounters;
 }
 
 export interface Engine {
@@ -109,6 +112,12 @@ interface VmEntry {
 interface Write {
 	readonly path: string;
 	settle(outcome: FileOutcome): void;
+}
+
+/** One port of a switch that there is. */
+interface Socket {
+	readonly sw: LabSwitch;
+	readonly port: PortNo;
 }
 
 interface SwitchEntry {
@@ -176,6 +185,8 @@ export function createEngine(deps: EngineDeps): Engine {
 	const sessions = new Map<SessionId, SessionEntry>();
 	const jobs = new Map<MachineName, Job>();
 	const switches = new Map<SwitchName, SwitchEntry>();
+	/** Where each plugged NIC's frames go in. The same cables as the switches', found by NIC. */
+	const plugged = new Map<MachineName, Map<NicNo, Socket>>();
 	let published: readonly HostEntry[] | null = null;
 	let writes = 0;
 	let clock: { readonly hz: 1 | 10; readonly stop: () => void } | null = null;
@@ -189,6 +200,25 @@ export function createEngine(deps: EngineDeps): Engine {
 		const entry: SwitchEntry = { sw, cables: new Map(), untap };
 		switches.set(name, entry);
 		return entry;
+	};
+
+	const unplug = ({ switch: on, port }: PortRef): void => {
+		const entry = switches.get(on);
+		const held = entry?.cables.get(port);
+		if (!entry || !held) return;
+		entry.cables.delete(port);
+		entry.sw.detach(port);
+		const nics = plugged.get(held.machine);
+		const at = nics?.get(held.nic);
+		if (at?.sw === entry.sw && at.port === port) nics?.delete(held.nic);
+	};
+
+	const dropSwitch = (name: SwitchName): void => {
+		const entry = switches.get(name);
+		if (!entry) return;
+		for (const port of entry.cables.keys()) unplug({ switch: name, port });
+		entry.untap();
+		switches.delete(name);
 	};
 
 	/** The vm a report came from, if it is still the one being listened to. */
@@ -316,13 +346,8 @@ export function createEngine(deps: EngineDeps): Engine {
 		},
 		frame(ref, nic, frame) {
 			if (!heard(ref)) return;
-			for (const { sw, cables } of switches.values()) {
-				for (const [port, plugged] of cables) {
-					if (plugged.machine !== ref.machine || plugged.nic !== nic) continue;
-					sw.receive(port, frame);
-					return;
-				}
-			}
+			const at = plugged.get(ref.machine)?.get(nic);
+			at?.sw.receive(at.port, frame);
 		},
 		consoleBytes(ref, bytes) {
 			if (heard(ref)) output(`${ref.machine}:console`, bytes);
@@ -539,8 +564,10 @@ export function createEngine(deps: EngineDeps): Engine {
 				const { sw, cables } = switchOf(effect.port.switch);
 				const held = cables.get(port);
 				if (held?.machine === machine && held.nic === nic) return;
-				sw.detach(port);
+				unplug(effect.port);
 				cables.set(port, { machine, nic });
+				const nics = plugged.get(machine) ?? new Map<NicNo, Socket>();
+				plugged.set(machine, nics.set(nic, { sw, port }));
 				sw.attach(port, {
 					deliver(frame) {
 						const entry = vms.get(machine);
@@ -551,13 +578,13 @@ export function createEngine(deps: EngineDeps): Engine {
 				sw.setLink(port, false);
 				return;
 			}
-			case "port/detach": {
-				const { port } = effect.port;
-				const { sw, cables } = switchOf(effect.port.switch);
-				cables.delete(port);
-				sw.detach(port);
+			case "port/detach":
+				unplug(effect.port);
 				return;
-			}
+			case "switch/remove":
+				// One that comes back under its name is another switch.
+				dropSwitch(effect.switch);
+				return;
 			case "link/set": {
 				const { port, machine, nic, up, cause } = effect;
 				switchOf(port.switch).sw.setLink(port.port, up);
@@ -727,15 +754,12 @@ export function createEngine(deps: EngineDeps): Engine {
 		reads: {
 			macTable: (of) => switches.get(of)?.sw.macTable() ?? [],
 			counters: ({ switch: of, port }) => switches.get(of)?.sw.counters(port),
+			totals: (of) => switches.get(of)?.sw.total ?? { in: 0, delivered: 0, flooded: 0 },
 		},
 		dispose() {
 			clock?.stop();
 			clock = null;
-			for (const { sw, cables, untap } of switches.values()) {
-				untap();
-				for (const port of cables.keys()) sw.detach(port);
-			}
-			switches.clear();
+			for (const name of switches.keys()) dropSwitch(name);
 			for (const job of jobs.values()) job.drop();
 			for (const [machine, entry] of vms) {
 				endWrites(entry, `${machine} stopped`);

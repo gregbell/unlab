@@ -15,6 +15,7 @@ export type HueNo = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
 export const PORTS: readonly PortNo[] = [1, 2, 3, 4, 5, 6, 7, 8];
 export const HUES: readonly HueNo[] = [1, 2, 3, 4, 5, 6, 7, 8];
 export const MAX_MACHINES = 8;
+export const MAX_SWITCHES = 8;
 /** The switch that every lab has. */
 export const DEFAULT_SWITCH = "switch0" as const;
 declare const switchName: unique symbol;
@@ -282,11 +283,14 @@ export type Policy = "run" | "ask" | "off";
 export type ToolName =
 	| "lab_help"
 	| "machines_list"
+	| "topology_read"
 	| "machines_spawn"
 	| "machines_boot"
 	| "machines_reboot"
 	| "machines_poweroff"
 	| "machines_remove"
+	| "switch_add"
+	| "switch_remove"
 	| "checkpoint_save"
 	| "checkpoint_restore"
 	| "checkpoint_remove"
@@ -363,6 +367,8 @@ export interface LabState {
 	readonly departed: Readonly<Partial<Record<MachineName, Departed>>>;
 	/** In the order they are shown. */
 	readonly switches: readonly [typeof DEFAULT_SWITCH, ...SwitchName[]];
+	/** The one whose faceplate is on the page. Always one of `switches`. */
+	readonly shownSwitch: SwitchName;
 	readonly sessions: Readonly<Partial<Record<SessionId, Session>>>;
 	readonly panes: Panes;
 	readonly keyboard: Keyboard;
@@ -401,6 +407,19 @@ export interface RestorePlan extends BootPlan {
 	readonly set: number;
 }
 
+export interface SwitchPlan {
+	readonly name: SwitchName;
+}
+
+/** Who already has a name that was chosen. */
+interface NameTaken<N> {
+	readonly kind: "name-taken";
+	readonly name: N;
+	readonly by: "machine" | "switch";
+}
+
+export type SwitchPlanError = { readonly kind: "no-switch-room" } | NameTaken<SwitchName>;
+
 export interface LinkChange extends NicRef {
 	readonly up: boolean;
 	readonly port: PortRef;
@@ -412,7 +431,7 @@ export type PlanError =
 	| { readonly kind: "no-ports"; readonly switch: SwitchName; readonly free: number; readonly wanted: number }
 	| { readonly kind: "no-room"; readonly free: number; readonly wanted: number }
 	| { readonly kind: "unknown-image"; readonly image: string }
-	| { readonly kind: "name-taken"; readonly name: MachineName; readonly by: "machine" | "switch" }
+	| NameTaken<MachineName>
 	| { readonly kind: "address-taken"; readonly address: Address; readonly by: NicRef }
 	/** Two of one machine's NICs would be in overlapping subnets. */
 	| { readonly kind: "address-overlap"; readonly nics: readonly [NicNo, NicNo] }
@@ -492,6 +511,8 @@ export type RuntimeEvent =
 export type CommandEvent =
 	| { readonly type: "cmd/spawn"; readonly plan: SpawnPlan; readonly at: number }
 	| { readonly type: "cmd/remove"; readonly machines: readonly MachineName[]; readonly cause: Cause }
+	| { readonly type: "cmd/switch-add"; readonly plan: SwitchPlan }
+	| { readonly type: "cmd/switch-remove"; readonly switch: SwitchName; readonly cause: Cause }
 	| { readonly type: "cmd/boot"; readonly machines: readonly BootPlan[]; readonly at: number }
 	| { readonly type: "cmd/power"; readonly machines: readonly MachineName[]; readonly next: Next }
 	| { readonly type: "cmd/checkpoint"; readonly machine: MachineName; readonly name: CheckpointName }
@@ -526,6 +547,7 @@ export type UiEvent =
 	| { readonly type: "ui/panel-unparked"; readonly panel: PanelName }
 	| { readonly type: "ui/panel-parked"; readonly panel: PanelName }
 	| { readonly type: "ui/panel-maximised"; readonly panel: PanelName }
+	| { readonly type: "ui/switch-shown"; readonly switch: SwitchName }
 	| { readonly type: "ui/bar"; readonly open: boolean }
 	| { readonly type: "ui/capture-filter"; readonly filter: string }
 	| { readonly type: "ui/capture-pause"; readonly paused: boolean }
@@ -588,6 +610,8 @@ export type Effect =
 	| { readonly type: "checkpoint/restore"; readonly copy: DiskCopy }
 	| { readonly type: "port/attach"; readonly port: PortRef; readonly machine: MachineName; readonly nic: NicNo }
 	| { readonly type: "port/detach"; readonly port: PortRef }
+	/** After its ports are detached. Nothing that the switch had learned or counted is left. */
+	| { readonly type: "switch/remove"; readonly switch: SwitchName }
 	/** Changes the switch link and writes the capture event row, in that order. */
 	| {
 			readonly type: "link/set";

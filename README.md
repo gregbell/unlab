@@ -49,6 +49,10 @@ every command, and `help spawn` explains one, with its options and an example.
 | `spawn 1 alpine --nics 2 --net switch0,none` | Add a machine with two network interfaces: `eth0` plugged in and `eth1` left unplugged. Without `--net`, each takes its own port.      |
 | `spawn 1 alpine --addr 10.1.0.1/24`          | Add a machine with an address you choose. With `--nics`, give each interface an address or `none`: `--nics 2 --addr 10.1.0.1/24,none`. |
 | `spawn 1 alpine --no-gateway`                | Add a machine on the switch but without the package gateway. DHCP on its `eth0` then goes to the other machines.                       |
+| `mkswitch lan`                               | Add a switch called `lan`. Without a name, it is the next free `switch1`. Frames do not pass from one switch to another.               |
+| `spawn 1 alpine --nics 2 --net switch0,lan`  | Add a machine with one network interface on each switch. `--net lan` puts every interface on `lan`.                                    |
+| `rmswitch lan`                               | Remove a switch, after a confirmation that lists what is plugged in. Those interfaces are left unplugged, and the machines run on.     |
+| `topology`                                   | List every switch, every port, what is in it, and whether its link is up.                                                              |
 | `exec node1 -- ping -c 1 10.88.0.12`         | Send one ping from node1 and read the exit code from its shell.                                                                        |
 | `write node1 /etc/motd --mode 644 -- hello`  | Put a text in a file on the machine, as root, with the directories it needs. `--owner user:group` sets whose it is.                    |
 | `link down node2`                            | Cut node2's cables, whether it is on or off. Reconnect them with `link up node2`. Name one of several with `node2:eth1`.               |
@@ -148,7 +152,7 @@ When you are done, turn remote debugging off.
 ### Connect a browser extension
 
 1. [Open the lab](https://unlab.run/) in Chrome. The bottom right
-   reads `webmcp: 15 tools registered`.
+   reads `webmcp: 18 tools registered`.
 2. To see a call without an agent, click that text, then click **try a call**. The
    call and its result appear in the panel.
 3. Install
@@ -174,11 +178,14 @@ them. Your choices survive a reload.
 | -------------------- | ---------------------------------------- | -------- |
 | `lab_help`           | Explain the commands and the tools.      | `run`    |
 | `machines_list`      | List machines, addresses, links, disks.  | `run`    |
+| `topology_read`      | List switches, ports and cables.         | `run`    |
 | `machines_spawn`     | Boot machines.                           | `ask me` |
 | `machines_boot`      | Boot machines that are off or failed.    | `run`    |
 | `machines_reboot`    | Reboot machines.                         | `run`    |
 | `machines_poweroff`  | Shut machines down and keep their disks. | `run`    |
 | `machines_remove`    | Remove machines and delete their disks.  | `ask me` |
+| `switch_add`         | Add a switch.                            | `run`    |
+| `switch_remove`      | Remove a switch and unplug its cables.   | `ask me` |
 | `checkpoint_save`    | Save a machine's disks as they are now.  | `run`    |
 | `checkpoint_restore` | Go back to a checkpoint and boot.        | `ask me` |
 | `checkpoint_remove`  | Delete a checkpoint.                     | `ask me` |
@@ -186,7 +193,7 @@ them. Your choices survive a reload.
 | `shell_read`         | Read what a guest's terminal shows.      | `run`    |
 | `file_write`         | Put a text in a file on a machine.       | `run`    |
 | `link_set`           | Cut or reconnect a machine's cables.     | `run`    |
-| `capture_read`       | Read captured frames from the switch.    | `run`    |
+| `capture_read`       | Read captured frames from the switches.  | `run`    |
 
 Commands run inside the guests, not on your computer. Guest output can contain
 text that tries to instruct the agent, so unlab marks it as untrusted.
@@ -207,10 +214,13 @@ a separate window opens when you wanted your own browser, reconnect `unlab` in
 
 ## Network and storage
 
-- The switch has eight ports and supports up to eight machines. A machine has one
-  to four network interfaces, and each takes a port or is left unplugged. The
-  switch carries IPv4 traffic between guests. A separate gateway on `eth0`
-  provides access to package repositories.
+- A lab has up to eight machines and eight switches. It starts with `switch0`, which
+  stays. A switch has eight ports. A machine has one to four network interfaces, and
+  each takes a port on a switch or is left unplugged. `link up` plugs one that is
+  unplugged into `switch0`. A switch carries IPv4 traffic between its guests. A separate
+  gateway on `eth0` provides access to package repositories.
+- With more than one switch, the switch panel's title chooses which one it shows, with
+  its ports, frame counts and MAC table.
 - Unless you choose, `eth0` starts with an address in `10.88.0.0/24` and `eth1` and
   up start without one. `--addr` sets one in any subnet. The lab applies the
   addresses it set again at every boot, and `/etc/hosts` in each machine lists
@@ -248,7 +258,7 @@ a separate window opens when you wanted your own browser, reconnect `unlab` in
   the `--owner` or to root. A link is followed. Write a space in a path as `\ `, and
   a backslash as `\\`. No terminal sees it, and the log leaves long texts out.
 - Reloading the page boots each machine from its own IndexedDB-backed disks, except
-  those that are off, which stay off. Switch ports and cable connections survive a
+  those that are off, which stay off. Switches, ports and cable connections survive a
   reload. Shell processes and packet captures start fresh. One tab at a time owns the
   lab.
 - A machine that the browser has no memory or storage left for fails with a sentence

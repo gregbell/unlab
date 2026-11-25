@@ -1,6 +1,6 @@
 import "./frame-detail.css";
 import { html, nothing, type TemplateResult } from "lit";
-import { selectPorts, severalNics } from "../../model/index.ts";
+import { selectPorts, severalNics, switchLabel } from "../../model/index.ts";
 import { EVERYONE } from "../../net/index.ts";
 import { Select, UnlabElement } from "../base/index.ts";
 import { FollowCapture } from "./follow.ts";
@@ -14,6 +14,7 @@ import { type DetailField, frameDetail, type Words } from "./frame-detail-model.
 export class UnlabFrameDetail extends UnlabElement {
 	readonly #selected = new Select(this, (s) => s.capture.selected);
 	readonly #machines = new Select(this, (s) => s.machines);
+	readonly #switches = new Select(this, (s) => s.switches);
 
 	constructor() {
 		super();
@@ -38,6 +39,7 @@ export class UnlabFrameDetail extends UnlabElement {
 				return machine ? { n: machine.n, label: machine.label } : null;
 			},
 			severalNics: (name) => severalNics({ machines }, name),
+			switchLabel: (on) => switchLabel({ switches: this.#switches.value }, on),
 		});
 		return html`<div class="head">
 				<h2 class="title">${d.title}</h2>

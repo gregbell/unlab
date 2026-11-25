@@ -123,6 +123,8 @@ const TABLE: Readonly<Record<Phase, Readonly<Record<Column, Outcome>>>> = {
 		"tick past the boot timeout": "failed",
 		"cmd/spawn": "untouched",
 		"cmd/remove": "removing",
+		"cmd/switch-add": "untouched",
+		"cmd/switch-remove": "ignored",
 		"cmd/boot": "ignored",
 		"cmd/power": "ignored",
 		"cmd/checkpoint": "ignored",
@@ -153,6 +155,8 @@ const TABLE: Readonly<Record<Phase, Readonly<Record<Column, Outcome>>>> = {
 		"tick past the boot timeout": "untouched",
 		"cmd/spawn": "untouched",
 		"cmd/remove": "removing",
+		"cmd/switch-add": "untouched",
+		"cmd/switch-remove": "ignored",
 		"cmd/boot": "ignored",
 		"cmd/power": "stopping",
 		"cmd/checkpoint": "ready",
@@ -183,6 +187,8 @@ const TABLE: Readonly<Record<Phase, Readonly<Record<Column, Outcome>>>> = {
 		"tick past the boot timeout": "untouched",
 		"cmd/spawn": "untouched",
 		"cmd/remove": "removing",
+		"cmd/switch-add": "untouched",
+		"cmd/switch-remove": "ignored",
 		"cmd/boot": "ignored",
 		"cmd/power": "ignored",
 		"cmd/checkpoint": "ignored",
@@ -213,6 +219,8 @@ const TABLE: Readonly<Record<Phase, Readonly<Record<Column, Outcome>>>> = {
 		"tick past the boot timeout": "untouched",
 		"cmd/spawn": "untouched",
 		"cmd/remove": "removing",
+		"cmd/switch-add": "untouched",
+		"cmd/switch-remove": "ignored",
 		"cmd/boot": "booting",
 		"cmd/power": "ignored",
 		"cmd/checkpoint": "off",
@@ -243,6 +251,8 @@ const TABLE: Readonly<Record<Phase, Readonly<Record<Column, Outcome>>>> = {
 		"tick past the boot timeout": "untouched",
 		"cmd/spawn": "untouched",
 		"cmd/remove": "removing",
+		"cmd/switch-add": "untouched",
+		"cmd/switch-remove": "ignored",
 		"cmd/boot": "ignored",
 		"cmd/power": "ignored",
 		"cmd/checkpoint": "ignored",
@@ -273,6 +283,8 @@ const TABLE: Readonly<Record<Phase, Readonly<Record<Column, Outcome>>>> = {
 		"tick past the boot timeout": "untouched",
 		"cmd/spawn": "untouched",
 		"cmd/remove": "removing",
+		"cmd/switch-add": "untouched",
+		"cmd/switch-remove": "ignored",
 		"cmd/boot": "booting",
 		"cmd/power": "ignored",
 		"cmd/checkpoint": "ignored",
@@ -303,6 +315,8 @@ const TABLE: Readonly<Record<Phase, Readonly<Record<Column, Outcome>>>> = {
 		"tick past the boot timeout": "untouched",
 		"cmd/spawn": "untouched",
 		"cmd/remove": "ignored",
+		"cmd/switch-add": "untouched",
+		"cmd/switch-remove": "ignored",
 		"cmd/boot": "ignored",
 		"cmd/power": "ignored",
 		"cmd/checkpoint": "ignored",
@@ -364,6 +378,10 @@ function eventFor(column: Column, s: LabState, name: MachineName, attempt: numbe
 			return spawnEvent(s, 1, { net: "none" });
 		case "cmd/remove":
 			return remove(name);
+		case "cmd/switch-add":
+			return { type: "cmd/switch-add", plan: { name: switchNamed("lan") } };
+		case "cmd/switch-remove":
+			return { type: "cmd/switch-remove", switch: "switch0", cause: "bar" };
 		case "cmd/boot":
 			return bootEvent(s, name);
 		case "cmd/power":
@@ -402,7 +420,10 @@ const VM_EVENTS = [
 ] as const;
 /** Every event that names a machine or one of its sessions. */
 const ADDRESSED = COLUMNS.filter(
-	(column) => !["tick", "tick past the boot timeout", "cmd/spawn", "cmd/capture", "cmd/logged"].includes(column),
+	(column) =>
+		!["tick", "tick past the boot timeout", "cmd/spawn", "cmd/switch-add", "cmd/capture", "cmd/logged"].includes(
+			column,
+		),
 );
 
 describe("the lifecycle table", () => {

@@ -1,4 +1,4 @@
-import type { Checkpoint, HueNo, Identity, MachineName, SessionId, Source } from "../model/index.ts";
+import type { Checkpoint, HueNo, Identity, MachineName, SessionId, Source, SwitchName } from "../model/index.ts";
 
 export interface Token {
 	readonly text: string;
@@ -59,6 +59,8 @@ export interface ConfirmText {
 	readonly actionLabel: string;
 	/** Whose it is, by number too: a name can be another machine's by the time it runs. */
 	readonly machines: readonly Pick<Identity, "n" | "name">[];
+	/** The switch that it is about, when that is no machine. */
+	readonly switch?: SwitchName;
 	/** Which of the machine's checkpoints, by their sets' numbers too. */
 	readonly checkpoints?: readonly Checkpoint[];
 }
@@ -128,9 +130,8 @@ export function lineError(message: string, token?: number, fix?: string): LineEr
 /** Why a yes to `asked` is not a yes to `now`, or null when they ask the same of the same machines. */
 export function changedSinceAsked(asked: ConfirmText, now: ConfirmText): LineError | null {
 	if (JSON.stringify(asked) === JSON.stringify(now)) return null;
-	return lineError(
-		`What this does to ${asked.machines.map((m) => m.name).join(", ")} has changed since it was asked, so ask again.`,
-	);
+	const whom = asked.switch ?? asked.machines.map((m) => m.name).join(", ");
+	return lineError(`What this does to ${whom} has changed since it was asked, so ask again.`);
 }
 
 export function isLineError(value: object): value is LineError {

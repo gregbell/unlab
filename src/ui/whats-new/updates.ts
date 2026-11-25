@@ -14,6 +14,13 @@ export interface Update {
 export const UPDATES: readonly Update[] = [
 	{
 		date: "2026-11-25",
+		title: "More than one switch",
+		detail:
+			"Add up to eight, and choose which one each network interface is plugged into. topology lists what is in every port.",
+		example: "mkswitch lan",
+	},
+	{
+		date: "2026-11-25",
 		title: "Park and maximise each panel",
 		detail:
 			"The capture and switch0 have the same two buttons as consoles. A parked panel waits by name in the bar at the bottom.",

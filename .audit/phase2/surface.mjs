@@ -1,6 +1,9 @@
 // Prints all that a person or an agent reads from the commands: help, completions, tool descriptions and schemas, and what
 // a recorded set of lines answers on labs of one switch. Run it on two checkouts and compare the output byte for byte.
 //
+// On a checkout that can add switches it goes on to labs of several, for reading. It exits 1 when a port was printed as an
+// object, which the types allow in a template string.
+//
 //   node --experimental-transform-types .audit/phase2/surface.mjs <checkout> > before.txt
 
 import { readdirSync, readFileSync } from "node:fs";
@@ -23,7 +26,12 @@ const named = "samePort" in model;
 const portOn = (port) => (named ? { switch: "switch0", port } : port);
 const selected = (select, state) => (named ? select("switch0")(state) : select(state));
 
-const print = (title, value) => console.log(`== ${title}\n${JSON.stringify(value, null, 1)}`);
+let unreadable = 0;
+const print = (title, value) => {
+	const text = JSON.stringify(value, null, 1);
+	if (text.includes("[object ")) unreadable++;
+	console.log(`== ${title}\n${text}`);
+};
 const signal = new AbortController().signal;
 
 function ports(state) {
@@ -175,7 +183,7 @@ for (const entry of capture.frames()) {
 		const machine = selected(model.selectPorts, lab.store.state)[(named ? ref.port : ref) - 1].machine;
 		return machine && { n: machine.n, label: machine.label };
 	};
-	print(`frame ${entry.seq}`, frameDetail(entry, { holder, severalNics: () => false }));
+	print(`frame ${entry.seq}`, frameDetail(entry, { holder, severalNics: () => false, switchLabel: () => null }));
 }
 
 const labs = resolve(import.meta.dirname, "../../test/fixtures/saved-labs");
@@ -195,4 +203,106 @@ for (const file of readdirSync(labs)) {
 	for (const machine of store.state.rail) store.dispatchRuntime({ type: "vm/ready", machine, attempt: 1, bootMs: 10 });
 	await list("ready");
 	print(`${file} effects`, restored.effects.map((e) => ("port" in e ? { ...e, port: named ? e.port.port : e.port } : e)));
+}
+
+if ("planSwitch" in model) await severalSwitches();
+if (unreadable > 0) {
+	console.error(`${unreadable} of these say [object Object].`);
+	process.exitCode = 1;
+}
+
+async function severalSwitches() {
+	const lab = storeLab();
+	const capture = createCaptureLog({
+		schedule: (fn) => fn(),
+		now: () => 1500,
+		rowNames: { switchLabel: (on) => model.switchLabel(lab.store.state, on) },
+	});
+	const reads = { screens: { get: () => undefined }, capture };
+	const several = (title, value) => print(`several: ${title}`, value);
+	const lines = [
+		"topology",
+		"rmswitch switch0",
+		"rmswitch lan",
+		"mkswitch",
+		"mkswitch lan",
+		"mkswitch lan",
+		"mkswitch Lan",
+		"mkswitch lan_1",
+		"mkswitch none",
+		"mkswitch arp",
+		"mkswitch node9",
+		`mkswitch ${"a".repeat(64)}`,
+		"spawn 1 alpine --name lan",
+		"spawn 1 alpine --name web",
+		"mkswitch web",
+		"spawn 1 alpine --net wan",
+		"spawn 1 alpine --nics 2 --net switch0,wan",
+		"spawn 1 alpine --nics 3 --net lan,switch0,switch1",
+		"spawn 1 alpine --nics 4 --net lan",
+		"spawn 1 alpine --nics 4 --net lan",
+		"spawn 1 alpine --net lan",
+		"ls",
+		"topology",
+		"link down node2:eth0",
+		"link down node3",
+		"link up node3",
+		"poweroff node2",
+		"boot node2",
+		"rm node2",
+		"rm all",
+		"rmswitch lam",
+		"rmswitch lan",
+		"rmswitch switch1",
+	];
+	for (const line of lines) {
+		several(`run ${line}`, await ran(lab, line));
+		several(`form after ${line}`, formView({ ...defaultChoice(lab.store.state), net: lab.store.state.switches.at(-1) }, lab.store.state, { registry: lab.registry, parse: lab.parse }));
+		settle(lab);
+		const { state } = lab.store;
+		for (const on of state.switches) {
+			several(`${on} after ${line}`, [model.selectPorts(on)(state), model.selectLinks(on)(state), model.selectSubnets(on)(state)]);
+		}
+		several(
+			`details after ${line}`,
+			state.rail.map((name) => {
+				const details = model.selectDetails({ ...state, keyboard: { kind: "pane", machine: name } });
+				return [details.rows, details.cables];
+			}),
+		);
+	}
+	for (const line of ["spawn 1 alpine --net ", "spawn 1 alpine --nics 2 --net lan,", "rmswitch ", "mkswitch ", "link up node2:"]) {
+		several(`complete ${line}`, completeLine(lab.registry, line, line.length, lab.store.state));
+	}
+	const lan = lab.store.state.switches.at(-1);
+	capture.appendFrame({ switch: lan, from: 1, to: 0b110, flood: "group", frame: arpRequest(1, 2) });
+	capture.appendFrame({ switch: lan, from: 2, to: 0b1, flood: null, frame: arpReply(2, 1) });
+	capture.appendFrame({ switch: "switch0", from: 2, to: 0, flood: "unknown", frame: ping(2, 1) });
+	capture.appendLink({ port: { switch: lan, port: 2 }, machine: "node2", nic: 0, up: false, cause: "bar" });
+	several("rows", capture.tail(10));
+	const names = {
+		holder: ({ switch: on, port }) => model.selectPorts(on)(lab.store.state)[port - 1].machine,
+		severalNics: () => true,
+		switchLabel: (on) => on,
+	};
+	for (const entry of capture.frames()) several(`frame ${entry.seq}`, frameDetail(entry, names));
+	const tools = toolTable(lab.registry, reads);
+	for (const [name, input] of [
+		["switch_add", {}],
+		["switch_add", { name: "wan" }],
+		["switch_add", { name: "web" }],
+		["switch_remove", { switch: "switch0" }],
+		["switch_remove", { switch: "lan" }],
+		["topology_read", {}],
+		["machines_list", {}],
+		["link_set", { link: "down", machines: "web" }],
+		["capture_read", {}],
+	]) {
+		const prepared = tools.find((tool) => tool.name === name).prepare(input, lab.store.state);
+		const asks = prepared.ok && name === "switch_remove";
+		several(`${name} ${JSON.stringify(input)}`, prepared.ok && !asks ? await prepared.run(signal) : prepared);
+	}
+	const base = model.initialState([{ name: "alpine", label: "alpine 3.24" }], { width: 1300, height: 500 });
+	const { state } = model.restoreWorkspace(base, model.saveWorkspace(lab.store.state));
+	several("after a reload", [state.switches, state.rail.map((name) => [name, state.machines[name].spec.nics, state.machines[name].life])]);
 }

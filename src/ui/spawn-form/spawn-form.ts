@@ -1,7 +1,7 @@
 import "./spawn-form.css";
 import { html, nothing, type TemplateResult } from "lit";
 import { isLineError, MULTICPU_BLOCKER } from "../../commands/index.ts";
-import { DEFAULT_SWITCH, DISK_SIZES } from "../../model/index.ts";
+import { DISK_SIZES } from "../../model/index.ts";
 import { Select, UnlabElement } from "../base/index.ts";
 import { defaultChoice, formView, MEMORY, type Memory, type SpawnChoice } from "./form.ts";
 
@@ -85,7 +85,7 @@ export class UnlabSpawnForm extends UnlabElement {
 					<div class="question">
 						<div class="label" id="spawn-network">Network</div>
 						<div class="choices" role="group" aria-labelledby="spawn-network">
-							${option(`plug into ${DEFAULT_SWITCH}`, choice.net === DEFAULT_SWITCH, { net: DEFAULT_SWITCH })}
+							${lab.switches.map((name) => option(`plug into ${name}`, choice.net === name, { net: name }))}
 							${option("leave unplugged", choice.net === "none", { net: "none" })}
 						</div>
 						<p class="note">${view.networkNote}</p>

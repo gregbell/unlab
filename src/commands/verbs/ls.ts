@@ -4,6 +4,7 @@ import {
 	type CheckpointName,
 	type Disk,
 	disksOf,
+	type LabState,
 	type Machine,
 	type MachineName,
 	machineList,
@@ -12,7 +13,9 @@ import {
 	nicPortsOf,
 	type Phase,
 	type PortNo,
+	portText,
 	type SessionId,
+	type SwitchName,
 	savingOf,
 	sessionLabel,
 	sizeText,
@@ -21,7 +24,7 @@ import { ip4str, NICS, nicName } from "../../net/index.ts";
 import { defineVerb } from "../define.ts";
 import type { ReportBlock } from "../types.ts";
 import { type CableLink, cableLink } from "./link.ts";
-import { count, diskList } from "./words.ts";
+import { count, diskList, portOf } from "./words.ts";
 
 /** One NIC as `machines_list` returns it. */
 export interface ListedNic {
@@ -30,6 +33,8 @@ export interface ListedNic {
 	/** The address the lab set on it, or null. A guest can add others. */
 	readonly address: string | null;
 	readonly prefix: number | null;
+	/** The port's, when the lab has several. */
+	readonly switch?: SwitchName;
 	readonly port: PortNo | null;
 	/** Null unless the machine is ready or off. */
 	readonly link: CableLink | null;
@@ -56,7 +61,7 @@ export interface ListedMachine {
 	readonly reason?: string;
 }
 
-function listed(m: Machine): ListedMachine {
+function listed(lab: LabState, m: Machine): ListedMachine {
 	const ports = nicPortsOf(m.life);
 	const nics = NICS.slice(0, m.spec.nics.length).map((nic): ListedNic => {
 		const { address } = m.spec.nics[nic];
@@ -65,7 +70,7 @@ function listed(m: Machine): ListedMachine {
 			mac: nicMac(m.n, nic),
 			address: address && ip4str(address.ip),
 			prefix: address?.prefix ?? null,
-			port: ports[nic]?.port ?? null,
+			...portOf(lab, ports[nic]),
 			link: cableLink(m.life, nic),
 		};
 	});
@@ -85,10 +90,11 @@ function listed(m: Machine): ListedMachine {
 	};
 }
 
-function cableLine({ port, link }: ListedNic): string {
-	if (port === null) return "unplugged";
-	if (link === null) return `port ${port} reserved`;
-	return link === "off" ? `plugged into port ${port}` : `${link} on port ${port}`;
+function cableLine({ switch: on, port: no, link }: ListedNic): string {
+	if (no === null) return "unplugged";
+	const port = portText(on ?? null, no);
+	if (link === null) return `${port} reserved`;
+	return link === "off" ? `plugged into ${port}` : `${link} on ${port}`;
 }
 
 function nicLine(nic: ListedNic): string {
@@ -131,14 +137,14 @@ export const ls = defineVerb({
 	name: "ls",
 	about: "list machines, addresses, links and disks",
 	description:
-		"List every machine with its state (booting, ready, stopping, off, restoring, failed or removing), why it failed, and its sessions, disks, checkpoints and NICs. A checkpoint has the bytes of storage it takes. Each NIC has its MAC, the address and prefix the lab set, switch port and link. Only a ready machine runs commands and takes files.",
+		"List every machine with its state (booting, ready, stopping, off, restoring, failed or removing), why it failed, and its sessions, disks, checkpoints and NICs. A checkpoint has the bytes of storage it takes. Each NIC has its MAC, the address and prefix the lab set, switch port and link, and the port's switch when the lab has several. Only a ready machine runs commands and takes files.",
 	danger: false,
 	grammar: {},
 	example: {},
-	plan: (_a, lab) => ({ machines: machineList(lab) }),
+	plan: (_a, lab) => ({ lab, machines: machineList(lab) }),
 	describe: (plan) => `list ${count(plan.machines.length, "machine")} with their addresses, links and disks`,
 	async execute(plan) {
-		const rows = plan.machines.map(listed);
+		const rows = plan.machines.map((m) => listed(plan.lab, m));
 		const blocks = plan.machines.map(
 			(m, i): ReportBlock => ({
 				machine: m.name,

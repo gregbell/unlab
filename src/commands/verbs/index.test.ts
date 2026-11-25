@@ -18,6 +18,9 @@ describe("VERBS", () => {
 			["write", "<machine> <path> [--owner user[:group]] [--mode mode] -- <text>", "put a text in a file on a machine"],
 			["sh", "<machine>", "open another shell on a machine"],
 			["link", "<up | down> <machines>", "plug or cut cables"],
+			["mkswitch", "[name]", "add a switch"],
+			["rmswitch", "<switch>", "remove a switch and unplug what is in it"],
+			["topology", "", "list switches, their ports and what is plugged in"],
 			["capture", "<filter>", "filter the packet capture"],
 			["focus", "<machine or session> [--main | --max]", "move the keyboard to a console"],
 			["boot", "<machines>", "boot machines that are off or failed"],
@@ -42,6 +45,9 @@ describe("VERBS", () => {
 			["exec", "shell_exec", "run", { untrustedContentHint: true }],
 			["write", "file_write", "run", { untrustedContentHint: true }],
 			["link", "link_set", "run", {}],
+			["mkswitch", "switch_add", "run", {}],
+			["rmswitch", "switch_remove", "ask", { consequentialHint: true }],
+			["topology", "topology_read", "run", { readOnlyHint: true }],
 			["boot", "machines_boot", "run", {}],
 			["reboot", "machines_reboot", "run", {}],
 			["poweroff", "machines_poweroff", "run", {}],
@@ -50,7 +56,12 @@ describe("VERBS", () => {
 			["forget", "checkpoint_remove", "ask", { consequentialHint: true }],
 			["help", "lab_help", "run", { readOnlyHint: true }],
 		]);
-		expect(registry.commands.filter((c) => c.danger).map((c) => c.name)).toEqual(["rm", "restore", "forget"]);
+		expect(registry.commands.filter((c) => c.danger).map((c) => c.name)).toEqual([
+			"rm",
+			"rmswitch",
+			"restore",
+			"forget",
+		]);
 	});
 });
 
@@ -64,7 +75,7 @@ const lines = fc.oneof(
 			fc.integer({ min: 1, max: 4 }),
 			fc.constantFrom("alpine", "debian"),
 			fc.option(fc.constantFrom("--mem 128", "--mem 256", "--mem 1000")),
-			fc.option(fc.constantFrom("--net switch0", "--no-net")),
+			fc.option(fc.constantFrom("--net switch0", "--net wan", "--no-net")),
 			fc.option(fc.constantFrom("--extra-disk 1", "--extra-disk 64,1,1,2")),
 			fc.boolean(),
 		)
@@ -85,6 +96,7 @@ const lines = fc.oneof(
 		.array(fc.constantFrom("icmp", "arp", "node1", "or", "port:2"), { maxLength: 4 })
 		.map((w) => `capture ${w.join(" ")}`),
 	fc.tuple(fc.constantFrom("reboot", "poweroff"), word).map(([verb, w]) => `${verb} ${w}`),
+	fc.constantFrom("topology", "mkswitch", "mkswitch lan", "mkswitch switch7", "rmswitch wan"),
 	fc.constantFrom("ls", "sh node1", "sh node3", "help", "help spawn", "help machines_spawn"),
 	fc
 		.tuple(
@@ -100,6 +112,7 @@ describe("the round trip", () => {
 		const lab = storeLab();
 		await lab.lab(3);
 		await lab.run("sh node2");
+		await lab.run("mkswitch wan");
 		fc.assert(
 			fc.property(lines, spaces, (line, gap) => {
 				const typed = line.replace(/ /, gap);

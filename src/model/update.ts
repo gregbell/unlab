@@ -43,6 +43,7 @@ import {
 	visiblePanes,
 } from "./panes.ts";
 import { later, patch, step } from "./step.ts";
+import { addSwitch, removeSwitch, showSwitch } from "./switches.ts";
 import {
 	type AgentCall,
 	type AgentState,
@@ -65,19 +66,22 @@ import {
 } from "./types.ts";
 
 /**
- * Every tool runs at once except spawn, which adds to the lab, and those that
- * take from it: remove, and going back to a checkpoint or deleting one. Power
- * does neither: the disks and the cables stay, and a guest can be rebooted from
+ * Every tool runs at once except spawn, which takes the browser's memory and
+ * storage, and those that take from the lab: removing a machine or a switch, and
+ * going back to a checkpoint or deleting one. Power does neither: the disks and the cables stay, and a guest can be rebooted from
  * the shell that `shell_exec` types into. A file can be written from it too.
  */
 export const DEFAULT_POLICIES: Readonly<Record<ToolName, Policy>> = {
 	lab_help: "run",
 	machines_list: "run",
+	topology_read: "run",
 	machines_spawn: "ask",
 	machines_boot: "run",
 	machines_reboot: "run",
 	machines_poweroff: "run",
 	machines_remove: "ask",
+	switch_add: "run",
+	switch_remove: "ask",
 	checkpoint_save: "run",
 	checkpoint_restore: "ask",
 	checkpoint_remove: "ask",
@@ -101,6 +105,7 @@ export function initialState(
 		rail: [],
 		departed: {},
 		switches: [DEFAULT_SWITCH],
+		shownSwitch: DEFAULT_SWITCH,
 		sessions: {},
 		panes: emptyPanes(gridFor(area.width, area.height)),
 		keyboard: NOWHERE,
@@ -180,6 +185,10 @@ function reduce(state: LabState, event: LabEvent): Step {
 		}
 		case "cmd/remove":
 			return remove(state, event.machines, event.cause);
+		case "cmd/switch-add":
+			return addSwitch(state, event.plan);
+		case "cmd/switch-remove":
+			return removeSwitch(state, event.switch, event.cause);
 		case "cmd/boot":
 			return bootStopped(state, event.machines, event.at);
 		case "cmd/power":
@@ -227,6 +236,8 @@ function reduce(state: LabState, event: LabEvent): Step {
 			return panels(state, parkPanel(state.panels, event.panel));
 		case "ui/panel-maximised":
 			return panels(state, toggleMaximisedPanel(state.panels, event.panel));
+		case "ui/switch-shown":
+			return step(showSwitch(state, event.switch));
 		case "ui/bar":
 			return event.open ? openBar(state) : closeBar(state);
 		case "ui/capture-filter":

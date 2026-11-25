@@ -1,8 +1,17 @@
 import "./switch.css";
 import "./mac-table.ts";
 import { html, nothing, type TemplateResult } from "lit";
-import { DEFAULT_SWITCH, type PortView, selectLinks, selectPorts, selectSubnets } from "../../model/index.ts";
+import {
+	DEFAULT_SWITCH,
+	type LabState,
+	type PortView,
+	panelLabel,
+	selectLinks,
+	selectPorts,
+	selectSubnets,
+} from "../../model/index.ts";
 import { Select, UnlabElement, windowButtons } from "../base/index.ts";
+import { FollowCapture } from "../capture/follow.ts";
 
 /** What a click on a port column runs. Empty ports, and those of a machine on its way somewhere, do nothing. */
 function clickLine(port: PortView): string | null {
@@ -12,34 +21,49 @@ function clickLine(port: PortView): string | null {
 	return null;
 }
 
+/** What a per-switch selector has for the switch on the page. */
+const shown =
+	<T>(select: (on: LabState["shownSwitch"]) => (state: LabState) => T) =>
+	(state: LabState): T =>
+		select(state.shownSwitch)(state);
+
 /**
  * The switch faceplate: a header, then eight equal port columns. `compact`
  * is the dock's size; without it, the maximised panel's, with the MAC table
  * beside the ports. A column whose click does something is one
  * button named by that action, which says the state its face draws; cutting
- * and reconnecting need no confirmation.
+ * and reconnecting need no confirmation. In a lab with several switches its
+ * title is where one is chosen, and it counts that switch's frames.
  */
 export class UnlabSwitch extends UnlabElement {
 	static override properties = { compact: { type: Boolean, reflect: true } };
 	declare compact: boolean;
 
-	readonly #ports = new Select(this, selectPorts(DEFAULT_SWITCH));
-	readonly #links = new Select(this, selectLinks(DEFAULT_SWITCH));
-	readonly #subnets = new Select(this, selectSubnets);
+	readonly #switches = new Select(this, (s) => s.switches);
+	readonly #shown = new Select(this, (s) => s.shownSwitch);
+	readonly #ports = new Select(this, shown(selectPorts));
+	readonly #links = new Select(this, shown(selectLinks));
+	readonly #subnets = new Select(this, shown(selectSubnets));
 
 	constructor() {
 		super();
 		this.compact = false;
+		new FollowCapture(this, (capture) => (this.#several ? capture.counters.in : 0));
+	}
+
+	get #several(): boolean {
+		return this.#switches.value.length > 1;
 	}
 
 	override render(): TemplateResult {
 		const links = this.#links.value;
+		const label = panelLabel(DEFAULT_SWITCH, { switches: this.#switches.value });
 		return html`<div class="header">
-				<span class="title">${DEFAULT_SWITCH}</span>
+				${this.#several ? this.#chooser() : html`<span class="title">${DEFAULT_SWITCH}</span>`}
 				<span class="subnet">L2 · ${this.#subnets.value}</span>
 				<span class="spacer"></span>
 				<span class="links" data-cut=${links.cut > 0}>${links.up} of ${links.total} links up</span>
-				<span class="window">${windowButtons(DEFAULT_SWITCH, !this.compact, {
+				<span class="window">${windowButtons(label, !this.compact, {
 					maximise: () => this.app.store.dispatchUi({ type: "ui/panel-maximised", panel: DEFAULT_SWITCH }),
 					park: () => this.app.store.dispatchUi({ type: "ui/panel-parked", panel: DEFAULT_SWITCH }),
 				})}</span>
@@ -48,10 +72,29 @@ export class UnlabSwitch extends UnlabElement {
 				<div class="faceplate">
 					<div class="ports">${this.#ports.value.map((port) => this.#column(port))}</div>
 					<p class="note">Click a cable to cut or reconnect it.</p>
+					${this.#several ? this.#counters() : nothing}
 				</div>
 				${this.compact ? nothing : html`<unlab-mac-table></unlab-mac-table>`}
 			</div>`;
 	}
+
+	#counters(): TemplateResult {
+		const counters = this.app.switch.totals(this.#shown.value);
+		return html`<p class="counters">${counters.in} in · ${counters.delivered} delivered · ${counters.flooded} flooded</p>`;
+	}
+
+	#chooser(): TemplateResult {
+		return html`<select class="field title" aria-label="Switch" @change=${this.#choose}>
+			${this.#switches.value.map((name) => html`<option value=${name} .selected=${name === this.#shown.value}>${name}</option>`)}
+		</select>`;
+	}
+
+	readonly #choose = (event: Event): void => {
+		if (!(event.currentTarget instanceof HTMLSelectElement)) return;
+		const { value } = event.currentTarget;
+		const name = this.#switches.value.find((other) => other === value);
+		if (name) this.app.store.dispatchUi({ type: "ui/switch-shown", switch: name });
+	};
 
 	#column(port: PortView): TemplateResult {
 		const socket = html`<span class="socket">${port.machine ? html`<span class="light"></span>` : nothing}${port.port}</span>`;

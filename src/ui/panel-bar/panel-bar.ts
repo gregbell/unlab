@@ -1,23 +1,25 @@
 import "./panel-bar.css";
 import { html, nothing, type TemplateResult } from "lit";
-import { DEFAULT_SWITCH, type PanelName, parkedPanels, selectLinks } from "../../model/index.ts";
+import { type PanelName, panelLabel, parkedPanels, selectAllLinks } from "../../model/index.ts";
 import { Select, UnlabElement, upIcon } from "../base/index.ts";
 
 /** The parked panels by name, each with the one thing worth knowing while it is away. A click brings it back. */
 export class UnlabPanelBar extends UnlabElement {
 	readonly #panels = new Select(this, (s) => s.panels);
 	readonly #paused = new Select(this, (s) => s.capture.paused);
-	readonly #links = new Select(this, selectLinks(DEFAULT_SWITCH));
+	readonly #switches = new Select(this, (s) => s.switches);
+	readonly #links = new Select(this, selectAllLinks);
 
 	override render(): TemplateResult {
+		const label = (name: PanelName) => panelLabel(name, { switches: this.#switches.value });
 		return html`${parkedPanels(this.#panels.value).map(
 			(name) => html`<button
 				type="button"
 				data-panel=${name}
-				title="Bring back ${name}"
+				title="Bring back ${label(name)}"
 				@click=${() => this.app.store.dispatchUi({ type: "ui/panel-unparked", panel: name })}
 			>
-				${upIcon} ${name} ${this.#word(name)}
+				${upIcon} ${label(name)} ${this.#word(name)}
 			</button>`,
 		)}`;
 	}
