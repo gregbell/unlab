@@ -2,6 +2,7 @@ import {
 	type Address,
 	ALL_MACHINES,
 	addressText,
+	type CheckpointName,
 	type GiB,
 	isNameFault,
 	type LabState,
@@ -16,10 +17,12 @@ import {
 	type NicSpec,
 	nicsOf,
 	type Phase,
+	parseCheckpointName,
 	parseChosenName,
 	parseGiB,
 	plugsOf,
 	type SessionId,
+	sizeText,
 } from "../../model/index.ts";
 import {
 	type AddressFault,
@@ -121,6 +124,7 @@ const PHASE_WORDS: Readonly<Record<Phase, { readonly skipped: string; readonly s
 	booting: { skipped: "still booting", sentence: "is still booting" },
 	ready: { skipped: "already running", sentence: "is already running" },
 	stopping: { skipped: "stopping", sentence: "is stopping" },
+	restoring: { skipped: "being restored", sentence: "is being restored" },
 	off: { skipped: "off", sentence: "is off" },
 	failed: { skipped: "failed", sentence: "has failed" },
 	removing: { skipped: "being removed", sentence: "is being removed" },
@@ -300,6 +304,56 @@ export function newName(): Value<MachineName | null> {
 			description:
 				"A name for the machine, which is also its hostname: lowercase letters, digits and hyphens, such as web-1. Left out, node and a number.",
 		},
+	};
+}
+
+const CHECKPOINT = "A checkpoint's name: lowercase letters, digits and hyphens, such as before-upgrade.";
+
+function readCheckpoint(text: string, { verb }: ReadContext): CheckpointName | Miss {
+	const name = parseCheckpointName(text);
+	if (name) return name;
+	const lower = parseCheckpointName(text.toLowerCase());
+	const why = lower
+		? `A checkpoint's name is in lowercase letters, so use ${lower}.`
+		: text.length > MAX_NAME
+			? `A checkpoint's name has at most ${MAX_NAME} characters, and that is ${text.length}.`
+			: `${verb} wants a name of lowercase letters, digits and hyphens, starting with a letter and not ending with a hyphen, such as before-upgrade, not ${text}.`;
+	return new Miss(why, undefined, false);
+}
+
+/** A name for a checkpoint that is not there yet. Whether the machine has one of that name is the verb's to say. */
+export function newCheckpoint(): Value<CheckpointName> {
+	return {
+		kind: "positional",
+		label: "checkpoint",
+		noun: "a name for the checkpoint",
+		read: readCheckpoint,
+		suggest: () => [],
+		format: (name) => name,
+		schema: { type: "string", description: CHECKPOINT },
+	};
+}
+
+/** The name of a checkpoint that is there. Whether it is the machine's is the verb's to say. */
+export function checkpoint(): Value<CheckpointName> {
+	return {
+		kind: "positional",
+		label: "checkpoint",
+		noun: "a checkpoint",
+		read: readCheckpoint,
+		suggest: (_typed, { lab }) =>
+			machinesOf(lab).flatMap((m) =>
+				m.sets.checkpoints.map(
+					({ name, bytes }): Suggestion => ({
+						insert: name,
+						label: name,
+						detail: `${m.name} · ${sizeText(bytes)}`,
+						hue: m.hue,
+					}),
+				),
+			),
+		format: (name) => name,
+		schema: { type: "string", description: CHECKPOINT },
 	};
 }
 

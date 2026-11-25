@@ -9,7 +9,7 @@ import { type DistroManifest, imageSource } from "./image.ts";
 import { createScreens } from "./screens.ts";
 import { LabSwitch } from "./switch.ts";
 import { startVm } from "./vm.ts";
-import { spawnVmWorker } from "./worker.ts";
+import { spawnVmWorker, startCopy } from "./worker.ts";
 
 export interface RuntimeOptions {
 	readonly store: RuntimeStore;
@@ -38,7 +38,8 @@ export function createRuntime(options: RuntimeOptions): Engine {
 				now,
 			}),
 		image: imageSource(options.manifest),
-		deleteDisks: (n) => void deleteDisks(n, [0], MAX_EXTRA_DISKS),
+		deleteDisks: (n, sets) => void deleteDisks(n, sets, MAX_EXTRA_DISKS),
+		startCopy,
 		announce: options.announce,
 		every(ms, fn) {
 			const id = setInterval(fn, ms);

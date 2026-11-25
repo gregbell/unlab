@@ -13,6 +13,7 @@ const NODE3: BootConfig = {
 		gateway: true,
 		nics: [{ net: "switch0", address: defaultAddress(3) }],
 	},
+	set: 0,
 	hosts: [
 		{ ip: "10.88.0.11", name: "node1" },
 		{ ip: "10.88.0.13", name: "node3" },
@@ -40,6 +41,7 @@ function boot(attempt = 1, config = NODE3, released: Promise<unknown> = Promise.
 		ready: record("ready"),
 		failed: record("failed"),
 		halted: record("halted"),
+		copied: record("copied"),
 		nicLost: record("nicLost"),
 		frame: record("frame"),
 		consoleBytes: record("consoleBytes"),
@@ -125,6 +127,7 @@ describe("boot", () => {
 					memoryMiB: 256,
 					cpus: 1,
 					disks: { root: "4", extra: [] },
+					set: 0,
 					hosts: NODE3.hosts,
 					gateway: true,
 					cols: 100,
@@ -162,6 +165,7 @@ describe("boot", () => {
 		t.from({ type: "pty-ready", sid: 2, pid: 80, pts: 1 });
 		t.from({ type: "pty-output", sid: 2, bytes });
 		t.from({ type: "pty-exit", sid: 2, code: 0, reason: "", lost: false });
+		t.from({ type: "copy", report: { kind: "done", bytes: 4096 } });
 		t.from({ type: "ready", ms: 900 });
 
 		const at = { machine: "node3", attempt: 4 };
@@ -173,6 +177,7 @@ describe("boot", () => {
 			["ptyOpened", at, 2],
 			["ptyBytes", at, 2, bytes],
 			["ptyExited", at, 2, false],
+			["copied", at, { kind: "done", bytes: 4096 }],
 			["ready", at, 0],
 		]);
 	});

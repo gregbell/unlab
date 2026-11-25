@@ -1,4 +1,4 @@
-import { FORCED_STOP, type LabState, type Machine, type MachineName, type Phase } from "../../model/index.ts";
+import { FORCED_STOP, type LabState, type Machine, type MachineName, type Phase, savingOf } from "../../model/index.ts";
 import { type CommandDeps, type Refusal, refuse } from "../define.ts";
 import type { Selection } from "../grammar/slots.ts";
 import type { Result, RunContext } from "../types.ts";
@@ -28,6 +28,8 @@ export function planStop(
 	for (const name of names) {
 		const machine = lab.machines[name];
 		if (machine?.life.phase !== "ready") return refuse(`${name} is no longer ready.`, "names");
+		const saving = savingOf(machine.life);
+		if (saving) return refuse(`${name} is saving checkpoint ${saving.name}, so wait until it is done.`, "names");
 		machines.push(machine);
 	}
 	return { machines, skipped };

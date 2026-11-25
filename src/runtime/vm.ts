@@ -5,6 +5,7 @@
 
 import {
 	type BootConfig,
+	type DiskCopy,
 	type HostEntry,
 	type MachineName,
 	type Next,
@@ -15,7 +16,7 @@ import {
 } from "../model/index.ts";
 import { NICS } from "../net/index.ts";
 import { SYNC_MS } from "./power.ts";
-import type { FromVm, ToVm, VmConfig } from "./protocol.ts";
+import type { CopyReport, FromVm, ToVm, VmConfig } from "./protocol.ts";
 
 /** A kernel parked in Atomics.wait may never see `stop`, so the thread is dropped this long after asking. */
 export const STOP_GRACE_MS = 250;
@@ -42,6 +43,8 @@ export interface VmSink {
 	halted(vm: VmRef, next: Next): void;
 	/** A NIC is gone from the running guest. One sentence. */
 	nicLost(vm: VmRef, nic: NicNo, reason: string): void;
+	/** How the copy of the guest's disks that `checkpoint` asked for goes. */
+	copied(vm: VmRef, report: CopyReport): void;
 	/** A frame one of the guest's NICs put on the wire. */
 	frame(vm: VmRef, nic: NicNo, frame: Uint8Array): void;
 	consoleBytes(vm: VmRef, bytes: Uint8Array): void;
@@ -60,6 +63,8 @@ export interface Vm {
 	reconfigure(hosts: readonly HostEntry[]): void;
 	/** A frame from the switch, into one of the guest's NICs. */
 	deliver(nic: NicNo, frame: Uint8Array): void;
+	/** Copy the guest's disks as they are now, while it runs. One at a time. */
+	checkpoint(copy: DiskCopy): void;
 	/**
 	 * Stop the guest as `how` says, then drop its thread. Every call returns the
 	 * same promise, and `drop` hurries one that waits. It resolves with whether
@@ -160,6 +165,9 @@ export function startVm(boot: VmBoot, sink: VmSink, deps: VmDeps): Vm {
 				case "pty-exit":
 					sink.ptyExited(ref, m.sid, m.lost);
 					return;
+				case "copy":
+					sink.copied(ref, m.report);
+					return;
 				case "nic-lost":
 					sink.nicLost(ref, m.nic, m.reason);
 					return;
@@ -194,6 +202,7 @@ export function startVm(boot: VmBoot, sink: VmSink, deps: VmDeps): Vm {
 		memoryMiB: spec.memMiB,
 		cpus: spec.cpus ?? 1,
 		disks: spec.disks,
+		set: boot.config.set,
 		hosts: boot.config.hosts,
 		gateway: spec.gateway,
 		cols: boot.cols,
@@ -230,6 +239,9 @@ export function startVm(boot: VmBoot, sink: VmSink, deps: VmDeps): Vm {
 			// bytes are copied before the buffer is transferred away.
 			const copy = frame.slice();
 			post({ type: "frame", nic, frame: copy }, [copy.buffer]);
+		},
+		checkpoint(copy) {
+			post({ type: "checkpoint", copy });
 		},
 		stop(how) {
 			const first = !stopped;

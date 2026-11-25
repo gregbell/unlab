@@ -1,4 +1,4 @@
-import type { HueNo, Identity, MachineName, SessionId, Source } from "../model/index.ts";
+import type { Checkpoint, HueNo, Identity, MachineName, SessionId, Source } from "../model/index.ts";
 
 export interface Token {
 	readonly text: string;
@@ -59,6 +59,8 @@ export interface ConfirmText {
 	readonly actionLabel: string;
 	/** Whose it is, by number too: a name can be another machine's by the time it runs. */
 	readonly machines: readonly Pick<Identity, "n" | "name">[];
+	/** Which of the machine's checkpoints, by their sets' numbers too. */
+	readonly checkpoints?: readonly Checkpoint[];
 }
 
 export interface ReportBlock {

@@ -49,6 +49,9 @@ describe("<unlab-agent-panel>", () => {
 			"machines_reboot(names)",
 			"machines_poweroff(names)",
 			"machines_remove(names)",
+			"checkpoint_save(machine, checkpoint)",
+			"checkpoint_restore(machine, checkpoint)",
+			"checkpoint_remove(machine, checkpoint)",
 			"shell_exec(targets, command)",
 			"shell_read(machine, lines)",
 			"link_set(link, machines)",
@@ -128,7 +131,8 @@ describe("<unlab-agent-panel>", () => {
 
 		const panel = element.getBoundingClientRect();
 		const approvals = element.querySelector(".approvals")?.getBoundingClientRect();
-		expect(approvals && panel.bottom - approvals.bottom).toBeLessThanOrEqual(14.5);
+		const bottom = Math.min(panel.bottom, window.innerHeight);
+		expect(approvals && bottom - approvals.bottom).toBeLessThanOrEqual(14.5);
 
 		await userEvent.keyboard("{Enter}");
 		await settle();
@@ -199,7 +203,7 @@ describe("<unlab-agent-panel>", () => {
 		expect(text(element.querySelector(".about"))).toBe(
 			"This tab has no WebMCP, so no agent can call these yet. In Chrome or Edge 150 or later, open chrome://flags/#enable-webmcp-testing, choose Enabled and relaunch. Or let an agent open the lab in its own Chrome: connect an agent.",
 		);
-		expect(element.querySelectorAll(".tool")).toHaveLength(10);
+		expect(element.querySelectorAll(".tool")).toHaveLength(13);
 		expect(page.getByRole("button", { name: "try a call" }).elements()).toEqual([]);
 
 		const copy = page.getByRole("button", { name: "copy address" }).element();

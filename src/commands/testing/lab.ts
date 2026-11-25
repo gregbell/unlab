@@ -1,5 +1,6 @@
 import {
 	type Address,
+	type CheckpointName,
 	type CommandEvent,
 	DEFAULT_POLICIES,
 	HUES,
@@ -60,6 +61,16 @@ function life(f: MachineFixture): Lifecycle {
 			return { phase: "stopping", attempt: 1, next: "off", plugs: [plugged(f, port)], linked: true, closed: [] };
 		case "off":
 			return { phase: "off", attempt: 1, plugs: [plugged(f, port)] };
+		case "restoring":
+			return {
+				phase: "restoring",
+				attempt: 2,
+				from: { name: "before" as CheckpointName, set: 1, bytes: 0 },
+				set: 2,
+				percent: 0,
+				plugs: [plugged(f, port)],
+				closed: [],
+			};
 		case "failed":
 			return { phase: "failed", attempt: 1, reason: "No prompt after 120 s." };
 		case "removing":
@@ -93,6 +104,8 @@ export function labWith(fixtures: readonly MachineFixture[], images: readonly Im
 			activeSession: ids[0],
 			nextShell: (f.shells ?? 0) + 1,
 			lastStop: null,
+			sets: { live: 0, next: 1, checkpoints: [] },
+			unsaved: null,
 		};
 		for (const id of ids) {
 			sessions[id] = {

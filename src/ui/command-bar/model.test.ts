@@ -180,6 +180,9 @@ describe("the artboards, replayed", () => {
 			"boot",
 			"reboot",
 			"poweroff",
+			"checkpoint",
+			"restore",
+			"forget",
 		]);
 		expect(view.chosen).toBe(3);
 		expect(view.hint).toBe("tab → spawn");

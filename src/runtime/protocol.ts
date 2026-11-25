@@ -2,7 +2,7 @@
 // a kernel owns its thread (it blocks in Atomics.wait while idle), so a busy
 // machine must never be able to stall another one or the page.
 
-import type { Address, Disks, HostEntry, Next, StopHow } from "../model/index.ts";
+import type { Address, DiskCopy, Disks, HostEntry, Next, StopHow } from "../model/index.ts";
 import type { NicNo } from "../net/index.ts";
 
 export interface VmConfig {
@@ -20,6 +20,8 @@ export interface VmConfig {
 	distro: string;
 	memoryMiB: number;
 	disks: Disks;
+	/** Which set of them. */
+	set: number;
 	cpus?: number;
 	hosts: readonly HostEntry[];
 	/** Attach the gateway for signed distro repositories to eth0. */
@@ -37,6 +39,19 @@ export interface PtySpec {
 	rows: number;
 }
 
+/** How a copy of a machine's disks goes. The last is `done` or `failed`, and one that failed has left nothing. */
+export type CopyReport =
+	| { readonly kind: "progress"; readonly percent: number }
+	| { readonly kind: "done"; readonly bytes: number }
+	/** One sentence. */
+	| { readonly kind: "failed"; readonly reason: string };
+
+/** A copy of disks that no guest has open, which a worker of its own makes. */
+export interface CopyJob {
+	readonly copy: DiskCopy;
+	readonly why: "save" | "restore";
+}
+
 export type ToVm =
 	| { type: "boot"; cfg: VmConfig }
 	| { type: "frame"; nic: NicNo; frame: Uint8Array }
@@ -47,6 +62,8 @@ export type ToVm =
 	| { type: "pty-data"; sid: number; data: string }
 	| { type: "pty-resize"; sid: number; cols: number; rows: number }
 	| { type: "pty-close"; sid: number }
+	/** Save the guest's disks as they are. Answered with `copy`s. */
+	| { type: "checkpoint"; copy: DiskCopy }
 	/** Stop the kernel, for a thread that is about to be dropped. */
 	| { type: "stop" }
 	/** Save every disk, once the guest has shut down when it is asked to. Answered with `released`. */
@@ -64,6 +81,7 @@ export type FromVm =
 	| { type: "exited"; code: number; reason: string }
 	/** Nothing of the machine is left to save. `clean` when the guest shut down and every disk was saved. */
 	| { type: "released"; clean: boolean }
+	| { type: "copy"; report: CopyReport }
 	/** A NIC is gone from a guest that runs on. */
 	| { type: "nic-lost"; nic: NicNo; reason: string }
 	| { type: "pty-ready"; sid: number; pid: number; pts: number }

@@ -68,6 +68,38 @@ export interface Disks {
 	readonly extra: readonly GiB[];
 }
 
+declare const checkpointName: unique symbol;
+/** What a person calls a checkpoint, unique on its machine. */
+export type CheckpointName = string & { readonly [checkpointName]: true };
+
+/** A machine's disks as they were. */
+export interface Checkpoint {
+	readonly name: CheckpointName;
+	readonly set: number;
+	/** What its blocks take in the browser's storage. */
+	readonly bytes: number;
+}
+
+/**
+ * All of a machine's disks are kept together in a numbered set. The guest has
+ * the live one, and each checkpoint is another. `next` only goes up, so a number
+ * is one set's for the machine's lifetime, and a set that nothing here names is
+ * one that was never finished.
+ */
+export interface DiskSets {
+	readonly live: number;
+	readonly next: number;
+	/** Oldest first. */
+	readonly checkpoints: readonly Checkpoint[];
+}
+
+/** A checkpoint that is being saved. */
+export interface Saving {
+	readonly name: CheckpointName;
+	readonly set: number;
+	readonly percent: number;
+}
+
 /** The most a guest kernel can address. */
 export const MAX_MEM_MIB = 4096;
 
@@ -120,6 +152,10 @@ export type Next = "off" | "reboot";
  *
  * Stopping lasts until the worker is gone and its disks are saved. A guest
  * that is asked to stop still has its links until then.
+ *
+ * Restoring copies a checkpoint to a new set of disks beside the live one, which
+ * the machine then boots from. Until then nothing has changed but that it is
+ * down. A checkpoint that is being saved ends with the phase it was started in.
  */
 export type Lifecycle =
 	| {
@@ -136,6 +172,7 @@ export type Lifecycle =
 			readonly plugs: readonly Plug[];
 			/** NICs that are gone from the running guest. They are back at its next boot. */
 			readonly lost?: readonly NicNo[];
+			readonly saving?: Saving;
 	  }
 	| {
 			readonly phase: "stopping";
@@ -147,7 +184,23 @@ export type Lifecycle =
 			/** The shells that closed because of it. */
 			readonly closed: readonly SessionId[];
 	  }
-	| { readonly phase: "off"; readonly attempt: number; readonly plugs: readonly Plug[] }
+	| {
+			readonly phase: "off";
+			readonly attempt: number;
+			readonly plugs: readonly Plug[];
+			readonly saving?: Saving;
+	  }
+	| {
+			readonly phase: "restoring";
+			readonly attempt: number;
+			readonly from: Checkpoint;
+			/** The set that will be live. */
+			readonly set: number;
+			readonly percent: number;
+			readonly plugs: readonly Plug[];
+			/** The shells that closed because of it. */
+			readonly closed: readonly SessionId[];
+	  }
 	| { readonly phase: "failed"; readonly attempt: number; readonly reason: string }
 	| { readonly phase: "removing"; readonly attempt: number; readonly ports: NicPorts };
 
@@ -164,6 +217,9 @@ export type Machine = Identity & {
 	readonly nextShell: number;
 	/** How its last stop went: whether the guest shut down, or had to be cut short. Null when it has not stopped with its cables in. */
 	readonly lastStop: "clean" | "forced" | null;
+	readonly sets: DiskSets;
+	/** Why the last checkpoint that was asked for could not be saved. */
+	readonly unsaved: { readonly set: number; readonly reason: string } | null;
 };
 
 export interface Session {
@@ -220,6 +276,9 @@ export type ToolName =
 	| "machines_reboot"
 	| "machines_poweroff"
 	| "machines_remove"
+	| "checkpoint_save"
+	| "checkpoint_restore"
+	| "checkpoint_remove"
 	| "shell_exec"
 	| "shell_read"
 	| "link_set"
@@ -315,6 +374,11 @@ export interface BootPlan {
 	readonly ports: NicPorts;
 }
 
+export interface RestorePlan extends BootPlan {
+	/** The checkpoint's. */
+	readonly set: number;
+}
+
 export interface LinkChange extends NicRef {
 	readonly up: boolean;
 	readonly port: PortNo;
@@ -365,6 +429,37 @@ export type RuntimeEvent =
 			/** One sentence. */
 			readonly reason: string;
 	  }
+	| {
+			readonly type: "checkpoint/progress";
+			readonly machine: MachineName;
+			readonly attempt: number;
+			/** The set that is being written. */
+			readonly set: number;
+			readonly percent: number;
+	  }
+	| {
+			readonly type: "checkpoint/saved";
+			readonly machine: MachineName;
+			readonly attempt: number;
+			readonly set: number;
+			readonly bytes: number;
+	  }
+	/** Nothing of it is left. */
+	| {
+			readonly type: "checkpoint/unsaved";
+			readonly machine: MachineName;
+			readonly attempt: number;
+			readonly set: number;
+			/** One sentence. */
+			readonly reason: string;
+	  }
+	| {
+			readonly type: "checkpoint/restored";
+			readonly machine: MachineName;
+			readonly attempt: number;
+			readonly set: number;
+			readonly at: number;
+	  }
 	| { readonly type: "session/opened"; readonly session: SessionId }
 	| { readonly type: "session/ended"; readonly session: SessionId }
 	| { readonly type: "session/shell"; readonly session: SessionId; readonly shell: "prompt" | "running" }
@@ -377,6 +472,9 @@ export type CommandEvent =
 	| { readonly type: "cmd/remove"; readonly machines: readonly MachineName[]; readonly cause: Cause }
 	| { readonly type: "cmd/boot"; readonly machines: readonly BootPlan[]; readonly at: number }
 	| { readonly type: "cmd/power"; readonly machines: readonly MachineName[]; readonly next: Next }
+	| { readonly type: "cmd/checkpoint"; readonly machine: MachineName; readonly name: CheckpointName }
+	| { readonly type: "cmd/restore"; readonly plan: RestorePlan }
+	| { readonly type: "cmd/forget"; readonly machine: MachineName; readonly set: number }
 	| { readonly type: "cmd/link"; readonly changes: readonly LinkChange[]; readonly cause: Cause }
 	| { readonly type: "cmd/shell"; readonly machine: MachineName }
 	| {
@@ -435,7 +533,20 @@ export interface HostEntry {
 export interface BootConfig {
 	readonly identity: Identity;
 	readonly spec: MachineSpec;
+	/** The disks it boots from. */
+	readonly set: number;
 	readonly hosts: readonly HostEntry[];
+}
+
+/** One set of a machine's disks to copy to another. */
+export interface DiskCopy {
+	readonly machine: MachineName;
+	readonly attempt: number;
+	readonly n: number;
+	readonly extras: number;
+	readonly checkpoint: CheckpointName;
+	readonly from: number;
+	readonly to: number;
 }
 
 /** `drop` loses what is not saved yet. The others save every disk, and `off` and `reboot` have the guest shut down first. */
@@ -445,8 +556,12 @@ export type Effect =
 	| { readonly type: "vm/boot"; readonly machine: MachineName; readonly attempt: number; readonly config: BootConfig }
 	/** Stop the worker as `how` says, then report vm/stopped. Idempotent, and `drop` hurries a slower stop. */
 	| { readonly type: "vm/stop"; readonly machine: MachineName; readonly attempt: number; readonly how: StopHow }
-	/** The machine is gone, and nothing can ask for its disks again. */
-	| { readonly type: "disks/delete"; readonly n: number }
+	/** Nothing can ask for these disks again. */
+	| { readonly type: "disks/delete"; readonly n: number; readonly sets: readonly number[] }
+	/** Of a guest that runs, or of disks that no one has open. Reports checkpoint/saved or checkpoint/unsaved. */
+	| { readonly type: "checkpoint/save"; readonly copy: DiskCopy }
+	/** Once the worker is gone. Reports checkpoint/restored, or vm/failed with the live disks as they were. */
+	| { readonly type: "checkpoint/restore"; readonly copy: DiskCopy }
 	| { readonly type: "port/attach"; readonly port: PortNo; readonly machine: MachineName; readonly nic: NicNo }
 	| { readonly type: "port/detach"; readonly port: PortNo }
 	/** Changes the switch link and writes the capture event row, in that order. */

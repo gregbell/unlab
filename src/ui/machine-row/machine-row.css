@@ -31,7 +31,7 @@
 			background: var(--line);
 		}
 
-		.row:is([data-phase="booting"], [data-phase="stopping"], [data-phase="off"]) {
+		.row:is([data-phase="booting"], [data-phase="stopping"], [data-phase="restoring"], [data-phase="off"]) {
 			border-left-color: var(--line-strong);
 		}
 

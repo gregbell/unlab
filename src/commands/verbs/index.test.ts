@@ -22,6 +22,9 @@ describe("VERBS", () => {
 			["boot", "<machines>", "boot machines that are off or failed"],
 			["reboot", "<machines>", "shut machines down and boot them again"],
 			["poweroff", "<machines>", "shut machines down and keep their disks"],
+			["checkpoint", "<machine> <checkpoint>", "save a machine's disks as they are now"],
+			["restore", "<machine> <checkpoint>", "go back to a checkpoint and boot"],
+			["forget", "<machine> <checkpoint>", "delete a checkpoint"],
 		]);
 	});
 
@@ -39,8 +42,11 @@ describe("VERBS", () => {
 			["boot", "machines_boot", "run", {}],
 			["reboot", "machines_reboot", "run", {}],
 			["poweroff", "machines_poweroff", "run", {}],
+			["checkpoint", "checkpoint_save", "run", {}],
+			["restore", "checkpoint_restore", "ask", { consequentialHint: true }],
+			["forget", "checkpoint_remove", "ask", { consequentialHint: true }],
 		]);
-		expect(registry.commands.filter((c) => c.danger).map((c) => c.name)).toEqual(["rm"]);
+		expect(registry.commands.filter((c) => c.danger).map((c) => c.name)).toEqual(["rm", "restore", "forget"]);
 	});
 });
 

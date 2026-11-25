@@ -77,6 +77,9 @@ describe("initialState", () => {
 				machines_reboot: "run",
 				machines_poweroff: "run",
 				machines_remove: "ask",
+				checkpoint_save: "run",
+				checkpoint_restore: "ask",
+				checkpoint_remove: "ask",
 				shell_exec: "run",
 				shell_read: "run",
 				link_set: "run",
@@ -112,6 +115,8 @@ describe("spawn", () => {
 			activeSession: "node1:console",
 			nextShell: 1,
 			lastStop: null,
+			sets: { live: 0, next: 1, checkpoints: [] },
+			unsaved: null,
 		});
 		expect(state.machines.node2?.life).toMatchObject({ phase: "booting", plugs: [{ port: 2 }] });
 		expect(state.sessions).toEqual({
@@ -138,14 +143,14 @@ describe("spawn", () => {
 		expect(effects).toEqual([
 			{ type: "screen/create", session: "node1:console" },
 			{ type: "port/attach", port: 1, machine: "node1", nic: 0 },
-			{ type: "vm/boot", machine: "node1", attempt: 1, config: { identity: identity(1), spec: ALPINE, hosts } },
+			{ type: "vm/boot", machine: "node1", attempt: 1, config: { identity: identity(1), spec: ALPINE, set: 0, hosts } },
 			{ type: "screen/create", session: "node2:console" },
 			{ type: "port/attach", port: 2, machine: "node2", nic: 0 },
 			{
 				type: "vm/boot",
 				machine: "node2",
 				attempt: 1,
-				config: { identity: identity(2), spec: alpineAt("10.88.0.12/24"), hosts },
+				config: { identity: identity(2), spec: alpineAt("10.88.0.12/24"), set: 0, hosts },
 			},
 			{ type: "clock", hz: 10 },
 		]);
@@ -452,6 +457,7 @@ describe("boot again", () => {
 				config: {
 					identity: identity(1),
 					spec: ALPINE,
+					set: 0,
 					hosts: [
 						{ ip: "10.88.0.11", name: "node1" },
 						{ ip: "10.88.0.12", name: "node2" },
@@ -482,7 +488,7 @@ describe("rm", () => {
 			{ type: "port/detach", port: 1 },
 			{ type: "screen/dispose", session: "node1:console" },
 			{ type: "screen/dispose", session: "node1:sh1" },
-			{ type: "disks/delete", n: 1 },
+			{ type: "disks/delete", n: 1, sets: [0] },
 			{ type: "hosts/publish", hosts: [{ ip: "10.88.0.12", name: "node2" }] },
 			{ type: "announce", text: "node1 removed" },
 		]);

@@ -30,11 +30,23 @@ function losses(machines: readonly Machine[]): string {
 	return disks.length === 1 ? `everything on its ${diskList(disks)} disk is gone` : `${gone}: ${diskList(disks)}`;
 }
 
+/** `Its checkpoint before is deleted too.`, or for several machines whose each is. */
+function theirCheckpoints(machines: readonly Machine[]): string[] {
+	const having = machines.filter((m) => m.sets.checkpoints.length > 0);
+	const named = having.map(({ name, sets }) => {
+		const names = sets.checkpoints.map((checkpoint) => checkpoint.name);
+		const whose = machines.length === 1 ? "Its" : `${name}'s`;
+		return `${whose} ${names.length === 1 ? "checkpoint" : "checkpoints"} ${andList(names)}`;
+	});
+	const total = having.reduce((n, m) => n + m.sets.checkpoints.length, 0);
+	return total === 0 ? [] : [`${andList(named)} ${total === 1 ? "is" : "are"} deleted too.`];
+}
+
 export const rm = defineVerb({
 	name: "rm",
 	about: "remove machines and their disks",
 	danger: true,
-	phases: ["booting", "ready", "stopping", "off", "failed"],
+	phases: ["booting", "ready", "stopping", "off", "restoring", "failed"],
 	grammar: { names: slots.machines() },
 	plan(a, lab) {
 		const machines: Machine[] = [];
@@ -66,7 +78,11 @@ export const rm = defineVerb({
 			: shells === 0
 				? "Their consoles close"
 				: `Their consoles and ${count(shells, "shell")} close`;
-		const lost = `${closes} and ${losses(plan.machines)}. There is no undo.`;
+		const lost = [
+			`${closes} and ${losses(plan.machines)}.`,
+			...theirCheckpoints(plan.machines),
+			"There is no undo.",
+		].join(" ");
 
 		const freed = plan.machines.flatMap((m) => portsOf(m.life));
 		const going = new Set<MachineName>(names);
@@ -101,7 +117,7 @@ export const rm = defineVerb({
 		name: "machines_remove",
 		title: "Remove machines",
 		description:
-			"Remove machines and everything on their disks. There is no undo. Returns the names removed once they are gone.",
+			"Remove machines, everything on their disks, and their checkpoints. There is no undo. Returns the names removed once they are gone.",
 		policy: "ask",
 		annotations: { consequentialHint: true },
 	},

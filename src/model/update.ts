@@ -1,8 +1,12 @@
 import { parseSessionId } from "./identity.ts";
 import {
 	bootStopped,
+	checkpointProgress,
+	checkpointSaved,
+	checkpointUnsaved,
 	expireBoots,
 	fail,
+	forget,
 	halted,
 	link,
 	machineList,
@@ -11,6 +15,9 @@ import {
 	power,
 	ready,
 	remove,
+	restore,
+	restored,
+	saveCheckpoint,
 	selectTab,
 	sessionEnded,
 	sessionMarked,
@@ -55,9 +62,10 @@ import {
 } from "./types.ts";
 
 /**
- * Every tool runs at once except spawn, which adds to the lab, and remove,
- * which takes from it. Power does neither: the disks and the cables stay, and
- * a guest can be rebooted from the shell that `shell_exec` types into.
+ * Every tool runs at once except spawn, which adds to the lab, and those that
+ * take from it: remove, and going back to a checkpoint or deleting one. Power
+ * does neither: the disks and the cables stay, and a guest can be rebooted from
+ * the shell that `shell_exec` types into.
  */
 export const DEFAULT_POLICIES: Readonly<Record<ToolName, Policy>> = {
 	machines_list: "run",
@@ -66,6 +74,9 @@ export const DEFAULT_POLICIES: Readonly<Record<ToolName, Policy>> = {
 	machines_reboot: "run",
 	machines_poweroff: "run",
 	machines_remove: "ask",
+	checkpoint_save: "run",
+	checkpoint_restore: "ask",
+	checkpoint_remove: "ask",
 	shell_exec: "run",
 	shell_read: "run",
 	link_set: "run",
@@ -137,6 +148,14 @@ function reduce(state: LabState, event: LabEvent): Step {
 			return halted(state, event.machine, event.attempt, event.next, event.closed);
 		case "vm/nic-lost":
 			return nicLost(state, event.machine, event.attempt, event.nic, event.reason);
+		case "checkpoint/progress":
+			return checkpointProgress(state, event.machine, event.attempt, event.set, event.percent);
+		case "checkpoint/saved":
+			return checkpointSaved(state, event.machine, event.attempt, event.set, event.bytes);
+		case "checkpoint/unsaved":
+			return checkpointUnsaved(state, event.machine, event.attempt, event.set, event.reason);
+		case "checkpoint/restored":
+			return restored(state, event.machine, event.attempt, event.set, event.at);
 		case "session/opened":
 			return sessionOpened(state, event.session);
 		case "session/ended":
@@ -159,6 +178,12 @@ function reduce(state: LabState, event: LabEvent): Step {
 			return bootStopped(state, event.machines, event.at);
 		case "cmd/power":
 			return power(state, event.machines, event.next);
+		case "cmd/checkpoint":
+			return saveCheckpoint(state, event.machine, event.name);
+		case "cmd/restore":
+			return restore(state, event.plan);
+		case "cmd/forget":
+			return forget(state, event.machine, event.set);
 		case "cmd/link":
 			return link(state, event.changes, event.cause);
 		case "cmd/shell":

@@ -3,9 +3,19 @@
 // compare with Object.is.
 
 import { addressStr, ip4str, LAB_SUBNET, type NameBook, NICS, nicName, subnetStr } from "../net/index.ts";
-import { type Device, disksOf } from "./disks.ts";
+import { type Device, disksOf, sizeText } from "./disks.ts";
 import { nicLabel, nicMac, sessionLabel } from "./identity.ts";
-import { ACCEPTS, type Accepts, addressOf, machineList, nameBook, nicPortsOf, plugsOf, portsOf } from "./machines.ts";
+import {
+	ACCEPTS,
+	type Accepts,
+	addressOf,
+	machineList,
+	nameBook,
+	nicPortsOf,
+	plugsOf,
+	portsOf,
+	savingOf,
+} from "./machines.ts";
 import { keyboardHolder, parkedPanes, visiblePanes } from "./panes.ts";
 import { type Tiling, tile } from "./tiling.ts";
 import {
@@ -88,7 +98,15 @@ export const selectSubnets: (state: LabState) => string = memo(
 	},
 );
 
-export type StateWord = LinkWord | `booting ${string} s` | "powering off" | "rebooting" | "off" | "failed" | "removing";
+export type StateWord =
+	| LinkWord
+	| `booting ${string} s`
+	| `restoring ${number}%`
+	| "powering off"
+	| "rebooting"
+	| "off"
+	| "failed"
+	| "removing";
 
 function stateWord(machine: Machine, now: number): StateWord {
 	const { life } = machine;
@@ -99,6 +117,8 @@ function stateWord(machine: Machine, now: number): StateWord {
 			return machineLink(machine) ?? "unplugged";
 		case "stopping":
 			return life.next === "off" ? "powering off" : "rebooting";
+		case "restoring":
+			return `restoring ${life.percent}%`;
 		default:
 			return life.phase;
 	}
@@ -142,6 +162,7 @@ export interface DetailRow {
 		| "CPUs"
 		| "disk"
 		| Device
+		| "checkpoints"
 		| "memory"
 		| "address"
 		| "mac"
@@ -171,7 +192,7 @@ export interface MachineDetails {
 	readonly ports: readonly PortNo[];
 	/** One for each NIC, eth0 first. Empty unless the machine takes them now. */
 	readonly cables: readonly Cable[];
-	/** Why it failed, as the runtime said it. */
+	/** Why it failed, or could not save the last checkpoint, as the runtime said it. */
 	readonly reason: string | null;
 	readonly accepts: Accepts;
 	/**
@@ -200,7 +221,7 @@ function linkRow(label: "link" | NicName, { life }: Machine, nic: NicNo): Detail
 	if (life.phase === "ready" && life.lost?.includes(nic))
 		return { label, value: "gone from the guest until it reboots", tone: "down" };
 	if (plug.link === "cut") return { label, value: `cable cut on port ${plug.port}`, tone: "down" };
-	if (life.phase === "off") return { label, value: `plugged into port ${plug.port}` };
+	if (life.phase === "off" || life.phase === "restoring") return { label, value: `plugged into port ${plug.port}` };
 	return { label, value: `connected on port ${plug.port}`, tone: "ok" };
 }
 
@@ -208,6 +229,18 @@ function linkRow(label: "link" | NicName, { life }: Machine, nic: NicNo): Detail
 function diskRows({ spec }: Machine): DetailRow[] {
 	const disks = disksOf(spec);
 	return disks.map(({ device, gib }) => ({ label: disks.length === 1 ? "disk" : device, value: `${gib} GiB` }));
+}
+
+/** `before 12.5 MiB, after 13.0 MiB · 25.5 MiB in all`, and one that is being saved. */
+function checkpointRows({ sets, life }: Machine): DetailRow[] {
+	const { checkpoints } = sets;
+	const saving = savingOf(life);
+	const parts = [
+		checkpoints.map(({ name, bytes }) => `${name} ${sizeText(bytes)}`).join(", "),
+		checkpoints.length > 1 ? `${sizeText(checkpoints.reduce((sum, { bytes }) => sum + bytes, 0))} in all` : "",
+		saving ? `saving ${saving.name} ${saving.percent}%` : "",
+	].filter(Boolean);
+	return parts.length === 0 ? [] : [{ label: "checkpoints", value: parts.join(" · ") }];
 }
 
 /** One NIC reads as the machine's own address and link. Several are told apart by name. */
@@ -255,13 +288,14 @@ export const selectDetails: (state: LabState) => MachineDetails | null = memo(
 			phase: machine.life.phase,
 			ports: portsOf(machine.life),
 			cables: cables(machine),
-			reason: machine.life.phase === "failed" ? machine.life.reason : null,
+			reason: machine.life.phase === "failed" ? machine.life.reason : (machine.unsaved?.reason ?? null),
 			accepts: ACCEPTS[machine.life.phase],
 			rows: [
 				{ label: "state", value: stateValue(machine, now), ...stateTone(machine) },
 				{ label: "image", value: image ? image.label : machine.spec.image },
 				{ label: "CPUs", value: String(machine.spec.cpus ?? 1) },
 				...diskRows(machine),
+				...checkpointRows(machine),
 				{ label: "memory", value: `${machine.spec.memMiB} MiB` },
 				...nicRows(machine),
 				{ label: "shells", value: machine.sessions.map(sessionLabel).join(", ") },
@@ -299,7 +333,7 @@ function portView(port: PortNo, machine: Machine | undefined): PortView {
 	const holder = { n, name, hue, label, nic: machine.spec.nics.length > 1 ? nicName(nic) : null };
 	if (life.phase === "removing") return { port, state: "removing", machine: holder, word: "down", actionLabel: null };
 	const plug = plugsOf(life)[nic];
-	if (life.phase === "booting" || !plug)
+	if (life.phase === "booting" || life.phase === "restoring" || !plug)
 		return { port, state: "booting", machine: holder, word: "boot", actionLabel: null };
 	if (life.phase === "stopping") return { port, state: "stopping", machine: holder, word: "stop", actionLabel: null };
 	if (plugWord(plug) === "up") {
@@ -388,6 +422,7 @@ function machinesSegment(machines: readonly Machine[]): StatusSegment {
 	if (total === 0) return { key: "machines", text: "0 machines", tone: "quiet" };
 	const parts = [`${count("ready")} of ${plural(total, "machine")} ready`];
 	if (count("booting") > 0) parts.push(`${count("booting")} booting`);
+	if (count("restoring") > 0) parts.push(`${count("restoring")} restoring`);
 	if (count("stopping") > 0) parts.push(`${count("stopping")} stopping`);
 	if (count("off") > 0) parts.push(`${count("off")} off`);
 	if (count("failed") > 0) parts.push(`${count("failed")} failed`);
