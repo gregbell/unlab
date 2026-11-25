@@ -101,6 +101,9 @@ for (const image of ["alpine", "debian"]) {
 		await expect(page.locator("#tab-node1-sh1")).toBeVisible();
 		await page.locator("#tab-node1-console").click();
 		await root(page, 1, "sleep 4321 & echo $! > /tmp/pid");
+		// Every prompt has the guest write its files to disk. This one is written after the last, and is still in memory.
+		await root(page, 1, "(sleep 1; echo late > /root/late) >/dev/null 2>&1 &");
+		await page.waitForTimeout(2500);
 		await typed(page, "checkpoint node1 before");
 		await expect(row(page)).toContainText(/before \d+\.\d MiB/);
 		await root(page, 1, "kill -0 $(cat /tmp/pid)");
@@ -114,7 +117,8 @@ for (const image of ["alpine", "debian"]) {
 		const files = () =>
 			root(page, 1, "cd /root; find . -type f | sort | xargs md5sum | md5sum; find . | sort | xargs stat -c %n,%Y,%a");
 		const before = await files();
-		expect(before).toContain("./tree/numbers,");
+		expect(before).toContain("./late,");
+		expect(await root(page, 1, "cat /root/late")).toBe("late");
 		const change = () =>
 			root(
 				page,
@@ -240,6 +244,11 @@ test("a reload while a checkpoint is saved leaves none of it, and one while a ma
 	await typed(page, "checkpoint node1 cut");
 	await expect(row(page)).toContainText(/saving cut [1-9]\d?%/);
 	expect(await databases(page)).toEqual([...kept(1, 0, 1), saved(1, 1), saved(1, 2)].sort());
+	const [worker] = page.workers().filter((w) => w.url().includes("vm-worker"));
+	// As when the browser goes down, the worker does not see that it has ended.
+	await worker.evaluate(() => {
+		IDBFactory.prototype.deleteDatabase = () => ({}) as IDBOpenDBRequest;
+	});
 	await page.reload();
 	await status(page, "1 of 1 machine ready");
 	expect(await names(page)).toEqual([["before"]]);
