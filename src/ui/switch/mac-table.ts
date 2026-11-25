@@ -1,6 +1,6 @@
 import "./mac-table.css";
 import { html, nothing, type TemplateResult } from "lit";
-import { DEFAULT_SWITCH, selectNames, severalNics } from "../../model/index.ts";
+import { selectNames, severalNics, switchLabel } from "../../model/index.ts";
 import { nameOf, nicLabel, nicOfMac, parseMac } from "../../net/index.ts";
 import { Select, UnlabElement } from "../base/index.ts";
 import { FollowCapture } from "../capture/follow.ts";
@@ -14,6 +14,8 @@ import { FollowCapture } from "../capture/follow.ts";
 export class UnlabMacTable extends UnlabElement {
 	readonly #machines = new Select(this, (s) => s.machines);
 	readonly #names = new Select(this, selectNames);
+	readonly #shown = new Select(this, (s) => s.shownSwitch);
+	readonly #label = new Select(this, (s) => switchLabel(s, s.shownSwitch));
 
 	constructor() {
 		super();
@@ -24,12 +26,13 @@ export class UnlabMacTable extends UnlabElement {
 
 	override render(): TemplateResult {
 		const now = this.app.switch.now();
-		const entries = [...this.app.switch.macTable(DEFAULT_SWITCH)].sort(
+		const label = this.#label.value;
+		const entries = [...this.app.switch.macTable(this.#shown.value)].sort(
 			(a, b) => a.port - b.port || a.mac.localeCompare(b.mac),
 		);
 		const learned = entries.filter((e) => !e.flushed).length;
 		return html`<div class="header">
-				<h2 class="title">mac address table</h2>
+				<h2 class="title">${label === null ? "" : `${label} `}mac address table</h2>
 				<span class="count">${learned} learned</span>
 			</div>
 			<div class="scroll">

@@ -12,7 +12,7 @@ import {
 	udpSegment,
 } from "../../../test/support/frames.ts";
 import type { FrameEntry } from "../../capture/index.ts";
-import { type PortNo, parseSwitchName } from "../../model/index.ts";
+import { type PortNo, parseSwitchName, type SwitchName } from "../../model/index.ts";
 import { NO_NAMES } from "../../net/index.ts";
 import { frameDetail, type LabNames, type Named } from "./frame-detail-model.ts";
 
@@ -40,6 +40,7 @@ const only = (n: number): Named => ({ n, label: `node${n}` });
 const machinesTo = (last: number): LabNames => ({
 	holder: ({ port }) => (port <= last ? only(port) : null),
 	severalNics: () => false,
+	switchLabel: () => null,
 });
 const holder = machinesTo(3);
 
@@ -109,6 +110,7 @@ describe("frameDetail", () => {
 		const names: LabNames = {
 			holder: ({ port }) => (port === 3 ? { n: 2, label: "node2:eth1" } : port === 1 ? only(1) : only(2)),
 			severalNics: (machine) => machine === "node2",
+			switchLabel: () => null,
 		};
 		const d = frameDetail(entry(routedPing(mac(1), mac(2), 1, 3), { from: 1, to: ports([2]) }), names);
 		expect(d.groups[0].fields.slice(0, 2).map((f) => f.who)).toEqual([
@@ -139,18 +141,23 @@ describe("frameDetail", () => {
 	});
 
 	it("says which switch did it, and who is on that switch's ports", () => {
-		const lan = parseSwitchName("lan") ?? "switch0";
+		const lan = parseSwitchName("lan") as SwitchName;
 		const names: LabNames = {
-			holder: ({ switch: on, port }) => (on === lan && port === 2 ? only(2) : null),
+			holder: ({ switch: on, port }) => (on === lan && port >= 2 && port <= 3 ? only(port) : null),
 			severalNics: () => false,
+			switchLabel: (on) => on,
 		};
 		const flooded = entry(arpRequest(1, 2), { switch: lan, from: 1, to: ports([2]), flood: "group" });
-		expect(frameDetail(flooded, names).did).toEqual([
-			["Broadcast, so sent out every live port: delivered to ", only(2), " on port 2."],
-		]);
+		expect(frameDetail(flooded, names)).toMatchObject({
+			summary: expect.stringMatching(/ · in on lan port 1$/),
+			did: [
+				["Broadcast, so sent out every live port: delivered to ", only(2), " on lan port 2."],
+				["lan port 3 was down, so ", only(3), " never saw it."],
+			],
+		});
 		const forwarded = entry(ping(1, 2), { switch: lan, from: 1, to: ports([2]) });
 		expect(frameDetail(forwarded, names).did).toEqual([
-			["lan had learned ", only(2), " on port 2, so it forwarded the frame there only."],
+			["lan had learned ", only(2), " on lan port 2, so it forwarded the frame there only."],
 		]);
 	});
 

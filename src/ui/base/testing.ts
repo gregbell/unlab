@@ -27,10 +27,12 @@ import {
 	type NicSpec,
 	type PortNo,
 	parseChosenName,
+	parseSwitchName,
 	planLink,
 	planSpawn,
 	type Source,
 	type Store,
+	type SwitchName,
 	update,
 	type WebMcp,
 } from "../../model/index.ts";
@@ -152,6 +154,15 @@ export const link =
 		return [{ type: "cmd/link", changes, cause: "bar" }];
 	};
 
+export function switchNamed(text: string): SwitchName {
+	const name = parseSwitchName(text);
+	if (isNameFault(name)) throw new Error(`${text}: ${name.kind}`);
+	return name;
+}
+
+export const addSwitch = (name: SwitchName): LabEvent => ({ type: "cmd/switch-add", plan: { name } });
+export const removeSwitch = (name: SwitchName): LabEvent => ({ type: "cmd/switch-remove", switch: name, cause: "bar" });
+
 export const focus = (target: MachineName): LabEvent => ({ type: "cmd/focus", target, mode: "plain" });
 export const remove = (...machines: readonly MachineName[]): LabEvent => ({
 	type: "cmd/remove",
@@ -197,7 +208,7 @@ export interface MountOptions<E extends HTMLElement> {
 	/** The capture the element reads. Defaults to an empty one that never changes. */
 	readonly capture?: CaptureView;
 	/** The switch's MAC table and clock. Defaults to an empty table at time 0; `counters` still applies. */
-	readonly switch?: Pick<SwitchReadout, "macTable" | "now">;
+	readonly switch?: Partial<Pick<SwitchReadout, "macTable" | "totals" | "now">>;
 	/** The terminal screens. Defaults to none: every `host` is null. */
 	readonly terminals?: TerminalService;
 	/** What `services.agent.tryCall` is. Defaults to null, as where a page cannot call tools. */
@@ -260,6 +271,7 @@ export async function mount<K extends keyof HTMLElementTagNameMap>(
 		capture: options.capture ?? EMPTY_CAPTURE,
 		switch: {
 			macTable: () => [],
+			totals: () => ({ in: 0, delivered: 0, flooded: 0 }),
 			now: () => 0,
 			...options.switch,
 			counters: ({ switch: on, port }) => (on === DEFAULT_SWITCH ? counters.get(port) : undefined),

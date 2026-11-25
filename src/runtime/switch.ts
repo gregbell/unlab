@@ -15,6 +15,15 @@ export interface PortCounters {
 	flooded: number;
 }
 
+/** What a switch has carried since it was made, whatever has been unplugged from it. */
+export interface SwitchCounters {
+	/** Frames it accepted. */
+	readonly in: number;
+	/** Copies handed to ports: a flood to two ports counts two. */
+	readonly delivered: number;
+	readonly flooded: number;
+}
+
 export interface SwitchPort {
 	/**
 	 * Hand a frame to the attached machine. The frame is shared with every
@@ -68,6 +77,7 @@ export class LabSwitch {
 	readonly #ports = new Map<PortNo, Port>();
 	readonly #macTable = new Map<string, Learned>();
 	readonly #taps = new Set<(e: TapEvent) => void>();
+	readonly #counters = { in: 0, delivered: 0, flooded: 0 };
 	readonly #macAgeMs: number;
 	readonly #now: () => number;
 
@@ -114,6 +124,11 @@ export class LabSwitch {
 		return this.#ports.get(port)?.counters;
 	}
 
+	/** Every port's, those that are unplugged by now too. */
+	get total(): SwitchCounters {
+		return { ...this.#counters };
+	}
+
 	macTable(): readonly MacEntry[] {
 		return Array.from(this.#macTable, ([mac, e]) => ({ mac, port: e.port, seen: e.seen, flushed: e.flushed }));
 	}
@@ -129,6 +144,7 @@ export class LabSwitch {
 			return;
 		}
 
+		this.#counters.in++;
 		const snapshot = this.#taps.size ? frame.slice() : frame;
 		this.#learn(srcMac(frame), from, this.#now());
 
@@ -138,6 +154,7 @@ export class LabSwitch {
 		let to = 0;
 		if (flood) {
 			src.counters.flooded++;
+			this.#counters.flooded++;
 			for (const p of this.#ports.values()) if (p.no !== from && this.#send(p, frame)) to |= 1 << (p.no - 1);
 		} else if (entry && entry.port !== from) {
 			const target = this.#ports.get(entry.port);
@@ -189,6 +206,7 @@ export class LabSwitch {
 			p.counters.dropped++;
 			return false;
 		}
+		this.#counters.delivered++;
 		return true;
 	}
 }

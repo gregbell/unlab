@@ -89,7 +89,7 @@ export function named(text: string): MachineName {
 
 export function switchNamed(text: string): SwitchName {
 	const name = parseSwitchName(text);
-	if (!name) throw new Error(`${text} is no switch's name`);
+	if (isNameFault(name)) throw new Error(`${text}: ${name.kind}`);
 	return name;
 }
 

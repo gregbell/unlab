@@ -9,15 +9,17 @@ import {
 	ACCEPTS,
 	type Accepts,
 	addressOf,
+	type HeldPort,
+	heldPorts,
 	machineList,
 	nameBook,
 	nicPortsOf,
 	plugsOf,
 	portsOf,
-	samePort,
 	savingOf,
 } from "./machines.ts";
 import { keyboardHolder, parkedPanes, visiblePanes } from "./panes.ts";
+import { portLabel } from "./switches.ts";
 import { type Tiling, tile } from "./tiling.ts";
 import {
 	AGENT_IDLE_MS,
@@ -101,15 +103,27 @@ export const selectNames: (state: LabState) => NameBook = memo(
 	(machines, rail, departed) => nameBook({ machines, rail, departed }),
 );
 
-/** The subnet the lab's addresses are in, or how many there are. A lab that has none yet starts in this one. */
-export const selectSubnets: (state: LabState) => string = memo(
-	(s) => [s.machines, s.rail],
-	(machines, rail) => {
-		const nics = machineList({ machines, rail }).flatMap((machine) => machine.spec.nics);
-		const subnets = [...new Set(nics.flatMap(({ address }) => (address ? [subnetStr(address)] : [])))];
-		if (subnets.length > 1) return plural(subnets.length, "subnet");
-		return subnets[0] ?? subnetStr(LAB_SUBNET);
-	},
+/**
+ * The subnet the lab's addresses are in, or how many there are. A lab that has
+ * none yet starts in this one. Of several switches, each has only those of the
+ * NICs plugged into it.
+ */
+export const selectSubnets = perSwitch((on) =>
+	memo(
+		(s) => [s.machines, s.rail, s.switches],
+		(machines, rail, switches): string => {
+			const several = switches.length > 1;
+			const addresses = machineList({ machines, rail }).flatMap(({ spec, life }) => {
+				const ports = nicPortsOf(life);
+				return spec.nics.flatMap(({ address }, nic) =>
+					address && (!several || ports[nic]?.switch === on) ? [address] : [],
+				);
+			});
+			const subnets = [...new Set(addresses.map(subnetStr))];
+			if (subnets.length > 1) return plural(subnets.length, "subnet");
+			return subnets[0] ?? (several ? "no addresses" : subnetStr(LAB_SUBNET));
+		},
+	),
 );
 
 export type StateWord =
@@ -227,17 +241,17 @@ function stateTone(machine: Machine): Pick<DetailRow, "tone"> {
 	return machine.life.phase === "failed" ? { tone: "down" } : {};
 }
 
-function linkRow(label: "link" | NicName, { life }: Machine, nic: NicNo): DetailRow {
-	if (life.phase === "removing" && life.ports[nic]) return { label, value: `port ${life.ports[nic].port} down` };
+function linkRow(lab: Pick<LabState, "switches">, label: "link" | NicName, { life }: Machine, nic: NicNo): DetailRow {
+	if (life.phase === "removing" && life.ports[nic]) return { label, value: `${portLabel(lab, life.ports[nic])} down` };
 	const plug = plugsOf(life)[nic];
 	if (!plug || plug.kind === "none") return { label, value: "unplugged" };
-	const { port } = plug.port;
-	if (life.phase === "booting") return { label, value: `port ${port} reserved` };
+	const port = portLabel(lab, plug.port);
+	if (life.phase === "booting") return { label, value: `${port} reserved` };
 	if (life.phase === "ready" && life.lost?.includes(nic))
 		return { label, value: "gone from the guest until it reboots", tone: "down" };
-	if (plug.link === "cut") return { label, value: `cable cut on port ${port}`, tone: "down" };
-	if (life.phase === "off" || life.phase === "restoring") return { label, value: `plugged into port ${port}` };
-	return { label, value: `connected on port ${port}`, tone: "ok" };
+	if (plug.link === "cut") return { label, value: `cable cut on ${port}`, tone: "down" };
+	if (life.phase === "off" || life.phase === "restoring") return { label, value: `plugged into ${port}` };
+	return { label, value: `connected on ${port}`, tone: "ok" };
 }
 
 /** The only disk is the machine's own. Several are told apart by device. */
@@ -259,7 +273,7 @@ function checkpointRows({ sets, life }: Machine): DetailRow[] {
 }
 
 /** One NIC reads as the machine's own address and link. Several are told apart by name. */
-function nicRows(machine: Machine): DetailRow[] {
+function nicRows(lab: Pick<LabState, "switches">, machine: Machine): DetailRow[] {
 	const { spec } = machine;
 	const uplink: DetailRow[] = [
 		{ label: "uplink", value: "lab only" },
@@ -273,8 +287,8 @@ function nicRows(machine: Machine): DetailRow[] {
 			{ label: "mac", value: nicMac(machine.n, nic) },
 		];
 	};
-	if (nics.length === 1) return [...facts(0), ...uplink, linkRow("link", machine, 0)];
-	return [...uplink, ...nics.flatMap((nic) => [linkRow(nicName(nic), machine, nic), ...facts(nic)])];
+	if (nics.length === 1) return [...facts(0), ...uplink, linkRow(lab, "link", machine, 0)];
+	return [...uplink, ...nics.flatMap((nic) => [linkRow(lab, nicName(nic), machine, nic), ...facts(nic)])];
 }
 
 function cables(machine: Machine): readonly Cable[] {
@@ -292,9 +306,9 @@ export const selectDetails: (state: LabState) => MachineDetails | null = memo(
 	(s) => {
 		const focused = selectFocused(s);
 		const machine = focused === null ? undefined : s.machines[focused];
-		return [machine, s.images, machine?.life.phase === "booting" ? s.now : 0];
+		return [machine, s.images, s.switches, machine?.life.phase === "booting" ? s.now : 0];
 	},
-	(machine, images, now) => {
+	(machine, images, switches, now) => {
 		if (!machine) return null;
 		const image = images.find((known) => known.name === machine.spec.image);
 		return {
@@ -312,7 +326,7 @@ export const selectDetails: (state: LabState) => MachineDetails | null = memo(
 				...diskRows(machine),
 				...checkpointRows(machine),
 				{ label: "memory", value: `${machine.spec.memMiB} MiB` },
-				...nicRows(machine),
+				...nicRows({ switches }, machine),
 				{ label: "shells", value: machine.sessions.map(sessionLabel).join(", ") },
 			],
 		};
@@ -340,12 +354,11 @@ export interface PortView {
 	readonly actionLabel: string | null;
 }
 
-function portView(ref: PortRef, machine: Machine | undefined): PortView {
+function portView(lab: Pick<LabState, "switches">, ref: PortRef, held: HeldPort | undefined): PortView {
 	const { port } = ref;
-	if (!machine) return { port, state: "empty", machine: null, word: null, actionLabel: null };
+	if (!held) return { port, state: "empty", machine: null, word: null, actionLabel: null };
+	const { machine, nic } = held;
 	const { n, name, hue, life } = machine;
-	const held = nicPortsOf(life);
-	const nic = NICS.find((k) => held[k] && samePort(held[k], ref)) ?? 0;
 	const label = nicLabel(machine, nic);
 	const holder = { n, name, hue, label, nic: machine.spec.nics.length > 1 ? nicName(nic) : null };
 	if (life.phase === "removing") return { port, state: "removing", machine: holder, word: "down", actionLabel: null };
@@ -354,27 +367,27 @@ function portView(ref: PortRef, machine: Machine | undefined): PortView {
 		return { port, state: "booting", machine: holder, word: "boot", actionLabel: null };
 	if (life.phase === "stopping") return { port, state: "stopping", machine: holder, word: "stop", actionLabel: null };
 	if (plugWord(plug) === "up") {
-		const actionLabel = `Cut the cable from ${label} to port ${port}`;
+		const actionLabel = `Cut the cable from ${label} to ${portLabel(lab, ref)}`;
 		const word = life.phase === "off" ? "off" : "up";
 		return { port, state: word, machine: holder, word, actionLabel };
 	}
-	const actionLabel = `Reconnect the cable from ${label} to port ${port}`;
+	const actionLabel = `Reconnect the cable from ${label} to ${portLabel(lab, ref)}`;
 	return { port, state: "cut", machine: holder, word: "cut", actionLabel };
 }
 
 /** A switch's eight ports, lowest first. */
 export const selectPorts = perSwitch((on) =>
 	memo(
-		(s) => [s.machines, s.rail],
-		(machines, rail): readonly PortView[] => {
-			const list = machineList({ machines, rail });
-			return PORTS.map((port) => {
-				const ref = { switch: on, port };
-				return portView(
-					ref,
-					list.find(({ life }) => portsOf(life).some((held) => samePort(held, ref))),
-				);
-			});
+		(s) => [s.machines, s.rail, s.switches],
+		(machines, rail, switches): readonly PortView[] => {
+			const held = heldPorts({ machines, rail }, on);
+			return PORTS.map((port) =>
+				portView(
+					{ switches },
+					{ switch: on, port },
+					held.find((taken) => taken.port === port),
+				),
+			);
 		},
 	),
 );
@@ -403,6 +416,16 @@ export const selectLinks = perSwitch((on) =>
 			};
 		},
 	),
+);
+
+/** The lab's, on every switch. */
+export const selectAllLinks: (state: LabState) => LinkCount = memo(
+	(s) => s.switches.map((on) => selectLinks(on)(s)),
+	(...links) => ({
+		up: links.reduce((n, { up }) => n + up, 0),
+		total: links.reduce((n, { total }) => n + total, 0),
+		cut: links.reduce((n, { cut }) => n + cut, 0),
+	}),
 );
 
 /** Unchanged by a focus, because focusing never moves a pane. */

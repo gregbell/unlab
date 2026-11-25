@@ -2,7 +2,7 @@ import "./panel-bar.ts";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { page } from "vitest/browser";
 import type { LabState } from "../../model/index.ts";
-import { lab, link, mount, ready, spawn, tokenColor, unmountAll } from "../base/testing.ts";
+import { addSwitch, lab, link, mount, ready, spawn, switchNamed, tokenColor, unmountAll } from "../base/testing.ts";
 
 beforeEach(() => page.viewport(1440, 900));
 afterEach(unmountAll);
@@ -53,6 +53,14 @@ describe("<unlab-panel-bar>", () => {
 		store.dispatchUi({ type: "ui/panel-maximised", panel: "switch0" });
 		await settle();
 		expect(names()).toEqual([]);
+	});
+
+	it("counts the links of every switch under one name when there are several", async () => {
+		const lan = switchNamed("lan");
+		const { park } = await mountBar(lab(addSwitch(lan), spawn(2), spawn(1, lan), ready(), link("down", "node3")));
+		await park("switch0");
+		await expect.element(page.getByRole("button", { name: "switches 2 of 3 up" })).toBeVisible();
+		expect(getComputedStyle(word("switch0")).color).toBe(tokenColor("down"));
 	});
 
 	it("says when a parked capture is paused and a cable is cut", async () => {

@@ -11,7 +11,7 @@ import {
 	routedPing,
 } from "../../test/support/frames.ts";
 import { port0 } from "../../test/support/ports.ts";
-import type { MachineName, PortNo } from "../model/index.ts";
+import { type MachineName, type PortNo, parseSwitchName, type SwitchName } from "../model/index.ts";
 import { type CaptureFilter, compileFilter, type Flood, type NameBook, type NicNo, NO_NAMES } from "../net/index.ts";
 import { type CaptureLog, createCaptureLog } from "./log.ts";
 import { formatCounters } from "./rows.ts";
@@ -178,9 +178,43 @@ describe("rows", () => {
 	});
 });
 
+describe("several switches", () => {
+	const lan = parseSwitchName("lan") as SwitchName;
+	const log = (several: boolean) => {
+		const made = createCaptureLog({
+			schedule: (fn) => fn(),
+			now: () => 0,
+			rowNames: { switchLabel: (on) => (several || on !== "switch0" ? on : null) },
+		});
+		made.appendFrame({ switch: "switch0", from: 1, to: 0b110, flood: "group", frame: arpRequest(1, 2) });
+		made.appendFrame({ switch: lan, from: 1, to: 0b100, flood: "unknown", frame: ping(1, 2) });
+		made.appendFrame({ switch: lan, from: 1, to: 0, flood: "group", frame: arpRequest(1, 2) });
+		made.appendLink({ port: { switch: lan, port: 3 }, machine: "node2", nic: 0, up: false, cause: "bar" });
+		return made.tail(4).map((row) => [row.switch, row.kind === "frame" ? row.note : row.text]);
+	};
+
+	test("are named by their rows, with the ports", () => {
+		expect(log(true)).toEqual([
+			["switch0", "flooded to switch0 ports 2 and 3"],
+			["lan", "unknown destination, flooded to lan port 3"],
+			["lan", "flooded, no other lan port is up"],
+			["lan", "lan port 3 link down"],
+		]);
+	});
+
+	test("that are gone are still named by the rows of their frames, and the one that is left is not", () => {
+		expect(log(false).map(([on]) => on)).toEqual([undefined, "lan", "lan", "lan"]);
+		expect(log(false)[0][1]).toBe("flooded to ports 2 and 3");
+	});
+});
+
 describe("a machine with several NICs", () => {
 	const named = () => {
-		const log = createCaptureLog({ schedule: (fn) => fn(), now: () => 0, severalNics: (name) => name === "node2" });
+		const log = createCaptureLog({
+			schedule: (fn) => fn(),
+			now: () => 0,
+			rowNames: { severalNics: (name) => name === "node2" },
+		});
 		const route = (bytes: Uint8Array) => {
 			log.appendFrame({ switch: "switch0", from: 1, to: 0, flood: null, frame: bytes });
 			const row = log.tail(1)[0];

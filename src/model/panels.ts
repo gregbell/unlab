@@ -1,10 +1,15 @@
-import { PANELS, type PanelName, type Panels } from "./types.ts";
+import { type LabState, PANELS, type PanelName, type Panels } from "./types.ts";
 
 export const ALL_OPEN: Panels = { open: PANELS, maximised: null };
 
 /** The panels on show, in bar order: the maximised one alone, or every open one. */
 export function visiblePanels(p: Panels): readonly PanelName[] {
 	return p.maximised ? [p.maximised] : p.open;
+}
+
+/** What a panel goes by. The switch panel shows one switch at a time, so with several it has no one's name. */
+export function panelLabel(name: PanelName, { switches }: Pick<LabState, "switches">): string {
+	return name === "capture" || switches.length === 1 ? name : "switches";
 }
 
 /** The panels put away, in bar order. One that a maximised panel covers is not parked. */

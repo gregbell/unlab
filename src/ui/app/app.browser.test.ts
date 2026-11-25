@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import type { LabState } from "../../model/index.ts";
 import {
+	addSwitch,
 	agentCall,
 	fail,
 	focus,
@@ -14,6 +15,7 @@ import {
 	ready,
 	remove,
 	spawn,
+	switchNamed,
 	tick,
 	tokenColor,
 	unmountAll,
@@ -297,6 +299,17 @@ describe("<unlab-app> panels", () => {
 			await expect.element(name(panel)).not.toBeInTheDocument();
 		},
 	);
+
+	it("parks the switches and brings them back, and the focus follows", async () => {
+		const { settle } = await mountApp(lab(addSwitch(switchNamed("lan")), spawn(2), ready()));
+		the('#unlab-dock [aria-label="Park switches"]').focus();
+		await userEvent.keyboard("{Enter}");
+		await settle();
+		await expect.element(name("switches")).toHaveFocus();
+		await userEvent.keyboard("{Enter}");
+		await settle();
+		await expect.element(page.getByRole("button", { name: "Park switches" })).toHaveFocus();
+	});
 
 	it("maximises one panel over the panes, beside the rail, and restores it on Esc", async () => {
 		const { store, settle } = await mountApp();

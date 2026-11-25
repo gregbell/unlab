@@ -112,8 +112,32 @@ export function samePort(a: PortRef, b: PortRef): boolean {
 }
 
 export function takenPorts(state: LabState, on: SwitchName): ReadonlySet<PortNo> {
-	const held = machineList(state).flatMap((machine) => portsOf(machine.life));
-	return new Set(held.filter((ref) => ref.switch === on).map(({ port }) => port));
+	return new Set(heldPorts(state, on).map(({ port }) => port));
+}
+
+/** What goes by the name now. A machine that is being removed still does. */
+export function nameHolder(state: LabState, name: MachineName | SwitchName): "machine" | "switch" | null {
+	if (state.switches.some((other) => other === name)) return "switch";
+	return state.rail.some((other) => other === name) ? "machine" : null;
+}
+
+/** A port and the NIC whose cable is in it, or was when its machine began to go. */
+export interface HeldPort {
+	readonly port: PortNo;
+	readonly machine: Machine;
+	readonly nic: NicNo;
+}
+
+/** The ports of the switch that are taken, lowest first. */
+export function heldPorts(state: Pick<LabState, "machines" | "rail">, on: SwitchName): readonly HeldPort[] {
+	const held = machineList(state).flatMap((machine) => {
+		const ports = nicPortsOf(machine.life);
+		return NICS.flatMap((nic): HeldPort[] => {
+			const ref = ports[nic];
+			return ref?.switch === on ? [{ port: ref.port, machine, nic }] : [];
+		});
+	});
+	return held.sort((a, b) => a.port - b.port);
 }
 
 /** Up to `count` of the switch's free ports, lowest first. A switch that is not there has none. */
@@ -183,8 +207,8 @@ export function planSpawn(state: LabState, count: number, request: SpawnRequest)
 	if (count > room) return { kind: "no-room", free: room, wanted: count };
 	const names = Array.from({ length: count }, (_, i) => request.name ?? defaultName(state.nextN + i));
 	for (const [i, name] of names.entries()) {
-		if (state.machines[name] || names.indexOf(name) < i) return { kind: "name-taken", name, by: "machine" };
-		if (state.switches.some((other) => other === name)) return { kind: "name-taken", name, by: "switch" };
+		const by = names.indexOf(name) < i ? "machine" : nameHolder(state, name);
+		if (by) return { kind: "name-taken", name, by };
 	}
 	const nets = request.nics.map(({ net }) => net);
 	const ports = claimPorts(
@@ -370,6 +394,34 @@ function linksDown({ name, life }: Machine, cause: Cause): Effect[] {
 	return cablesOf(life)
 		.filter(({ link }) => link === "up")
 		.map(({ port, nic }) => ({ type: "link/set", port, machine: name, nic, up: false, cause }));
+}
+
+const onSwitch = (on: SwitchName) => (port: PortRef | null) => port?.switch === on;
+
+function unplugged(life: Lifecycle, on: SwitchName): Lifecycle {
+	const gone = onSwitch(on);
+	if (life.phase === "failed") return life;
+	if (life.phase === "removing") return { ...life, ports: life.ports.map((port) => (gone(port) ? null : port)) };
+	return { ...life, plugs: life.plugs.map((plug) => (plug.kind === "port" && gone(plug.port) ? UNPLUGGED : plug)) };
+}
+
+/** Every NIC off the switch, and none to be plugged into it at a later boot. What the machines run goes on. */
+export function unplugAll(state: LabState, on: SwitchName, cause: Cause): Step {
+	const effects: Effect[] = [];
+	const machines = { ...state.machines };
+	for (const machine of machineList(state)) {
+		const { name, life, spec } = machine;
+		const held = portsOf(life).filter(onSwitch(on));
+		const asked = spec.nics.some(({ net }) => net === on);
+		if (held.length === 0 && !asked) continue;
+		effects.push(
+			...linksDown(machine, cause).filter((effect) => effect.type === "link/set" && onSwitch(on)(effect.port)),
+		);
+		for (const port of held) effects.push({ type: "port/detach", port });
+		const nics = spec.nics.map((nic): NicSpec => (nic.net === on ? { ...nic, net: "none" } : nic));
+		machines[name] = { ...machine, life: unplugged(life, on), spec: { ...spec, nics } };
+	}
+	return step({ ...state, machines }, effects);
 }
 
 /** The ports go on the switch before the kernel boots, so its first frame has somewhere to go. */

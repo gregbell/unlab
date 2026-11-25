@@ -5,7 +5,7 @@ import { live } from "lit/directives/live.js";
 import { createRef, type Ref, ref } from "lit/directives/ref.js";
 import { repeat } from "lit/directives/repeat.js";
 import type { CaptureRow, FrameRow, LinkRow, RouteEnd } from "../../capture/index.ts";
-import { DEFAULT_SWITCH, selectNames, type UiEvent } from "../../model/index.ts";
+import { selectNames, type UiEvent } from "../../model/index.ts";
 import { compileFilter, EVERYONE, toPcap } from "../../net/index.ts";
 import { clearIcon, pauseIcon, resumeIcon, Select, UnlabElement, windowButtons } from "../base/index.ts";
 import { FollowCapture } from "./follow.ts";
@@ -48,6 +48,8 @@ export class UnlabCapture extends UnlabElement {
 	readonly #ui = new Select(this, (s) => s.capture);
 	readonly #machines = new Select(this, (s) => s.machines);
 	readonly #names = new Select(this, selectNames);
+	/** Rows name the switch when there are several. */
+	readonly #switches = new Select(this, (s) => s.switches);
 	readonly #scroller: Ref<HTMLElement> = createRef();
 	/** The full list's scroller, while there is one. */
 	#observed: HTMLElement | null = null;
@@ -276,7 +278,8 @@ export class UnlabCapture extends UnlabElement {
 		const url = URL.createObjectURL(new Blob([new Uint8Array(bytes)], { type: "application/vnd.tcpdump.pcap" }));
 		const link = document.createElement("a");
 		link.href = url;
-		link.download = `unlab-${DEFAULT_SWITCH}.pcap`;
+		const [first, ...others] = this.#switches.value;
+		link.download = others.length === 0 ? `unlab-${first}.pcap` : "unlab.pcap";
 		link.click();
 		setTimeout(() => URL.revokeObjectURL(url), 10_000);
 	};

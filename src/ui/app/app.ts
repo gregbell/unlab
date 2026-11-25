@@ -98,7 +98,7 @@ export class UnlabApp extends LitElement {
 		const place = parked ? "unlab-panel-bar" : `#${DOCK_ID} > [data-panel="${panel}"]`;
 		const host = this.querySelector<LitElement>(place);
 		await host?.updateComplete;
-		host?.querySelector<HTMLElement>(parked ? `[data-panel="${panel}"]` : `[aria-label="Park ${panel}"]`)?.focus();
+		host?.querySelector<HTMLElement>(parked ? `[data-panel="${panel}"]` : ".window [title=Park]")?.focus();
 	}
 
 	override render(): TemplateResult {

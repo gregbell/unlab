@@ -764,6 +764,54 @@ describe("several switches", () => {
 		expect(engine.reads.macTable(parseSwitchName("wan") as SwitchName)).toEqual([]);
 	});
 
+	test("count what each has carried, and what one had stays when its cables go", () => {
+		const { vms, engine, run } = plugged();
+		const [vm1, vm2] = vms;
+		vm1.sink.frame(vm1.ref, 0, arpRequest(1, 3));
+		vm2.sink.frame(vm2.ref, 0, arpRequest(2, 3));
+		vm2.sink.frame(vm2.ref, 0, ping(2, 2));
+		run({ type: "port/detach", port: { switch: lan, port: 1 } });
+		expect(engine.reads.totals("switch0")).toEqual({ in: 1, delivered: 1, flooded: 1 });
+		expect(engine.reads.totals(lan)).toEqual({ in: 2, delivered: 1, flooded: 1 });
+		expect(engine.reads.totals(parseSwitchName("wan") as SwitchName)).toEqual({ in: 0, delivered: 0, flooded: 0 });
+	});
+
+	test("one that is removed lets go of its ports and its tap, and starts empty when it is added again", () => {
+		const { vms, engine, run, capture, switches } = plugged();
+		const [, vm2, vm3] = vms;
+		vm2.sink.frame(vm2.ref, 0, arpRequest(2, 3));
+		run({ type: "switch/remove", switch: lan });
+		expect(engine.reads.macTable(lan)).toEqual([]);
+		expect(engine.reads.totals(lan)).toEqual({ in: 0, delivered: 0, flooded: 0 });
+		expect(engine.reads.counters({ switch: lan, port: 1 })).toBeUndefined();
+
+		const before = capture.frameCount;
+		vm3.sent.length = 0;
+		vm2.sink.frame(vm2.ref, 0, arpRequest(2, 3));
+		switches.get(lan)?.receive(1, arpRequest(2, 3));
+		expect([capture.frameCount, vm3.sent]).toEqual([before, []]);
+
+		const old = switches.get(lan);
+		const cable = { port: { switch: lan, port: 1 }, machine: "node2", nic: 0 } as const;
+		run({ type: "port/attach", ...cable }, { type: "link/set", ...cable, up: true, cause: "runtime" });
+		expect(switches.get(lan)).not.toBe(old);
+		expect(engine.reads.macTable(lan)).toEqual([]);
+		vm2.sink.frame(vm2.ref, 0, arpRequest(2, 3));
+		expect(engine.reads.totals(lan)).toEqual({ in: 1, delivered: 0, flooded: 1 });
+		expect(capture.frameCount).toBe(before + 1);
+		expect(vm3.sent).toEqual([]);
+	});
+
+	test("a NIC that moves from one to the other sends where its cable is, whichever end is done first", () => {
+		const { vms, engine, run } = plugged();
+		const [vm1] = vms;
+		const to = { port: { switch: lan, port: 5 }, machine: "node1", nic: 0 } as const;
+		run({ type: "port/attach", ...to }, { type: "link/set", ...to, up: true, cause: "bar" });
+		run({ type: "port/detach", port: { switch: "switch0", port: 1 } });
+		vm1.sink.frame(vm1.ref, 0, arpRequest(1, 3));
+		expect(engine.reads.counters({ switch: lan, port: 5 })).toMatchObject({ rxFrames: 1 });
+	});
+
 	test("cut and free a port of one, and leave the other's port of that number as it was", () => {
 		const { vms, engine, run, capture } = plugged();
 		const [vm1, vm2, vm3] = vms;

@@ -19,6 +19,7 @@ import {
 	saveWorkspace,
 	selectNames,
 	severalNics,
+	switchLabel,
 } from "./model/index.ts";
 import { compileFilter } from "./net/index.ts";
 import { createRuntime, type DistroManifest, type Engine, sweepDisks } from "./runtime/index.ts";
@@ -87,7 +88,10 @@ async function main(): Promise<void> {
 		schedule,
 		now,
 		names: () => selectNames(store.state),
-		severalNics: (machine) => severalNics(store.state, machine),
+		rowNames: {
+			severalNics: (machine) => severalNics(store.state, machine),
+			switchLabel: (on) => switchLabel(store.state, on),
+		},
 	});
 	let runtime: Engine | undefined;
 	const key = "unlab.workspace.v1";
