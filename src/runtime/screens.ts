@@ -71,8 +71,10 @@ export interface Screen {
 	readonly session: SessionId;
 	/** What the session's shell is doing, from every byte written so far. */
 	readonly shell: ShellPhase;
-	/** Believe only prompt marks with this boot's token, starting over at unknown. */
+	/** A new boot. Believe only prompt marks with its token, starting over at unknown, on what the last guest left. */
 	expectPromptToken(token: string): void;
+	/** A line from the lab, after a guest that has ended. */
+	note(text: string): void;
 	/** The grid the guest should be drawing for. */
 	readonly size: { readonly cols: number; readonly rows: number };
 	/**
@@ -119,6 +121,28 @@ const SCROLLBACK_LINES = 5000;
 const PENDING_LIMIT = 1 << 20;
 /** The core tracks 63 positions per terminal. A mark takes two, and wterm's own selection needs some. */
 const MAX_MARKS = 24;
+
+const utf8 = new TextEncoder();
+
+/**
+ * Undoes what a guest can leave a terminal in: half an escape sequence, a
+ * full-screen program's screen and scroll region, its keys, its mouse, a
+ * hidden cursor, its colours, and text below the cursor. The rest of what the
+ * terminal holds stays.
+ *
+ * Leaving the alternate screen restores the cursor the program came from, or
+ * on the main screen the one saved just before, which changes nothing.
+ */
+const GUEST_ENDED = [
+	"\x1b\\",
+	"\x1b7\x1b[?1049l",
+	"\x1b7\x1b[r\x1b8",
+	"\x1b[J",
+	"\x1b[?1;9;1000;1002;1003;1004;1005;1006;1015;2004;2026l",
+	"\x1b[?7;25h",
+	"\x1b[4l\x1b>\x1b[<99u",
+	"\x1b(B\x0f\x1b[0m",
+].join("");
 
 const NO_EVENTS: readonly ShellEvent[] = Object.freeze([]);
 const NO_MARKS: readonly VisibleMark[] = Object.freeze([]);
@@ -250,7 +274,7 @@ function echoedLines(lines: readonly string[], prompt: string, typed: string): n
 
 function createScreen(session: SessionId, io: ScreenIo, loadCore: () => Promise<GhosttyCore>): OwnedScreen {
 	const tracker = createShellTracker();
-	const withoutPromptQuery = createPromptQueryFilter();
+	let withoutPromptQuery = createPromptQueryFilter();
 	const marks: Mark[] = [];
 	const listeners = new Set<() => void>();
 	let state: State = { kind: "buffering", pending: [], bytes: 0, mounting: false };
@@ -259,6 +283,7 @@ function createScreen(session: SessionId, io: ScreenIo, loadCore: () => Promise<
 	let focused = false;
 	let replaying = false;
 	let notifying = false;
+	let touched = false;
 
 	const invalidate = () => {
 		if (notifying || listeners.size === 0) return;
@@ -325,6 +350,12 @@ function createScreen(session: SessionId, io: ScreenIo, loadCore: () => Promise<
 
 	const unanchored = (source: MarkSource): LineMark => ({ source, end() {}, output: () => NOTHING });
 
+	const show = (bytes: Uint8Array) => {
+		if (state.kind === "buffering") keep(state, bytes);
+		else if (state.kind === "live") state.term.write(bytes);
+		invalidate();
+	};
+
 	return {
 		session,
 		get shell() {
@@ -332,6 +363,11 @@ function createScreen(session: SessionId, io: ScreenIo, loadCore: () => Promise<
 		},
 		expectPromptToken(token) {
 			tracker.expectToken(token);
+			withoutPromptQuery = createPromptQueryFilter();
+			if (touched) show(utf8.encode(GUEST_ENDED));
+		},
+		note(text) {
+			show(utf8.encode(`${GUEST_ENDED}\r\n\x1b[2m${text}\x1b[0m\r\n`));
 		},
 		get size() {
 			return size;
@@ -339,6 +375,7 @@ function createScreen(session: SessionId, io: ScreenIo, loadCore: () => Promise<
 
 		write(raw) {
 			if (state.kind === "disposed") return NO_EVENTS;
+			touched = true;
 			const bytes = withoutPromptQuery(raw);
 			const events = tracker.scan(bytes);
 			if (state.kind === "buffering") {

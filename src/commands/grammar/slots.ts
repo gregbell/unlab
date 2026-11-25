@@ -120,7 +120,9 @@ const NETWORKS: readonly NicSpec["net"][] = ["switch0", "none"];
 const PHASE_WORDS: Readonly<Record<Phase, { readonly skipped: string; readonly sentence: string }>> = {
 	booting: { skipped: "still booting", sentence: "is still booting" },
 	ready: { skipped: "already running", sentence: "is already running" },
-	failed: { skipped: "did not boot", sentence: "did not boot" },
+	stopping: { skipped: "stopping", sentence: "is stopping" },
+	off: { skipped: "off", sentence: "is off" },
+	failed: { skipped: "failed", sentence: "has failed" },
 	removing: { skipped: "being removed", sentence: "is being removed" },
 };
 
@@ -147,7 +149,8 @@ function noMachine(lab: LabState, text: string): string {
 }
 
 function phaseNoun(phases: readonly Phase[]): string {
-	return phases.length === 1 ? `a ${phases[0]} machine` : "a machine";
+	if (phases.length > 2) return "a machine";
+	return `${phases[0] === "off" ? "an" : "a"} ${list(phases, "or")} machine`;
 }
 
 function linkWord(m: Machine): string {

@@ -10,12 +10,13 @@ import {
 	type NodeNic,
 	subnetsOverlap,
 } from "../net/index.ts";
-import { identity, nicLabel } from "./identity.ts";
+import { identity, nicLabel, sessionLabel } from "./identity.ts";
 import { without } from "./record.ts";
 import { andThen, later, patch, step } from "./step.ts";
 import {
 	type Address,
 	BOOT_TIMEOUT_MS,
+	type BootPlan,
 	type Cause,
 	type Effect,
 	type HostEntry,
@@ -28,6 +29,7 @@ import {
 	type Machine,
 	type MachineName,
 	type MachineSpec,
+	type Next,
 	type NicPorts,
 	type NicRef,
 	type NicSpec,
@@ -38,26 +40,33 @@ import {
 	type PortNo,
 	type Session,
 	type SessionId,
+	SHUTDOWN_MS,
 	type SpawnPlan,
 	type SpawnRequest,
 	type Step,
+	type StopHow,
 } from "./types.ts";
 
-/** The last column of the handoff's lifecycle table. `commands` is everything but boot again and rm. */
+/** What a machine in each phase takes. `commands` is everything that needs its guest. */
 export interface Accepts {
 	readonly commands: boolean;
-	readonly bootAgain: boolean;
+	readonly boot: boolean;
+	readonly cables: boolean;
 	readonly remove: boolean;
 }
 
 export const ACCEPTS: Readonly<Record<Phase, Accepts>> = {
-	booting: { commands: false, bootAgain: false, remove: true },
-	ready: { commands: true, bootAgain: false, remove: true },
-	failed: { commands: false, bootAgain: true, remove: true },
-	removing: { commands: false, bootAgain: false, remove: false },
+	booting: { commands: false, boot: false, cables: false, remove: true },
+	ready: { commands: true, boot: false, cables: true, remove: true },
+	stopping: { commands: false, boot: false, cables: false, remove: true },
+	off: { commands: false, boot: true, cables: true, remove: true },
+	failed: { commands: false, boot: true, cables: false, remove: true },
+	removing: { commands: false, boot: false, cables: false, remove: false },
 };
 
 const BOOT_TIMEOUT_REASON = `No prompt after ${BOOT_TIMEOUT_MS / 1000} s.`;
+/** What a stop that the guest did not finish leaves to say. */
+export const FORCED_STOP = `It did not shut down in ${SHUTDOWN_MS / 1000} s, so it was stopped, and what it had not written to disk may be lost.`;
 const UNPLUGGED: Plug = { kind: "none" };
 
 /** The machines in rail order, which is spawn order. */
@@ -67,10 +76,10 @@ export function machineList(state: Pick<LabState, "machines" | "rail">): readonl
 
 /** One for each NIC, eth0 first. None while it is failed or being removed. */
 export function plugsOf(life: Lifecycle): readonly Plug[] {
-	return life.phase === "booting" || life.phase === "ready" ? life.plugs : [];
+	return life.phase === "failed" || life.phase === "removing" ? [] : life.plugs;
 }
 
-/** The port each NIC holds. Cut cables and removing machines still hold theirs. A failed machine has none. */
+/** The port each NIC holds. Cut cables, and machines that are off or being removed, still hold theirs. A failed machine has none. */
 export function nicPortsOf(life: Lifecycle): NicPorts {
 	if (life.phase === "removing") return life.ports;
 	return plugsOf(life).map((plug) => (plug.kind === "port" ? plug.port : null));
@@ -224,7 +233,7 @@ export function nicsOf(state: Pick<LabState, "machines">, name: MachineName): re
 
 /**
  * The cables that would change. A machine's name alone is all its NICs. NICs
- * of machines that are not ready, not there, or already as asked are left out.
+ * of machines that take no cable now, are not there, or are already as asked are left out.
  * `link up` on an unplugged NIC takes the lowest free port.
  */
 export function planLink(
@@ -240,7 +249,7 @@ export function planLink(
 	}
 	const plugs = [...asked.values()].flatMap(({ machine, nic }) => {
 		const life = state.machines[machine]?.life;
-		const plug = life?.phase === "ready" ? life.plugs[nic] : undefined;
+		const plug = life && ACCEPTS[life.phase].cables ? plugsOf(life)[nic] : undefined;
 		return plug ? [{ machine, nic, plug }] : [];
 	});
 	const ports = claimPorts(state, up ? plugs.filter(({ plug }) => plug.kind === "none").length : 0);
@@ -252,18 +261,23 @@ export function planLink(
 	});
 }
 
-export interface BootAgainPlan {
-	readonly machine: MachineName;
-	/** The lowest free ports, for the NICs that were spawned plugged in. */
-	readonly ports: NicPorts;
-}
-
-/** Null unless the machine is failed. */
-export function planBootAgain(state: LabState, machine: MachineName): BootAgainPlan | PlanError | null {
-	const found = state.machines[machine];
-	if (!found || !ACCEPTS[found.life.phase].bootAgain) return null;
-	const ports = claimPorts(state, pluggedNics(found.spec.nics));
-	return isPlanError(ports) ? ports : { machine, ports: nicPorts(found.spec.nics, ports) };
+/** Those of the machines that are off or failed. */
+export function planBoot(state: LabState, names: readonly MachineName[]): readonly BootPlan[] | PlanError {
+	const machines = [...new Set(names)].flatMap((name) => state.machines[name] ?? []);
+	const unplugged = machines.filter((machine) => machine.life.phase === "failed");
+	const ports = claimPorts(
+		state,
+		unplugged.reduce((sum, { spec }) => sum + pluggedNics(spec.nics), 0),
+	);
+	if (isPlanError(ports)) return ports;
+	let claimed = 0;
+	return machines.flatMap(({ name, life, spec }): BootPlan[] => {
+		if (life.phase === "off") return [{ machine: name, ports: nicPortsOf(life) }];
+		if (life.phase !== "failed") return [];
+		const from = claimed;
+		claimed += pluggedNics(spec.nics);
+		return [{ machine: name, ports: nicPorts(spec.nics, ports.slice(from)) }];
+	});
 }
 
 function claimPorts(state: LabState, wanted: number): readonly PortNo[] | PlanError {
@@ -271,13 +285,15 @@ function claimPorts(state: LabState, wanted: number): readonly PortNo[] | PlanEr
 	return ports.length < wanted ? { kind: "no-ports", free: ports.length, wanted } : ports;
 }
 
-/** Both are plain data that `planSpawn` laid out from the same request. */
-function samePlan(a: SpawnPlan, b: SpawnPlan): boolean {
-	return JSON.stringify(a.machines) === JSON.stringify(b.machines);
+/** Both are plain data that one planner laid out. */
+function samePlan(a: SpawnPlan["machines"] | readonly BootPlan[], b: typeof a): boolean {
+	return JSON.stringify(a) === JSON.stringify(b);
 }
 
-function samePorts(a: NicPorts, b: NicPorts): boolean {
-	return a.length === b.length && a.every((port, i) => port === b[i]);
+/** `node1`, `node1 and node2`, `node1, node2 and node3`. */
+export function andList(words: readonly (string | number)[]): string {
+	if (words.length < 2) return words.join("");
+	return `${words.slice(0, -1).join(", ")} and ${words[words.length - 1]}`;
 }
 
 function put(state: LabState, machine: Machine): LabState {
@@ -299,26 +315,26 @@ function cablesOf(life: Lifecycle): readonly { nic: NicNo; port: PortNo; link: "
 	});
 }
 
-/** Takes down every link that is up on the switch. Only a ready machine has any, because links come up at the first prompt. */
+/** Takes down every link that is up on the switch. They come up at the first prompt, and stay until the guest has stopped. */
 function linksDown({ name, life }: Machine, cause: Cause): Effect[] {
-	if (life.phase !== "ready") return [];
+	if (life.phase !== "ready" && !(life.phase === "stopping" && life.linked)) return [];
 	return cablesOf(life)
 		.filter(({ link }) => link === "up")
 		.map(({ port, nic }) => ({ type: "link/set", port, machine: name, nic, up: false, cause }));
 }
 
 /** The ports go on the switch before the kernel boots, so its first frame has somewhere to go. */
-function bootEffects(machine: Machine, state: LabState): Effect[] {
-	const { n, name, mac, spec, life } = machine;
-	return [
-		...cablesOf(machine.life).map(({ port, nic }): Effect => ({ type: "port/attach", port, machine: name, nic })),
-		{
-			type: "vm/boot",
-			machine: name,
-			attempt: life.attempt,
-			config: { identity: { n, name, mac }, spec, hosts: hostsFor(state) },
-		},
-	];
+function attachEffects({ name, life }: Machine): Effect[] {
+	return cablesOf(life).map(({ port, nic }) => ({ type: "port/attach", port, machine: name, nic }));
+}
+
+function bootEffect({ n, name, mac, spec, life }: Machine, state: LabState): Effect {
+	return {
+		type: "vm/boot",
+		machine: name,
+		attempt: life.attempt,
+		config: { identity: { n, name, mac }, spec, hosts: hostsFor(state) },
+	};
 }
 
 /**
@@ -328,7 +344,7 @@ function bootEffects(machine: Machine, state: LabState): Effect[] {
  */
 export function spawn(state: LabState, plan: SpawnPlan, at: number): Step {
 	const fresh = planSpawn(state, plan.machines.length, plan.request);
-	if (isPlanError(fresh) || fresh.machines.length === 0 || !samePlan(fresh, plan)) return step(state);
+	if (isPlanError(fresh) || fresh.machines.length === 0 || !samePlan(fresh.machines, plan.machines)) return step(state);
 
 	const nodes = fresh.machines.map(({ ports, ...machine }) => ({ ...machine, plugs: plugInto(ports) }));
 	return bootMachines(state, nodes, state.nextN + nodes.length, at);
@@ -336,6 +352,8 @@ export function spawn(state: LabState, plan: SpawnPlan, at: number): Step {
 
 export interface BootNode {
 	failure?: string;
+	/** It is there, but it does not boot. */
+	off?: boolean;
 	identity: ReturnType<typeof identity>;
 	hue: HueNo;
 	spec: MachineSpec;
@@ -346,20 +364,23 @@ export function bootMachines(state: LabState, nodes: readonly BootNode[], nextN:
 	const machines = { ...state.machines };
 	const sessions = { ...state.sessions };
 	const added: Machine[] = [];
-	for (const { identity: id, hue, spec, plugs, failure } of nodes) {
+	for (const { identity: id, hue, spec, plugs, failure, off } of nodes) {
 		const tab: SessionId = `${id.name}:console`;
 		const attempt = (state.departed[id.name]?.attempt ?? 0) + 1;
 		const machine: Machine = {
 			...id,
 			life:
-				failure === undefined
-					? { phase: "booting", attempt, since: at, stage: "", plugs }
-					: { phase: "failed", attempt, reason: failure },
+				failure !== undefined
+					? { phase: "failed", attempt, reason: failure }
+					: off
+						? { phase: "off", attempt, plugs }
+						: { phase: "booting", attempt, since: at, stage: "", plugs },
 			hue,
 			spec,
 			sessions: [tab],
 			activeSession: tab,
 			nextShell: 1,
+			lastStop: null,
 		};
 		machines[id.name] = machine;
 		sessions[tab] = { id: tab, machine: id.name, kind: "console", state: "open", shell: "unknown", agentLines: false };
@@ -375,7 +396,8 @@ export function bootMachines(state: LabState, nodes: readonly BootNode[], nextN:
 	};
 	const effects = added.flatMap((machine): Effect[] => [
 		{ type: "screen/create", session: machine.activeSession },
-		...(machine.life.phase === "booting" ? bootEffects(machine, next) : []),
+		...attachEffects(machine),
+		...(machine.life.phase === "booting" ? [bootEffect(machine, next)] : []),
 	]);
 	return step(next, effects);
 }
@@ -393,41 +415,140 @@ export function ready(state: LabState, name: MachineName, attempt: number, bootM
 	const { plugs } = machine.life;
 	const next = put(state, { ...machine, life: { phase: "ready", attempt, bootMs, plugs } });
 	const effects: Effect[] = [{ type: "announce", text: `${name} ready` }];
+	const cause = machine.lastStop === null ? "runtime" : "power";
 	for (const { nic, port, link } of cablesOf(machine.life)) {
-		if (link === "up") effects.push({ type: "link/set", port, machine: name, nic, up: true, cause: "runtime" });
+		if (link === "up") effects.push({ type: "link/set", port, machine: name, nic, up: true, cause });
 	}
 	effects.push({ type: "hosts/publish", hosts: hostsFor(next) });
 	return step(next, effects);
 }
 
+/** The machine with its console alone, and nothing known of what it runs. The shells end with the guest. */
+function shellsClosed(state: LabState, machine: Machine): { state: LabState; machine: Machine; effects: Effect[] } {
+	const [tab, ...shells] = machine.sessions;
+	let sessions = state.sessions;
+	for (const session of shells) sessions = without(sessions, session);
+	const consoleSession = sessions[tab];
+	if (consoleSession) sessions = { ...sessions, [tab]: patch(consoleSession, { shell: "unknown" }) };
+	return {
+		state: { ...state, sessions },
+		machine: { ...machine, sessions: [tab], activeSession: tab },
+		effects: shells.map((session) => ({ type: "screen/dispose", session })),
+	};
+}
+
 /**
- * A boot that errs or times out, or a ready guest that dies. The cables are
- * withdrawn and the ports freed. The console stays for scrolling back. Shells
- * die with the guest.
+ * A boot that errs or times out, or a guest that dies. The cables are
+ * withdrawn and the ports freed. The console stays for scrolling back.
  */
 export function fail(state: LabState, name: MachineName, attempt: number, reason: string): Step {
 	const machine = onAttempt(state, name, attempt);
 	if (!machine) return step(state);
 	const { life } = machine;
-	if (life.phase !== "booting" && life.phase !== "ready") return step(state);
+	if (life.phase !== "booting" && life.phase !== "ready" && life.phase !== "stopping") return step(state);
 
-	const [tab, ...shells] = machine.sessions;
-	const effects: Effect[] = [...linksDown(machine, "runtime"), { type: "vm/stop", machine: name, attempt }];
+	const alone = shellsClosed(state, machine);
+	const effects: Effect[] = [
+		...linksDown(machine, "runtime"),
+		{ type: "vm/stop", machine: name, attempt, how: "save" },
+	];
 	for (const port of portsOf(life)) effects.push({ type: "port/detach", port });
-	for (const session of shells) effects.push({ type: "screen/dispose", session });
+	effects.push(...alone.effects);
 	effects.push({ type: "announce", text: [`${name} failed.`, reason].filter(Boolean).join(" ") });
+	const failed: Machine = { ...alone.machine, life: { phase: "failed", attempt, reason }, lastStop: null };
+	return step(put(alone.state, failed), effects);
+}
 
-	let sessions = state.sessions;
-	for (const session of shells) sessions = without(sessions, session);
-	const consoleSession = sessions[tab];
-	if (consoleSession) sessions = { ...sessions, [tab]: patch(consoleSession, { shell: "unknown" }) };
-	const failed: Machine = {
-		...machine,
-		life: { phase: "failed", attempt, reason },
-		sessions: [tab],
-		activeSession: tab,
-	};
-	return step(put({ ...state, sessions }, failed), effects);
+/** `sh1 and sh2 closed with it.` */
+function closedWithIt(closed: readonly SessionId[]): string[] {
+	return closed.length === 0 ? [] : [`${andList(closed.map(sessionLabel))} closed with it.`];
+}
+
+/** The machine keeps its plugs, and its links until its worker is gone. */
+function stopping(state: LabState, machine: Machine, next: Next, how: StopHow, ended: readonly SessionId[] = []): Step {
+	const { name, life } = machine;
+	const alone = shellsClosed(state, machine);
+	const [, ...shells] = machine.sessions;
+	const closed = [...new Set([...ended, ...shells])];
+	const doing = next === "off" ? `${name} powering off` : `${name} rebooting`;
+	const said = closed.length === 0 ? doing : [`${doing}.`, ...closedWithIt(closed)].join(" ");
+	return step(
+		put(alone.state, {
+			...alone.machine,
+			life: {
+				phase: "stopping",
+				attempt: life.attempt,
+				next,
+				plugs: plugsOf(life),
+				linked: life.phase === "ready",
+				closed,
+			},
+		}),
+		[
+			{ type: "vm/stop", machine: name, attempt: life.attempt, how },
+			...alone.effects,
+			{ type: "announce", text: said },
+		],
+	);
+}
+
+/** The guest of each ready machine is asked to shut down. */
+export function power(state: LabState, names: readonly MachineName[], next: Next): Step {
+	let result = step(state);
+	for (const name of new Set(names)) {
+		result = andThen(result, (s) => {
+			const machine = s.machines[name];
+			return machine && ACCEPTS[machine.life.phase].commands ? stopping(s, machine, next, next) : step(s);
+		});
+	}
+	return result;
+}
+
+/** The guest shut down by itself, and the disks have still to be saved. A machine that was told what comes next does that. */
+export function halted(
+	state: LabState,
+	name: MachineName,
+	attempt: number,
+	next: Next,
+	closed: readonly SessionId[],
+): Step {
+	const machine = onAttempt(state, name, attempt);
+	if (machine?.life.phase !== "booting" && machine?.life.phase !== "ready") return step(state);
+	return stopping(state, machine, next, "save", closed);
+}
+
+/** The worker is gone and has let go of its disks, so the machine can go on to what it was stopped for. */
+export function stopped(state: LabState, name: MachineName, attempt: number, clean: boolean, at: number): Step {
+	const machine = onAttempt(state, name, attempt);
+	if (machine?.life.phase === "removing") return gone(state, machine);
+	if (machine?.life.phase !== "stopping") return step(state);
+	const { next, plugs, closed } = machine.life;
+	const forced = clean ? [] : [FORCED_STOP];
+	const now = next === "off" ? `${name} is off.` : `${name} is rebooting.`;
+	const note = [now, ...closedWithIt(closed), ...forced].join(" ");
+	const effects: Effect[] = [
+		...linksDown(machine, "power"),
+		{ type: "screen/note", session: machine.sessions[0], text: note },
+	];
+	const lastStop = clean ? "clean" : "forced";
+	if (next === "reboot") {
+		const booting = boot({ ...machine, lastStop }, plugs, at);
+		const after = put({ ...state, now: later(state.now, at) }, booting);
+		if (!clean) effects.push({ type: "announce", text: `${name} rebooting. ${FORCED_STOP}` });
+		return step(after, [...effects, bootEffect(booting, after)]);
+	}
+	effects.push({ type: "announce", text: clean ? `${name} off` : `${name} off. ${FORCED_STOP}` });
+	return step(put(state, { ...machine, life: { phase: "off", attempt, plugs }, lastStop }), effects);
+}
+
+/** A NIC that is gone from a guest that still runs. */
+export function nicLost(state: LabState, name: MachineName, attempt: number, nic: NicNo, reason: string): Step {
+	const machine = onAttempt(state, name, attempt);
+	if (machine?.life.phase !== "ready" || machine.life.lost?.includes(nic)) return step(state);
+	const lost = [...(machine.life.lost ?? []), nic];
+	return step(put(state, { ...machine, life: { ...machine.life, lost } }), [
+		{ type: "announce", text: `${name} lost a NIC. ${reason} Reboot it to have it back.` },
+	]);
 }
 
 /** A boot is late when the clock says so. No timer exists that could fire on a later attempt. */
@@ -455,14 +576,14 @@ function removeOne(state: LabState, name: MachineName, cause: Cause): Step {
 	const removing: Machine = { ...machine, life: { phase: "removing", attempt: life.attempt, ports: nicPortsOf(life) } };
 	return step(put(state, removing), [
 		...linksDown(machine, cause),
-		{ type: "vm/stop", machine: name, attempt: life.attempt },
+		{ type: "vm/stop", machine: name, attempt: life.attempt, how: "drop" },
 	]);
 }
 
-/** Teardown has ended. The record goes, and its hue and ports are free again. */
-export function gone(state: LabState, name: MachineName, attempt: number): Step {
-	const machine = onAttempt(state, name, attempt);
-	if (machine?.life.phase !== "removing") return step(state);
+/** The record goes, and its hue and ports are free again. */
+function gone(state: LabState, machine: Machine): Step {
+	const { name } = machine;
+	const { attempt } = machine.life;
 	let sessions = state.sessions;
 	for (const session of machine.sessions) sessions = without(sessions, session);
 	const next: LabState = {
@@ -482,16 +603,32 @@ export function gone(state: LabState, name: MachineName, attempt: number): Step 
 	return step(next, effects);
 }
 
-/** Same name, hue, image and memory, on the planned ports. Ignored unless `ports` is still the plan. */
-export function bootAgain(state: LabState, name: MachineName, ports: NicPorts, at: number): Step {
-	const plan = planBootAgain(state, name);
-	const machine = state.machines[name];
-	if (!machine || plan === null || isPlanError(plan) || !samePorts(plan.ports, ports)) return step(state);
+/** Its next attempt: same name, hue, image, memory and disks. */
+function boot(machine: Machine, plugs: readonly Plug[], at: number): Machine {
 	const attempt = machine.life.attempt + 1;
-	const plugs = plugInto(ports);
-	const booting: Machine = { ...machine, life: { phase: "booting", attempt, since: at, stage: "", plugs } };
-	const next = put({ ...state, now: later(state.now, at) }, booting);
-	return step(next, bootEffects(booting, next));
+	return { ...machine, life: { phase: "booting", attempt, since: at, stage: "", plugs } };
+}
+
+/** Machines that are off or failed, on the planned ports. Ignored unless that is still the plan. */
+export function bootStopped(state: LabState, plan: readonly BootPlan[], at: number): Step {
+	const fresh = planBoot(
+		state,
+		plan.map(({ machine }) => machine),
+	);
+	if (isPlanError(fresh) || !samePlan(fresh, plan)) return step(state);
+	let result = step(state);
+	for (const { machine: name, ports } of fresh) {
+		result = andThen(result, (s) => {
+			const machine = s.machines[name];
+			if (!machine) return step(s);
+			// An off machine is plugged in already.
+			const held = machine.life.phase === "off" ? machine.life.plugs : null;
+			const booting = boot(machine, held ?? plugInto(ports), at);
+			const next = put({ ...s, now: later(s.now, at) }, booting);
+			return step(next, [...(held ? [] : attachEffects(booting)), bootEffect(booting, next)]);
+		});
+	}
+	return result;
 }
 
 export function link(state: LabState, changes: readonly LinkChange[], cause: Cause): Step {
@@ -502,7 +639,7 @@ export function link(state: LabState, changes: readonly LinkChange[], cause: Cau
 
 function linkOne(state: LabState, change: LinkChange, cause: Cause): Step {
 	const machine = state.machines[change.machine];
-	if (machine?.life.phase !== "ready") return step(state);
+	if (machine?.life.phase !== "ready" && machine?.life.phase !== "off") return step(state);
 	const { port, nic, up } = change;
 	const plug = machine.life.plugs[nic];
 	if (!plug) return step(state);
@@ -516,11 +653,16 @@ function linkOne(state: LabState, change: LinkChange, cause: Cause): Step {
 		...machine,
 		life: { ...machine.life, plugs: machine.life.plugs.map((other, i) => (i === nic ? set : other)) },
 	});
+	const label = nicLabel(machine, nic);
 	const effects: Effect[] = [];
 	if (change.newPort) effects.push({ type: "port/attach", port, machine: machine.name, nic });
+	// Its link is down, and what is plugged in now says whether it comes up at the next boot.
+	if (machine.life.phase === "off") {
+		return step(next, [...effects, { type: "announce", text: `${label} cable ${up ? "plugged in" : "cut"}` }]);
+	}
 	effects.push(
 		{ type: "link/set", port, machine: machine.name, nic, up, cause },
-		{ type: "announce", text: `${nicLabel(machine, nic)} link ${up ? "up" : "down"}` },
+		{ type: "announce", text: `${label} link ${up ? "up" : "down"}` },
 	);
 	return step(next, effects);
 }

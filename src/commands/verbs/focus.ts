@@ -15,7 +15,7 @@ export const focus = defineVerb({
 	name: "focus",
 	about: "move the keyboard to a console",
 	danger: false,
-	phases: ["booting", "ready", "failed"],
+	phases: ["booting", "ready", "stopping", "off", "failed"],
 	grammar: {
 		target: slots.target(),
 		mode: slots.exclusive<Mode>("plain", [slots.flag("--main", "main"), slots.flag("--max", "max")]),

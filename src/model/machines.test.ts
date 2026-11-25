@@ -8,7 +8,7 @@ import {
 	isPlanError,
 	lowestFreePorts,
 	nameBook,
-	planBootAgain,
+	planBoot,
 	planLink,
 	planSpawn,
 	takenPorts,
@@ -16,10 +16,11 @@ import {
 import { addressText } from "./selectors.ts";
 import {
 	address,
-	bootAgainEvent,
+	bootEvent,
 	effectsOf,
 	emptyLab,
 	hasFailed,
+	hasHalted,
 	hasStopped,
 	IMAGES,
 	isReady,
@@ -27,6 +28,7 @@ import {
 	linkEvent,
 	machine,
 	named,
+	power,
 	remove,
 	run,
 	type SpawnOptions,
@@ -63,12 +65,15 @@ function labIn(phase: Phase, attempt: 1 | 2): LabState {
 	s = run(s, spawnEvent(s, 2, { at: 1000 }), isReady("node2"));
 	if (attempt === 2) {
 		s = run(s, hasFailed("node1", 1));
-		s = run(s, bootAgainEvent(s, "node1", 2000));
+		s = run(s, bootEvent(s, "node1", 2000));
 	}
 	if (phase === "booting") return s;
 	if (phase === "failed") return run(s, hasFailed("node1", attempt));
 	s = run(s, isReady("node1", attempt));
-	return phase === "ready" ? s : run(s, remove("node1"));
+	if (phase === "ready") return s;
+	if (phase === "removing") return run(s, remove("node1"));
+	s = run(s, power("off", "node1"));
+	return phase === "stopping" ? s : run(s, hasStopped("node1", attempt));
 }
 
 type Column = (RuntimeEvent | CommandEvent)["type"] | "tick past the boot timeout";
@@ -85,6 +90,8 @@ const TABLE: Readonly<Record<Phase, Readonly<Record<Column, Outcome>>>> = {
 		"vm/stage": "booting",
 		"vm/ready": "ready",
 		"vm/failed": "failed",
+		"vm/halted": "stopping",
+		"vm/nic-lost": "ignored",
 		"vm/stopped": "ignored",
 		"session/opened": "ignored",
 		"session/ended": "ignored",
@@ -94,7 +101,8 @@ const TABLE: Readonly<Record<Phase, Readonly<Record<Column, Outcome>>>> = {
 		"tick past the boot timeout": "failed",
 		"cmd/spawn": "untouched",
 		"cmd/remove": "removing",
-		"cmd/boot-again": "ignored",
+		"cmd/boot": "ignored",
+		"cmd/power": "ignored",
 		"cmd/link": "ignored",
 		"cmd/shell": "ignored",
 		"cmd/focus": "untouched",
@@ -105,6 +113,8 @@ const TABLE: Readonly<Record<Phase, Readonly<Record<Column, Outcome>>>> = {
 		"vm/stage": "ignored",
 		"vm/ready": "ignored",
 		"vm/failed": "failed",
+		"vm/halted": "stopping",
+		"vm/nic-lost": "ready",
 		"vm/stopped": "ignored",
 		"session/opened": "ignored",
 		"session/ended": "ignored",
@@ -114,9 +124,56 @@ const TABLE: Readonly<Record<Phase, Readonly<Record<Column, Outcome>>>> = {
 		"tick past the boot timeout": "untouched",
 		"cmd/spawn": "untouched",
 		"cmd/remove": "removing",
-		"cmd/boot-again": "ignored",
+		"cmd/boot": "ignored",
+		"cmd/power": "stopping",
 		"cmd/link": "ready",
 		"cmd/shell": "ready",
+		"cmd/focus": "untouched",
+		"cmd/capture": "untouched",
+		"cmd/logged": "untouched",
+	},
+	stopping: {
+		"vm/stage": "ignored",
+		"vm/ready": "ignored",
+		"vm/failed": "failed",
+		"vm/halted": "ignored",
+		"vm/nic-lost": "ignored",
+		"vm/stopped": "off",
+		"session/opened": "ignored",
+		"session/ended": "ignored",
+		"session/shell": "untouched",
+		"session/marked": "untouched",
+		tick: "untouched",
+		"tick past the boot timeout": "untouched",
+		"cmd/spawn": "untouched",
+		"cmd/remove": "removing",
+		"cmd/boot": "ignored",
+		"cmd/power": "ignored",
+		"cmd/link": "ignored",
+		"cmd/shell": "ignored",
+		"cmd/focus": "untouched",
+		"cmd/capture": "untouched",
+		"cmd/logged": "untouched",
+	},
+	off: {
+		"vm/stage": "ignored",
+		"vm/ready": "ignored",
+		"vm/failed": "ignored",
+		"vm/halted": "ignored",
+		"vm/nic-lost": "ignored",
+		"vm/stopped": "ignored",
+		"session/opened": "ignored",
+		"session/ended": "ignored",
+		"session/shell": "untouched",
+		"session/marked": "untouched",
+		tick: "untouched",
+		"tick past the boot timeout": "untouched",
+		"cmd/spawn": "untouched",
+		"cmd/remove": "removing",
+		"cmd/boot": "booting",
+		"cmd/power": "ignored",
+		"cmd/link": "off",
+		"cmd/shell": "ignored",
 		"cmd/focus": "untouched",
 		"cmd/capture": "untouched",
 		"cmd/logged": "untouched",
@@ -125,6 +182,8 @@ const TABLE: Readonly<Record<Phase, Readonly<Record<Column, Outcome>>>> = {
 		"vm/stage": "ignored",
 		"vm/ready": "ignored",
 		"vm/failed": "ignored",
+		"vm/halted": "ignored",
+		"vm/nic-lost": "ignored",
 		"vm/stopped": "ignored",
 		"session/opened": "ignored",
 		"session/ended": "ignored",
@@ -134,7 +193,8 @@ const TABLE: Readonly<Record<Phase, Readonly<Record<Column, Outcome>>>> = {
 		"tick past the boot timeout": "untouched",
 		"cmd/spawn": "untouched",
 		"cmd/remove": "removing",
-		"cmd/boot-again": "booting",
+		"cmd/boot": "booting",
+		"cmd/power": "ignored",
 		"cmd/link": "ignored",
 		"cmd/shell": "ignored",
 		"cmd/focus": "untouched",
@@ -145,6 +205,8 @@ const TABLE: Readonly<Record<Phase, Readonly<Record<Column, Outcome>>>> = {
 		"vm/stage": "ignored",
 		"vm/ready": "ignored",
 		"vm/failed": "ignored",
+		"vm/halted": "ignored",
+		"vm/nic-lost": "ignored",
 		"vm/stopped": "gone",
 		"session/opened": "ignored",
 		"session/ended": "ignored",
@@ -154,7 +216,8 @@ const TABLE: Readonly<Record<Phase, Readonly<Record<Column, Outcome>>>> = {
 		"tick past the boot timeout": "untouched",
 		"cmd/spawn": "untouched",
 		"cmd/remove": "ignored",
-		"cmd/boot-again": "ignored",
+		"cmd/boot": "ignored",
+		"cmd/power": "ignored",
 		"cmd/link": "ignored",
 		"cmd/shell": "ignored",
 		"cmd/focus": "untouched",
@@ -172,6 +235,10 @@ function eventFor(column: Column, s: LabState, name: MachineName, attempt: numbe
 			return isReady(name, attempt);
 		case "vm/failed":
 			return hasFailed(name, attempt);
+		case "vm/halted":
+			return hasHalted(name, "reboot", attempt);
+		case "vm/nic-lost":
+			return { type: "vm/nic-lost", machine: name, attempt, nic: 0, reason: "eth0 stopped: signal 9." };
 		case "vm/stopped":
 			return hasStopped(name, attempt);
 		case "session/opened":
@@ -190,8 +257,10 @@ function eventFor(column: Column, s: LabState, name: MachineName, attempt: numbe
 			return spawnEvent(s, 1, { net: "none" });
 		case "cmd/remove":
 			return remove(name);
-		case "cmd/boot-again":
-			return { type: "cmd/boot-again", machine: name, ports: [lowestFreePorts(s, 1)[0] ?? null], at: s.now };
+		case "cmd/boot":
+			return bootEvent(s, name);
+		case "cmd/power":
+			return power("off", name);
 		case "cmd/link":
 			return {
 				type: "cmd/link",
@@ -209,10 +278,10 @@ function eventFor(column: Column, s: LabState, name: MachineName, attempt: numbe
 	}
 }
 
-const PHASES: readonly Phase[] = ["booting", "ready", "failed", "removing"];
+const PHASES: readonly Phase[] = ["booting", "ready", "stopping", "off", "failed", "removing"];
 const ATTEMPTS = [1, 2] as const;
 const COLUMNS = Object.keys(TABLE.booting).filter((key): key is Column => key in TABLE.booting);
-const VM_EVENTS = ["vm/stage", "vm/ready", "vm/failed", "vm/stopped"] as const;
+const VM_EVENTS = ["vm/stage", "vm/ready", "vm/failed", "vm/halted", "vm/nic-lost", "vm/stopped"] as const;
 /** Every event that names a machine or one of its sessions. */
 const ADDRESSED = COLUMNS.filter(
 	(column) => !["tick", "tick past the boot timeout", "cmd/spawn", "cmd/capture", "cmd/logged"].includes(column),
@@ -267,12 +336,14 @@ describe("the lifecycle table", () => {
 		expect(step.effects).toEqual([]);
 	});
 
-	test("what each phase accepts is the handoff's last column", () => {
+	test("what each phase accepts", () => {
 		expect(ACCEPTS).toEqual({
-			booting: { commands: false, bootAgain: false, remove: true },
-			ready: { commands: true, bootAgain: false, remove: true },
-			failed: { commands: false, bootAgain: true, remove: true },
-			removing: { commands: false, bootAgain: false, remove: false },
+			booting: { commands: false, boot: false, cables: false, remove: true },
+			ready: { commands: true, boot: false, cables: true, remove: true },
+			stopping: { commands: false, boot: false, cables: false, remove: true },
+			off: { commands: false, boot: true, cables: true, remove: true },
+			failed: { commands: false, boot: true, cables: false, remove: true },
+			removing: { commands: false, boot: false, cables: false, remove: false },
 		});
 	});
 
@@ -290,7 +361,7 @@ describe("the lifecycle table", () => {
 
 	test("a late message from the worker a boot again replaced is ignored", () => {
 		let s = labIn("failed", 1);
-		s = run(s, bootAgainEvent(s, "node1"));
+		s = run(s, bootEvent(s, "node1"));
 		expect(machine(s, "node1").life).toMatchObject({ phase: "booting", attempt: 2 });
 		expect(update(s, isReady("node1", 1)).state).toBe(s);
 		expect(update(s, hasStopped("node1", 1)).state).toBe(s);
@@ -337,7 +408,7 @@ describe("hues", () => {
 	test("boot again keeps the hue", () => {
 		let s = labWith(3);
 		s = run(s, hasFailed("node2"));
-		s = run(s, bootAgainEvent(s, "node2"));
+		s = run(s, bootEvent(s, "node2"));
 		expect(machine(s, "node2").hue).toBe(2);
 	});
 });
@@ -372,7 +443,7 @@ describe("ports", () => {
 		expect(machine(s, "node2").life).toEqual({ phase: "failed", attempt: 1, reason: "Kernel panic." });
 		s = run(s, spawnEvent(s, 1));
 		expect(machine(s, "node4").life).toMatchObject({ plugs: [{ port: 2 }] });
-		s = run(s, bootAgainEvent(s, "node2", 9000));
+		s = run(s, bootEvent(s, "node2", 9000));
 		expect(machine(s, "node2")).toMatchObject({
 			...identity(2),
 			hue: 2,
@@ -384,7 +455,7 @@ describe("ports", () => {
 	test("a boot-again planned for a port someone has since taken is ignored", () => {
 		let s = labWith(2);
 		s = run(s, hasFailed("node1"));
-		const planned = bootAgainEvent(s, "node1");
+		const planned = bootEvent(s, "node1");
 		s = run(s, spawnEvent(s, 1));
 		expect(machine(s, "node3").life).toMatchObject({ plugs: [{ port: 1 }] });
 		expect(update(s, planned).state).toBe(s);
@@ -396,8 +467,8 @@ describe("ports", () => {
 		expect(machine(s, "node1").life).toMatchObject({ plugs: [{ kind: "none" }] });
 		expect([...takenPorts(s)]).toEqual([]);
 		s = run(s, hasFailed("node1"));
-		expect(planBootAgain(s, "node1")).toEqual({ machine: "node1", ports: [null] });
-		s = run(s, bootAgainEvent(s, "node1"));
+		expect(planBoot(s, ["node1"])).toEqual([{ machine: "node1", ports: [null] }]);
+		s = run(s, bootEvent(s, "node1"));
 		expect(machine(s, "node1").life).toMatchObject({ phase: "booting", plugs: [{ kind: "none" }] });
 	});
 
@@ -480,7 +551,7 @@ describe("planSpawn", () => {
 		expect(isPlanError(planSpawn(labWith(8), 1, ALPINE))).toBe(true);
 		expect(isPlanError(planSpawn(emptyLab(), 1, ALPINE))).toBe(false);
 		expect(isPlanError(planLink(labWith(1), ["node1"], false))).toBe(false);
-		expect(isPlanError(planBootAgain(labWith(1), "node1"))).toBe(false);
+		expect(isPlanError(planBoot(labWith(1), ["node1"]))).toBe(false);
 	});
 });
 
@@ -517,17 +588,27 @@ describe("planLink", () => {
 	});
 });
 
-describe("planBootAgain", () => {
-	test("is only for a failed machine", () => {
+describe("planBoot", () => {
+	test("is only for a machine that is off or failed", () => {
 		const s = labWith(1);
-		expect(planBootAgain(s, "node1")).toBeNull();
-		expect(planBootAgain(s, "node9")).toBeNull();
+		expect(planBoot(s, ["node1"])).toEqual([]);
+		expect(planBoot(s, ["node9"])).toEqual([]);
 	});
 
 	test("plans the lowest free port", () => {
 		let s = labWith(3);
 		s = run(s, hasFailed("node1"), hasFailed("node3"));
-		expect(planBootAgain(s, "node3")).toEqual({ machine: "node3", ports: [1] });
+		expect(planBoot(s, ["node3"])).toEqual([{ machine: "node3", ports: [1] }]);
+	});
+
+	test("plans several at once: off machines hold their ports, and failed ones share out the rest", () => {
+		let s = labWith(4);
+		s = run(s, power("off", "node2"), hasStopped("node2"), hasFailed("node1"), hasFailed("node4"));
+		expect(planBoot(s, ["node4", "node3", "node2", "node1"])).toEqual([
+			{ machine: "node4", ports: [1] },
+			{ machine: "node2", ports: [2] },
+			{ machine: "node1", ports: [4] },
+		]);
 	});
 });
 
@@ -563,7 +644,7 @@ describe("addresses", () => {
 			nics: [{ address: null }, { address: address("10.1.0.1/16") }],
 		});
 		s = run(s, hasFailed("node1"));
-		const again = effectsOf(s, bootAgainEvent(s, "node1")).find((e) => e.type === "vm/boot");
+		const again = effectsOf(s, bootEvent(s, "node1")).find((e) => e.type === "vm/boot");
 		expect(again).toMatchObject({ config: { spec: machine(s, "node1").spec } });
 	});
 
@@ -680,7 +761,7 @@ describe("a machine's name", () => {
 
 	test("nothing late from one machine reaches the next of that name", () => {
 		let s = run(spawnWeb(emptyLab()), hasFailed(web, 1));
-		s = run(s, bootAgainEvent(s, web), isReady(web, 2));
+		s = run(s, bootEvent(s, web), isReady(web, 2));
 		s = spawnWeb(gone(s, web));
 		expect(machine(s, web)).toMatchObject({ n: 2, life: { phase: "booting", attempt: 3 } });
 		for (const attempt of [1, 2]) {
@@ -753,7 +834,7 @@ describe("machines with several NICs", () => {
 		expect(effectsOf(s, event)).toEqual([
 			{ type: "link/set", port: 1, machine: "node1", nic: 0, up: false, cause: "bar" },
 			{ type: "link/set", port: 2, machine: "node1", nic: 2, up: false, cause: "bar" },
-			{ type: "vm/stop", machine: "node1", attempt: 1 },
+			{ type: "vm/stop", machine: "node1", attempt: 1, how: "drop" },
 		]);
 		s = run(s, event);
 		expect(machine(s, "node1").life).toEqual({ phase: "removing", attempt: 1, ports: [1, null, 2] });
@@ -783,9 +864,9 @@ describe("machines with several NICs", () => {
 		s = run(s, spawnEvent(s, 1, { net: ["switch0", "none", "switch0"] }), hasFailed("node1"));
 		s = run(s, spawnEvent(s, 1));
 		expect([...takenPorts(s)]).toEqual([1]);
-		expect(planBootAgain(s, "node1")).toEqual({ machine: "node1", ports: [2, null, 3] });
+		expect(planBoot(s, ["node1"])).toEqual([{ machine: "node1", ports: [2, null, 3] }]);
 		s = run(s, spawnEvent(s, 6));
-		expect(planBootAgain(s, "node1")).toEqual({ kind: "no-ports", free: 1, wanted: 2 });
+		expect(planBoot(s, ["node1"])).toEqual({ kind: "no-ports", free: 1, wanted: 2 });
 	});
 
 	test("change the cable of one NIC alone, or of every NIC by the machine's name", () => {

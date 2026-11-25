@@ -1,12 +1,14 @@
 import { parseSessionId } from "./identity.ts";
 import {
-	bootAgain,
+	bootStopped,
 	expireBoots,
 	fail,
-	gone,
+	halted,
 	link,
 	machineList,
+	nicLost,
 	openShell,
+	power,
 	ready,
 	remove,
 	selectTab,
@@ -16,6 +18,7 @@ import {
 	sessionShell,
 	spawn,
 	stage,
+	stopped,
 } from "./machines.ts";
 import {
 	addPanes,
@@ -51,10 +54,17 @@ import {
 	type WebMcp,
 } from "./types.ts";
 
-/** From the handoff's tools table. Every tool runs at once except spawn and remove, which ask first. */
+/**
+ * Every tool runs at once except spawn, which adds to the lab, and remove,
+ * which takes from it. Power does neither: the disks and the cables stay, and
+ * a guest can be rebooted from the shell that `shell_exec` types into.
+ */
 export const DEFAULT_POLICIES: Readonly<Record<ToolName, Policy>> = {
 	machines_list: "run",
 	machines_spawn: "ask",
+	machines_boot: "run",
+	machines_reboot: "run",
+	machines_poweroff: "run",
 	machines_remove: "ask",
 	shell_exec: "run",
 	shell_read: "run",
@@ -122,7 +132,11 @@ function reduce(state: LabState, event: LabEvent): Step {
 		case "vm/failed":
 			return fail(state, event.machine, event.attempt, event.reason);
 		case "vm/stopped":
-			return gone(state, event.machine, event.attempt);
+			return stopped(state, event.machine, event.attempt, event.clean, event.at);
+		case "vm/halted":
+			return halted(state, event.machine, event.attempt, event.next, event.closed);
+		case "vm/nic-lost":
+			return nicLost(state, event.machine, event.attempt, event.nic, event.reason);
 		case "session/opened":
 			return sessionOpened(state, event.session);
 		case "session/ended":
@@ -141,8 +155,10 @@ function reduce(state: LabState, event: LabEvent): Step {
 		}
 		case "cmd/remove":
 			return remove(state, event.machines, event.cause);
-		case "cmd/boot-again":
-			return bootAgain(state, event.machine, event.ports, event.at);
+		case "cmd/boot":
+			return bootStopped(state, event.machines, event.at);
+		case "cmd/power":
+			return power(state, event.machines, event.next);
 		case "cmd/link":
 			return link(state, event.changes, event.cause);
 		case "cmd/shell":

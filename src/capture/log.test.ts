@@ -225,6 +225,12 @@ test("a link the lab raises is a machine plugging in at boot, not a reconnect", 
 	const { log } = setup();
 	log.appendLink({ port: 1, machine: "node1", nic: 0, up: true, cause: "runtime" });
 	expect(log.tail(1)[0]).toMatchObject({ text: "port 1 link up", cause: "Cable to node1 plugged in by the lab." });
+	log.appendLink({ port: 1, machine: "node1", nic: 0, up: false, cause: "power" });
+	log.appendLink({ port: 1, machine: "node1", nic: 0, up: true, cause: "power" });
+	expect(log.tail(2)).toMatchObject([
+		{ text: "port 1 link down", cause: "node1 stopped." },
+		{ text: "port 1 link up", cause: "node1 booted." },
+	]);
 });
 
 describe("annotations", () => {

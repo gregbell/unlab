@@ -5,6 +5,7 @@ import { repeat } from "lit/directives/repeat.js";
 import {
 	ACCEPTS,
 	addressText,
+	FORCED_STOP,
 	type MachineName,
 	type RailRow,
 	type SessionId,
@@ -25,8 +26,9 @@ function rightSide(word: RailRow["word"], address: string): { readonly text: str
 			return { text: "cable cut", tone: "down" };
 		case "failed":
 			return { text: "failed", tone: "down" };
+		case "off":
 		case "removing":
-			return { text: "removing", tone: "address" };
+			return { text: word, tone: "address" };
 		default:
 			return { text: word, tone: "booting" };
 	}
@@ -44,7 +46,7 @@ const NAV_KEYS = new Set(["ArrowLeft", "ArrowRight", "Home", "End"]);
  * terminal keeps its screen for the session's life.
  *
  * The pane with the keyboard puts DOM focus in its active terminal. A booting,
- * failed or departing machine takes no keys, so its terminal never holds focus.
+ * stopped or departing machine takes no keys, so its terminal never holds focus.
  */
 export class UnlabPane extends UnlabElement {
 	static override properties = { machine: { type: String, reflect: true } };
@@ -148,6 +150,18 @@ export class UnlabPane extends UnlabElement {
 								${life.reason ? html`<p class="reason">${life.reason}</p>` : nothing}
 								<div class="actions">
 									<button type="button" class="button primary" @click=${() => this.runLine(`boot ${name}`)}>Boot again</button>
+									<button type="button" class="button" @click=${() => this.app.commands.confirmInBar(`rm ${name}`)}>Remove</button>
+								</div>
+							</div>`
+						: nothing
+				}
+				${
+					life.phase === "off"
+						? html`<div class="off">
+								<p class="headline">${name} is off.</p>
+								<p class="reason">${machine.lastStop === "forced" ? FORCED_STOP : "It keeps its disks and its ports."}</p>
+								<div class="actions">
+									<button type="button" class="button primary" @click=${() => this.runLine(`boot ${name}`)}>Boot</button>
 									<button type="button" class="button" @click=${() => this.app.commands.confirmInBar(`rm ${name}`)}>Remove</button>
 								</div>
 							</div>`

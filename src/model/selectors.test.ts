@@ -17,15 +17,18 @@ import {
 	agentCall,
 	emptyLab,
 	hasFailed,
+	hasStopped,
 	isReady,
 	labWith,
 	linkEvent,
 	logged,
+	power,
 	remove,
 	run,
 	spawnEvent,
 } from "./testkit.ts";
-import { AGENT_IDLE_MS, type LabEvent, type LabState, type MachineName } from "./types.ts";
+import { AGENT_IDLE_MS, type LabEvent, type LabState, type MachineName, type ToolName } from "./types.ts";
+import { DEFAULT_POLICIES } from "./update.ts";
 
 const tick = (now: number): LabEvent => ({ type: "tick", now });
 const shell = (machine: MachineName): LabEvent => ({ type: "cmd/shell", machine });
@@ -72,6 +75,76 @@ function oneOfEach(): LabState {
 	s = run(s, hasFailed("node5"), isReady("node6"), remove("node6"));
 	return run(s, tick(11_400));
 }
+
+describe("machines that stop", () => {
+	/** node1 powering off, node2 rebooting, node3 off, node4 off with its cable cut. */
+	const stopping = () => {
+		let s = labWith(4);
+		s = run(s, linkEvent(s, false, "node4"));
+		s = run(s, power("off", "node3", "node4"), hasStopped("node3"), hasStopped("node4"));
+		return run(s, power("off", "node1"), power("reboot", "node2"));
+	};
+
+	test("say so in the rail, with their addresses", () => {
+		const s = stopping();
+		expect(selectRail(s).map((r) => [r.phase, r.line2, r.word])).toEqual([
+			["stopping", "10.88.0.11", "powering off"],
+			["stopping", "10.88.0.12", "rebooting"],
+			["off", "10.88.0.13", "off"],
+			["off", "10.88.0.14", "off"],
+		]);
+	});
+
+	test("say so on their ports, and an off machine's cable can be cut or plugged in", () => {
+		expect(selectPorts(stopping()).map((p) => [p.state, p.word, p.actionLabel])).toEqual([
+			["stopping", "stop", null],
+			["stopping", "stop", null],
+			["off", "off", "Cut the cable from node3 to port 3"],
+			["cut", "cut", "Reconnect the cable from node4 to port 4"],
+			["empty", null, null],
+			["empty", null, null],
+			["empty", null, null],
+			["empty", null, null],
+		]);
+		expect(selectLinks(stopping())).toEqual({ up: 0, total: 4, cut: 0 });
+	});
+
+	test("say so in the details, and an off machine that had to be cut short says that", () => {
+		const s = stopping();
+		const facts = (state: LabState, name: MachineName) => {
+			const details = selectDetails(run(state, focus(name)));
+			const value = (label: string) => details?.rows.find((r) => r.label === label)?.value;
+			return { state: value("state"), link: value("link"), cables: details?.cables, accepts: details?.accepts };
+		};
+		expect(facts(s, "node2")).toMatchObject({
+			state: "rebooting",
+			cables: [],
+			accepts: { commands: false, boot: false },
+		});
+		expect(facts(s, "node3")).toMatchObject({
+			state: "off",
+			link: "plugged into port 3",
+			cables: [{ link: "up" }],
+			accepts: { commands: false, boot: true, cables: true, remove: true },
+		});
+		expect(facts(s, "node4")).toMatchObject({ link: "cable cut on port 4", cables: [{ link: "cut" }] });
+		expect(facts(run(s, hasStopped("node1", 1, false)), "node1").state).toBe("off · did not shut down");
+	});
+
+	test("are counted in the status line", () => {
+		expect(selectStatus(stopping()).left[0].text).toBe("0 of 4 machines ready, 2 stopping, 2 off");
+		expect(selectStatus(stopping()).left[0].tone).toBe("quiet");
+	});
+
+	test("a NIC that is gone from a running guest is marked until it reboots", () => {
+		let s = labWith(1);
+		s = run(s, { type: "vm/nic-lost", machine: "node1", attempt: 1, nic: 0, reason: "eth0 stopped: signal 9." });
+		const link = () => selectDetails(s)?.rows.find((r) => r.label === "link");
+		expect(link()).toEqual({ label: "link", value: "gone from the guest until it reboots", tone: "down" });
+		s = run(s, power("reboot", "node1"), hasStopped("node1"), isReady("node1", 2));
+		expect(link()).toEqual({ label: "link", value: "connected on port 1", tone: "ok" });
+	});
+});
 
 describe("the rail", () => {
 	test("has one row per machine, in spawn order, with the machine's hue", () => {
@@ -152,7 +225,7 @@ describe("machine details", () => {
 			ports: [2],
 			cables: [{ label: "node2", nic: null, link: "up" }],
 			reason: null,
-			accepts: { commands: true, bootAgain: false, remove: true },
+			accepts: { commands: true, boot: false, cables: true, remove: true },
 			rows: [
 				{ label: "state", value: "ready · 3582 ms" },
 				{ label: "image", value: "alpine 3.24" },
@@ -206,7 +279,7 @@ describe("machine details", () => {
 			phase: "booting",
 			cables: [],
 			ports: [3],
-			accepts: { commands: false, bootAgain: false, remove: true },
+			accepts: { commands: false, boot: false, cables: false, remove: true },
 		});
 		expect(value(run(s, focus("node4")), "link")).toBe("port 3 reserved");
 		expect(selectDetails(run(s, focus("node5")))).toMatchObject({
@@ -214,13 +287,13 @@ describe("machine details", () => {
 			cables: [],
 			ports: [],
 			reason: "Kernel panic.",
-			accepts: { commands: false, bootAgain: true, remove: true },
+			accepts: { commands: false, boot: true, cables: false, remove: true },
 		});
 		expect(value(run(s, focus("node5")), "link")).toBe("unplugged");
 		expect(selectDetails(run(s, focus("node6")))).toMatchObject({
 			phase: "removing",
 			cables: [],
-			accepts: { commands: false, bootAgain: false, remove: false },
+			accepts: { commands: false, boot: false, cables: false, remove: false },
 		});
 		expect(value(run(s, focus("node6")), "link")).toBe("port 5 down");
 	});
@@ -387,7 +460,7 @@ describe("the status line", () => {
 	test("words its segments as the handoff does", () => {
 		expect(texts(busy())).toEqual({
 			left: ["3 of 4 machines ready, 1 booting", "5 open sessions", "switch0: 2 of 3 links up"],
-			right: ["webmcp: 7 tools, agent active"],
+			right: ["webmcp: 10 tools, agent active"],
 		});
 	});
 
@@ -428,7 +501,7 @@ describe("the status line", () => {
 		expect(texts(s).right[0]).toBe("webmcp: 2 calls waiting for you");
 		s = run(s, { type: "agent/settled", id: 2, status: "denied", result: "Denied by the user." });
 		s = run(s, { type: "agent/settled", id: 3, status: "aborted", result: null });
-		expect(texts(s).right[0]).toBe("webmcp: 7 tools, agent active");
+		expect(texts(s).right[0]).toBe("webmcp: 10 tools, agent active");
 		expect(tone(s, "webmcp")).toBe("quiet");
 	});
 
@@ -455,15 +528,15 @@ describe("the status line", () => {
 
 	test("a tool switched off is not counted, and an idle agent is called idle", () => {
 		let s = run(busy(), { type: "ui/policy", tool: "shell_exec", policy: "off" });
-		expect(texts(s).right[0]).toBe("webmcp: 6 tools, agent active");
+		expect(texts(s).right[0]).toBe("webmcp: 9 tools, agent active");
 		s = run(s, tick(s.now + AGENT_IDLE_MS));
-		expect(texts(s).right[0]).toBe("webmcp: 6 tools, agent idle");
+		expect(texts(s).right[0]).toBe("webmcp: 9 tools, agent idle");
 	});
 
 	test("an empty lab", () => {
 		expect(texts(emptyLab())).toEqual({
 			left: ["0 machines", "0 open sessions"],
-			right: ["webmcp: 7 tools registered"],
+			right: ["webmcp: 10 tools registered"],
 		});
 	});
 
@@ -474,7 +547,8 @@ describe("the status line", () => {
 
 	test("one of anything is singular", () => {
 		let s = run(labWith(1), { type: "ui/policy", tool: "capture_read", policy: "off" });
-		for (const tool of ["machines_list", "machines_spawn", "machines_remove", "shell_exec", "shell_read"] as const) {
+		for (const tool of Object.keys(DEFAULT_POLICIES) as ToolName[]) {
+			if (tool === "link_set") continue;
 			s = run(s, { type: "ui/policy", tool, policy: "off" });
 		}
 		expect(texts(s)).toEqual({

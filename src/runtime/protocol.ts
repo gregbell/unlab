@@ -2,7 +2,7 @@
 // a kernel owns its thread (it blocks in Atomics.wait while idle), so a busy
 // machine must never be able to stall another one or the page.
 
-import type { Address, Disks, HostEntry } from "../model/index.ts";
+import type { Address, Disks, HostEntry, Next, StopHow } from "../model/index.ts";
 import type { NicNo } from "../net/index.ts";
 
 export interface VmConfig {
@@ -47,7 +47,10 @@ export type ToVm =
 	| { type: "pty-data"; sid: number; data: string }
 	| { type: "pty-resize"; sid: number; cols: number; rows: number }
 	| { type: "pty-close"; sid: number }
-	| { type: "stop" };
+	/** Stop the kernel, for a thread that is about to be dropped. */
+	| { type: "stop" }
+	/** Save every disk, once the guest has shut down when it is asked to. Answered with `released`. */
+	| { type: "release"; how: Exclude<StopHow, "drop"> };
 
 export type FromVm =
 	| { type: "stage"; stage: string; detail?: string }
@@ -55,8 +58,16 @@ export type FromVm =
 	| { type: "ready"; ms: number }
 	| { type: "frame"; nic: NicNo; frame: Uint8Array }
 	| { type: "console"; bytes: Uint8Array }
+	/** The guest shut down by itself or as it was asked. */
+	| { type: "halted"; next: Next }
+	/** The kernel ended in any other way. */
 	| { type: "exited"; code: number; reason: string }
+	/** Nothing of the machine is left to save. `clean` when the guest shut down and every disk was saved. */
+	| { type: "released"; clean: boolean }
+	/** A NIC is gone from a guest that runs on. */
+	| { type: "nic-lost"; nic: NicNo; reason: string }
 	| { type: "pty-ready"; sid: number; pid: number; pts: number }
 	| { type: "pty-output"; sid: number; bytes: Uint8Array }
-	| { type: "pty-exit"; sid: number; code: number | null; reason: string }
+	/** `lost` when the guest took the shell away, as it does when it goes down. */
+	| { type: "pty-exit"; sid: number; code: number | null; reason: string; lost: boolean }
 	| { type: "error"; message: string; fatal: boolean };

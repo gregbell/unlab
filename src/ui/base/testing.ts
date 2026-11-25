@@ -20,6 +20,7 @@ import {
 	type LabState,
 	MAX_NAME,
 	type MachineName,
+	type Next,
 	type NicRef,
 	type NicRequest,
 	type NicSpec,
@@ -127,6 +128,20 @@ export const ready =
 export const fail =
 	(machine: MachineName, reason = "Kernel panic."): Step =>
 	(state) => [{ type: "vm/failed", machine, attempt: state.machines[machine]?.life.attempt ?? 1, reason }];
+
+/** The machines are stopped, for what comes next. */
+export const power = (next: Next, ...machines: readonly MachineName[]): LabEvent => ({
+	type: "cmd/power",
+	machines,
+	next,
+});
+
+/** The named machines' workers are gone. */
+export const stopped =
+	(machine: MachineName, clean = true): Step =>
+	(state) => [
+		{ type: "vm/stopped", machine, attempt: state.machines[machine]?.life.attempt ?? 1, clean, at: state.now },
+	];
 
 export const link =
 	(direction: "up" | "down", ...cables: readonly (MachineName | NicRef)[]): Step =>

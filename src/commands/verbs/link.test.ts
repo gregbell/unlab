@@ -162,6 +162,39 @@ describe("link", () => {
 		});
 	});
 
+	it("cuts and plugs in a machine that is off, whose link comes up when it boots", async () => {
+		const lab = storeLab();
+		await lab.lab(1);
+		await lab.run("spawn 1 alpine --no-net");
+		lab.ready("node2");
+		await lab.run("poweroff all");
+		expect(lab.parsed("link down node1").preview(lab.store.state)).toMatchObject({
+			will: "cut the cable to node1 on port 1 · node1 is off",
+		});
+		expect(await lab.run("link down node1")).toMatchObject({
+			text: "node1 cut",
+			data: [{ machine: "node1", nic: "eth0", port: 1, link: "cut" }],
+		});
+		lab.effects.length = 0;
+		expect(await lab.run("link up all")).toMatchObject({
+			text: "node1 plugged in, node2 plugged in",
+			data: [
+				{ machine: "node1", nic: "eth0", port: 1, link: "off" },
+				{ machine: "node2", nic: "eth0", port: 2, link: "off" },
+			],
+		});
+		expect(lab.effects.filter((e) => e.type === "link/set")).toEqual([]);
+		await lab.run("boot all");
+		lab.runtime(
+			{ type: "vm/ready", machine: "node1", attempt: 2, bootMs: 1 },
+			{ type: "vm/ready", machine: "node2", attempt: 2, bootMs: 1 },
+		);
+		expect(lab.effects.filter((e) => e.type === "link/set")).toMatchObject([
+			{ port: 1, up: true },
+			{ port: 2, up: true },
+		]);
+	});
+
 	it("is the link_set tool", () => {
 		const { tool } = storeLab().registry.find("link") ?? {};
 		expect(tool).toMatchObject({ name: "link_set", policy: "run", annotations: {} });

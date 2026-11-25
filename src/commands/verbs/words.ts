@@ -1,12 +1,8 @@
-import type { Disk, LabState, PlanError } from "../../model/index.ts";
+import { andList, type Disk, type LabState, type PlanError } from "../../model/index.ts";
 import { addressStr, ip4str, nicName, subnetStr } from "../../net/index.ts";
 import type { Selection } from "../grammar/slots.ts";
 
-/** `node1`, `node1 and node2`, `node1, node2 and node3`. */
-export function andList(words: readonly (string | number)[]): string {
-	if (words.length < 2) return words.join("");
-	return `${words.slice(0, -1).join(", ")} and ${words[words.length - 1]}`;
-}
+export { andList };
 
 /** `1 shell`, `2 shells`. */
 export function count(n: number, one: string, many = `${one}s`): string {

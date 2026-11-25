@@ -14,6 +14,7 @@ function toneOf(word: RailRow["word"]): Tone {
 		case "failed":
 			return "down";
 		case "unplugged":
+		case "off":
 		case "removing":
 			return "quiet";
 		default:

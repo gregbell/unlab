@@ -60,7 +60,7 @@ describe("subscribers", () => {
 		const store = createStore(labWith(1), noEffects);
 		store.subscribe(() => told++);
 		store.dispatchRuntime(isReady("node1"));
-		store.dispatchRuntime({ type: "vm/stopped", machine: "node9", attempt: 1 });
+		store.dispatchRuntime({ type: "vm/stopped", machine: "node9", attempt: 1, clean: true, at: 0 });
 		store.dispatchUi({ type: "ui/view", view: "lab" });
 		expect(told).toBe(0);
 		store.dispatchUi({ type: "ui/view", view: "wire" });
@@ -114,7 +114,7 @@ describe("re-entrant dispatch", () => {
 		const store = wired(labWith(2), (effect, s) => {
 			log.push(tag(effect));
 			if (effect.type === "vm/stop")
-				s.dispatchRuntime({ type: "vm/stopped", machine: effect.machine, attempt: effect.attempt });
+				s.dispatchRuntime({ type: "vm/stopped", machine: effect.machine, attempt: effect.attempt, clean: true, at: 0 });
 		});
 		store.subscribe(() => log.push(`told: ${store.state.rail.join(",") || "empty"}`));
 
@@ -184,7 +184,7 @@ describe("until", () => {
 			return gone(state);
 		}, new AbortController().signal);
 		store.dispatchCommand(remove("node1"));
-		store.dispatchRuntime({ type: "vm/stopped", machine: "node1", attempt: 1 });
+		store.dispatchRuntime({ type: "vm/stopped", machine: "node1", attempt: 1, clean: true, at: 0 });
 		const settledWith = store.state;
 		store.dispatchUi({ type: "ui/view", view: "wire" });
 		await expect(waiting).resolves.toBe(settledWith);

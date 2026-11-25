@@ -175,14 +175,14 @@ export const capture = defineVerb({
 
 export const boot = defineVerb({
 	name: "boot",
-	about: "Boots a failed machine again",
+	about: "Boots a machine that is off or failed",
 	danger: false,
-	phases: ["failed"],
+	phases: ["off", "failed"],
 	grammar: { machine: slots.machine() },
 	plan: (a) => ({ machine: a.machine }),
 	describe: (p) => `boot ${p.machine} again`,
 	async execute(plan, _ctx, deps) {
-		deps.dispatch({ type: "cmd/boot-again", machine: plan.machine, ports: [null], at: deps.now() });
+		deps.dispatch({ type: "cmd/boot", machines: [{ machine: plan.machine, ports: [null] }], at: deps.now() });
 		return { kind: "visible", text: "", data: null };
 	},
 });

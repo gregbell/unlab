@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 import type { Address, BootConfig } from "../model/index.ts";
 import { defaultAddress } from "../net/index.ts";
 import type { FromVm, ToVm } from "./protocol.ts";
-import { STOP_GRACE_MS, startVm, type VmSink, type WorkerEvents } from "./vm.ts";
+import { SAVE_MS, STOP_GRACE_MS, startVm, type VmSink, type WorkerEvents } from "./vm.ts";
 
 const NODE3: BootConfig = {
 	identity: { n: 3, name: "node3", mac: "52:54:00:88:00:0d" },
@@ -21,7 +21,7 @@ const NODE3: BootConfig = {
 
 type Call = readonly [name: keyof VmSink, ...args: unknown[]];
 
-function boot(attempt = 1, config = NODE3) {
+function boot(attempt = 1, config = NODE3, released: Promise<unknown> = Promise.resolve()) {
 	const posted: { message: ToVm; transfer: Transferable[] }[] = [];
 	const timers: { ms: number; fn: () => void }[] = [];
 	const calls: Call[] = [];
@@ -39,6 +39,8 @@ function boot(attempt = 1, config = NODE3) {
 		stage: record("stage"),
 		ready: record("ready"),
 		failed: record("failed"),
+		halted: record("halted"),
+		nicLost: record("nicLost"),
 		frame: record("frame"),
 		consoleBytes: record("consoleBytes"),
 		ptyOpened: record("ptyOpened"),
@@ -54,6 +56,7 @@ function boot(attempt = 1, config = NODE3) {
 			cols: 100,
 			rows: 30,
 			promptToken: "00112233aabbccdd",
+			released,
 			image: new Promise((resolve, reject) => {
 				image = { resolve, reject };
 			}),
@@ -84,17 +87,19 @@ function boot(attempt = 1, config = NODE3) {
 		workerError: (reason: string) => events?.error(reason),
 		imageArrives: async (buf: ArrayBufferLike = new ArrayBuffer(8)) => {
 			image?.resolve(buf);
-			await Promise.resolve();
+			await settle();
 		},
 		imageFails: async (e: unknown) => {
 			image?.reject(e);
-			await Promise.resolve();
+			await settle();
 		},
 		at: (ms: number) => {
 			clock = ms;
 		},
 	};
 }
+
+const settle = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
 const AT = { machine: "node3", attempt: 1 };
 
@@ -156,7 +161,7 @@ describe("boot", () => {
 		t.from({ type: "frame", nic: 0, frame: bytes });
 		t.from({ type: "pty-ready", sid: 2, pid: 80, pts: 1 });
 		t.from({ type: "pty-output", sid: 2, bytes });
-		t.from({ type: "pty-exit", sid: 2, code: 0, reason: "" });
+		t.from({ type: "pty-exit", sid: 2, code: 0, reason: "", lost: false });
 		t.from({ type: "ready", ms: 900 });
 
 		const at = { machine: "node3", attempt: 4 };
@@ -167,7 +172,7 @@ describe("boot", () => {
 			["frame", at, 0, bytes],
 			["ptyOpened", at, 2],
 			["ptyBytes", at, 2, bytes],
-			["ptyExited", at, 2],
+			["ptyExited", at, 2, false],
 			["ready", at, 0],
 		]);
 	});
@@ -286,11 +291,80 @@ describe("what the page sends", () => {
 	});
 });
 
+describe("power", () => {
+	const asked = { type: "release", how: "off" } as const;
+
+	test("has the worker shut the guest down and save, and drops it when it has", async () => {
+		const t = boot();
+		const stopped = t.vm.stop("off");
+		expect(t.messages()).toEqual([asked]);
+		t.from({ type: "console", bytes: Uint8Array.of(1) });
+		t.from({ type: "halted", next: "off" });
+		expect(t.calls.map(([name]) => name)).toEqual(["stage", "consoleBytes", "halted"]);
+		expect(t.terminated()).toBe(0);
+		t.from({ type: "released", clean: true });
+		expect(await stopped).toBe(true);
+		expect(t.terminated()).toBe(1);
+		for (const { fn } of t.timers) fn();
+		expect(t.terminated()).toBe(1);
+	});
+
+	test.each([
+		["save", SAVE_MS],
+		["off", 28_000],
+		["reboot", 28_000],
+	] as const)("drops a worker that does not answer %s within %i ms, and says it was not clean", async (how, ms) => {
+		const t = boot();
+		const stopped = t.vm.stop(how);
+		expect(t.timers.map((timer) => timer.ms)).toEqual([ms]);
+		t.timers[0].fn();
+		expect(await stopped).toBe(false);
+		expect(t.terminated()).toBe(1);
+	});
+
+	test("waits no longer than the grace period for a thread that failed", () => {
+		const t = boot();
+		t.workerError("out of memory");
+		void t.vm.stop("save");
+		expect(t.timers.map((timer) => timer.ms)).toEqual([STOP_GRACE_MS]);
+	});
+
+	test("a drop hurries it, and then waits for nothing but the grace period", async () => {
+		const t = boot();
+		const stopped = t.vm.stop("off");
+		expect(t.vm.stop("drop")).toBe(stopped);
+		expect(t.messages()).toEqual([asked, { type: "stop" }]);
+		expect(t.timers.map((timer) => timer.ms)).toEqual([28_000, STOP_GRACE_MS]);
+		t.timers[1].fn();
+		expect(await stopped).toBe(false);
+	});
+
+	test("a disk that cannot be saved is still a failure, and the rest is still waited for", async () => {
+		const t = boot();
+		const stopped = t.vm.stop("off");
+		t.from({ type: "error", message: "Browser storage is full.", fatal: true });
+		expect(t.calls.at(-1)).toEqual(["failed", AT, "Browser storage is full."]);
+		expect(t.terminated()).toBe(0);
+		t.from({ type: "released", clean: false });
+		expect(await stopped).toBe(false);
+	});
+
+	test("opens no disk until the last attempt has let go of them", async () => {
+		const last = Promise.withResolvers<void>();
+		const t = boot(2, NODE3, last.promise);
+		await t.imageArrives();
+		expect(t.messages()).toEqual([]);
+		last.resolve();
+		await settle();
+		expect(t.messages()).toMatchObject([{ type: "boot" }]);
+	});
+});
+
 describe("stop", () => {
 	test("asks the guest to stop, then terminates the worker after the grace period", async () => {
 		const t = boot();
 		let resolved = 0;
-		void t.vm.stop().then(() => resolved++);
+		void t.vm.stop("drop").then(() => resolved++);
 
 		expect(t.messages()).toEqual([{ type: "stop" }]);
 		expect(t.timers.map((x) => x.ms)).toEqual([STOP_GRACE_MS]);
@@ -305,22 +379,22 @@ describe("stop", () => {
 
 	test("is idempotent: one stop message, one timer, one termination, one promise", async () => {
 		const t = boot();
-		const first = t.vm.stop();
-		const second = t.vm.stop();
+		const first = t.vm.stop("drop");
+		const second = t.vm.stop("drop");
 		expect(second).toBe(first);
 		expect(t.messages()).toEqual([{ type: "stop" }]);
 		expect(t.timers).toHaveLength(1);
 
 		t.timers[0].fn();
 		await first;
-		expect(t.vm.stop()).toBe(first);
+		expect(t.vm.stop("drop")).toBe(first);
 		expect(t.terminated()).toBe(1);
 		expect(t.timers).toHaveLength(1);
 	});
 
 	test("a stopped machine reports nothing more: its exit is not a failure", async () => {
 		const t = boot();
-		void t.vm.stop();
+		void t.vm.stop("drop");
 		t.calls.length = 0;
 
 		t.from({ type: "exited", code: 0, reason: "powered off" });

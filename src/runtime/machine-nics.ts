@@ -17,7 +17,7 @@ export interface MachineNicsOptions {
 	/** A frame a NIC sent, in a buffer of its own. */
 	readonly toSwitch: (nic: NicNo, frame: Uint8Array) => void;
 	/** A NIC went away in a running guest. One sentence. */
-	readonly lost: (reason: string) => void;
+	readonly lost: (nic: NicNo, reason: string) => void;
 }
 
 export class MachineNics {
@@ -55,7 +55,7 @@ export class MachineNics {
 					name: nicName(nic),
 					mac: this.#opts.macs[nic],
 					toSwitch: (frame) => this.#opts.toSwitch(nic, frame),
-					lost: this.#opts.lost,
+					lost: (reason) => this.#opts.lost(nic, reason),
 				});
 				this.#taps.set(nic, tap);
 			}),

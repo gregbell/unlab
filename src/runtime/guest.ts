@@ -19,7 +19,7 @@ exec \${SUDO:+$SUDO -n} /bin/sh -c "$s" sh "$@"`;
 
 /** Run a shell script as root in the guest, with args as $1... */
 export function execAsRoot(
-	vm: KernelHandle,
+	vm: Pick<KernelHandle, "exec">,
 	script: string,
 	args: string[] = [],
 	opts?: ExecOptions & { encoding?: "utf8" },

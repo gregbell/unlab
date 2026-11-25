@@ -10,6 +10,7 @@ import {
 	parseMachineName,
 	type RuntimeEvent,
 	type SessionId,
+	type StopHow,
 } from "../model/index.ts";
 
 import { defaultAddress } from "../net/index.ts";
@@ -54,6 +55,7 @@ interface FakeScreen extends Screen {
 	readonly io: ScreenIo;
 	readonly written: Uint8Array[];
 	readonly made: FakeMark[];
+	readonly notes: string[];
 	text(): string;
 	/** What the next mark's rows will read as. */
 	printed: string;
@@ -70,12 +72,14 @@ function fakeScreens() {
 			const tracker = createShellTracker();
 			const written: Uint8Array[] = [];
 			const made: FakeMark[] = [];
+			const notes: string[] = [];
 			let size = { cols: 100, rows: 30 };
 			const screen: FakeScreen = {
 				session,
 				io,
 				written,
 				made,
+				notes,
 				printed: "",
 				cut: false,
 				text: () => written.map((b) => new TextDecoder().decode(b)).join(""),
@@ -91,6 +95,9 @@ function fakeScreens() {
 				resizeTo(cols, rows) {
 					size = { cols, rows };
 					io.resize(cols, rows);
+				},
+				note(text) {
+					notes.push(text);
 				},
 				write(b) {
 					written.push(b);
@@ -144,35 +151,32 @@ interface FakeVm extends Vm {
 	readonly ref: VmRef;
 	readonly sink: VmSink;
 	readonly sent: unknown[][];
-	stops: number;
-	/** Let the 250 ms teardown finish. */
-	finishStop(): void;
+	readonly stops: StopHow[];
+	/** Let the teardown finish. */
+	finishStop(clean?: boolean): void;
 }
 
 function fakeVms() {
 	const started: FakeVm[] = [];
 	const startVm: StartVm = (boot, sink) => {
 		const sent: unknown[][] = [];
-		let finish = () => {};
-		const stopped = new Promise<void>((resolve) => {
-			finish = resolve;
-		});
+		const stopped = Promise.withResolvers<boolean>();
 		const vm: FakeVm = {
 			boot,
 			sink,
 			ref: { machine: boot.machine, attempt: boot.attempt },
 			sent,
-			stops: 0,
-			finishStop: () => finish(),
+			stops: [],
+			finishStop: (clean = true) => stopped.resolve(clean),
 			write: (tty: Tty, data) => sent.push(["write", tty, data]),
 			resize: (tty: Tty, cols, rows) => sent.push(["resize", tty, cols, rows]),
 			openPty: (pty, cols, rows) => sent.push(["openPty", pty, cols, rows]),
 			closePty: (pty) => sent.push(["closePty", pty]),
 			reconfigure: (hosts) => sent.push(["reconfigure", hosts]),
 			deliver: (nic, frame) => sent.push(["deliver", nic, frame]),
-			stop() {
-				vm.stops++;
-				return stopped;
+			stop(how) {
+				vm.stops.push(how);
+				return stopped.promise;
 			},
 		};
 		started.push(vm);
@@ -271,6 +275,8 @@ function setup() {
 	};
 }
 
+const never = new AbortController().signal;
+
 describe("a name used again", () => {
 	const web = parseMachineName("web") as MachineName;
 	const bootWeb = (t: ReturnType<typeof setup>, n: number, attempt: number) => {
@@ -287,7 +293,7 @@ describe("a name used again", () => {
 		const old = bootWeb(t, 1, 1);
 		old.sink.ready(old.ref, 10);
 		t.run({ type: "screen/create", session: `${web}:sh1` }, { type: "pty/open", session: `${web}:sh1` });
-		t.run({ type: "vm/stop", machine: web, attempt: 1 });
+		t.run({ type: "vm/stop", machine: web, attempt: 1, how: "drop" });
 		old.finishStop();
 		await settle();
 		t.run(
@@ -306,7 +312,7 @@ describe("a name used again", () => {
 		old.sink.consoleBytes(old.ref, bytes("late"));
 		old.sink.ptyOpened(old.ref, 1);
 		old.sink.ptyBytes(old.ref, 1, bytes("late"));
-		old.sink.ptyExited(old.ref, 1);
+		old.sink.ptyExited(old.ref, 1, false);
 		old.sink.frame(old.ref, 0, new Uint8Array(60));
 		old.sink.failed(old.ref, "late");
 		expect(t.take()).toEqual([]);
@@ -347,8 +353,8 @@ describe("vm/boot", () => {
 		const t = setup();
 		const first = t.boot(3, 1);
 		const second = t.boot(3, 2);
-		expect(first.stops).toBe(1);
-		expect(second.stops).toBe(0);
+		expect(first.stops).toEqual(["save"]);
+		expect(second.stops).toEqual([]);
 
 		first.sink.stage(first.ref, "kernel");
 		first.sink.ready(first.ref, 900);
@@ -367,7 +373,7 @@ describe("vm/boot", () => {
 		t.run({ type: "vm/boot", machine: "node3", attempt: 2, config: config(3) });
 		t.run({ type: "vm/boot", machine: "node3", attempt: 1, config: config(3) });
 		expect(t.vms.started).toHaveLength(1);
-		expect(t.vms.of("node3").stops).toBe(0);
+		expect(t.vms.of("node3").stops).toEqual([]);
 	});
 });
 
@@ -377,14 +383,14 @@ describe("vm/stop", () => {
 		const vm = t.ready(3);
 		t.take();
 
-		t.run({ type: "vm/stop", machine: "node3", attempt: 1 });
+		t.run({ type: "vm/stop", machine: "node3", attempt: 1, how: "drop" });
 		await settle();
-		expect(vm.stops).toBe(1);
+		expect(vm.stops).toEqual(["drop"]);
 		expect(t.events).toEqual([]);
 
 		vm.finishStop();
 		await settle();
-		expect(t.take()).toEqual([{ type: "vm/stopped", machine: "node3", attempt: 1 }]);
+		expect(t.take()).toEqual([{ type: "vm/stopped", machine: "node3", attempt: 1, clean: true, at: 0 }]);
 	});
 
 	test("is idempotent: a repeat while stopping reports once, a repeat afterwards reports the end state again", async () => {
@@ -392,35 +398,143 @@ describe("vm/stop", () => {
 		const vm = t.ready(3);
 		t.take();
 
-		t.run({ type: "vm/stop", machine: "node3", attempt: 1 }, { type: "vm/stop", machine: "node3", attempt: 1 });
+		t.run(
+			{ type: "vm/stop", machine: "node3", attempt: 1, how: "drop" },
+			{ type: "vm/stop", machine: "node3", attempt: 1, how: "drop" },
+		);
 		vm.finishStop();
 		await settle();
-		expect(vm.stops).toBe(1);
-		expect(t.take()).toEqual([{ type: "vm/stopped", machine: "node3", attempt: 1 }]);
+		expect(vm.stops).toEqual(["drop"]);
+		expect(t.take()).toEqual([{ type: "vm/stopped", machine: "node3", attempt: 1, clean: true, at: 0 }]);
 
-		t.run({ type: "vm/stop", machine: "node3", attempt: 1 });
-		expect(t.take()).toEqual([{ type: "vm/stopped", machine: "node3", attempt: 1 }]);
+		t.run({ type: "vm/stop", machine: "node3", attempt: 1, how: "drop" });
+		expect(t.take()).toEqual([{ type: "vm/stopped", machine: "node3", attempt: 1, clean: true, at: 0 }]);
 	});
 
 	test("a stop for a stale attempt leaves the current vm alone and reports nothing", async () => {
 		const t = setup();
 		t.boot(3, 1);
 		const current = t.boot(3, 2);
-		t.run({ type: "vm/stop", machine: "node3", attempt: 1 });
+		t.run({ type: "vm/stop", machine: "node3", attempt: 1, how: "drop" });
 		await settle();
-		expect(current.stops).toBe(0);
+		expect(current.stops).toEqual([]);
 		expect(t.events).toEqual([]);
 	});
 
 	test("a stopping vm is quiet, and its machine takes no more input", async () => {
 		const t = setup();
 		const vm = t.atPrompt(3);
-		t.run({ type: "vm/stop", machine: "node3", attempt: 1 });
+		t.run({ type: "vm/stop", machine: "node3", attempt: 1, how: "drop" });
 		vm.sink.failed(vm.ref, "powered off");
 		vm.sink.consoleBytes(vm.ref, bytes("bye"));
 		t.screens.get("node3:console").io.input("ls\r");
 		expect(t.events).toEqual([]);
 		expect(vm.sent).toEqual([]);
+	});
+});
+
+describe("power", () => {
+	const reboots = (t: ReturnType<typeof setup>) =>
+		t.run({ type: "vm/stop", machine: "node1", attempt: 1, how: "reboot" });
+
+	test("a guest that is shutting down is still heard and seen, and takes no more", () => {
+		const t = setup();
+		t.run(
+			{ type: "port/attach", port: 1, machine: "node1", nic: 0 },
+			{ type: "link/set", port: 1, machine: "node1", nic: 0, up: true, cause: "runtime" },
+		);
+		const vm = t.atPrompt(1);
+		reboots(t);
+		expect(vm.stops).toEqual(["reboot"]);
+		vm.sink.consoleBytes(vm.ref, bytes("The system is going down NOW!"));
+		vm.sink.frame(vm.ref, 0, arpRequest(1, 2));
+		expect(t.screens.get("node1:console").text()).toContain("The system is going down NOW!");
+		expect(t.capture.counters.in).toBe(1);
+
+		t.take();
+		vm.sink.consoleBytes(vm.ref, bytes(prompt(0)));
+		vm.sink.ptyExited(vm.ref, 1, true);
+		vm.sink.halted(vm.ref, "off");
+		vm.sink.nicLost(vm.ref, 1, "eth1 stopped: signal 15.");
+		t.screens.get("node1:console").io.input("ls\r");
+		expect(t.take()).toEqual([]);
+		expect(vm.sent).toEqual([]);
+	});
+
+	test("says a guest went down by itself, with the shells it took away but not one that had exited", () => {
+		const t = setup();
+		const vm = t.atPrompt(1);
+		for (const k of [1, 2, 3] as const) {
+			t.run({ type: "screen/create", session: `node1:sh${k}` }, { type: "pty/open", session: `node1:sh${k}` });
+			vm.sink.ptyOpened(vm.ref, k);
+		}
+		vm.sink.ptyExited(vm.ref, 1, false);
+		vm.sink.ptyExited(vm.ref, 2, true);
+		t.take();
+		vm.sink.halted(vm.ref, "reboot");
+		expect(t.take()).toEqual([
+			{ type: "session/ended", session: "node1:sh3" },
+			{ type: "vm/halted", machine: "node1", attempt: 1, next: "reboot", closed: ["node1:sh2"] },
+		]);
+	});
+
+	test("a command that a power off or a reboot cut short says so", async () => {
+		const t = setup();
+		t.atPrompt(1);
+		const asked = t.engine.exec.inject("node1:console", "sleep 100", "bar", never);
+		reboots(t);
+		await expect(asked).rejects.toThrow("node1 rebooted before the command returned.");
+		const vm = t.atPrompt(2);
+		const halted = t.engine.exec.inject("node2:console", "poweroff; sleep 100", "bar", never);
+		vm.sink.halted(vm.ref, "off");
+		await expect(halted).rejects.toThrow("node2 powered off before the command returned.");
+	});
+
+	test("reports the stop with how it went, and a drop hurries it without reporting it twice", async () => {
+		const t = setup();
+		const vm = t.ready(1);
+		reboots(t);
+		reboots(t);
+		t.run({ type: "vm/stop", machine: "node1", attempt: 1, how: "drop" });
+		expect(vm.stops).toEqual(["reboot", "drop"]);
+		t.take();
+		vm.finishStop(false);
+		await settle();
+		expect(t.take()).toEqual([{ type: "vm/stopped", machine: "node1", attempt: 1, clean: false, at: 0 }]);
+	});
+
+	test("the next boot waits for the last one's disks, and starts its console over", async () => {
+		const t = setup();
+		const vm = t.atPrompt(1);
+		const screen = t.screens.get("node1:console");
+		screen.io.input("half a li");
+		vm.sink.failed(vm.ref, "Kernel panic.");
+		t.run({ type: "vm/stop", machine: "node1", attempt: 1, how: "save" });
+		t.run({ type: "vm/boot", machine: "node1", attempt: 2, config: config(1) });
+		let released = false;
+		void t.vms.of("node1", 2).boot.released.then(() => {
+			released = true;
+		});
+		await settle();
+		expect(released).toBe(false);
+		vm.finishStop();
+		await settle();
+		expect(released).toBe(true);
+
+		const next = t.vms.of("node1", 2);
+		expect(screen.shell).toBe("unknown");
+		next.sink.ready(next.ref, 1);
+		next.sink.consoleBytes(next.ref, bytes(prompt(0)));
+		void t.engine.exec.inject("node1:console", "true", "bar", never).catch(() => {});
+		expect(next.sent).toEqual([["write", "console", "true\r"]]);
+	});
+
+	test("a note goes to the session's screen, if it has one", () => {
+		const t = setup();
+		t.boot(1);
+		t.run({ type: "screen/note", session: "node1:console", text: "node1 is off." });
+		t.run({ type: "screen/note", session: "node9:console", text: "nobody" });
+		expect(t.screens.get("node1:console").notes).toEqual(["node1 is off."]);
 	});
 });
 
@@ -697,8 +811,8 @@ describe("sessions", () => {
 		]);
 		t.take();
 
-		vm.sink.ptyExited(vm.ref, 1);
-		vm.sink.ptyExited(vm.ref, 1);
+		vm.sink.ptyExited(vm.ref, 1, false);
+		vm.sink.ptyExited(vm.ref, 1, false);
 		expect(t.take()).toEqual([{ type: "session/ended", session: "node2:sh1" }]);
 	});
 
@@ -714,7 +828,7 @@ describe("sessions", () => {
 		expect(vm.sent).toEqual([["closePty", 3]]);
 		expect(t.take()).toEqual([{ type: "session/ended", session: "node2:sh3" }]);
 
-		vm.sink.ptyExited(vm.ref, 3);
+		vm.sink.ptyExited(vm.ref, 3, false);
 		t.run({ type: "pty/close", session: "node2:sh3" });
 		expect(t.events).toEqual([]);
 	});
@@ -849,7 +963,7 @@ describe("dispose", () => {
 		t.take();
 
 		t.engine.dispose();
-		expect([a.stops, b.stops]).toEqual([1, 1]);
+		expect([a.stops, b.stops]).toEqual([["drop"], ["drop"]]);
 		expect(t.intervals[0].cancelled).toBe(true);
 		expect(t.screens.disposed).toEqual(["node1:console", "node2:console"]);
 
@@ -860,8 +974,6 @@ describe("dispose", () => {
 });
 
 describe("exec", () => {
-	const never = new AbortController().signal;
-
 	test("types the line into the session, marks it, and resolves at the shell's next D with what it printed", async () => {
 		const t = setup();
 		const vm = t.atPrompt(1);
@@ -1150,7 +1262,7 @@ describe("exec", () => {
 		const t = setup();
 		t.atPrompt(1);
 		const stopped = t.engine.exec.inject("node1:console", "sleep 100", "bar", never);
-		t.run({ type: "vm/stop", machine: "node1", attempt: 1 });
+		t.run({ type: "vm/stop", machine: "node1", attempt: 1, how: "drop" });
 		await expect(stopped).rejects.toBeInstanceOf(ExecRefused);
 		await expect(stopped).rejects.toThrow("node1:console closed before the command returned.");
 		expect(t.screens.get("node1:console").made[0].ended).toBeGreaterThan(0);
@@ -1165,7 +1277,7 @@ describe("exec", () => {
 		other.sink.ptyOpened(other.ref, 1);
 		other.sink.ptyBytes(other.ref, 1, bytes(prompt(0)));
 		const exited = t.engine.exec.inject("node3:sh1", "exit", "bar", never);
-		other.sink.ptyExited(other.ref, 1);
+		other.sink.ptyExited(other.ref, 1, false);
 		await expect(exited).rejects.toThrow("node3:sh1 closed before the command returned.");
 	});
 });

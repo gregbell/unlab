@@ -1,33 +1,47 @@
 import {
+	ACCEPTS,
 	isPlanError,
 	type LabState,
+	type Lifecycle,
 	type LinkChange,
 	type MachineName,
 	type NicName,
+	type NicNo,
 	type NicRef,
 	nicLabel,
+	nicPortsOf,
 	type PortNo,
 	planLink,
+	plugsOf,
 } from "../../model/index.ts";
 import { nicName } from "../../net/index.ts";
 import { defineVerb, refuse } from "../define.ts";
 import * as slots from "../grammar/slots.ts";
 import { andList, planErrorSentence, ports, skippedPart } from "./words.ts";
 
+/** `off` for a cable that is in, on a machine that is off: its link comes up when the machine boots. */
+export type CableLink = "up" | "cut" | "unplugged" | "off";
+
 /** One NIC's cable as `link_set` reports it. */
 export interface CableState {
 	readonly machine: MachineName;
 	readonly nic: NicName;
 	readonly port: PortNo | null;
-	readonly link: "up" | "cut" | "unplugged";
+	readonly link: CableLink;
+}
+
+/** Null while the machine takes no change to its cables. */
+export function cableLink(life: Lifecycle, nic: NicNo): CableLink | null {
+	const plug = ACCEPTS[life.phase].cables ? plugsOf(life)[nic] : undefined;
+	if (!plug) return null;
+	if (plug.kind === "none") return "unplugged";
+	return plug.link === "up" && life.phase === "off" ? "off" : plug.link;
 }
 
 function cable(lab: LabState, { machine, nic }: NicRef): CableState | null {
 	const life = lab.machines[machine]?.life;
-	const plug = life?.phase === "ready" ? life.plugs[nic] : undefined;
-	if (!plug) return null;
-	const at = { machine, nic: nicName(nic) };
-	return plug.kind === "port" ? { ...at, port: plug.port, link: plug.link } : { ...at, port: null, link: "unplugged" };
+	const link = life ? cableLink(life, nic) : null;
+	return life && link ? { machine, nic: nicName(nic), port: nicPortsOf(life)[nic] ?? null, link } : null;
 }
 
 /** The cable as a person names it: `node2`, or `node2:eth1` when the machine has more than one. */
@@ -38,7 +52,7 @@ function label(lab: LabState, { machine, nic }: NicRef): string {
 
 function applied(lab: LabState, change: LinkChange): boolean {
 	const now = cable(lab, change);
-	return now !== null && now.port === change.port && (now.link === "up") === change.up;
+	return now !== null && now.port === change.port && (now.link !== "cut") === change.up;
 }
 
 const same = (a: NicRef, b: NicRef): boolean => a.machine === b.machine && a.nic === b.nic;
@@ -62,6 +76,7 @@ export const link = defineVerb({
 	name: "link",
 	about: "plug or cut cables",
 	danger: false,
+	phases: ["ready", "off"],
 	grammar: { link: slots.choice(["up", "down"]), machines: slots.cables() },
 	plan(a, lab) {
 		const up = a.link === "up";
@@ -82,6 +97,10 @@ export const link = defineVerb({
 			const lead = parts.length === 0 ? "change nothing: " : "";
 			parts.push(`${lead}${names(plan.unchanged)} ${are} already ${plan.up ? "up" : "cut"}`);
 		}
+		const off = [...new Set(plan.changes.map((c) => c.machine))].filter(
+			(name) => lab.machines[name]?.life.phase === "off",
+		);
+		if (off.length > 0) parts.push(`${andList(off)} ${off.length === 1 ? "is" : "are"} off`);
 		return [...parts, ...skippedPart(plan.skipped)].join(" · ");
 	},
 	async execute(plan, ctx, deps) {
@@ -89,7 +108,7 @@ export const link = defineVerb({
 		const settled = await deps.until((s) => plan.changes.every((c) => applied(s, c)), ctx.signal);
 		const cables = [...plan.changes, ...plan.unchanged].flatMap((ref) => {
 			const now = cable(settled, ref);
-			return now ? [{ now, text: `${label(settled, ref)} ${now.link}` }] : [];
+			return now ? [{ now, text: `${label(settled, ref)} ${now.link === "off" ? "plugged in" : now.link}` }] : [];
 		});
 		const text = cables.map((c) => c.text).join(", ");
 		return { kind: "visible", text: [text, ...skippedPart(plan.skipped)].join(" · "), data: cables.map((c) => c.now) };
@@ -98,7 +117,7 @@ export const link = defineVerb({
 		name: "link_set",
 		title: "Plug in or cut cables",
 		description:
-			"Plug in (up) or cut (down) the switch cables of machines or of single NICs. Returns the port and link state per NIC. A cable already as asked is left alone.",
+			"Plug in (up) or cut (down) the switch cables of machines or of single NICs. Returns the port and link state per NIC. A cable already as asked is left alone. A machine that is off can be unplugged or plugged in; its link comes up when it boots.",
 		policy: "run",
 	},
 });

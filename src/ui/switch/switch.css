@@ -119,7 +119,7 @@
 			color: var(--machine-hue);
 		}
 
-		.port[data-state="booting"] .cable {
+		.port:is([data-state="booting"], [data-state="stopping"]) .cable {
 			border-left-style: dotted;
 		}
 
@@ -173,7 +173,7 @@
 			color: var(--down);
 		}
 
-		.port[data-state="booting"] .word {
+		.port:is([data-state="booting"], [data-state="stopping"]) .word {
 			color: var(--text-2);
 		}
 

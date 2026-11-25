@@ -50,7 +50,7 @@ export interface LinkRow {
 	readonly up: boolean;
 	/** `port 3 link down`. */
 	readonly text: string;
-	/** `Cable to node3 cut by the agent.` */
+	/** `Cable to node3 cut by the agent.`, or `node3 stopped.` */
 	readonly cause: string;
 }
 
@@ -114,13 +114,18 @@ function note(e: FrameEntry): string | null {
 	return parts.length ? parts.join(" · ") : null;
 }
 
-/** The lab raises a link only when a machine first comes up, so that is a plug-in, not a reconnect. */
+/** The lab raises a link only when a machine comes up with a cable it did not have, so that is a plug-in, not a reconnect. */
 function linkVerb(e: LinkEntry): string {
 	if (!e.up) return "cut";
 	return e.cause === "runtime" ? "plugged in" : "reconnected";
 }
 
-const WHO: Readonly<Record<Cause, string>> = { agent: "the agent", bar: "you", button: "you", runtime: "the lab" };
+const WHO: Readonly<Record<Exclude<Cause, "power">, string>> = {
+	agent: "the agent",
+	bar: "you",
+	button: "you",
+	runtime: "the lab",
+};
 
 function linkRow(e: LinkEntry, several: HasSeveralNics): LinkRow {
 	const cable = nicLabel(e.machine, e.nic, several(e.machine));
@@ -131,7 +136,10 @@ function linkRow(e: LinkEntry, several: HasSeveralNics): LinkRow {
 		port: e.port,
 		up: e.up,
 		text: `port ${e.port} link ${e.up ? "up" : "down"}`,
-		cause: `Cable to ${cable} ${linkVerb(e)} by ${WHO[e.cause]}.`,
+		cause:
+			e.cause === "power"
+				? `${e.machine} ${e.up ? "booted" : "stopped"}.`
+				: `Cable to ${cable} ${linkVerb(e)} by ${WHO[e.cause]}.`,
 	};
 }
 

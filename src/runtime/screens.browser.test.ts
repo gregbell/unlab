@@ -531,6 +531,65 @@ describe("the shell's phase", () => {
 	});
 });
 
+describe("a guest that has ended", () => {
+	const boots = async (left: string) => {
+		const sent: string[] = [];
+		const s = screen({ input: (data) => sent.push(data) });
+		await s.mount(host());
+		s.write(bytes(`before\r\n${left}`));
+		s.note("node1 is rebooting. sh1 closed with it.");
+		s.expectPromptToken("00ff");
+		s.write(bytes("Welcome\r\n$ "));
+		return { s, sent };
+	};
+
+	test.each([
+		["nothing", ""],
+		["half a colour", `${ESC}[3`],
+		["half a mark", `${ESC}]133;A;unlab=`],
+		["a full-screen program", `${ESC}[?1049h${ESC}[H${ESC}[2Jfull screen${ESC}[5;1Hbottom`],
+		["a full-screen program that only switched screens", `${ESC}7${ESC}[?47h${ESC}[H${ESC}[2Jfull screen`],
+		["a scroll region", `${ESC}[2;4r${ESC}[2;1H`],
+	])("what it left in %s is undone, what it printed stays, and the next boot follows the note", async (_, left) => {
+		const { s } = await boots(left);
+		const lines = s
+			.readText()
+			.split("\n")
+			.filter((line) => line !== "");
+		expect(lines).toEqual(["before", "node1 is rebooting. sh1 closed with it.", "Welcome", "$"]);
+		expect(s.write(bytes(`${ESC}]133;A;unlab=00ff${BEL}`))).toEqual([{ kind: "phase", phase: "prompt" }]);
+	});
+
+	test("a program that drew over the main screen leaves nothing under the next boot", async () => {
+		const { s } = await boots(`one\r\ntwo\r\nthree${ESC}[2;1H`);
+		expect(s.readText()).not.toMatch(/two|three/);
+	});
+
+	test("the keys it had changed are ordinary again", async () => {
+		const el = host();
+		const sent: string[] = [];
+		const s = screen({ input: (data) => sent.push(data) });
+		await s.mount(el);
+		s.write(bytes(`${ESC}[?1h${ESC}[?1004h${ESC}[?2004h`));
+		s.note("node1 is off.");
+		s.setFocused(true);
+		await frames(2);
+		(document.activeElement as HTMLElement).dispatchEvent(
+			new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true, cancelable: true }),
+		);
+		expect(sent).toEqual([`${ESC}[A`]);
+	});
+
+	test("a note before the mount appears after it, in its place", async () => {
+		const s = screen();
+		s.write(bytes("before\r\n"));
+		s.note("node1 is off.");
+		s.write(bytes("after"));
+		await s.mount(host());
+		expect(s.readText().split("\n").filter(Boolean)).toEqual(["before", "node1 is off.", "after"]);
+	});
+});
+
 describe("disposal", () => {
 	test("a disposed screen leaves the host empty and takes no more bytes", async () => {
 		const el = host();

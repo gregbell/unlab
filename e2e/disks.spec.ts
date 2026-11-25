@@ -1,6 +1,6 @@
 import { expect, type Page, test } from "@playwright/test";
 import { chromiumExecutable } from "../test/support/chromium.ts";
-import { root, shell, typed } from "./lab.ts";
+import { crash, root, shell, typed } from "./lab.ts";
 import { call } from "./webmcp.ts";
 
 test.use({
@@ -82,7 +82,7 @@ test("extra disks are blank and sized as asked, take a partition and a file syst
 	await ready(page, "1 of 1 machine ready");
 	await held();
 
-	await shell(page, 1, "sudo poweroff -f").catch(() => {});
+	await crash(page, 1);
 	await expect(details).toContainText("failed", { timeout: 60_000 });
 	await typed(page, "boot node1");
 	await ready(page, "1 of 1 machine ready");

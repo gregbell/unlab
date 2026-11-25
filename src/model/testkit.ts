@@ -3,7 +3,7 @@
 import { isAddressFault, parseAddress } from "../net/index.ts";
 import { parseGiB } from "./disks.ts";
 import { isNameFault, parseChosenName } from "./identity.ts";
-import { isPlanError, planBootAgain, planLink, planSpawn } from "./machines.ts";
+import { isPlanError, planBoot, planLink, planSpawn } from "./machines.ts";
 import type {
 	Address,
 	AgentCall,
@@ -15,9 +15,11 @@ import type {
 	LabState,
 	Machine,
 	MachineName,
+	Next,
 	NicRef,
 	NicSpec,
 	RuntimeEvent,
+	SessionId,
 	Source,
 	SpawnRequest,
 } from "./types.ts";
@@ -105,11 +107,24 @@ export function spawnEvent(state: LabState, count: number, options: SpawnOptions
 	return { type: "cmd/spawn", plan, at: options.at ?? state.now };
 }
 
-export function bootAgainEvent(state: LabState, machine: MachineName, at: number = state.now): CommandEvent {
-	const plan = planBootAgain(state, machine);
-	if (plan === null || isPlanError(plan)) throw new Error(`cannot plan boot again: ${JSON.stringify(plan)}`);
-	return { type: "cmd/boot-again", machine, ports: plan.ports, at };
+export function bootEvent(state: LabState, machine: MachineName, at: number = state.now): CommandEvent {
+	const plan = planBoot(state, [machine]);
+	if (isPlanError(plan)) throw new Error(`cannot plan the boot: ${JSON.stringify(plan)}`);
+	return { type: "cmd/boot", machines: plan, at };
 }
+
+export const power = (next: Next, ...machines: readonly MachineName[]): CommandEvent => ({
+	type: "cmd/power",
+	machines,
+	next,
+});
+
+export const hasHalted = (
+	machine: MachineName,
+	next: Next,
+	attempt = 1,
+	closed: readonly SessionId[] = [],
+): RuntimeEvent => ({ type: "vm/halted", machine, attempt, next, closed });
 
 export function linkEvent(state: LabState, up: boolean, ...cables: readonly (MachineName | NicRef)[]): CommandEvent {
 	const changes = planLink(state, cables, up);
@@ -131,10 +146,12 @@ export const hasFailed = (machine: MachineName, attempt = 1, reason = "Kernel pa
 	reason,
 });
 
-export const hasStopped = (machine: MachineName, attempt = 1): RuntimeEvent => ({
+export const hasStopped = (machine: MachineName, attempt = 1, clean = true, at = 0): RuntimeEvent => ({
 	type: "vm/stopped",
 	machine,
 	attempt,
+	clean,
+	at,
 });
 
 export const remove = (...machines: readonly MachineName[]): CommandEvent => ({
