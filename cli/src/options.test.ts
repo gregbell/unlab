@@ -3,7 +3,7 @@ import { lineOf, portPair, readOptions, shellWord, UsageError } from "./options.
 
 test("options come before the command, and what follows it is the command's own", () => {
 	expect(readOptions([])).toMatchObject({
-		port: 47122,
+		port: 27122,
 		origin: "https://unlab.run",
 		words: [],
 		lan: false,
