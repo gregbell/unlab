@@ -629,6 +629,10 @@
 	.dt-device b {
 		color: var(--machine-hue, var(--text));
 	}
+	.dt-boot-error {
+		color: var(--down);
+		overflow-wrap: anywhere;
+	}
 	.dt-device-name {
 		display: flex;
 		align-items: center;

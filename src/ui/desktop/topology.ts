@@ -71,7 +71,7 @@ export function topologyMap(lab: LabState, selected: Selection | null, pick: (s:
 				m = d.kind === "machine" ? lab.machines[d.name] : null;
 			const meta =
 				d.kind === "switch" ? `${edges.filter((e) => e.on === d.name).length} / 8 ports` : (m?.spec.image ?? "");
-			return html`<button class="n-node" data-machine=${d.kind === "machine" ? d.name : nothing} data-switch=${d.kind === "switch" ? d.name : nothing} data-hue=${m?.hue ?? nothing} aria-pressed=${selected?.name === d.name} data-selected=${selected?.name === d.name} style=${`left:${(100 * p.x) / width}%;top:${p.y}px`} aria-label=${`Inspect ${d.kind} ${d.name}`} @click=${() => pick(d)}>
-				${art(d.kind)}<span class="n-node-label"><strong>${d.name}</strong><small>${meta}</small></span></button>`;
+			return html`<button class="n-node" data-machine=${d.kind === "machine" ? d.name : nothing} data-switch=${d.kind === "switch" ? d.name : nothing} data-hue=${m?.hue ?? nothing} aria-pressed=${selected?.name === d.name} data-selected=${selected?.name === d.name} style=${`left:${(100 * p.x) / width}%;top:${p.y}px`} @click=${() => pick(d)}>
+				<span class="visually-hidden">Inspect ${d.kind} </span>${art(d.kind)}<span class="n-node-label"><strong>${d.name}</strong> <small>${meta}</small></span></button>`;
 		})}</div></div>`;
 }

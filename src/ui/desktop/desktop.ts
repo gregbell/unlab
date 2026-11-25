@@ -973,9 +973,10 @@ class Desktop extends UnlabElement {
 		const machine = device.kind === "machine" ? lab.machines[device.name] : undefined;
 		const ports = device.kind === "switch" ? selectPorts(device.name)(lab) : [];
 
-		const summary = machine
+		const detail = machine
 			? `${machine.spec.image} · ${machine.spec.cpus ?? 1} vCPU · ${machine.spec.memMiB} MiB`
 			: `${ports.filter((p) => p.machine).length} / ${ports.length} ports · ${device.kind === "switch" ? selectSubnets(device.name)(lab) : ""}`;
+		const summary = machine && machine.life.phase !== "ready" ? `${detail} · ${machine.life.phase}` : detail;
 		const portLabels = ports.map((p) => `Port ${p.port} · ${p.machine ? `${p.machine.label} · ${p.state}` : "Empty"}`);
 		const portStrip = ports.length
 			? html`<span class="dt-port-strip" aria-hidden="true">${ports.map(
@@ -983,7 +984,7 @@ class Desktop extends UnlabElement {
 				)}</span>`
 			: nothing;
 		return html`<div class="dt-row" data-machine=${machine ? name : nothing} data-switch=${kind === "switch" ? name : nothing} data-hue=${machine?.hue ?? nothing}>
-		<div class="dt-row-main"><button class="dt-device" aria-label=${kind === "machine" ? `Configure ${name}` : `Inspect ${name}`} aria-description=${ports.length ? portLabels.join(". ") : nothing} @click=${() => this.inspect(device)}>${icon(kind)}<span><span class="dt-device-name"><b>${name}</b>${portStrip}</span><small>${summary}</small></span></button>
+		<div class="dt-row-main"><button class="dt-device" aria-description=${ports.length ? portLabels.join(". ") : nothing} @click=${() => this.inspect(device)}><span class="visually-hidden">${kind === "machine" ? "Configure" : "Inspect"} </span>${icon(kind)}<span><span class="dt-device-name"><b>${name}</b>${portStrip}</span> <small>${summary}</small></span></button>
 		${machine ? this.terminalButton(machine.name) : html`<button class="dt-primary" @click=${() => this.capture(name)}>Open capture ↗</button>`}</div>
 		</div>`;
 	}
@@ -1013,7 +1014,7 @@ class Desktop extends UnlabElement {
 		}</div></div>
 		<div class="dt-rack-scroll"><div class="dt-group"><h3>Machines <span>${lab.rail.length}</span></h3>${lab.rail.map((name) => this.deviceRow({ kind: "machine", name }))}</div>
 		<div class="dt-group"><h3>Switches <span>${lab.switches.length}</span></h3>${lab.switches.map((name) => this.deviceRow({ kind: "switch", name }))}</div></div>
-		<footer class="dt-rackfoot"><span><i class="dt-led" data-ready=${used > 0}></i>${used} links up</span><span>${lab.switches.length} switches</span></footer>`;
+		<footer class="dt-rackfoot"><span><i class="dt-led" data-ready=${used > 0}></i>${used} ${used === 1 ? "link" : "links"} up</span><span>${lab.switches.length} ${lab.switches.length === 1 ? "switch" : "switches"}</span></footer>`;
 	}
 	private terminalButton(name: string) {
 		return html`<button type="button" class="dt-primary dt-terminal-icon" aria-label=${`Open terminal for ${name}`} title=${`Open terminal for ${name}`} @click=${() => this.console(name)}>${icon("console")}</button>`;
@@ -1048,6 +1049,7 @@ class Desktop extends UnlabElement {
 		const ports = nicPortsOf(m.life),
 			accepts = ACCEPTS[m.life.phase];
 		return html`<div class="dt-config" data-hue=${m.hue}><div class="dt-config-tools"><strong>${m.name} · ${m.life.phase}</strong>${this.terminalButton(m.name)}${this.deviceActionsButton({ kind: "machine", name: m.name })}</div>
+		${m.life.phase === "failed" ? html`<p class="dt-boot-error">${m.life.reason}</p>` : nothing}
 		<h3>Compute</h3><dl><div><dt>Guest image</dt><dd>${m.spec.image}</dd></div><div><dt>Virtual CPUs</dt><dd>${m.spec.cpus ?? 1}</dd></div><div><dt>Memory</dt><dd>${m.spec.memMiB} MiB</dd></div></dl>
 		<h3>Storage</h3><dl>${disksOf(m.spec).map((d, i) => html`<div><dt>${i === 0 ? "Root" : "Data"} · ${d.device}</dt><dd>${d.gib} GiB</dd></div>`)}</dl>
 		<div class="dt-config-network"><h3>Network</h3><button class="dt-primary" ?disabled=${ping.disabled} @click=${ping.run}>${ping.label}</button></div><dl><div><dt>Package gateway</dt><dd>${m.spec.gateway ? "Enabled" : "Disabled"}</dd></div></dl>
