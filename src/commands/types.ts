@@ -77,6 +77,12 @@ export interface ReportBlock {
 	readonly focus: SessionId | null;
 }
 
+/** A term and what it means. */
+export interface ReportRow {
+	readonly term: string;
+	readonly text: string;
+}
+
 export type Result =
 	/** The effect is visible in the lab, so the bar closes. */
 	| { readonly kind: "visible"; readonly text: string; readonly data: unknown }
@@ -85,6 +91,8 @@ export type Result =
 			readonly kind: "report";
 			readonly header: string;
 			readonly blocks: readonly ReportBlock[];
+			/** What the report says of no machine. */
+			readonly rows?: readonly ReportRow[];
 			readonly data: unknown;
 	  }
 	| { readonly kind: "failed"; readonly error: LineError };
@@ -120,7 +128,9 @@ export function lineError(message: string, token?: number, fix?: string): LineEr
 /** Why a yes to `asked` is not a yes to `now`, or null when they ask the same of the same machines. */
 export function changedSinceAsked(asked: ConfirmText, now: ConfirmText): LineError | null {
 	if (JSON.stringify(asked) === JSON.stringify(now)) return null;
-	return lineError(`What this does to ${asked.machines.map((m) => m.name).join(", ")} has changed since it was asked.`);
+	return lineError(
+		`What this does to ${asked.machines.map((m) => m.name).join(", ")} has changed since it was asked, so ask again.`,
+	);
 }
 
 export function isLineError(value: object): value is LineError {

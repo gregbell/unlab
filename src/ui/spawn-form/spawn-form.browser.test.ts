@@ -132,7 +132,7 @@ describe("<unlab-spawn-form> preview", () => {
 		await expect.element(button("Boot 1 machine")).toBeDisabled();
 		await expect
 			.element(page.getByRole("alert"))
-			.toHaveTextContent("The lab has no room for another machine. Remove one with rm first. Nothing was changed.");
+			.toHaveTextContent("The lab has no room for another machine, so remove one with rm first. Nothing was changed.");
 		expect(rows()).toEqual([]);
 	});
 });

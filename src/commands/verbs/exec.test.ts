@@ -62,7 +62,7 @@ describe("exec", () => {
 		);
 		expect(lab.parsed("exec all -- uname").validate(lab.store.state)).toEqual({
 			message:
-				"exec has nothing to type into. Skipped node1:console: running a program, node2:console: running a program, node3:console: running a program. Nothing was changed.",
+				"exec wants a session at its prompt here, and node1:console is running a program, node2:console is running a program and node3:console is running a program. Nothing was changed.",
 			token: 1,
 		});
 	});
@@ -78,6 +78,29 @@ describe("exec", () => {
 			["node2", { kind: "unknown" }],
 			["node1", { kind: "skipped", reason: "node1:console is busy running top." }],
 		]);
+	});
+
+	it("fails in the runtime's sentence when the line was typed into no session", async () => {
+		const { lab, calls } = await threeReady();
+		const one = lab.run("exec node1 -- uname", "agent");
+		calls[0].reject(new Error("node1:console has a half-typed line, so finish it there or use another session."));
+		expect(await one).toEqual({
+			kind: "failed",
+			error: { message: "node1:console has a half-typed line, so finish it there or use another session." },
+		});
+		expect(lab.events.at(-1)).toMatchObject({ type: "cmd/logged", line: "exec node1 -- uname", outcome: "failed" });
+
+		lab.runtime({ type: "vm/halted", machine: "node3", attempt: 1, next: "off", closed: [] });
+		const two = lab.run("exec node1,node2,node3 -- uname");
+		calls[1].reject(new Error("node1:console is not open, so use another session."));
+		calls[2].reject(new Error("node2 stopped before the command returned."));
+		expect(await two).toMatchObject({
+			kind: "failed",
+			error: {
+				message:
+					"node1:console is not open, so use another session; node2 stopped before the command returned; node3 is off.",
+			},
+		});
 	});
 
 	it("keeps the last whole lines of a long output and flags it, as it does one the terminal already cut", async () => {
@@ -125,12 +148,12 @@ describe("exec", () => {
 		await lab.lab(1);
 		expect(lab.parse("exec all")).toEqual({ message: "exec wants a command after --. Nothing was changed." });
 		expect(lab.parse("exec nod1 -- ls")).toEqual({
-			message: "No machine called nod1. You have node1. Nothing was changed.",
+			message: "No machine is called nod1, so use node1. Nothing was changed.",
 			token: 1,
 			fix: "exec node1 -- ls",
 		});
 		expect(lab.parse("exec node1:sh4 -- ls")).toEqual({
-			message: "node1 has no session called sh4. It has console. Nothing was changed.",
+			message: "node1 has no session called sh4, so use console. Nothing was changed.",
 			token: 1,
 		});
 	});

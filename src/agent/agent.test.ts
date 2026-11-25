@@ -17,10 +17,11 @@ import { detectModelContext, type ModelContextLike, startAgent, type WebMcpTool 
 
 /** The real store and every verb; the runtime stand-in answers vm/stop so removals finish. */
 function storeLab(files: FilePort = { write: () => Promise.reject(new Error("This test has no file port.")) }) {
+	let held = false;
 	const store = createStore(
 		initialState([{ name: "alpine", label: "alpine 3.24" }], { width: 1300, height: 500 }),
 		(effect) => {
-			if (effect.type === "vm/stop") {
+			if (effect.type === "vm/stop" && !held) {
 				store.dispatchRuntime({
 					type: "vm/stopped",
 					machine: effect.machine,
@@ -46,6 +47,10 @@ function storeLab(files: FilePort = { write: () => Promise.reject(new Error("Thi
 	return {
 		store,
 		registry,
+		/** From now on, a worker that is told to stop has not. */
+		hold() {
+			held = true;
+		},
 		/** Spawns `count` alpine machines and brings them all to ready. */
 		async lab(count: number) {
 			const line = parseLine(registry, `spawn ${count} alpine`, store.state);
@@ -73,6 +78,7 @@ function fakeModelContext() {
 }
 
 const ALL_TOOLS: readonly ToolName[] = [
+	"lab_help",
 	"machines_list",
 	"machines_spawn",
 	"machines_boot",
@@ -174,6 +180,7 @@ describe("registration", () => {
 		expect([...context.tools.values()].map((tool) => tool.title).sort()).toEqual([
 			"Boot machines",
 			"Delete a checkpoint",
+			"Explain the lab's verbs",
 			"List machines",
 			"Plug in or cut cables",
 			"Power machines off",
@@ -533,8 +540,38 @@ describe("a tool set to ask", () => {
 		lab.store.dispatchCommand({ type: "cmd/remove", machines: [gone], cause: "bar" });
 		expect(lab.store.state.machines[gone]).toBeUndefined();
 		agent.answer(id, true);
-		await expect(removing).resolves.toEqual(refusal("node2 is already gone."));
+		await expect(removing).resolves.toEqual(refusal("No machine is called node2, so use node1."));
 		expect(lastCall()).toMatchObject({ id, status: "failed" });
+	});
+});
+
+describe("a machine that changes while a call waits", () => {
+	it.each([
+		["machines_poweroff", { names: "node2" }, "poweroff wants a ready machine here, and node2 is being removed."],
+		[
+			"link_set",
+			{ link: "down", machines: "node2" },
+			"link wants a ready or off machine here, and node2 is being removed.",
+		],
+		[
+			"file_write",
+			{ machine: "node2", path: "/a", text: "" },
+			"write wants a ready machine here, and node2 is being removed.",
+		],
+		[
+			"checkpoint_save",
+			{ machine: "node2", checkpoint: "a" },
+			"checkpoint wants a ready or off machine here, and node2 is being removed.",
+		],
+	] as const)("is named with its state by %s", async (tool, input, sentence) => {
+		const { agent, call, lab, policy, waiting } = await setup();
+		policy(tool, "ask");
+		const reply = call(tool, input);
+		const [asked] = waiting();
+		lab.hold();
+		lab.store.dispatchCommand({ type: "cmd/remove", machines: ["node2"], cause: "bar" });
+		agent.answer(asked.id, true);
+		await expect(reply).resolves.toEqual({ error: `${sentence} Nothing was changed.` });
 	});
 });
 
@@ -615,7 +652,7 @@ describe("shell_read", () => {
 	it("says which machines exist when it is asked for one that does not", async () => {
 		const { call } = await setup();
 		await expect(call("shell_read", { machine: "node9" })).resolves.toEqual(
-			refusal("No machine called node9. You have node1, node2."),
+			refusal("No machine is called node9, so use node1 or node2."),
 		);
 		await expect(call("shell_read", { machine: "node1", lines: 0 })).resolves.toEqual(
 			refusal("whole number from 1 to 500"),
@@ -676,6 +713,8 @@ describe("capture_read", () => {
 
 	it("refuses a filter the capture panel would refuse", async () => {
 		const { call } = await setup();
-		await expect(call("capture_read", { filter: "arp or" })).resolves.toEqual(refusal("A term is a protocol"));
+		await expect(call("capture_read", { filter: "arp or" })).resolves.toEqual(
+			refusal("Capture needs a term on each side of or, such as arp or icmp."),
+		);
 	});
 });

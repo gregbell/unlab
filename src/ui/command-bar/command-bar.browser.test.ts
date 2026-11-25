@@ -193,6 +193,7 @@ describe("<unlab-command-bar> CmdOpen: just opened", () => {
 			"checkpoint",
 			"restore",
 			"forget",
+			"help",
 		]);
 		const listbox = the('[role="listbox"]');
 		expect(listbox.offsetHeight).toBe(8 * 32 + 2 * 28);
@@ -459,6 +460,25 @@ describe("<unlab-command-bar> CmdFanout: exec results", () => {
 			"10.88.0.11/24 · 52:54:00:88:00:0b · up on port 1 · 4 GiB disk · console",
 		);
 		expect(document.querySelector("unlab-command-bar .footnote")).toBeNull();
+	});
+
+	it("shows help as a list of terms, stays open on it, and Enter runs it again", async () => {
+		const { runs } = await mountBar(threeReady(), { recorded: true });
+		await typeLine("help");
+		await userEvent.keyboard("{Enter}");
+		await expect.poll(() => document.querySelector("unlab-command-bar .result")).not.toBeNull();
+		expect(texts(".rows dt")).toEqual(VERBS.map((verb) => verb.name));
+		expect(texts(".rows dd")).toEqual(VERBS.map((verb) => verb.manual.about));
+		expect(await axeViolations()).toEqual([]);
+		await userEvent.keyboard("{ArrowUp} spawn{Enter}");
+		await expect.poll(() => text(".summary")).toMatch(/^spawn <count> <image> /);
+		expect(texts(".rows dt")).toContain("[--extra-disk GiB,...]");
+		expect(await axeViolations()).toEqual([]);
+		const panel = the(".panel");
+		expect(panel.scrollWidth).toBe(panel.clientWidth);
+		expect(isOpen()).toBe(true);
+		await userEvent.keyboard("{Enter}");
+		await expect.poll(() => runs.map(({ line }) => line)).toEqual(["help", "help spawn", "help spawn"]);
 	});
 });
 

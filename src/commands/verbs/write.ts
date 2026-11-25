@@ -1,5 +1,5 @@
 import type { MachineName } from "../../model/index.ts";
-import { defineVerb, refuse } from "../define.ts";
+import { defineVerb, machineNow, Refusal, refuse } from "../define.ts";
 import * as slots from "../grammar/slots.ts";
 import { lineError } from "../types.ts";
 import { count } from "./words.ts";
@@ -30,22 +30,29 @@ function textFault(text: string): string | null {
 	const bytes = bytesOf(text);
 	if (bytes > MAX_TEXT_BYTES) return `text has ${bytes} bytes, and write takes at most ${MAX_TEXT_BYTES}.`;
 	if (text.isWellFormed()) return null;
-	return "text has half of a surrogate pair in it, which is no character and cannot be written as UTF-8.";
+	return "text has half of a surrogate pair in it, which is no character, so leave it out.";
 }
 
 export const write = defineVerb({
 	name: "write",
 	about: "put a text in a file on a machine",
+	description:
+		"Put a text in a file on a machine, as root, in place of what is there. No terminal sees it. The text arrives byte for byte, so end it with a newline if the file should. A link is followed. The file is replaced whole or left as it was, and is on the machine's disk when this returns. Returns the file's path, size, owner and mode.",
 	danger: false,
 	grammar: {
 		machine: slots.machine(),
 		path: slots.filePath(),
 		owner: slots.option("--owner", slots.owner(), null),
 		mode: slots.option("--mode", slots.fileMode(), null),
-		text: slots.verbatim("text"),
+		text: slots.verbatim(
+			"text",
+			`The whole text, kept exactly as it is, its line ends too. Up to ${MAX_TEXT_BYTES / 2 ** 20} MiB.`,
+		),
 	},
-	plan({ machine, path, owner, mode, text }, lab) {
-		if (lab.machines[machine]?.life.phase !== "ready") return refuse(`${machine} is no longer ready.`, "machine");
+	example: { machine: "node1", path: "/etc/motd", mode: "644", text: "hello" },
+	plan({ machine, path, owner, mode, text }, _lab, ctx) {
+		const ready = machineNow(machine, ctx, "machine");
+		if (ready instanceof Refusal) return ready;
 		const fault = textFault(text);
 		if (fault !== null) return refuse(fault, "text");
 		return { machine, file: { path, owner, mode, text } };
@@ -80,8 +87,6 @@ export const write = defineVerb({
 	tool: {
 		name: "file_write",
 		title: "Write a file",
-		description:
-			"Put a text in a file on a machine, as root, in place of what is there. No terminal sees it. The text arrives byte for byte, so end it with a newline if the file should. A link is followed. The file is replaced whole or left as it was, and is on the machine's disk when this returns. Returns the file's path, size, owner and mode.",
 		policy: "run",
 		annotations: { untrustedContentHint: true },
 	},

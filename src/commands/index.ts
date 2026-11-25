@@ -3,6 +3,7 @@ import type { AnyVerb, Command, CommandDeps, CommandFace, ParsedLine, VerbSpec }
 import { oneEditFix } from "./grammar/fix.ts";
 import { tokenize } from "./grammar/tokenize.ts";
 import { type Completion, type LineError, lineError } from "./types.ts";
+import { noVerb } from "./verbs/words.ts";
 
 export type { Approval } from "./approval.ts";
 export type {
@@ -30,9 +31,11 @@ export type {
 } from "./define.ts";
 export { defineVerb, Refusal, refuse } from "./define.ts";
 export type { Parsed } from "./grammar/parse.ts";
+export { noField, slotSchema, written } from "./grammar/schema.ts";
 export type { ArgsOf, Flag, Grammar, Options, ReadContext, Selection, Slot, Value, Variant } from "./grammar/slots.ts";
 export * as slots from "./grammar/slots.ts";
 export { tokenize } from "./grammar/tokenize.ts";
+export type { Manual, ManualArgument } from "./manual.ts";
 export { type CommandService, type CommandServiceDeps, createCommandService } from "./service.ts";
 export type {
 	Completion,
@@ -41,6 +44,7 @@ export type {
 	LineError,
 	Preview,
 	ReportBlock,
+	ReportRow,
 	Result,
 	RunContext,
 	Suggestion,
@@ -83,11 +87,7 @@ export function parseLine(registry: Registry, line: string, lab: LabState): Pars
 	if (!verb) return lineError(`Type a verb first: ${names.join(", ")}.`);
 	const command = registry.find(verb.text);
 	if (!command) {
-		return lineError(
-			`No verb called ${verb.text}. The verbs are ${names.join(", ")}.`,
-			0,
-			oneEditFix(line, verb, names),
-		);
+		return lineError(noVerb(verb.text, names), 0, oneEditFix(line, verb, names));
 	}
 	return command.read(tokenized, lab);
 }

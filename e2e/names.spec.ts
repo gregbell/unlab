@@ -140,7 +140,7 @@ test("every command that takes a machine takes its name", async ({ page }) => {
 	await page.keyboard.press("Control+/");
 	await page.keyboard.type("capture dbx");
 	await page.keyboard.press("Enter");
-	await expect(page.locator("unlab-command-bar")).toContainText("capture cannot read dbx.");
+	await expect(page.locator("unlab-command-bar")).toContainText("capture cannot read dbx, so use");
 	await page.keyboard.press("Escape");
 	await expect(page.locator("unlab-pane:visible")).toHaveCount(0);
 	await typed(page, "focus db --max");

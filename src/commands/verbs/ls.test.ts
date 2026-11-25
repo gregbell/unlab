@@ -1,7 +1,25 @@
 import { describe, expect, it } from "vitest";
+import { createRegistry } from "../index.ts";
+import { fakeDeps, labWith } from "../testing/lab.ts";
 import { storeLab } from "../testing/store.ts";
+import { ls } from "./ls.ts";
 
 describe("ls", () => {
+	it.each(["booting", "ready", "stopping", "off", "restoring", "failed", "removing"] as const)(
+		"says that a machine is %s, to a person and to an agent",
+		async (phase) => {
+			const lab = labWith([{ n: 1, phase }]);
+			const command = createRegistry(fakeDeps(lab).deps, [ls]).command(ls);
+			const result = await command.run({}, { source: "agent", signal: new AbortController().signal });
+			expect(result).toMatchObject({
+				kind: "report",
+				header: `1 machine · 1 ${phase}`,
+				blocks: [{ status: { kind: "state", text: phase } }],
+				data: [{ name: "node1", state: phase, ...(phase === "failed" ? { reason: "No prompt after 120 s." } : {}) }],
+			});
+		},
+	);
+
 	it("returns one block per machine, with its address, cable and sessions, and keeps the bar open", async () => {
 		const lab = storeLab();
 		await lab.lab(3);
@@ -134,7 +152,7 @@ describe("ls", () => {
 
 	it("takes no arguments", () => {
 		expect(storeLab().parse("ls node1")).toEqual({
-			message: "ls takes no arguments, so node1 is one too many. Nothing was changed.",
+			message: "ls takes no arguments, so leave out node1. Nothing was changed.",
 			token: 1,
 		});
 	});

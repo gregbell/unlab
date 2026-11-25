@@ -18,8 +18,7 @@ const args = (line: string, state = lab) => parsedOk(parse(line, state)).args;
 describe("verbs", () => {
 	it("offers the one close verb as the fix for a misspelt verb", () => {
 		expect(parse("spwn 2 alpine")).toEqual({
-			message:
-				"No verb called spwn. The verbs are spawn, rm, ls, exec, link, capture, focus, boot. Nothing was changed.",
+			message: "No verb is called spwn, so use spawn, rm, ls, exec, link, capture, focus or boot. Nothing was changed.",
 			token: 0,
 			fix: "spawn 2 alpine",
 		});
@@ -53,7 +52,7 @@ describe("count", () => {
 
 	it.each(["two", "0", "-1", "2.5", "1e3"])("refuses %s", (bad) => {
 		expect(parse(`spawn ${bad} alpine`)).toMatchObject({
-			message: `spawn wants a count here, not ${bad}. Nothing was changed.`,
+			message: `spawn wants a count such as 2 here, not ${bad}. Nothing was changed.`,
 			token: 1,
 		});
 	});
@@ -66,7 +65,7 @@ describe("image", () => {
 
 	it("names the images there are and fixes a near miss", () => {
 		expect(parse("spawn 2 alpne")).toEqual({
-			message: "No image called alpne. You have alpine, debian. Nothing was changed.",
+			message: "No image is called alpne, so use alpine or debian. Nothing was changed.",
 			token: 2,
 			fix: "spawn 2 alpine",
 		});
@@ -103,7 +102,7 @@ describe("options", () => {
 
 	it("fixes a misspelt flag", () => {
 		expect(parse("spawn 2 alpine --mme 512")).toEqual({
-			message: "spawn has no option --mme. Nothing was changed.",
+			message: "spawn has no option --mme, so use --mem, --net or --no-net. Nothing was changed.",
 			token: 3,
 			fix: "spawn 2 alpine --mem 512",
 		});
@@ -129,16 +128,16 @@ describe("options", () => {
 
 describe("argument count", () => {
 	it("names the missing argument", () => {
-		expect(parse("spawn 2")).toEqual({ message: "spawn needs an image. Nothing was changed." });
+		expect(parse("spawn 2")).toEqual({ message: "spawn needs an image such as alpine. Nothing was changed." });
 	});
 
 	it("points at the first extra token", () => {
 		expect(parse("link down node1 node2")).toEqual({
-			message: "link takes 2 arguments, so node2 is one too many. Nothing was changed.",
+			message: "link takes <up | down> <machines>, so leave out node2. Nothing was changed.",
 			token: 3,
 		});
 		expect(parse("ls foo")).toMatchObject({
-			message: "ls takes no arguments, so foo is one too many. Nothing was changed.",
+			message: "ls takes no arguments, so leave out foo. Nothing was changed.",
 		});
 	});
 });
@@ -191,14 +190,14 @@ describe("machines", () => {
 
 	it("refuses when nothing is left to act on", () => {
 		expect(parse("link down node4")).toEqual({
-			message: "link has no machine to act on. Skipped node4: still booting. Nothing was changed.",
+			message: "link wants a ready machine here, and node4 is still booting. Nothing was changed.",
 			token: 2,
 		});
 	});
 
 	it("lists the machines there are and offers no fix when several are as close", () => {
 		expect(parse("link down node7", threeReady)).toEqual({
-			message: "No machine called node7. You have node1, node2, node3. Nothing was changed.",
+			message: "No machine is called node7, so use node1, node2 or node3. Nothing was changed.",
 			token: 2,
 		});
 	});
@@ -206,7 +205,7 @@ describe("machines", () => {
 	it("fixes one name inside a list without touching the others", () => {
 		const twelve = labWith([{ n: 1 }, { n: 12 }]);
 		expect(parse("link down node12,nod", twelve)).toEqual({
-			message: "No machine called nod. You have node1, node12. Nothing was changed.",
+			message: "No machine is called nod, so use node1 or node12. Nothing was changed.",
 			token: 2,
 			fix: "link down node12,node1",
 		});
@@ -214,14 +213,14 @@ describe("machines", () => {
 
 	it("says when a glob matches nothing", () => {
 		expect(parse("link down web*")).toMatchObject({
-			message: "No machine matches web*. You have node1, node2, node3, node4, node5. Nothing was changed.",
+			message: "No machine matches web*, so use node1, node2, node3, node4 or node5. Nothing was changed.",
 			token: 2,
 		});
 	});
 
 	it("says when the lab is empty", () => {
 		expect(parse("link down node1", labWith([]))).toMatchObject({
-			message: "No machine called node1. The lab has no machines yet. Nothing was changed.",
+			message: "No machine is called node1, and the lab has none yet, so spawn one first. Nothing was changed.",
 		});
 	});
 });
@@ -233,7 +232,7 @@ describe("machine", () => {
 
 	it("refuses a machine in another phase, saying why", () => {
 		expect(parse("boot node1")).toEqual({
-			message: "boot wants an off or failed machine here, and node1 is already running. Nothing was changed.",
+			message: "boot wants an off or failed machine here, and node1 is ready. Nothing was changed.",
 			token: 1,
 		});
 	});
@@ -248,7 +247,7 @@ describe("machine or session", () => {
 
 	it("names the sessions a machine has and fixes a near one", () => {
 		expect(parse("focus node2:sh9")).toEqual({
-			message: "node2 has no session called sh9. It has console, sh1. Nothing was changed.",
+			message: "node2 has no session called sh9, so use console or sh1. Nothing was changed.",
 			token: 1,
 			fix: "focus node2:sh1",
 		});
@@ -281,7 +280,7 @@ describe("free text and passthrough", () => {
 
 	it("refuses -- on a verb that takes nothing after it", () => {
 		expect(parse("link down node1 -- x")).toEqual({
-			message: "link takes nothing after --. Nothing was changed.",
+			message: "link takes nothing after --, so leave it out. Nothing was changed.",
 			token: 3,
 		});
 	});

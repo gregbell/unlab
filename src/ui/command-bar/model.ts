@@ -17,6 +17,7 @@ import {
 	parseLine,
 	type Registry,
 	type ReportBlock,
+	type ReportRow,
 	type Result,
 	type Suggestion,
 	tokenize,
@@ -138,6 +139,7 @@ export type BarBlock =
 			readonly line: string;
 			readonly header: string;
 			readonly blocks: readonly ReportBlock[];
+			readonly rows: readonly ReportRow[];
 	  };
 
 export interface BarView {
@@ -376,8 +378,10 @@ function blockOf(bar: OpenBar, reading: Reading, lab: LabState, registry: Regist
 		}
 		case "running":
 			return { kind: "running", line: mode.line };
-		case "result":
-			return { kind: "result", line: mode.line, header: mode.report.header, blocks: mode.report.blocks };
+		case "result": {
+			const { header, blocks, rows = [] } = mode.report;
+			return { kind: "result", line: mode.line, header, blocks, rows };
+		}
 		case "typing": {
 			if (reading.checked === null) return { kind: "none" };
 			if (reading.checked.ok) return previewBlock(reading.checked, lab);

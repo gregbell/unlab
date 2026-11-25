@@ -6,16 +6,14 @@ import * as slots from "../grammar/slots.ts";
 export const capture = defineVerb({
 	name: "capture",
 	about: "filter the packet capture",
+	description: "Maximise the capture on the frames that match a filter. An agent reads them with capture_read.",
 	danger: false,
-	grammar: { filter: slots.text("filter") },
+	grammar: { filter: slots.frameFilter() },
+	example: { filter: "arp or node2" },
 	plan(a, lab) {
 		const compiled = compileFilter(a.filter, selectNames(lab));
 		if (compiled.ok) return { filter: a.filter };
-		const said = compiled.error.message.replace(/^Capture /, "capture ");
-		return refuse(
-			`${said} A term is a protocol, a machine, a NIC (node2:eth1), an address, a MAC or port:N.`,
-			"filter",
-		);
+		return refuse(compiled.error.message.replace(/^Capture /, "capture "), "filter");
 	},
 	describe: (plan) =>
 		plan.filter === "" ? "show every captured frame" : `show captured frames matching ${plan.filter}`,

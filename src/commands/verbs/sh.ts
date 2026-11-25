@@ -1,15 +1,18 @@
 import type { SessionId } from "../../model/index.ts";
-import { defineVerb, refuse } from "../define.ts";
+import { defineVerb, machineNow, Refusal } from "../define.ts";
 import * as slots from "../grammar/slots.ts";
 
 export const sh = defineVerb({
 	name: "sh",
 	about: "open another shell on a machine",
+	description:
+		"Open another shell on a machine and move the keyboard to it. It is a session, such as node2:sh1, that exec can name.",
 	danger: false,
 	grammar: { machine: slots.machine() },
-	plan(a, lab) {
-		const m = lab.machines[a.machine];
-		if (m?.life.phase !== "ready") return refuse(`${a.machine} is no longer ready.`, "machine");
+	example: { machine: "node2" },
+	plan(a, _lab, ctx) {
+		const m = machineNow(a.machine, ctx, "machine");
+		if (m instanceof Refusal) return m;
 		const session: SessionId = `${m.name}:sh${m.nextShell}`;
 		return { machine: m.name, session };
 	},

@@ -183,7 +183,12 @@ export function compileFilter(source: string, known: NameBook): FilterResult {
 	let lastOr: { token: string; start: number } | null = null;
 	const orError = (token: string, start: number): FilterResult => ({
 		ok: false,
-		error: { token, start, end: start + token.length, message: "Capture needs a term on each side of or." },
+		error: {
+			token,
+			start,
+			end: start + token.length,
+			message: `Capture needs a term on each side of ${OR}, such as arp or icmp.`,
+		},
 	});
 
 	for (const m of source.matchAll(/\S+/g)) {
@@ -201,7 +206,12 @@ export function compileFilter(source: string, known: NameBook): FilterResult {
 		if (!term) {
 			return {
 				ok: false,
-				error: { token, start, end: start + token.length, message: `Capture cannot read ${token}.` },
+				error: {
+					token,
+					start,
+					end: start + token.length,
+					message: `Capture cannot read ${token}, so use a protocol, a machine, a NIC (node2:eth1), an address, a MAC or port:N.`,
+				},
 			};
 		}
 		group.push(term);

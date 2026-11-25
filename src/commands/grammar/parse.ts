@@ -1,14 +1,17 @@
 import { type LineError, lineError, type Token, type Tokenized } from "../types.ts";
 import { oneEditFix } from "./fix.ts";
-import { optionTokens } from "./format.ts";
+import { optionTokens, slotSignature } from "./format.ts";
 import {
 	type ArgsOf,
 	endsLine,
 	type Grammar,
+	list,
 	Miss,
+	type Optional,
 	type Options,
 	type ReadContext,
 	type Rest,
+	type Slot,
 	type Value,
 	type Variant,
 } from "./slots.ts";
@@ -38,18 +41,18 @@ export function flagTable(grammar: Grammar): ReadonlyMap<string, FlagEntry> {
 	return table;
 }
 
-export function positionalsOf(grammar: Grammar): readonly (readonly [string, Value<unknown> | Rest])[] {
-	return Object.entries(grammar).flatMap(([key, slot]) =>
-		slot.kind === "positional" || slot.kind === "rest" ? [[key, slot] as const] : [],
-	);
+type Plain = Value<unknown> | Optional<unknown> | Rest;
+
+export function isPlain(slot: Slot): slot is Plain {
+	return slot.kind === "positional" || slot.kind === "optional" || slot.kind === "rest";
+}
+
+export function positionalsOf(grammar: Grammar): readonly (readonly [string, Plain])[] {
+	return Object.entries(grammar).flatMap(([key, slot]) => (isPlain(slot) ? [[key, slot] as const] : []));
 }
 
 export function expectedOf(value: Value<unknown>, ctx: ReadContext): readonly string[] {
 	return value.suggest("", ctx).map((s) => s.insert);
-}
-
-function plural(n: number, word: string): string {
-	return n === 0 ? `no ${word}s` : n === 1 ? `1 ${word}` : `${n} ${word}s`;
 }
 
 /**
@@ -99,12 +102,13 @@ export function parse<G extends Grammar>(
 			const entry = flags.get(token.text);
 			if (!entry) {
 				const unused = [...flags.values()].filter((f) => !(f.key in tokenOf)).map((f) => f.variant.flag);
-				return fail(`${verb} has no option ${token.text}.`, i, unused);
+				const instead = unused.length === 0 ? "so leave it out" : `so use ${list(unused, "or")}`;
+				return fail(`${verb} has no option ${token.text}, ${instead}.`, i, unused);
 			}
 			if (entry.key in tokenOf) {
 				const group = entry.slot.variants.map((v) => v.flag);
 				const message =
-					group.length > 1 ? `${verb} takes ${group.join(" or ")}, not both.` : `${verb} takes ${token.text} once.`;
+					group.length > 1 ? `${verb} takes ${list(group, "or")}, not both.` : `${verb} takes ${token.text} once.`;
 				return fail(message, i);
 			}
 			tokenOf[entry.key] = i;
@@ -126,7 +130,8 @@ export function parse<G extends Grammar>(
 
 		const positional = positionals[next];
 		if (!positional) {
-			return fail(`${verb} takes ${plural(positionals.length, "argument")}, so ${token.text} is one too many.`, i);
+			const takes = positionals.length === 0 ? "no arguments" : positionals.map(([, s]) => slotSignature(s)).join(" ");
+			return fail(`${verb} takes ${takes}, so leave out ${token.text}.`, i);
 		}
 		const [key, slot] = positional;
 		tokenOf[key] ??= i;
@@ -134,7 +139,7 @@ export function parse<G extends Grammar>(
 			restWords.push(token.text);
 			continue;
 		}
-		const value = read(slot, token, i, "here");
+		const value = read(slot.kind === "optional" ? slot.value : slot, token, i, "here");
 		if (!value.ok) return value.error;
 		values[key] = value.value;
 		next++;
@@ -146,6 +151,9 @@ export function parse<G extends Grammar>(
 		switch (slot.kind) {
 			case "positional":
 				if (!(key in values)) return fail(`${verb} needs ${slot.noun}.`);
+				break;
+			case "optional":
+				values[key] ??= null;
 				break;
 			case "rest":
 				values[key] = restWords.join(" ");
@@ -176,7 +184,7 @@ export function parse<G extends Grammar>(
 		}
 	}
 	if (dashes !== undefined && !entries.some(([, slot]) => endsLine(slot))) {
-		return fail(`${verb} takes nothing after --.`, dashes);
+		return fail(`${verb} takes nothing after --, so leave it out.`, dashes);
 	}
 
 	// Each slot above filled exactly its own key with a value it read and checked, so this is ArgsOf<G>.

@@ -70,6 +70,7 @@ import {
  * the shell that `shell_exec` types into. A file can be written from it too.
  */
 export const DEFAULT_POLICIES: Readonly<Record<ToolName, Policy>> = {
+	lab_help: "run",
 	machines_list: "run",
 	machines_spawn: "ask",
 	machines_boot: "run",

@@ -152,7 +152,9 @@ test("a NIC left unplugged takes no port, and a machine that needs more ports th
 	await page.keyboard.press("Control+/");
 	await page.keyboard.type("spawn 2 alpine --nics 3");
 	await page.keyboard.press("Enter");
-	await expect(page.locator("unlab-command-bar")).toContainText("switch0 has 4 free ports, and this takes 6.");
+	await expect(page.locator("unlab-command-bar")).toContainText(
+		"switch0 has 4 free ports and this takes 6, so add --no-net",
+	);
 	await page.keyboard.press("Escape");
 	await expect(page.locator("unlab-pane")).toHaveCount(3);
 

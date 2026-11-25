@@ -1067,7 +1067,7 @@ describe("exec", () => {
 
 		const refused = t.engine.exec.inject("node1:console", "ls", "bar", never);
 		await expect(refused).rejects.toBeInstanceOf(ExecRefused);
-		await expect(refused).rejects.toThrow("node1:console is running a program.");
+		await expect(refused).rejects.toThrow("node1:console is running a program, so wait until it ends.");
 		expect(vm.sent).toEqual([]);
 		expect(t.screens.get("node1:console").made).toEqual([]);
 		expect(t.events).toEqual([]);
@@ -1082,7 +1082,7 @@ describe("exec", () => {
 		vm.sent.length = 0;
 
 		await expect(t.engine.exec.inject("node1:console", "ls /tmp", "agent", never)).rejects.toThrow(
-			"node1:console has a half-typed line.",
+			"node1:console has a half-typed line, so finish it there or use another session.",
 		);
 		expect(vm.sent).toEqual([]);
 
@@ -1110,7 +1110,7 @@ describe("exec", () => {
 		for (const session of ["node9:console", "node1:console", "node2:sh1"] as const) {
 			const refused = t.engine.exec.inject(session, "ls", "bar", never);
 			await expect(refused).rejects.toBeInstanceOf(ExecRefused);
-			await expect(refused).rejects.toThrow(`${session} is not open.`);
+			await expect(refused).rejects.toThrow(`${session} is not open, so use another session.`);
 		}
 		expect(t.vms.of("node2").sent.filter(([op]) => op === "write")).toEqual([]);
 	});
@@ -1134,7 +1134,7 @@ describe("exec", () => {
 		const vm = t.ready(1);
 		const refused = t.engine.exec.inject("node1:console", "false", "bar", never);
 		await expect(refused).rejects.toBeInstanceOf(ExecRefused);
-		await expect(refused).rejects.toThrow("node1:console has not shown a prompt yet.");
+		await expect(refused).rejects.toThrow("node1:console has not shown a prompt yet, so wait until it has.");
 		expect(vm.sent).toEqual([]);
 	});
 
@@ -1169,7 +1169,7 @@ describe("exec", () => {
 		expect(screen.made[0].ended).toBeGreaterThan(0);
 
 		await expect(t.engine.exec.inject("node1:console", "true", "bar", never)).rejects.toThrow(
-			"node1:console is running a program.",
+			"node1:console is running a program, so wait until it ends.",
 		);
 
 		vm.sink.consoleBytes(vm.ref, bytes(returns(130)));
@@ -1201,7 +1201,7 @@ describe("exec", () => {
 			const t = swallowed();
 			t.tickAt(1000);
 			await expect(t.engine.exec.inject("node1:console", "ls", "agent", never)).rejects.toThrow(
-				"is running a program.",
+				"is running a program, so wait until it ends.",
 			);
 			t.tickAt(2000);
 			expect(t.take()).toContainEqual({ type: "session/shell", session: "node1:console", shell: "prompt" });
@@ -1230,7 +1230,7 @@ describe("exec", () => {
 			t.tickAt(1000);
 			t.tickAt(2000);
 			await expect(t.engine.exec.inject("node1:console", "ls", "agent", never)).rejects.toThrow(
-				"has a half-typed line.",
+				"has a half-typed line, so finish it there or use another session.",
 			);
 		});
 
@@ -1263,7 +1263,9 @@ describe("exec", () => {
 			t.at(ms);
 			t.intervals.at(-1)?.fn();
 		}
-		await expect(t.engine.exec.inject("node1:console", "ls", "agent", never)).rejects.toThrow("is running a program.");
+		await expect(t.engine.exec.inject("node1:console", "ls", "agent", never)).rejects.toThrow(
+			"is running a program, so wait until it ends.",
+		);
 	});
 
 	test("an already aborted signal rejects before anything is typed", async () => {
@@ -1324,7 +1326,7 @@ describe("files", () => {
 	test("a machine that is not ready is given nothing", async () => {
 		const t = setup();
 		const vm = t.boot(1);
-		const refused = { kind: "refused", reason: "node1 is not ready." };
+		const refused = { kind: "refused", reason: "node1 is not ready, so wait until it is." };
 		expect(await t.engine.files.write("node1", FILE, none())).toEqual(refused);
 		expect(await t.engine.files.write("node2", FILE, none())).toMatchObject({ kind: "refused" });
 		vm.sink.ready(vm.ref, 1);

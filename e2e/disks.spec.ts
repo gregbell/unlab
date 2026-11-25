@@ -132,7 +132,7 @@ test("a machine the browser has no memory for fails naming memory and the size, 
 }) => {
 	await openLab(page);
 	await typed(page, "spawn 1 alpine --mem 4097");
-	await expect(page.locator("unlab-command-bar")).toContainText("A machine has at most 4096 MiB of memory.");
+	await expect(page.locator("unlab-command-bar")).toContainText("--mem wants at most 4096 MiB of memory, not ");
 	await page.keyboard.press("Escape");
 
 	const refused = await page.evaluate(() => {
@@ -146,7 +146,7 @@ test("a machine the browser has no memory for fails naming memory and the size, 
 	});
 	expect(refused).toContain("could not allocate memory");
 	const reason =
-		"The browser could not give node1 512 MiB of memory. Remove a machine or close other tabs, then boot it again.";
+		"The browser could not give node1 512 MiB of memory, so remove a machine or close other tabs, then boot it again.";
 	await typed(page, "spawn 1 alpine --no-net --mem 512");
 	await expect(page.locator("unlab-machine-details")).toContainText(reason);
 	expect(await call(page, "machines_list", {})).toMatchObject({ data: [{ state: "failed", reason }] });
@@ -163,7 +163,7 @@ async function limitStorage(page: Page, quotaSize?: number): Promise<void> {
 
 /** The sentence a person sees in the details and an agent reads in the list. */
 async function outOfStorage(page: Page, machine: string, device: string): Promise<void> {
-	const reason = `Browser storage is full, so ${machine}'s disk ${device} could not be saved. Remove a machine or free some space, then boot it again.`;
+	const reason = `Browser storage is full, so ${machine}'s disk ${device} could not be saved: remove a machine or free some space, then boot it again.`;
 	await expect(page.locator("unlab-machine-details")).toContainText(reason);
 	const { data } = (await call(page, "machines_list", {})) as { data: { name: string }[] };
 	expect(data.find(({ name }) => name === machine)).toMatchObject({ state: "failed", reason });
