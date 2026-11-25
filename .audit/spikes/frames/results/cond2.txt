@@ -1,0 +1,54 @@
+B/main one lab delay 5: RTT minus base minus 2x: 1.46 [0.84-1.71] n=5
+B/main one lab delay 5: frames handed on late, mean ms: 0.42 [0.29-0.48] n=5
+B/main one lab delay 5: frames handed on late, worst ms: 0.90 [0.81-0.92] n=5
+B/main one lab delay 100: RTT minus base minus 2x: 2.41 [2.20-2.56] n=5
+B/main one lab delay 100: frames handed on late, mean ms: 0.92 [0.84-0.96] n=5
+B/main one lab delay 100: frames handed on late, worst ms: 1.77 [1.63-1.97] n=5
+B/main one lab delay 1000: RTT minus base minus 2x: 2.96 [2.62-3.25] n=5
+B/main one lab delay 1000: frames handed on late, mean ms: 1.13 [0.99-1.18] n=5
+B/main one lab delay 1000: frames handed on late, worst ms: 1.66 [1.56-1.80] n=5
+B/main one lab reorder 25%: replies out of order of 200: 61.00 [60.00-63.00] n=5
+B/main one lab mtu 1000: answers to -s 1200: 0.00 [0.00-0.00] n=5
+B/main one lab mtu 1000: answers to -s 900: 2.00 [2.00-2.00] n=5
+B/main one lab loss 20%: share of 1000 requests lost toward node2, percent: 19.60 [18.40-20.90] n=5
+B/main one lab loss 20%: seconds for 1000 pings: 6.18 [6.11-6.25] n=5
+B/main one lab rate 1 Mbit/s: TCP payload Mbit/s: 0.96 [0.96-0.96] n=5
+B/main one lab rate 1 Mbit/s: frames dropped by the queue: 10.00 [10.00-11.00] n=5
+B/main one lab rate 10 Mbit/s: TCP payload Mbit/s: 9.57 [9.56-9.57] n=5
+B/main one lab cleared: TCP Mbit/s: 298.45 [291.84-303.59] n=5
+B/main one lab clock=worker delay 5: RTT minus base minus 2x: 2.09 [1.93-2.27] n=5
+B/main one lab clock=worker delay 5: frames handed on late, mean ms: 0.74 [0.69-0.78] n=5
+B/main one lab clock=worker delay 5: frames handed on late, worst ms: 1.30 [1.10-1.38] n=5
+B/main one lab clock=worker delay 100: RTT minus base minus 2x: 3.00 [2.89-3.27] n=5
+B/main one lab clock=worker delay 100: frames handed on late, mean ms: 1.25 [1.24-1.33] n=5
+B/main one lab clock=worker delay 100: frames handed on late, worst ms: 2.13 [1.94-2.24] n=5
+B/main one lab clock=worker delay 1000: RTT minus base minus 2x: 3.34 [3.09-3.90] n=5
+B/main one lab clock=worker delay 1000: frames handed on late, mean ms: 1.43 [1.29-1.69] n=5
+B/main one lab clock=worker delay 1000: frames handed on late, worst ms: 2.04 [1.98-2.31] n=5
+B/main one lab clock=worker reorder 25%: replies out of order of 200: 62.00 [54.00-65.00] n=5
+B/main one lab clock=worker mtu 1000: answers to -s 1200: 0.00 [0.00-0.00] n=5
+B/main one lab clock=worker mtu 1000: answers to -s 900: 2.00 [2.00-2.00] n=5
+B/main one lab clock=worker loss 20%: share of 1000 requests lost toward node2, percent: 20.40 [19.50-21.70] n=5
+B/main one lab clock=worker loss 20%: seconds for 1000 pings: 6.19 [6.14-6.20] n=5
+B/main one lab clock=worker rate 1 Mbit/s: TCP payload Mbit/s: 0.96 [0.96-0.96] n=5
+B/main one lab clock=worker rate 1 Mbit/s: frames dropped by the queue: 11.00 [10.00-11.00] n=5
+B/main one lab clock=worker rate 10 Mbit/s: TCP payload Mbit/s: 9.57 [9.57-9.57] n=5
+B/main one lab clock=worker cleared: TCP Mbit/s: 297.32 [290.77-306.55] n=5
+B/worker one lab delay 5: RTT minus base minus 2x: 1.55 [1.35-1.70] n=5
+B/worker one lab delay 5: frames handed on late, mean ms: 0.39 [0.34-0.43] n=5
+B/worker one lab delay 5: frames handed on late, worst ms: 0.89 [0.72-1.24] n=5
+B/worker one lab delay 100: RTT minus base minus 2x: 2.63 [2.53-3.00] n=5
+B/worker one lab delay 100: frames handed on late, mean ms: 0.87 [0.84-0.99] n=5
+B/worker one lab delay 100: frames handed on late, worst ms: 1.61 [1.50-3.30] n=5
+B/worker one lab delay 1000: RTT minus base minus 2x: 2.89 [2.56-3.76] n=5
+B/worker one lab delay 1000: frames handed on late, mean ms: 1.05 [0.95-1.16] n=5
+B/worker one lab delay 1000: frames handed on late, worst ms: 1.63 [1.52-1.66] n=5
+B/worker one lab reorder 25%: replies out of order of 200: 60.00 [54.00-67.00] n=5
+B/worker one lab mtu 1000: answers to -s 1200: 0.00 [0.00-0.00] n=5
+B/worker one lab mtu 1000: answers to -s 900: 2.00 [2.00-2.00] n=5
+B/worker one lab loss 20%: share of 1000 requests lost toward node2, percent: 19.90 [17.60-20.50] n=5
+B/worker one lab loss 20%: seconds for 1000 pings: 6.15 [6.06-6.18] n=5
+B/worker one lab rate 1 Mbit/s: TCP payload Mbit/s: 0.96 [0.96-0.96] n=5
+B/worker one lab rate 1 Mbit/s: frames dropped by the queue: 10.00 [10.00-11.00] n=5
+B/worker one lab rate 10 Mbit/s: TCP payload Mbit/s: 9.57 [9.56-9.57] n=5
+B/worker one lab cleared: TCP Mbit/s: 270.69 [269.82-274.34] n=5

@@ -1,0 +1,13 @@
+naive: triangle, one broadcast
+  returned, hops 2500 drops counted on cable ports 0/1 0/1 0/0
+triangle A: hops/s 2423480 [2408552-2499570]  max task gap ms 12 [12-14]  grew MB 0 [0-0]  waiting 2 [2-2]  ended ms after cut 0 [0-0]  longest drain ms 4 [4-4]  dropped/run {"loss":0,"mtu":0,"rate":0,"full":0,"cut":1,"storm":0} left 0
+triangle B: hops/s 1991024 [1984433-2010290]  max task gap ms 12 [12-14]  grew MB 0 [0-0]  waiting 2 [2-2]  ended ms after cut 0 [0-0]  longest drain ms 4 [4-4]  dropped/run {"loss":0,"mtu":0,"rate":0,"full":0,"cut":2,"storm":0} left 0
+mesh A: hops/s 2141029 [2098455-2172749]  max task gap ms 13 [12-13]  grew MB 1 [0-1]  waiting 4096 [4096-4096]  ended ms after cut 0 [0-0]  longest drain ms 4 [4-4]  dropped/run {"loss":0,"mtu":0,"rate":0,"full":4234908,"cut":0,"storm":0} left 0
+mesh B: hops/s 1988675 [1945384-2003111]  max task gap ms 12 [12-13]  grew MB 0 [0-1]  waiting 3069 [3068-3069]  ended ms after cut 0 [0-0]  longest drain ms 4 [4-4]  dropped/run {"loss":0,"mtu":0,"rate":0,"full":4006725,"cut":3069,"storm":0} left 0
+forwarding cost with no loop, ns per frame at the first switch
+  one naive: 875 [811-912]
+  one A: 889 [867-918]
+  one B: 913 [868-916]
+  two naive: 1802 [1763-1817]
+  two A: 2042 [2001-2080]
+  two B: 2106 [2046-2140]

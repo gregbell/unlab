@@ -1,0 +1,40 @@
+run 0 B/main triangle pace=1000 flush=true
+   hops/s 3263  paints/s 60  page timer gap max 19 p50 0 ms (n=3015)  page.evaluate max 3 ms  guest echo 32 ms  ping during: 0/20 p50 NaN max -Infinity dup 0
+   RSS 516 -> 555 605 631 651 659 609 628 656 643 652 646 666 MB each 5 s  looped/s 2504  CPU chromium MAIN 0.14, DedicatedWorker 0.11, DedicatedWorker 0.10  waiting 19 maxDrain 0.5  dropped {"loss":0,"mtu":0,"rate":0,"full":0,"cut":0,"storm":0} nicDropped [0,0]
+   vms [{"type":"probe","id":4,"got":60842,"rx":0,"maxRx":3,"rxDropped":0},{"type":"probe","id":5,"got":60852,"rx":0,"maxRx":1,"rxDropped":0}]
+   after cut: last looped frame 6 ms , frames 400-500 ms later 0; ping 3/3 max 2.235 ms, done 977 ms after the cut; echo 32 ms; capture {"in":320797,"delivered":451144,"flooded":182574,"skipped":0}
+run 0 B/worker triangle pace=1000 flush=true
+   hops/s 2916  paints/s 60  page timer gap max 8 p50 0 ms (n=3012)  page.evaluate max 3 ms  guest echo 31 ms  ping during: 0/20 p50 NaN max -Infinity dup 0
+   RSS 520 -> 580 663 710 750 759 775 792 790 764 791 753 764 MB each 5 s  looped/s 2182  CPU DedicatedWorker 0.13, DedicatedWorker 0.10, DedicatedWorker 0.09, chromium MAIN 0.05  waiting 12 maxDrain 0.5  dropped {"loss":0,"mtu":0,"rate":0,"full":0,"cut":0,"storm":0} nicDropped [0,0]
+   vms [{"type":"probe","id":4,"got":45571,"rx":0,"maxRx":0,"rxDropped":0},{"type":"probe","id":5,"got":45581,"rx":0,"maxRx":0,"rxDropped":0}]
+   after cut: last looped frame 21 ms , frames 400-500 ms later 0; ping 3/3 max 1.605 ms, done 975 ms after the cut; echo 31 ms; capture {"in":352349,"delivered":463170,"flooded":136774,"skipped":0}
+run 0 B/main mesh+pair pace=1000 flush=true
+   hops/s 11975  paints/s 60  page timer gap max 58 p50 0 ms (n=3000)  page.evaluate max 2 ms  guest echo 31 ms  ping during: 20/20 p50 0.975 max 1.255 dup 0
+   RSS 574 -> 652 678 705 754 772 768 793 842 874 878 910 908 MB each 5 s  looped/s 11958  CPU chromium MAIN 0.15, DedicatedWorker 0.15  waiting 762 maxDrain 0.8  dropped {"loss":0,"mtu":0,"rate":0,"full":0,"cut":0,"storm":35795} nicDropped [0,0,0]
+   vms [{"type":"probe","id":4,"got":27,"rx":0,"maxRx":0,"rxDropped":0},{"type":"probe","id":5,"got":27,"rx":0,"maxRx":0,"rxDropped":0},{"type":"probe","id":6,"got":183152,"rx":0,"maxRx":0,"rxDropped":0}]
+   after cut: last looped frame 0 ms , frames 400-500 ms later 0; ping 3/3 max 1.135 ms, done 974 ms after the cut; echo 32 ms; capture {"in":732803,"delivered":1648612,"flooded":732687,"skipped":0}
+run 0 B/worker mesh+pair pace=1000 flush=true
+   hops/s 11994  paints/s 60  page timer gap max 62 p50 0 ms (n=3000)  page.evaluate max 2 ms  guest echo 31 ms  ping during: 20/20 p50 0.92 max 1.44 dup 0
+   RSS 577 -> 710 783 851 905 936 970 1045 1090 1122 1165 1196 1252 MB each 5 s  looped/s 11978  CPU DedicatedWorker 0.16, DedicatedWorker 0.14, chromium MAIN 0.13, ThreadPoolForeg 0.09, ThreadPoolForeg 0.08, ThreadPoolForeg 0.08, ThreadPoolForeg 0.07, ThreadPoolForeg 0.07  waiting 763 maxDrain 1.2  dropped {"loss":0,"mtu":0,"rate":0,"full":0,"cut":0,"storm":35806} nicDropped [0,0,0]
+   vms [{"type":"probe","id":4,"got":27,"rx":0,"maxRx":0,"rxDropped":0},{"type":"probe","id":5,"got":27,"rx":0,"maxRx":0,"rxDropped":0},{"type":"probe","id":6,"got":183176,"rx":0,"maxRx":0,"rxDropped":0}]
+   after cut: last looped frame 0 ms , frames 400-500 ms later 0; ping 3/3 max 1.075 ms, done 980 ms after the cut; echo 31 ms; capture {"in":732904,"delivered":1648852,"flooded":732788,"skipped":0}
+run 0 B/main triangle pace=1000 flush=true
+   hops/s 2958  paints/s 60  page timer gap max 21 p50 0 ms (n=3017)  page.evaluate max 2 ms  guest echo 31 ms  ping during: 0/20 p50 NaN max -Infinity dup 0
+   RSS 516 -> 558 607 630 653 661 610 630 638 638 655 671 685 MB each 5 s  looped/s 2262  CPU chromium MAIN 0.13, DedicatedWorker 0.10, DedicatedWorker 0.09  waiting 15 maxDrain 0.8  dropped {"loss":0,"mtu":0,"rate":0,"full":0,"cut":0,"storm":0} nicDropped [0,0]
+   vms [{"type":"probe","id":4,"got":60907,"rx":0,"maxRx":5,"rxDropped":0},{"type":"probe","id":5,"got":60912,"rx":0,"maxRx":1,"rxDropped":0}]
+   after cut: last looped frame 6 ms , frames 400-500 ms later 0; ping 3/3 max 2.61 ms, done 972 ms after the cut; echo 32 ms; capture {"in":319196,"delivered":449693,"flooded":182769,"skipped":0}
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+page.evaluate: Target crashed 
+    at Proxy.<anonymous> (.audit/spikes/frames/lab-drive.ts:66:62)
+    at .audit/spikes/frames/lab-drive.ts:206:28
+    at async withLab (.audit/spikes/frames/lab-drive.ts:68:15)
+    at async file://.audit/spikes/frames/lab-drive.ts:180:4 {
+  log: [],
+  name: 'Error'
+}
+
+Node.js v24.21.0
+done

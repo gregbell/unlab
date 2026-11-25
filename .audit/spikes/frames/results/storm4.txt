@@ -1,0 +1,100 @@
+run 0 B/main triangle pace=1000 flush=true
+   hops/s 4130  paints/s 60  page timer gap max 1 p50 0 ms (n=546)  page.evaluate max 2 ms  guest echo 24 ms  ping during: 0/20 p50 NaN max -Infinity dup 0
+   RSS 527 -> 580 613 MB each 5 s  looped/s 3132  CPU chromium MAIN 0.13, DedicatedWorker 0.09, DedicatedWorker 0.08  waiting 17 maxDrain 0.8  dropped {"loss":0,"mtu":0,"rate":0,"full":0,"cut":0,"storm":0} nicDropped [0,0]
+   vms [{"type":"probe","id":4,"got":11379,"rx":0,"maxRx":3,"rxDropped":0},{"type":"probe","id":5,"got":11388,"rx":0,"maxRx":0,"rxDropped":0}]
+   after cut: last looped frame 6 ms , frames 400-500 ms later 0; ping 3/3 max 1.355 ms, done 973 ms after the cut; echo 23 ms; capture {"in":61355,"delivered":84761,"flooded":34188,"skipped":0}
+run 0 B/worker triangle pace=1000 flush=true
+   hops/s 4098  paints/s 60  page timer gap max 1 p50 0 ms (n=545)  page.evaluate max 3 ms  guest echo 23 ms  ping during: 0/20 p50 NaN max -Infinity dup 0
+   RSS 536 -> 610 670 MB each 5 s  looped/s 3049  CPU DedicatedWorker 0.12, DedicatedWorker 0.10, DedicatedWorker 0.09  waiting 14 maxDrain 1.7  dropped {"loss":0,"mtu":0,"rate":0,"full":0,"cut":0,"storm":0} nicDropped [0,0]
+   vms [{"type":"probe","id":4,"got":11545,"rx":0,"maxRx":0,"rxDropped":0},{"type":"probe","id":5,"got":11557,"rx":0,"maxRx":0,"rxDropped":0}]
+   after cut: last looped frame 6 ms , frames 400-500 ms later 0; ping 3/3 max 1.33 ms, done 976 ms after the cut; echo 26 ms; capture {"in":62550,"delivered":86354,"flooded":34683,"skipped":0}
+run 0 B/main mesh+pair pace=1000 flush=true
+   hops/s 11989  paints/s 60  page timer gap max 6 p50 0 ms (n=543)  page.evaluate max 2 ms  guest echo 27 ms  ping during: 20/20 p50 0.875 max 1.615 dup 0
+   RSS 575 -> 652 676 MB each 5 s  looped/s 11973  CPU chromium MAIN 0.14, DedicatedWorker 0.13  waiting 765 maxDrain 1.1  dropped {"loss":0,"mtu":0,"rate":0,"full":0,"cut":0,"storm":35669} nicDropped [0,0,0]
+   vms [{"type":"probe","id":4,"got":27,"rx":0,"maxRx":0,"rxDropped":0},{"type":"probe","id":5,"got":27,"rx":0,"maxRx":0,"rxDropped":0},{"type":"probe","id":6,"got":33128,"rx":0,"maxRx":0,"rxDropped":0}]
+   after cut: last looped frame 0 ms , frames 400-500 ms later 0; ping 3/3 max 1.11 ms, done 972 ms after the cut; echo 30 ms; capture {"in":132670,"delivered":298337,"flooded":132554,"skipped":0}
+run 0 B/worker mesh+pair pace=1000 flush=true
+   hops/s 11999  paints/s 60  page timer gap max 3 p50 0 ms (n=544)  page.evaluate max 2 ms  guest echo 27 ms  ping during: 20/20 p50 0.905 max 1.31 dup 0
+   RSS 576 -> 709 731 MB each 5 s  looped/s 11983  CPU DedicatedWorker 0.15, DedicatedWorker 0.14, chromium MAIN 0.07  waiting 764 maxDrain 1.0  dropped {"loss":0,"mtu":0,"rate":0,"full":0,"cut":0,"storm":35627} nicDropped [0,0,0]
+   vms [{"type":"probe","id":4,"got":27,"rx":0,"maxRx":0,"rxDropped":0},{"type":"probe","id":5,"got":27,"rx":0,"maxRx":0,"rxDropped":0},{"type":"probe","id":6,"got":33086,"rx":0,"maxRx":0,"rxDropped":0}]
+   after cut: last looped frame 0 ms , frames 400-500 ms later 0; ping 3/3 max 1.26 ms, done 968 ms after the cut; echo 26 ms; capture {"in":132500,"delivered":297978,"flooded":132384,"skipped":0}
+run 1 B/main triangle pace=1000 flush=true
+   hops/s 3667  paints/s 60  page timer gap max 1 p50 0 ms (n=545)  page.evaluate max 3 ms  guest echo 24 ms  ping during: 0/20 p50 NaN max -Infinity dup 0
+   RSS 525 -> 574 613 MB each 5 s  looped/s 2702  CPU chromium MAIN 0.12, DedicatedWorker 0.09, DedicatedWorker 0.08  waiting 14 maxDrain 0.7  dropped {"loss":0,"mtu":0,"rate":0,"full":0,"cut":0,"storm":0} nicDropped [0,0]
+   vms [{"type":"probe","id":4,"got":11314,"rx":0,"maxRx":2,"rxDropped":0},{"type":"probe","id":5,"got":11321,"rx":0,"maxRx":2,"rxDropped":0}]
+   after cut: last looped frame 8 ms , frames 400-500 ms later 0; ping 3/3 max 1.25 ms, done 967 ms after the cut; echo 23 ms; capture {"in":59559,"delivered":82872,"flooded":34000,"skipped":0}
+run 1 B/worker triangle pace=1000 flush=true
+   hops/s 4080  paints/s 60  page timer gap max 1 p50 0 ms (n=545)  page.evaluate max 3 ms  guest echo 27 ms  ping during: 0/20 p50 NaN max -Infinity dup 0
+   RSS 536 -> 620 685 MB each 5 s  looped/s 3054  CPU DedicatedWorker 0.12, DedicatedWorker 0.11, DedicatedWorker 0.10  waiting 14 maxDrain 0.8  dropped {"loss":0,"mtu":0,"rate":0,"full":0,"cut":0,"storm":0} nicDropped [0,0]
+   vms [{"type":"probe","id":4,"got":11663,"rx":0,"maxRx":0,"rxDropped":0},{"type":"probe","id":5,"got":11668,"rx":0,"maxRx":0,"rxDropped":0}]
+   after cut: last looped frame 8 ms , frames 400-500 ms later 0; ping 3/3 max 1.46 ms, done 961 ms after the cut; echo 26 ms; capture {"in":61946,"delivered":85986,"flooded":35037,"skipped":0}
+run 1 B/main mesh+pair pace=1000 flush=true
+   hops/s 12008  paints/s 60  page timer gap max 2 p50 0 ms (n=543)  page.evaluate max 2 ms  guest echo 25 ms  ping during: 20/20 p50 0.85 max 1.485 dup 0
+   RSS 573 -> 652 677 MB each 5 s  looped/s 11991  CPU chromium MAIN 0.15, DedicatedWorker 0.14  waiting 764 maxDrain 1.0  dropped {"loss":0,"mtu":0,"rate":0,"full":0,"cut":0,"storm":35642} nicDropped [0,0,0]
+   vms [{"type":"probe","id":4,"got":27,"rx":0,"maxRx":0,"rxDropped":0},{"type":"probe","id":5,"got":27,"rx":0,"maxRx":0,"rxDropped":0},{"type":"probe","id":6,"got":33083,"rx":0,"maxRx":0,"rxDropped":0}]
+   after cut: last looped frame 0 ms , frames 400-500 ms later 0; ping 3/3 max 1.895 ms, done 964 ms after the cut; echo 24 ms; capture {"in":132491,"delivered":297957,"flooded":132375,"skipped":0}
+run 1 B/worker mesh+pair pace=1000 flush=true
+   hops/s 12003  paints/s 60  page timer gap max 6 p50 0 ms (n=543)  page.evaluate max 3 ms  guest echo 27 ms  ping during: 20/20 p50 1.07 max 1.475 dup 0
+   RSS 575 -> 707 729 MB each 5 s  looped/s 11987  CPU DedicatedWorker 0.14, DedicatedWorker 0.14, chromium MAIN 0.05  waiting 764 maxDrain 1.3  dropped {"loss":0,"mtu":0,"rate":0,"full":0,"cut":0,"storm":35663} nicDropped [0,0,0]
+   vms [{"type":"probe","id":4,"got":27,"rx":0,"maxRx":0,"rxDropped":0},{"type":"probe","id":5,"got":27,"rx":0,"maxRx":0,"rxDropped":0},{"type":"probe","id":6,"got":33074,"rx":0,"maxRx":0,"rxDropped":0}]
+   after cut: last looped frame 0 ms , frames 400-500 ms later 0; ping 3/3 max 1.46 ms, done 972 ms after the cut; echo 23 ms; capture {"in":132454,"delivered":297874,"flooded":132338,"skipped":0}
+run 2 B/main triangle pace=1000 flush=true
+   hops/s 3106  paints/s 60  page timer gap max 1 p50 0 ms (n=546)  page.evaluate max 2 ms  guest echo 24 ms  ping during: 12/20 p50 0.47 max 1.11 dup 0
+   RSS 526 -> 562 597 MB each 5 s  looped/s 2334  CPU chromium MAIN 0.15, DedicatedWorker 0.10, DedicatedWorker 0.09  waiting 10 maxDrain 0.7  dropped {"loss":0,"mtu":0,"rate":0,"full":0,"cut":0,"storm":0} nicDropped [0,0]
+   vms [{"type":"probe","id":4,"got":8859,"rx":0,"maxRx":2,"rxDropped":0},{"type":"probe","id":5,"got":8865,"rx":0,"maxRx":0,"rxDropped":0}]
+   after cut: last looped frame 8 ms , frames 400-500 ms later 0; ping 3/3 max 1.09 ms, done 964 ms after the cut; echo 24 ms; capture {"in":45538,"delivered":63865,"flooded":26556,"skipped":0}
+run 2 B/worker triangle pace=1000 flush=true
+   hops/s 3971  paints/s 60  page timer gap max 1 p50 0 ms (n=545)  page.evaluate max 2 ms  guest echo 24 ms  ping during: 0/20 p50 NaN max -Infinity dup 0
+   RSS 538 -> 621 687 MB each 5 s  looped/s 2950  CPU DedicatedWorker 0.11, DedicatedWorker 0.10, DedicatedWorker 0.08, chromium MAIN 0.05  waiting 14 maxDrain 0.6  dropped {"loss":0,"mtu":0,"rate":0,"full":0,"cut":0,"storm":0} nicDropped [0,0]
+   vms [{"type":"probe","id":4,"got":11694,"rx":0,"maxRx":0,"rxDropped":0},{"type":"probe","id":5,"got":11700,"rx":0,"maxRx":0,"rxDropped":0}]
+   after cut: last looped frame 7 ms , frames 400-500 ms later 0; ping 3/3 max 1.315 ms, done 962 ms after the cut; echo 24 ms; capture {"in":62955,"delivered":87082,"flooded":35133,"skipped":0}
+run 2 B/main mesh+pair pace=1000 flush=true
+   hops/s 12003  paints/s 60  page timer gap max 1 p50 0 ms (n=543)  page.evaluate max 2 ms  guest echo 29 ms  ping during: 20/20 p50 0.965 max 1.22 dup 0
+   RSS 576 -> 641 676 MB each 5 s  looped/s 11987  CPU chromium MAIN 0.13, DedicatedWorker 0.13  waiting 764 maxDrain 1.3  dropped {"loss":0,"mtu":0,"rate":0,"full":0,"cut":0,"storm":35711} nicDropped [0,0,0]
+   vms [{"type":"probe","id":4,"got":27,"rx":0,"maxRx":0,"rxDropped":0},{"type":"probe","id":5,"got":27,"rx":0,"maxRx":0,"rxDropped":0},{"type":"probe","id":6,"got":33107,"rx":0,"maxRx":0,"rxDropped":0}]
+   after cut: last looped frame 0 ms , frames 400-500 ms later 0; ping 3/3 max 1.44 ms, done 972 ms after the cut; echo 23 ms; capture {"in":132599,"delivered":298179,"flooded":132483,"skipped":0}
+run 2 B/worker mesh+pair pace=1000 flush=true
+   hops/s 12004  paints/s 60  page timer gap max 5 p50 0 ms (n=544)  page.evaluate max 2 ms  guest echo 24 ms  ping during: 20/20 p50 1.035 max 1.5 dup 0
+   RSS 576 -> 709 754 MB each 5 s  looped/s 11988  CPU DedicatedWorker 0.15, DedicatedWorker 0.14, chromium MAIN 0.07  waiting 764 maxDrain 0.9  dropped {"loss":0,"mtu":0,"rate":0,"full":0,"cut":0,"storm":35786} nicDropped [0,0,0]
+   vms [{"type":"probe","id":4,"got":27,"rx":0,"maxRx":0,"rxDropped":0},{"type":"probe","id":5,"got":27,"rx":0,"maxRx":0,"rxDropped":0},{"type":"probe","id":6,"got":33098,"rx":0,"maxRx":0,"rxDropped":0}]
+   after cut: last looped frame 0 ms , frames 400-500 ms later 0; ping 3/3 max 1.055 ms, done 970 ms after the cut; echo 27 ms; capture {"in":132551,"delivered":298070,"flooded":132435,"skipped":0}
+run 3 B/main triangle pace=1000 flush=true
+   hops/s 3940  paints/s 60  page timer gap max 1 p50 0 ms (n=546)  page.evaluate max 2 ms  guest echo 28 ms  ping during: 0/20 p50 NaN max -Infinity dup 0
+   RSS 526 -> 578 613 MB each 5 s  looped/s 2908  CPU chromium MAIN 0.13, DedicatedWorker 0.10, DedicatedWorker 0.08  waiting 14 maxDrain 0.6  dropped {"loss":0,"mtu":0,"rate":0,"full":0,"cut":0,"storm":0} nicDropped [0,0]
+   vms [{"type":"probe","id":4,"got":11300,"rx":0,"maxRx":5,"rxDropped":0},{"type":"probe","id":5,"got":11311,"rx":0,"maxRx":3,"rxDropped":0}]
+   after cut: last looped frame 7 ms , frames 400-500 ms later 0; ping 3/3 max 1.37 ms, done 971 ms after the cut; echo 23 ms; capture {"in":58623,"delivered":81909,"flooded":33951,"skipped":0}
+run 3 B/worker triangle pace=1000 flush=true
+   hops/s 3935  paints/s 60  page timer gap max 3 p50 0 ms (n=544)  page.evaluate max 3 ms  guest echo 23 ms  ping during: 0/20 p50 NaN max -Infinity dup 0
+   RSS 534 -> 617 682 MB each 5 s  looped/s 2854  CPU DedicatedWorker 0.12, DedicatedWorker 0.12, DedicatedWorker 0.09, chromium MAIN 0.06  waiting 14 maxDrain 1.3  dropped {"loss":0,"mtu":0,"rate":0,"full":0,"cut":0,"storm":0} nicDropped [0,0]
+   vms [{"type":"probe","id":4,"got":11571,"rx":0,"maxRx":0,"rxDropped":0},{"type":"probe","id":5,"got":11581,"rx":0,"maxRx":0,"rxDropped":0}]
+   after cut: last looped frame 6 ms , frames 400-500 ms later 0; ping 3/3 max 1.575 ms, done 974 ms after the cut; echo 27 ms; capture {"in":61555,"delivered":85373,"flooded":34768,"skipped":0}
+run 3 B/main mesh+pair pace=1000 flush=true
+   hops/s 12000  paints/s 60  page timer gap max 6 p50 0 ms (n=542)  page.evaluate max 2 ms  guest echo 24 ms  ping during: 20/20 p50 0.895 max 1.425 dup 0
+   RSS 572 -> 650 675 MB each 5 s  looped/s 11984  CPU chromium MAIN 0.15, DedicatedWorker 0.13  waiting 764 maxDrain 0.9  dropped {"loss":0,"mtu":0,"rate":0,"full":0,"cut":0,"storm":35715} nicDropped [0,0,0]
+   vms [{"type":"probe","id":4,"got":27,"rx":0,"maxRx":0,"rxDropped":0},{"type":"probe","id":5,"got":27,"rx":0,"maxRx":0,"rxDropped":0},{"type":"probe","id":6,"got":33089,"rx":0,"maxRx":0,"rxDropped":0}]
+   after cut: last looped frame 0 ms , frames 400-500 ms later 0; ping 3/3 max 1.36 ms, done 971 ms after the cut; echo 27 ms; capture {"in":132513,"delivered":297986,"flooded":132397,"skipped":0}
+run 3 B/worker mesh+pair pace=1000 flush=true
+   hops/s 11995  paints/s 60  page timer gap max 1 p50 0 ms (n=544)  page.evaluate max 2 ms  guest echo 27 ms  ping during: 20/20 p50 0.975 max 1.325 dup 0
+   RSS 572 -> 705 727 MB each 5 s  looped/s 11979  CPU DedicatedWorker 0.16, DedicatedWorker 0.15, chromium MAIN 0.07  waiting 764 maxDrain 1.1  dropped {"loss":0,"mtu":0,"rate":0,"full":0,"cut":0,"storm":35795} nicDropped [0,0,0]
+   vms [{"type":"probe","id":4,"got":27,"rx":0,"maxRx":0,"rxDropped":0},{"type":"probe","id":5,"got":27,"rx":0,"maxRx":0,"rxDropped":0},{"type":"probe","id":6,"got":33100,"rx":0,"maxRx":0,"rxDropped":0}]
+   after cut: last looped frame 0 ms , frames 400-500 ms later 0; ping 3/3 max 0.975 ms, done 974 ms after the cut; echo 23 ms; capture {"in":132559,"delivered":298111,"flooded":132443,"skipped":0}
+run 4 B/main triangle pace=1000 flush=true
+   hops/s 4083  paints/s 60  page timer gap max 2 p50 0 ms (n=549)  page.evaluate max 2 ms  guest echo 23 ms  ping during: 0/20 p50 NaN max -Infinity dup 0
+   RSS 526 -> 582 619 MB each 5 s  looped/s 2931  CPU chromium MAIN 0.06  waiting 16 maxDrain 0.4  dropped {"loss":0,"mtu":0,"rate":0,"full":0,"cut":0,"storm":0} nicDropped [0,0]
+   vms [{"type":"probe","id":4,"got":12241,"rx":0,"maxRx":4,"rxDropped":0},{"type":"probe","id":5,"got":12248,"rx":0,"maxRx":1,"rxDropped":0}]
+   after cut: last looped frame 6 ms , frames 400-500 ms later 0; ping 3/3 max 1.84 ms, done 954 ms after the cut; echo 26 ms; capture {"in":65224,"delivered":90526,"flooded":36774,"skipped":0}
+run 4 B/worker triangle pace=1000 flush=true
+   hops/s 4161  paints/s 60  page timer gap max 1 p50 0 ms (n=545)  page.evaluate max 2 ms  guest echo 24 ms  ping during: 0/20 p50 NaN max -Infinity dup 0
+   RSS 535 -> 619 683 MB each 5 s  looped/s 3179  CPU DedicatedWorker 0.09, DedicatedWorker 0.08, DedicatedWorker 0.07  waiting 14 maxDrain 0.9  dropped {"loss":0,"mtu":0,"rate":0,"full":0,"cut":0,"storm":0} nicDropped [0,0]
+   vms [{"type":"probe","id":4,"got":11615,"rx":0,"maxRx":0,"rxDropped":0},{"type":"probe","id":5,"got":11622,"rx":0,"maxRx":0,"rxDropped":0}]
+   after cut: last looped frame 7 ms , frames 400-500 ms later 0; ping 3/3 max 1.455 ms, done 968 ms after the cut; echo 23 ms; capture {"in":61651,"delivered":85568,"flooded":34896,"skipped":0}
+run 4 B/main mesh+pair pace=1000 flush=true
+   hops/s 12000  paints/s 60  page timer gap max 5 p50 0 ms (n=543)  page.evaluate max 1 ms  guest echo 27 ms  ping during: 20/20 p50 0.855 max 1.37 dup 0
+   RSS 570 -> 648 668 MB each 5 s  looped/s 11983  CPU chromium MAIN 0.15, DedicatedWorker 0.13  waiting 764 maxDrain 0.8  dropped {"loss":0,"mtu":0,"rate":0,"full":0,"cut":0,"storm":35809} nicDropped [0,0,0]
+   vms [{"type":"probe","id":4,"got":27,"rx":0,"maxRx":0,"rxDropped":0},{"type":"probe","id":5,"got":27,"rx":0,"maxRx":0,"rxDropped":0},{"type":"probe","id":6,"got":33104,"rx":0,"maxRx":0,"rxDropped":0}]
+   after cut: last looped frame 0 ms , frames 400-500 ms later 0; ping 3/3 max 1.4 ms, done 968 ms after the cut; echo 23 ms; capture {"in":132580,"delivered":298140,"flooded":132464,"skipped":0}
+run 4 B/worker mesh+pair pace=1000 flush=true
+   hops/s 12001  paints/s 60  page timer gap max 3 p50 0 ms (n=544)  page.evaluate max 2 ms  guest echo 29 ms  ping during: 20/20 p50 1.14 max 2.625 dup 0
+   RSS 577 -> 717 735 MB each 5 s  looped/s 11985  CPU DedicatedWorker 0.15, DedicatedWorker 0.15, chromium MAIN 0.06  waiting 765 maxDrain 1.2  dropped {"loss":0,"mtu":0,"rate":0,"full":0,"cut":0,"storm":35716} nicDropped [0,0,0]
+   vms [{"type":"probe","id":4,"got":27,"rx":0,"maxRx":0,"rxDropped":0},{"type":"probe","id":5,"got":27,"rx":0,"maxRx":0,"rxDropped":0},{"type":"probe","id":6,"got":33101,"rx":0,"maxRx":0,"rxDropped":0}]
+   after cut: last looped frame 0 ms , frames 400-500 ms later 0; ping 3/3 max 1.165 ms, done 976 ms after the cut; echo 23 ms; capture {"in":132560,"delivered":298081,"flooded":132444,"skipped":0}

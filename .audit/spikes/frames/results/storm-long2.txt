@@ -1,0 +1,16 @@
+run 0 B/main mesh+pair window=1024 rx=1024 flush=true
+   hops/s 525037  paints/s 59  page timer gap max 131 p50 5 ms (n=2337)  page.evaluate max 6 ms  guest echo 39 ms  ping during: 20/20 p50 7.42 max 10.34 dup 0
+   RSS 571 -> 1534 1573 1802 1808 1687 2002 1870 2085 2116 1951 1959 1690 MB each 5 s  looped/s 525021  CPU DedicatedWorker 0.97, chromium MAIN 0.95, ThreadPoolForeg 0.11, ThreadPoolForeg 0.10, ThreadPoolForeg 0.09, ThreadPoolForeg 0.09, ThreadPoolForeg 0.09, ThreadPoolForeg 0.08  waiting 3069 maxDrain 11.2  dropped {"loss":0,"mtu":0,"rate":0,"full":1633958,"cut":0,"storm":0} nicDropped [0,0,61639]
+   vms [{"type":"probe","id":4,"got":27,"rx":0,"maxRx":0,"rxDropped":0},{"type":"probe","id":5,"got":27,"rx":0,"maxRx":0,"rxDropped":0},{"type":"probe","id":6,"got":6661680,"rx":0,"maxRx":0,"rxDropped":0}]
+   after cut: last looped frame 0 ms , frames 400-500 ms later 0; ping 3/3 max 1.09 ms, done 987 ms after the cut; echo 32 ms; capture {"in":32151788,"delivered":72330460,"flooded":32151672,"skipped":0}
+run 0 B/main mesh+pair pace=1000 flush=true
+   hops/s 11973  paints/s 60  page timer gap max 6 p50 0 ms (n=3004)  page.evaluate max 2 ms  guest echo 31 ms  ping during: 20/20 p50 0.93 max 1.395 dup 0
+   RSS 591 -> 670 697 697 720 735 710 713 738 734 741 753 742 MB each 5 s  looped/s 11957  CPU DedicatedWorker 0.15, chromium MAIN 0.14  waiting 762 maxDrain 1.2  dropped {"loss":0,"mtu":0,"rate":0,"full":0,"cut":0,"storm":35754} nicDropped [0,0,0]
+   vms [{"type":"probe","id":4,"got":27,"rx":0,"maxRx":0,"rxDropped":0},{"type":"probe","id":5,"got":27,"rx":0,"maxRx":0,"rxDropped":0},{"type":"probe","id":6,"got":183116,"rx":0,"maxRx":0,"rxDropped":0}]
+   after cut: last looped frame 0 ms , frames 400-500 ms later 0; ping 3/3 max 1.205 ms, done 983 ms after the cut; echo 31 ms; capture {"in":732643,"delivered":1648294,"flooded":732527,"skipped":0}
+run 0 B/main triangle pace=1000 flush=true
+   hops/s 3071  paints/s 60  page timer gap max 5 p50 0 ms (n=3018)  page.evaluate max 3 ms  guest echo 31 ms  ping during: 0/20 p50 NaN max -Infinity dup 0
+   RSS 517 -> 558 606 628 644 656 602 609 534 568 604 610 635 MB each 5 s  looped/s 2311  CPU chromium MAIN 0.13, DedicatedWorker 0.08, DedicatedWorker 0.08  waiting 14 maxDrain 0.7  dropped {"loss":0,"mtu":0,"rate":0,"full":0,"cut":0,"storm":0} nicDropped [0,0]
+   vms [{"type":"probe","id":4,"got":61058,"rx":0,"maxRx":4,"rxDropped":0},{"type":"probe","id":5,"got":61069,"rx":0,"maxRx":3,"rxDropped":0}]
+   after cut: last looped frame 6 ms , frames 400-500 ms later 0; ping 3/3 max 1.415 ms, done 973 ms after the cut; echo 31 ms; capture {"in":316346,"delivered":447161,"flooded":183225,"skipped":0}
+done
