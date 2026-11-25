@@ -1,0 +1,38 @@
+{
+	"name": "unlab.run",
+	"version": "0.1.0",
+	"description": "SSH into the Linux machines of an unlab lab in your browser, and give them the internet",
+	"keywords": [
+		"linux",
+		"network",
+		"lab",
+		"ssh",
+		"browser",
+		"wasm"
+	],
+	"homepage": "https://unlab.run",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/gregbell/unlab.git",
+		"directory": "cli"
+	},
+	"license": "MIT",
+	"author": "Greg Bell",
+	"type": "module",
+	"bin": {
+		"unlab": "dist/cli.mjs"
+	},
+	"files": [
+		"dist",
+		"README.md",
+		"LICENSE",
+		"THIRD-PARTY.txt"
+	],
+	"engines": {
+		"node": ">=22.12"
+	},
+	"publishConfig": {
+		"access": "public",
+		"provenance": true
+	}
+}

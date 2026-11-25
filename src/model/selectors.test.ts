@@ -247,11 +247,22 @@ describe("machine details", () => {
 				{ label: "memory", value: "256 MiB" },
 				{ label: "address", value: "10.88.0.12/24" },
 				{ label: "mac", value: "52:54:00:88:00:0c" },
-				{ label: "uplink", value: "lab only" },
+				{ label: "uplink", value: "package repositories" },
 				{ label: "link", value: "connected on port 2", tone: "ok" },
 				{ label: "shells", value: "console, sh1" },
 			],
 		});
+	});
+
+	test("its uplink is what the gateway reaches now", () => {
+		let s = emptyLab();
+		s = run(s, spawnEvent(s, 1), isReady("node1"));
+		const uplink = (state: LabState) => selectDetails(state)?.rows.find((r) => r.label === "uplink")?.value;
+		expect(uplink(s)).toBe("package repositories");
+		s = run(s, { type: "cli/link", cli: { kind: "linked" } });
+		expect(uplink(s)).toBe("internet through the CLI");
+		s = run(s, { type: "cli/link", cli: { kind: "waiting" } });
+		expect(uplink(s)).toBe("package repositories");
 	});
 
 	const value = (s: LabState, label: string) => selectDetails(s)?.rows.find((r) => r.label === label)?.value;
@@ -375,7 +386,7 @@ describe("a machine with several NICs", () => {
 		const s = run(three(), linkEvent(three(), false, { machine: "node1", nic: 1 }));
 		const details = selectDetails(s);
 		expect(details?.rows.slice(5)).toEqual([
-			{ label: "uplink", value: "lab only" },
+			{ label: "uplink", value: "package repositories" },
 			{ label: "eth0", value: "connected on port 1", tone: "ok" },
 			{ label: "address", value: "10.88.0.11/24" },
 			{ label: "mac", value: "52:54:00:88:00:0b" },

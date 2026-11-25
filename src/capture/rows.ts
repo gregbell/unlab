@@ -152,6 +152,7 @@ const WHO: Readonly<Record<Exclude<Cause, "power">, string>> = {
 	agent: "the agent",
 	bar: "you",
 	button: "you",
+	cli: "the CLI",
 	runtime: "the lab",
 };
 

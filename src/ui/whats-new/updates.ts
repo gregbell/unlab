@@ -21,6 +21,12 @@ export const UPDATES: readonly Update[] = [
 	},
 	{
 		date: "2026-11-25",
+		title: "SSH into a machine, and the internet in it",
+		detail:
+			"Run npx unlab.run in a terminal. It opens shells in your machines, copies files, runs lab commands, and gives machines the internet through your computer.",
+	},
+	{
+		date: "2026-11-25",
 		title: "Move a cable while a machine runs",
 		detail:
 			"Plug a network interface into another switch, at a port you name or the lowest free one, or unplug it. Build a router between two switches.",

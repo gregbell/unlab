@@ -4,6 +4,7 @@ import { Worker } from "node:worker_threads";
 import { address } from "../../src/model/testkit.ts";
 import type { PortNo } from "../../src/model/types.ts";
 import { addressStr, defaultAddress, ip4str, macStr, NICS, type NicNo, nodeMac } from "../../src/net/index.ts";
+import type { LinkTarget } from "../../src/runtime/machine-link.ts";
 import { LabSwitch, type TapEvent } from "../../src/runtime/switch.ts";
 import { imagePath } from "../support/images.ts";
 import type { ExecDone, FromMachine, MachineData, ToMachine } from "./vm-worker.ts";
@@ -36,6 +37,8 @@ export interface TestMachine {
 	console(): string;
 	/** What the machine said when a NIC went away. */
 	readonly lost: readonly string[];
+	/** Link it with a CLI as the page would, or unlink it. */
+	link(target: LinkTarget | null): void;
 	/** Put a frame on one of its NICs, as the switch would. */
 	deliver(nic: NicNo, frame: Uint8Array): void;
 }
@@ -68,6 +71,7 @@ export async function bootLab(setups: readonly MachineSetup[]): Promise<TestLab>
 
 	const boot = async (setup: MachineSetup): Promise<TestMachine> => {
 		const data: MachineData = {
+			n: setup.n,
 			name: nameOf(setup),
 			namedPrompt: setup.name !== undefined,
 			addresses: addressesOf(setup),
@@ -146,6 +150,7 @@ export async function bootLab(setups: readonly MachineSetup[]): Promise<TestLab>
 			// biome-ignore lint/suspicious/noControlCharactersInRegex: escape sequences start with one.
 			console: () => printed.replace(/\x1b(?:\][^\x07]*\x07|\[[\d;?]*[a-zA-Z])/g, ""),
 			lost,
+			link: (target) => post({ type: "link", target }),
 			deliver,
 		};
 	};

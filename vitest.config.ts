@@ -13,7 +13,7 @@ export default mergeConfig(
 				{
 					test: {
 						name: "unit",
-						include: ["src/**/*.test.ts", "scripts/**/*.test.ts"],
+						include: ["src/**/*.test.ts", "scripts/**/*.test.ts", "cli/**/*.test.ts"],
 						exclude: [...configDefaults.exclude, BROWSER_TESTS],
 						environment: "node",
 					},
@@ -22,6 +22,7 @@ export default mergeConfig(
 					test: {
 						name: "integration",
 						include: ["test/integration/**/*.test.ts"],
+						globalSetup: ["test/integration/global-setup.ts"],
 						environment: "node",
 						testTimeout: 300_000,
 						hookTimeout: 300_000,

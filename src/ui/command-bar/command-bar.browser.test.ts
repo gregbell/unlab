@@ -462,7 +462,7 @@ describe("<unlab-command-bar> CmdFanout: exec results", () => {
 		expect(text(".summary")).toBe("3 machines · 3 ready");
 		expect(texts(".machine-result .status")).toEqual(["ready", "ready", "ready"]);
 		expect(text(".machine-result .last")).toBe(
-			"10.88.0.11/24 · 52:54:00:88:00:0b · up on port 1 · 4 GiB disk · console",
+			"10.88.0.11/24 · 52:54:00:88:00:0b · up on port 1 · package repositories only · 4 GiB disk · console",
 		);
 		expect(document.querySelector("unlab-command-bar .footnote")).toBeNull();
 	});

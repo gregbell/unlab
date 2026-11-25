@@ -276,11 +276,14 @@ function checkpointRows({ sets, life }: Machine): DetailRow[] {
 	return parts.length === 0 ? [] : [{ label: "checkpoints", value: parts.join(" · ") }];
 }
 
+const UPLINK = { none: "lab only", packages: "package repositories", internet: "internet through the CLI" } as const;
+
 /** One NIC reads as the machine's own address and link. Several are told apart by name. */
-function nicRows(lab: Pick<LabState, "switches">, machine: Machine): DetailRow[] {
+function nicRows(lab: Pick<LabState, "switches" | "cli">, machine: Machine): DetailRow[] {
 	const { spec } = machine;
+	const reach = gatewayReach(lab, machine);
 	const uplink: DetailRow[] = [
-		{ label: "uplink", value: "lab only" },
+		{ label: "uplink", value: UPLINK[reach ?? "none"] },
 		...(spec.gateway ? [] : [{ label: "gateway", value: "off" } as const]),
 	];
 	const nics = NICS.slice(0, spec.nics.length);
@@ -310,9 +313,9 @@ export const selectDetails: (state: LabState) => MachineDetails | null = memo(
 	(s) => {
 		const focused = selectFocused(s);
 		const machine = focused === null ? undefined : s.machines[focused];
-		return [machine, s.images, s.switches, machine?.life.phase === "booting" ? s.now : 0];
+		return [machine, s.images, s.switches, s.cli, machine?.life.phase === "booting" ? s.now : 0];
 	},
-	(machine, images, switches, now) => {
+	(machine, images, switches, cli, now) => {
 		if (!machine) return null;
 		const image = images.find((known) => known.name === machine.spec.image);
 		return {
@@ -331,7 +334,7 @@ export const selectDetails: (state: LabState) => MachineDetails | null = memo(
 				...diskRows(machine),
 				...checkpointRows(machine),
 				{ label: "memory", value: `${machine.spec.memMiB} MiB` },
-				...nicRows({ switches }, machine),
+				...nicRows({ switches, cli }, machine),
 				{ label: "shells", value: machine.sessions.map(sessionLabel).join(", ") },
 			],
 		};
@@ -455,7 +458,7 @@ export function selectAgentIndicator(state: LabState): AgentIndicator {
 }
 
 export interface StatusSegment {
-	readonly key: "machines" | "sessions" | "webmcp";
+	readonly key: "machines" | "sessions" | "webmcp" | "cli";
 	readonly text: string;
 	/** `quiet` when all is well, `down` for a failed machine, `warn` while a call waits or the browser blocks the tools. */
 	readonly tone: "quiet" | "down" | "warn";
@@ -488,6 +491,25 @@ function webmcpSegment(agent: LabState["agent"], indicator: AgentIndicator): Sta
 	const tools = plural(Object.values(agent.policies).filter((policy) => policy !== "off").length, "tool");
 	const text = indicator === "no agent calls yet" ? `webmcp: ${tools} registered` : `webmcp: ${tools}, ${indicator}`;
 	return { key: "webmcp", text, tone: "quiet" };
+}
+
+/** The link with the CLI, which the status line shows beside WebMCP. */
+export function selectCliSegment({ cli }: LabState): StatusSegment {
+	return CLI_SEGMENTS[cli.kind];
+}
+
+const CLI_SEGMENTS: Readonly<Record<LabState["cli"]["kind"], StatusSegment>> = {
+	off: { key: "cli", text: "cli: off", tone: "quiet" },
+	waiting: { key: "cli", text: "cli: waiting", tone: "quiet" },
+	blocked: { key: "cli", text: "cli: blocked", tone: "warn" },
+	refused: { key: "cli", text: "cli: refused", tone: "warn" },
+	linked: { key: "cli", text: "cli: linked", tone: "quiet" },
+};
+
+/** What a machine's gateway reaches now, or null for one that has none. */
+export function gatewayReach({ cli }: Pick<LabState, "cli">, { spec }: Machine): "packages" | "internet" | null {
+	if (!spec.gateway) return null;
+	return cli.kind === "linked" ? "internet" : "packages";
 }
 
 export const selectStatus: (state: LabState) => StatusLine = memo(

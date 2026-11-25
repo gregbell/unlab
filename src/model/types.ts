@@ -53,7 +53,7 @@ export interface NicRef {
 
 // ───────────────────────────── machines ─────────────────────────────
 
-export type Source = "bar" | "button" | "agent";
+export type Source = "bar" | "button" | "agent" | "cli";
 /** Who or what caused something the lab reports in words: capture event rows, announcements. */
 export type Cause = Source | "runtime" | "power";
 
@@ -337,6 +337,17 @@ export interface AgentState {
 	readonly lastCallAt: number | null;
 }
 
+/** The link with the CLI on this computer. */
+export type CliLink =
+	/** The lab does not look for one. */
+	| { readonly kind: "off" }
+	| { readonly kind: "waiting" }
+	/** The browser does not let the lab reach this computer. */
+	| { readonly kind: "blocked" }
+	/** It is there and does not take this lab. One sentence. */
+	| { readonly kind: "refused"; readonly message: string }
+	| { readonly kind: "linked" };
+
 export interface LogEntry {
 	readonly id: number;
 	readonly line: string;
@@ -387,6 +398,7 @@ export interface LabState {
 	readonly panels: Panels;
 	readonly capture: CaptureUi;
 	readonly agent: AgentState;
+	readonly cli: CliLink;
 	/** Bounded. `recent` and bar history are selectors over it. */
 	readonly log: readonly LogEntry[];
 	readonly nextLogId: number;
@@ -461,7 +473,7 @@ export type PlanError =
 	| { readonly kind: "address-overlap"; readonly nics: readonly [NicNo, NicNo] }
 	| { readonly kind: "address-gateway"; readonly address: Address; readonly subnet: Address };
 
-// ───────────────────────────── events: one union, four producers ─────────────────────────────
+// ───────────────────────────── events: one union, five producers ─────────────────────────────
 
 /** Dispatched only by the runtime engine. Attempt-stamped. */
 export type RuntimeEvent =
@@ -592,7 +604,10 @@ export type AgentEvent =
 			readonly result: string | null;
 	  };
 
-export type LabEvent = RuntimeEvent | CommandEvent | UiEvent | AgentEvent;
+/** Dispatched only by link/. */
+export type LinkEvent = { readonly type: "cli/link"; readonly cli: CliLink };
+
+export type LabEvent = RuntimeEvent | CommandEvent | UiEvent | AgentEvent | LinkEvent;
 
 // ───────────────────────────── effects: what the shell must do ─────────────────────────────
 

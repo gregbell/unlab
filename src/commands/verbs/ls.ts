@@ -4,6 +4,7 @@ import {
 	type CheckpointName,
 	type Disk,
 	disksOf,
+	gatewayReach,
 	type LabState,
 	type Machine,
 	type MachineName,
@@ -48,6 +49,8 @@ export interface ListedMachine {
 	readonly address: string | null;
 	/** Whether eth0 reaches the package gateway. */
 	readonly gateway: boolean;
+	/** That gateway leads to the internet, as it does while a CLI is linked. */
+	readonly internet?: true;
 	/** eth0 first. */
 	readonly nics: readonly ListedNic[];
 	/** The one that keeps its files first. */
@@ -81,6 +84,7 @@ function listed(lab: LabState, m: Machine): ListedMachine {
 		state: m.life.phase,
 		address: address && ip4str(address.ip),
 		gateway: m.spec.gateway,
+		...(gatewayReach(lab, m) === "internet" ? { internet: true } : {}),
 		nics,
 		disks: disksOf(m.spec),
 		checkpoints: m.sets.checkpoints.map(({ name, bytes }) => ({ name, bytes })),
@@ -109,12 +113,17 @@ function checkpointPart({ checkpoints, saving }: ListedMachine): string[] {
 	];
 }
 
+function gatewayPart({ gateway, internet, nics }: ListedMachine): string[] {
+	if (internet) return ["internet through the CLI"];
+	if (gateway) return ["package repositories only"];
+	return nics[0].port === null ? [] : ["no package gateway"];
+}
+
 /** A machine with one NIC is one line. With more, each NIC has its own. */
 function lines(m: ListedMachine): string {
 	if (m.reason !== undefined) return m.reason;
-	const off = !m.gateway && m.nics[0].port !== null;
 	const rest = [
-		...(off ? ["no package gateway"] : []),
+		...gatewayPart(m),
 		m.disks.length === 1 ? `${diskList(m.disks)} disk` : diskList(m.disks),
 		m.sessions.map(sessionLabel).join(", "),
 		...checkpointPart(m),

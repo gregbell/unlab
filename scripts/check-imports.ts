@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join, normalize, relative } from "node:path";
 
-export type Layer = "net" | "model" | "capture" | "commands" | "agent" | "runtime" | "ui";
+export type Layer = "streams" | "net" | "model" | "capture" | "commands" | "agent" | "link" | "runtime" | "ui";
 
 interface Rule {
 	/** Layers whose index.ts this layer may import values from. */
@@ -11,12 +11,14 @@ interface Rule {
 }
 
 export const LAYERS: Readonly<Record<Layer, Rule>> = {
+	streams: { values: [], types: [] },
 	net: { values: [], types: [] },
 	model: { values: ["net"], types: [] },
 	capture: { values: ["net", "model"], types: [] },
 	commands: { values: ["net", "model"], types: [] },
 	agent: { values: ["net", "model", "capture", "commands"], types: [] },
-	runtime: { values: ["net", "model", "capture"], types: ["commands"] },
+	link: { values: ["streams", "net", "model", "commands"], types: [] },
+	runtime: { values: ["streams", "net", "model", "capture"], types: ["commands"] },
 	ui: { values: ["net", "model", "commands"], types: ["capture"] },
 };
 
@@ -25,6 +27,7 @@ const NAMED_EXCEPTIONS: ReadonlyArray<{ from: string; to: string }> = [
 	// Minting an Approval is restricted to the two surfaces that ask a person.
 	{ from: "src/ui/command-bar/", to: "src/commands/approval.ts" },
 	{ from: "src/agent/", to: "src/commands/approval.ts" },
+	{ from: "src/link/", to: "src/commands/approval.ts" },
 ];
 
 export interface SourceFile {

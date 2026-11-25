@@ -192,6 +192,8 @@ export interface Mounted<E extends HTMLElement> {
 	readonly confirms: string[];
 	/** Every answer given through `services.agent.answer`, in order. */
 	readonly answers: { readonly call: number; readonly allow: boolean }[];
+	/** Every word given through `services.link.set`, in order. */
+	readonly links: readonly boolean[];
 	/** What `services.switch.counters` answers for the default switch's ports. */
 	readonly counters: Map<PortNo, Counters>;
 	/** Resolves once every element in the tree has rendered. */
@@ -244,6 +246,7 @@ export async function mount<K extends keyof HTMLElementTagNameMap>(
 	const runs: Mounted<HTMLElement>["runs"] = [];
 	const confirms: string[] = [];
 	const answers: Mounted<HTMLElement>["answers"] = [];
+	const links: boolean[] = [];
 	const counters = new Map<PortNo, Counters>(options.counters);
 	const registry = createRegistry(
 		{
@@ -286,6 +289,11 @@ export async function mount<K extends keyof HTMLElementTagNameMap>(
 			},
 			tryCall: options.tryCall ?? null,
 		},
+		link: {
+			set: (on) => {
+				links.push(on);
+			},
+		},
 	};
 
 	const host = document.createElement("div");
@@ -297,7 +305,7 @@ export async function mount<K extends keyof HTMLElementTagNameMap>(
 	host.append(element);
 	const settle = () => settled(host);
 	await settle();
-	return { element, store, services, runs, confirms, answers, counters, settle };
+	return { element, store, services, runs, confirms, answers, links, counters, settle };
 }
 
 /** The tool list the agent layer derives, rebuilt here because ui may not import agent. */

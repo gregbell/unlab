@@ -13,15 +13,18 @@ import { type Device, type DiskCopy, disksOf, SHUTDOWN_MS } from "../model/index
 import { defaultName } from "../net/index.ts";
 import { rootStore } from "./disk-stores.ts";
 import { keepSaved, openExtraDisk } from "./extra-disk.ts";
+import { GatewayBackend } from "./gateway.ts";
 import { execAsRoot, hostsScript, setupScript } from "./guest.ts";
 import { MemoryDisk } from "./image.ts";
 import { copyLive, type LiveCopy, type LiveDisk, watchable } from "./live-copy.ts";
+import { type Channel, type LinkTarget, MachineLink } from "./machine-link.ts";
 import { MachineNics } from "./machine-nics.ts";
 import { alpinePackageSetup, packageBackend } from "./package-repositories.ts";
 import { nextOf, saveDisks, shutDown, syncGuest } from "./power.ts";
 import type { FromVm, PtySpec, ToVm, VmConfig } from "./protocol.ts";
 import { createShellTracker } from "./shell-tracker.ts";
 import { copyFailure, memoryShortage, storageFailure } from "./shortage.ts";
+import { fetchSshPrograms } from "./ssh-server.ts";
 import { writeFile } from "./write-file.ts";
 
 function post(m: FromVm, transfer: Transferable[] = []): void {
@@ -32,7 +35,7 @@ function fail(message: string, fatal: boolean): void {
 	post({ type: "error", message, fatal });
 }
 
-type Queued = Exclude<ToVm, { type: "boot" | "frame" | "release" }>;
+type Queued = Exclude<ToVm, { type: "boot" | "frame" | "link" | "release" }>;
 
 /** A guest that goes down ends what it runs first: how long before its kernel, when nothing much is left to write. */
 const GOING_DOWN_MS = 5000;
@@ -46,6 +49,9 @@ let saved: Promise<boolean> | undefined;
 /** The kernel has ended. */
 let over = false;
 let nics: MachineNics | undefined;
+let link: MachineLink | undefined;
+/** Where the CLI is, when the page said so before this machine was told what it is. */
+let linkTarget: LinkTarget | null = null;
 /** Shells opened beside the console, by session id. */
 const ptys = new Map<number, Pty>();
 /** Messages that arrive while the kernel is still booting. */
@@ -63,6 +69,11 @@ self.addEventListener("message", (ev: MessageEvent<ToVm>) => {
 	if (m.type === "frame") {
 		// Never queued: a NIC whose driver is not up yet drops frames, as a real one does.
 		nics?.deliver(m.nic, m.frame);
+		return;
+	}
+	if (m.type === "link") {
+		linkTarget = m.target;
+		link?.link(m.target);
 		return;
 	}
 	if (m.type === "release") {
@@ -218,7 +229,16 @@ async function boot(c: VmConfig): Promise<void> {
 
 	// The gateway is a NetStack of its own, told the same MAC as eth0 so its
 	// DHCP lease and ARP replies are addressed to this machine.
-	const gateway = c.gateway ? new NetStack({ mac: c.macs[0], backend: packageBackend() }) : undefined;
+	const backend = c.gateway ? new GatewayBackend(packageBackend()) : undefined;
+	const gateway = backend && new NetStack({ mac: c.macs[0], backend });
+	link = new MachineLink({
+		n: c.n,
+		name: c.name,
+		gateway: backend,
+		dial: (url) => new WebSocket(url) as Channel,
+		programs: fetchSshPrograms,
+	});
+	link.link(linkTarget);
 
 	nics = new MachineNics({
 		macs: c.macs,
@@ -277,6 +297,7 @@ async function boot(c: VmConfig): Promise<void> {
 	disks = kept.map((disk) => ({ disk, store: watchable(disk) }));
 	saved = vm.exited.then((exit) => {
 		over = true;
+		link?.link(null);
 		const next = nextOf(exit);
 		if (next) post({ type: "halted", next });
 		else if (exit.kind !== "stopped") post({ type: "exited", code: exit.code, reason: exit.reason });
@@ -332,6 +353,7 @@ async function boot(c: VmConfig): Promise<void> {
 	await firstPrompt;
 
 	booting = false;
+	link.ready(vm);
 	post({ type: "ready", ms: Math.round(performance.now() - t0) });
 	for (const m of queued.splice(0)) handle(m);
 }

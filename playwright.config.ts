@@ -1,7 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 import { chromiumExecutable } from "./test/support/chromium.ts";
 
-const PORT = 4173;
+const PORT = Number(process.env.E2E_PORT ?? 4173);
 
 export default defineConfig({
 	testDir: "e2e",
