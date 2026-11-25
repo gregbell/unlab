@@ -1,6 +1,6 @@
-import { ACCEPTS, disksOf, type Machine, type MachineName, machineList, plugsOf, portsOf } from "../../model/index.ts";
+import { disksOf, type Machine, type MachineName, machineList, plugsOf, portsOf } from "../../model/index.ts";
 import { ip4str } from "../../net/index.ts";
-import { defineVerb, refuse } from "../define.ts";
+import { defineVerb, machineNow, Refusal } from "../define.ts";
 import * as slots from "../grammar/slots.ts";
 import { andList, count, diskList, ports, skippedPart } from "./words.ts";
 
@@ -45,15 +45,17 @@ function theirCheckpoints(machines: readonly Machine[]): string[] {
 export const rm = defineVerb({
 	name: "rm",
 	about: "remove machines and their disks",
+	description:
+		"Remove machines, everything on their disks, and their checkpoints. There is no undo. Returns the names removed once they are gone.",
 	danger: true,
 	phases: ["booting", "ready", "stopping", "off", "restoring", "failed"],
 	grammar: { names: slots.machines() },
-	plan(a, lab) {
+	example: { names: "node2" },
+	plan(a, _lab, ctx) {
 		const machines: Machine[] = [];
 		for (const name of a.names.machines) {
-			const m = lab.machines[name];
-			if (!m) return refuse(`${name} is already gone.`, "names");
-			if (!ACCEPTS[m.life.phase].remove) return refuse(`${name} is already being removed.`, "names");
+			const m = machineNow(name, ctx, "names");
+			if (m instanceof Refusal) return m;
 			machines.push(m);
 		}
 		return { machines, skipped: a.names.skipped };
@@ -116,8 +118,6 @@ export const rm = defineVerb({
 	tool: {
 		name: "machines_remove",
 		title: "Remove machines",
-		description:
-			"Remove machines, everything on their disks, and their checkpoints. There is no undo. Returns the names removed once they are gone.",
 		policy: "ask",
 		annotations: { consequentialHint: true },
 	},

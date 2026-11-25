@@ -71,6 +71,7 @@ describe("initialState", () => {
 		expect(s.agent).toEqual({
 			webmcp: { kind: "absent" },
 			policies: {
+				lab_help: "run",
 				machines_list: "run",
 				machines_spawn: "ask",
 				machines_boot: "run",

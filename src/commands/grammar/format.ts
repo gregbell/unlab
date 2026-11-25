@@ -1,11 +1,14 @@
 import type { Grammar, Options, Slot } from "./slots.ts";
 import { tokenize } from "./tokenize.ts";
 
-function slotSignature(slot: Slot): string {
+/** `<image>`, `[--net network,... | --no-net]`, `-- <command>` */
+export function slotSignature(slot: Slot): string {
 	switch (slot.kind) {
 		case "positional":
 		case "rest":
 			return `<${slot.label}>`;
+		case "optional":
+			return `[${slot.value.label}]`;
 		case "options":
 			return `[${slot.variants.map((v) => ("value" in v ? `${v.flag} ${v.value.label}` : v.flag)).join(" | ")}]`;
 		case "passthrough":
@@ -61,6 +64,9 @@ export function format(verb: string, grammar: Grammar, args: Readonly<Record<str
 		switch (slot.kind) {
 			case "positional":
 				words.push(slot.format(value));
+				break;
+			case "optional":
+				if (value !== null) words.push(slot.value.format(value));
 				break;
 			case "rest":
 				if (value !== "") words.push(String(value));

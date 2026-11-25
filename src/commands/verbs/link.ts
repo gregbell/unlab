@@ -15,7 +15,7 @@ import {
 	plugsOf,
 } from "../../model/index.ts";
 import { nicName } from "../../net/index.ts";
-import { defineVerb, refuse } from "../define.ts";
+import { defineVerb, machineNow, Refusal, refuse } from "../define.ts";
 import * as slots from "../grammar/slots.ts";
 import { andList, planErrorSentence, ports, skippedPart } from "./words.ts";
 
@@ -75,10 +75,17 @@ function kindOf(change: LinkChange): Kind {
 export const link = defineVerb({
 	name: "link",
 	about: "plug or cut cables",
+	description:
+		"Plug in (up) or cut (down) the switch cables of machines or of single NICs. Returns the port and link state per NIC. A cable already as asked is left alone. A machine that is off can be unplugged or plugged in; its link comes up when it boots.",
 	danger: false,
 	phases: ["ready", "off"],
-	grammar: { link: slots.choice(["up", "down"]), machines: slots.cables() },
-	plan(a, lab) {
+	grammar: { link: slots.choice("up plugs the cables in, down cuts them.", ["up", "down"]), machines: slots.cables() },
+	example: { link: "down", machines: "node2" },
+	plan(a, lab, ctx) {
+		for (const { machine } of a.machines.nics) {
+			const now = machineNow(machine, ctx, "machines");
+			if (now instanceof Refusal) return now;
+		}
 		const up = a.link === "up";
 		const changes = planLink(lab, a.machines.nics, up);
 		if (isPlanError(changes)) return refuse(planErrorSentence(changes), "machines");
@@ -116,8 +123,6 @@ export const link = defineVerb({
 	tool: {
 		name: "link_set",
 		title: "Plug in or cut cables",
-		description:
-			"Plug in (up) or cut (down) the switch cables of machines or of single NICs. Returns the port and link state per NIC. A cable already as asked is left alone. A machine that is off can be unplugged or plugged in; its link comes up when it boots.",
 		policy: "run",
 	},
 });

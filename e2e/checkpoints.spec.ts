@@ -259,7 +259,7 @@ test("a reload while a checkpoint is saved leaves none of it, and one while a ma
 	await expect(rail(page, "node1")).toContainText(/restoring [1-9]\d?%/);
 	expect(await listed(page)).toMatchObject([{ name: "node1", state: "restoring" }]);
 	expect(await call(page, "shell_exec", { targets: "node1", command: "true" })).toEqual({
-		error: "exec has no machine to type into. Skipped node1: being restored. Nothing was changed.",
+		error: "exec wants a ready machine here, and node1 is being restored. Nothing was changed.",
 	});
 	await page.reload();
 	await expect(rail(page, "node1")).toContainText(/restoring [1-9]\d?%/, { timeout: 60_000 });
@@ -295,8 +295,8 @@ test("a machine can be removed while its disks are saved or restored, and nothin
 });
 
 const FULL = (what: string) =>
-	`Browser storage is full, so ${what} Delete a checkpoint, remove a machine or free some space, then try again.`;
-const SAVE_FULL = { error: `${FULL("checkpoint before of node1 could not be saved.")} Nothing was changed.` };
+	`Browser storage is full, so ${what}: delete a checkpoint, remove a machine or free some space, then try again.`;
+const SAVE_FULL = { error: `${FULL("checkpoint before of node1 could not be saved")} Nothing was changed.` };
 
 /** The guest runs on, and keeps what it writes. */
 async function unharmed(page: Page, extras = 1): Promise<void> {
@@ -361,7 +361,7 @@ test("a restore that runs out of storage, or whose checkpoint is gone, fails wit
 	const before = await databases(page);
 	await confirmed(page, "restore node1 before", "Everything written to its 2 disks");
 	await status(page, "0 of 1 machine ready, 1 failed");
-	const full = FULL("node1 could not go back to checkpoint before. Its disks are as they were.");
+	const full = FULL("node1 could not go back to checkpoint before, and its disks are as they were");
 	await expect(details(page)).toContainText(full);
 	await expect.poll(() => databases(page)).toEqual(before);
 
@@ -373,7 +373,9 @@ test("a restore that runs out of storage, or whose checkpoint is gone, fails wit
 		saved(1, 1),
 	);
 	await confirmed(page, "restore node1 before", "Everything written to its 2 disks");
-	await expect(details(page)).toContainText(/could not go back to checkpoint before: .* Its disks are as they were\./);
+	await expect(details(page)).toContainText(
+		/could not go back to checkpoint before, and its disks are as they were: .+\./,
+	);
 	await typed(page, "boot node1");
 	await status(page, "1 of 1 machine ready");
 	expect(await written(page)).toBe("second\ntwo");
@@ -429,7 +431,7 @@ test("an agent's restore asks first, runs only for the checkpoint it asked about
 	await call(page, "checkpoint_save", { machine: "node1", checkpoint: "before" });
 	await approve.click();
 	expect(await finish(page, "stale")).toEqual({
-		error: "What this does to node1 has changed since it was asked. Nothing was changed.",
+		error: "What this does to node1 has changed since it was asked, so ask again. Nothing was changed.",
 	});
 
 	await crash(page, 1);
@@ -447,6 +449,7 @@ test("an agent's restore asks first, runs only for the checkpoint it asked about
 	await panel.getByRole("button", { name: "Delete checkpoint before of node1", exact: true }).click();
 	expect(await finish(page, "forget")).toMatchObject({ data: { machine: "node1", removed: "before" } });
 	expect(await call(page, "checkpoint_restore", { machine: "node1", checkpoint: "before" })).toEqual({
-		error: "node1 has no checkpoint called before. It has none. Nothing was changed.",
+		error:
+			"node1 has no checkpoint called before, or any other, so save one first with checkpoint. Nothing was changed.",
 	});
 });

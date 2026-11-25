@@ -1,4 +1,4 @@
-import { type LabState, type MachineName, machineList, parseSessionId } from "../../model/index.ts";
+import { type LabState, type MachineName, parseSessionId } from "../../model/index.ts";
 import { defineVerb, refuse } from "../define.ts";
 import * as slots from "../grammar/slots.ts";
 
@@ -14,16 +14,21 @@ type Mode = "plain" | "main" | "max";
 export const focus = defineVerb({
 	name: "focus",
 	about: "move the keyboard to a console",
+	description: "Move the keyboard to a machine's console or another of its sessions.",
 	danger: false,
 	phases: ["booting", "ready", "stopping", "off", "restoring", "failed"],
 	grammar: {
 		target: slots.target(),
-		mode: slots.exclusive<Mode>("plain", [slots.flag("--main", "main"), slots.flag("--max", "max")]),
+		mode: slots.exclusive<Mode>("--main moves its pane to the front. --max maximises it, or restores it.", "plain", [
+			slots.flag("--main", "main"),
+			slots.flag("--max", "max"),
+		]),
 	},
-	plan(a, lab) {
+	example: { target: "node2", mode: "max" },
+	plan(a, _lab, ctx) {
 		const address = parseSessionId(a.target);
-		const m = machineList(lab).find((machine) => machine.name === (address?.machine ?? a.target));
-		if (!m || m.life.phase === "removing") return refuse(`${a.target} is no longer there to focus.`, "target");
+		const m = slots.readMachine(address?.machine ?? a.target, ctx);
+		if (m instanceof slots.Miss) return refuse(String(m.message), "target");
 		return { target: a.target, machine: m.name, session: address?.session ?? null, mode: a.mode };
 	},
 	describe(plan) {

@@ -37,3 +37,12 @@ ts	phase	decision	why	evidence	result
 2026-11-25T06:39:31Z	files	text on stdin of a root script, temp file then rename, 1 MiB limit	argv holds 64 KiB; old file stays whole on any failure	31 broken behaviours red; e2e/files.spec.ts 11 green after rebase	reviewed diff
 2026-11-25T06:39:31Z	files	policy run for file_write	same reach as shell_exec, which runs	src/model/update.ts	default, user can set ask
 2026-11-25T06:39:31Z	files	open: typing straight after starting cat on Debian showed ahalf sentence	seen before any write, cause not traced	worker report	open item
+2026-11-25T06:07:31Z	lab-image	merged PR 15	CI green	Actions run 45556494730; CI boot ms alpine 2739,2264,2349,2255 lab 2979,2374,2384,2370	merged
+2026-11-25T07:27:12Z	files	merged PR 16	CI green	Actions run 45562275744	merged
+2026-11-25T07:27:12Z	help	help, tool description and schema from one slot field; examples are tool input	they cannot drift	31 breaks red; e2e/help.spec.ts	reviewed diff
+2026-11-25T07:27:12Z	help	sh, capture, focus have no tool	they move a person's panes and keyboard; not phase 1 capabilities	stories file row 1.2	reported to user
+2026-11-25T07:28:13Z	gate	live run by a fresh agent passed	story 0 asks for an agent with only the page and the tools	.audit/live-gate/calls.jsonl; 21 calls, 0 failed, 3 approvals; README.txt sha256 264781be before and after reboot	pass
+2026-11-25T07:28:13Z	gate	open: ext4 on an extra disk replays its journal after a reboot	the image's shutdown does not unmount what a person mounted; its writes are synced	live run and lab-image e2e kernel messages	open item, no data lost
+2026-11-25T07:40:31Z	review	independent review of stories, log and code by claude-fable	a model other than the one that built it	no code defect found; weak rows 1.1 example, 1.3 busy, 1.4 booting	fixed rows and added e2e tests
+2026-11-25T07:40:31Z	review	merged PR 7 and PR 14 were not logged when merged	log hygiene, found in review	gh pr view 7, 14: CI green at merge	noted; several rows were written in batches after the fact
+2026-11-25T07:40:31Z	gate	kept only the brief and the commands of the live run, not the raw transcript	the raw one holds private session context and the repository is public	.audit/live-gate/run.md	done

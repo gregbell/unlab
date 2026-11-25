@@ -5,6 +5,7 @@ import { checkpoint } from "./checkpoint.ts";
 import { exec } from "./exec.ts";
 import { focus } from "./focus.ts";
 import { forget } from "./forget.ts";
+import { helpFor } from "./help.ts";
 import { link } from "./link.ts";
 import { ls } from "./ls.ts";
 import { poweroff } from "./poweroff.ts";
@@ -26,6 +27,8 @@ export { DEFAULT_CPUS, MULTICPU_BLOCKER, type SpawnData } from "./spawn.ts";
 export { MAX_TEXT_BYTES, type WriteData } from "./write.ts";
 export { boot, capture, checkpoint, exec, focus, forget, link, ls, poweroff, reboot, restore, rm, sh, spawn, write };
 
+export const help = helpFor(() => VERBS);
+
 /** The one verb list, in the order the bar's verbs group shows them. */
 export const VERBS: readonly AnyVerb[] = [
 	spawn,
@@ -43,4 +46,5 @@ export const VERBS: readonly AnyVerb[] = [
 	checkpoint,
 	restore,
 	forget,
+	help,
 ];

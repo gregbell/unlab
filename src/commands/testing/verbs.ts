@@ -24,7 +24,8 @@ export const link = defineVerb({
 	name: "link",
 	about: "Plugs in or cuts cables",
 	danger: false,
-	grammar: { dir: slots.choice(["up", "down"]), targets: slots.machines() },
+	grammar: { dir: slots.choice("Up or down.", ["up", "down"]), targets: slots.machines() },
+	example: { dir: "down", targets: "node1" },
 	plan(a, lab) {
 		const changes: LinkChange[] = [];
 		for (const name of a.targets.machines) {
@@ -53,18 +54,19 @@ export const spawn = defineVerb({
 	about: "Boots machines",
 	danger: false,
 	grammar: {
-		count: slots.count({ suggest: () => [1, 2, 3] }),
+		count: slots.count("How many.", { suggest: () => [1, 2, 3] }),
 		image: slots.image(),
 		mem: slots.option(
 			"--mem",
-			slots.count({ label: "MiB", noun: "a size in MiB", suggest: () => [128, 256, 512] }),
+			slots.count("The memory.", { label: "MiB", noun: "a size in MiB", suggest: () => [128, 256, 512] }),
 			256,
 		),
-		net: slots.exclusive<"switch0" | "none">("switch0", [
-			slots.valued("--net", slots.choice(["switch0"])),
+		net: slots.exclusive<"switch0" | "none">("The network.", "switch0", [
+			slots.valued("--net", slots.choice("The switch.", ["switch0"])),
 			slots.flag("--no-net", "none"),
 		]),
 	},
+	example: { count: 1, image: "alpine" },
 	plan(a, lab) {
 		const free = lowestFreePorts(lab, MAX_MACHINES).length;
 		if (a.net === "switch0" && free < a.count) {
@@ -100,6 +102,7 @@ export const rm = defineVerb({
 	danger: true,
 	phases: ["booting", "ready", "failed"],
 	grammar: { targets: slots.machines() },
+	example: { targets: "node1" },
 	plan(a, lab) {
 		const gone = a.targets.machines.find((n) => !lab.machines[n] || lab.machines[n]?.life.phase === "removing");
 		if (gone) return refuse(`${gone} is already gone.`, "targets");
@@ -127,7 +130,8 @@ export const exec = defineVerb({
 	name: "exec",
 	about: "Runs a shell command in each machine's active session",
 	danger: false,
-	grammar: { targets: slots.machines(), command: slots.passthrough("command") },
+	grammar: { targets: slots.machines(), command: slots.passthrough("command", "The command.") },
+	example: { targets: "node1", command: "ls" },
 	plan: (a) => ({ machines: a.targets.machines, command: a.command }),
 	describe: (p) => `type \`${p.command}\` into ${names(p.machines)}`,
 	async execute(plan) {
@@ -147,11 +151,12 @@ export const focus = defineVerb({
 	danger: false,
 	grammar: {
 		target: slots.target(),
-		mode: slots.exclusive<"plain" | "main" | "max">("plain", [
+		mode: slots.exclusive<"plain" | "main" | "max">("How.", "plain", [
 			slots.flag("--main", "main"),
 			slots.flag("--max", "max"),
 		]),
 	},
+	example: { target: "node1" },
 	plan: (a): { target: MachineName | SessionId; mode: "plain" | "main" | "max" } => a,
 	describe: (p) => `focus ${p.target}`,
 	async execute(plan, _ctx, deps) {
@@ -164,7 +169,8 @@ export const capture = defineVerb({
 	name: "capture",
 	about: "Sets the capture filter and opens Wire",
 	danger: false,
-	grammar: { filter: slots.text("filter") },
+	grammar: { filter: slots.text("filter", "The filter.") },
+	example: { filter: "arp" },
 	plan: (a) => ({ filter: a.filter }),
 	describe: (p) => (p.filter ? `show frames matching ${p.filter}` : "show every frame"),
 	async execute(plan, _ctx, deps) {
@@ -179,6 +185,7 @@ export const boot = defineVerb({
 	danger: false,
 	phases: ["off", "failed"],
 	grammar: { machine: slots.machine() },
+	example: { machine: "node5" },
 	plan: (a) => ({ machine: a.machine }),
 	describe: (p) => `boot ${p.machine} again`,
 	async execute(plan, _ctx, deps) {
@@ -192,6 +199,7 @@ export const ls = defineVerb({
 	about: "Lists machines",
 	danger: false,
 	grammar: {},
+	example: {},
 	plan: (_a, lab) => ({ machines: lab.rail }),
 	describe: () => "list the machines",
 	async execute(plan) {

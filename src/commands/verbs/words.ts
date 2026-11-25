@@ -1,8 +1,12 @@
 import { andList, type Disk, type LabState, type PlanError } from "../../model/index.ts";
 import { addressStr, ip4str, nicName, subnetStr } from "../../net/index.ts";
-import type { Selection } from "../grammar/slots.ts";
+import { list, type Selection } from "../grammar/slots.ts";
 
 export { andList };
+
+export function noVerb(text: string, names: readonly string[]): string {
+	return `No verb is called ${text}, so use ${list(names, "or")}.`;
+}
 
 /** `1 shell`, `2 shells`. */
 export function count(n: number, one: string, many = `${one}s`): string {
@@ -20,16 +24,16 @@ export function skippedPart(skipped: Selection["skipped"]): string[] {
 }
 
 /** A plan error from the model, as the verb says it. `ports` is what would make the switch's ports enough. */
-export function planErrorSentence(error: PlanError, ports = "Remove a machine with rm to free its ports."): string {
+export function planErrorSentence(error: PlanError, ports = "remove a machine with rm to free its ports"): string {
 	switch (error.kind) {
 		case "no-ports":
-			return `switch0 has ${count(error.free, "free port")}, and this takes ${error.wanted}. ${ports}`;
+			return `switch0 has ${count(error.free, "free port")} and this takes ${error.wanted}, so ${ports}.`;
 		case "no-room":
 			return error.free === 0
-				? "The lab has no room for another machine. Remove one with rm first."
+				? "The lab has no room for another machine, so remove one with rm first."
 				: `The lab has room for ${count(error.free, "more machine")}, not ${error.wanted}.`;
 		case "unknown-image":
-			return `No image called ${error.image}.`;
+			return `No image is called ${error.image}, so spawn another machine from an image that the lab has.`;
 		case "name-taken":
 			return `A machine is already called ${error.name}, so give another name with --name.`;
 		case "address-taken":

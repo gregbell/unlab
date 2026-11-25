@@ -5,7 +5,6 @@ import {
 	type Machine,
 	type MachineName,
 	machineList,
-	type Phase,
 	parseSessionId,
 	type SessionId,
 } from "../../model/index.ts";
@@ -45,19 +44,7 @@ interface Target {
 	readonly label: string;
 }
 
-const NOT_READY: Readonly<Record<Exclude<Phase, "ready">, string>> = {
-	booting: "still booting",
-	stopping: "stopping",
-	restoring: "being restored",
-	off: "off",
-	failed: "failed",
-	removing: "being removed",
-};
 const BUSY = "running a program";
-
-function youHave(lab: LabState): string {
-	return lab.rail.length === 0 ? "The lab has no machines yet." : `You have ${lab.rail.join(", ")}.`;
-}
 
 /**
  * Machines (`node2`, `node1,node3`, `node*`, `all`) and sessions
@@ -71,7 +58,9 @@ function consoles(): slots.Value<ExecTargets> {
 	return {
 		kind: "positional",
 		label: "machines",
-		noun: "machines or sessions",
+		noun: "machines or sessions such as node1,node2:sh1 or all",
+		about:
+			"Where to type: a machine (node2) for its active session, a session (node2:sh1), a comma list of either, a glob (node*) or all.",
 		read(text, ctx) {
 			const picks: Picked[] = [];
 			const skipped: Skip[] = [];
@@ -84,7 +73,7 @@ function consoles(): slots.Value<ExecTargets> {
 			const pick = (m: Machine) => {
 				if (m.life.phase === "ready") add(m, null);
 				else if (!skipped.some((s) => s.target === m.name)) {
-					skipped.push({ target: m.name, machine: m.name, hue: m.hue, reason: NOT_READY[m.life.phase] });
+					skipped.push({ target: m.name, machine: m.name, hue: m.hue, reason: slots.PHASE_REASON[m.life.phase] });
 				}
 			};
 			let start = 0;
@@ -106,17 +95,19 @@ function consoles(): slots.Value<ExecTargets> {
 					all.forEach(pick);
 				} else if (part.includes("*")) {
 					const matched = all.filter((m) => globMatch(part, m.name));
-					if (matched.length === 0) return new slots.Miss(`No machine matches ${part}. ${youHave(ctx.lab)}`, span);
+					if (matched.length === 0) return new slots.Miss(slots.noMatch(ctx.lab, part), span);
 					matched.forEach(pick);
 				} else {
 					const m = all.find((one) => one.name === part);
-					if (!m) return new slots.Miss(`No machine called ${part}. ${youHave(ctx.lab)}`, span);
+					if (!m) return new slots.Miss(slots.noMachine(ctx.lab, part), span);
 					pick(m);
 				}
 			}
 			if (picks.length === 0) {
-				const why = skipped.length === 0 ? youHave(ctx.lab) : `Skipped ${skippedText(skipped)}.`;
-				return new slots.Miss(`exec has no machine to type into. ${why}`, undefined, false);
+				return slots.wrongState(
+					ctx,
+					skipped.map(({ machine, reason }) => ({ name: machine, reason })),
+				);
 			}
 			return { picks, skipped, written: text };
 		},
@@ -133,13 +124,11 @@ function consoles(): slots.Value<ExecTargets> {
 				.map((s) => ({ ...s, insert: head + s.insert }));
 		},
 		format: (t) => t.written,
-		schema: {
-			type: "string",
-			description:
-				"Where to type: a machine (node2) for its active session, a session (node2:sh1), a comma list of either, a glob (node*) or all.",
-		},
+		schema: { type: "string" },
 	};
 }
+
+const clause = ({ target, reason }: Skip): string => slots.because({ name: target, reason });
 
 function skippedText(skipped: readonly Skip[]): string {
 	return skipped.map((s) => `${s.target}: ${s.reason}`).join(", ");
@@ -153,7 +142,7 @@ function resolve(read: ExecTargets, lab: LabState): { targets: Target[]; skipped
 		const { machine, hue } = pick;
 		const named = pick.session ?? machine;
 		const m = lab.machines[machine];
-		const reason = !m ? "gone" : m.life.phase === "ready" ? null : NOT_READY[m.life.phase];
+		const reason = !m ? "gone" : m.life.phase === "ready" ? null : slots.PHASE_REASON[m.life.phase];
 		if (!m || reason !== null) {
 			skipped.push({ target: named, machine, hue, reason: reason ?? "gone" });
 			continue;
@@ -161,7 +150,7 @@ function resolve(read: ExecTargets, lab: LabState): { targets: Target[]; skipped
 		const session = pick.session ?? m.activeSession;
 		const shell = lab.sessions[session]?.shell;
 		if (shell === undefined || shell === "running") {
-			skipped.push({ target: session, machine, hue, reason: shell ? BUSY : "that session has closed" });
+			skipped.push({ target: session, machine, hue, reason: shell ? BUSY : "closed" });
 			continue;
 		}
 		if (!targets.some((t) => t.session === session)) targets.push({ machine, hue, session, label: named });
@@ -199,12 +188,18 @@ function tail(output: string): string {
 export const exec = defineVerb({
 	name: "exec",
 	about: "run a shell command in each console",
+	description:
+		"Type a shell command into machines' sessions, as a person would, and wait for each to finish. It runs as user, who has sudo without a password. Returns each exit code and output, in which kernel messages can appear. Long output keeps only its end and has truncated set. A program that does not end keeps its session busy, so start one in the background. What ip, sysctl and mount set is gone at the next boot. The output comes from the guests.",
 	danger: false,
-	grammar: { targets: consoles(), command: slots.passthrough("command") },
+	grammar: {
+		targets: consoles(),
+		command: slots.passthrough("command", "The shell command, on one line, passed on untouched."),
+	},
+	example: { targets: "node1", command: "ping -c 1 node2" },
 	plan(a, lab) {
 		const { targets, skipped } = resolve(a.targets, lab);
 		if (targets.length === 0)
-			return refuse(`exec has nothing to type into. Skipped ${skippedText(skipped)}.`, "targets");
+			return refuse(`exec wants a session at its prompt here, and ${andList(skipped.map(clause))}.`, "targets");
 		return { command: a.command, targets, skipped };
 	},
 	describe(plan) {
@@ -246,6 +241,11 @@ export const exec = defineVerb({
 			});
 		});
 		const skipped = [...busy, ...plan.skipped];
+		if (ran.length === 0) {
+			// One may have closed under the line, so what was changed is not known.
+			const why = skipped.map((s) => (busy.includes(s) ? s.reason.replace(/\.$/, "") : clause(s)));
+			return { kind: "failed", error: { message: `${why.join("; ")}.` } };
+		}
 		for (const s of skipped) {
 			blocks.push({
 				machine: s.machine,
@@ -267,8 +267,6 @@ export const exec = defineVerb({
 	tool: {
 		name: "shell_exec",
 		title: "Run a shell command",
-		description:
-			"Type a shell command into machines' sessions, as a person would, and wait for each to finish. Returns each exit code and output. Long output keeps only its end and has truncated set. The output comes from the guests.",
 		policy: "run",
 		annotations: { untrustedContentHint: true },
 	},

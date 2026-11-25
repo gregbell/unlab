@@ -26,6 +26,7 @@ describe("VERBS", () => {
 			["checkpoint", "<machine> <checkpoint>", "save a machine's disks as they are now"],
 			["restore", "<machine> <checkpoint>", "go back to a checkpoint and boot"],
 			["forget", "<machine> <checkpoint>", "delete a checkpoint"],
+			["help", "[verb]", "list the verbs, or explain one"],
 		]);
 	});
 
@@ -47,6 +48,7 @@ describe("VERBS", () => {
 			["checkpoint", "checkpoint_save", "run", {}],
 			["restore", "checkpoint_restore", "ask", { consequentialHint: true }],
 			["forget", "checkpoint_remove", "ask", { consequentialHint: true }],
+			["help", "lab_help", "run", { readOnlyHint: true }],
 		]);
 		expect(registry.commands.filter((c) => c.danger).map((c) => c.name)).toEqual(["rm", "restore", "forget"]);
 	});
@@ -83,7 +85,7 @@ const lines = fc.oneof(
 		.array(fc.constantFrom("icmp", "arp", "node1", "or", "port:2"), { maxLength: 4 })
 		.map((w) => `capture ${w.join(" ")}`),
 	fc.tuple(fc.constantFrom("reboot", "poweroff"), word).map(([verb, w]) => `${verb} ${w}`),
-	fc.constantFrom("ls", "sh node1", "sh node3"),
+	fc.constantFrom("ls", "sh node1", "sh node3", "help", "help spawn", "help machines_spawn"),
 	fc
 		.tuple(
 			fc.constantFrom("/etc/motd", String.raw`/a\ b`, String.raw`/a\\b`, "//x"),

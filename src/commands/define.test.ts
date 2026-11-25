@@ -126,7 +126,7 @@ describe("run", () => {
 		setState(later);
 		expect(await yes.line.run({ source: "agent", signal, approval: yes.approval })).toEqual({
 			kind: "failed",
-			error: { message: "What this does to node3 has changed since it was asked. Nothing was changed." },
+			error: { message: "What this does to node3 has changed since it was asked, so ask again. Nothing was changed." },
 		});
 		expect(events).toEqual([expect.objectContaining({ type: "cmd/logged", line: "rm node3", outcome: "failed" })]);
 	});
@@ -170,17 +170,36 @@ describe("defineVerb", () => {
 				about: "",
 				danger: false,
 				grammar,
+				example: { words: 1 },
 				plan: () => ({}),
 				describe: () => "",
 				execute: async () => ({ kind: "visible", text: "", data: null }),
 			});
-		expect(verb({ words: slots.text("words"), count: slots.count() })).toThrow(
-			"free text must be the last positional argument",
+		expect(verb({ words: slots.text("words", ""), count: slots.count("") })).toThrow(
+			"only the last positional argument can be left out or be free text",
 		);
-		expect(verb({ a: slots.option("--x", slots.count(), 1), b: slots.option("--x", slots.count(), 2) })).toThrow(
+		expect(verb({ maybe: slots.optional(slots.count("")), count: slots.count("") })).toThrow(
+			"only the last positional argument can be left out or be free text",
+		);
+		expect(verb({ a: slots.option("--x", slots.count(""), 1), b: slots.option("--x", slots.count(""), 2) })).toThrow(
 			"each option flag must be unique",
 		);
-		expect(verb({ words: slots.count(), more: slots.text("more") })).not.toThrow();
+		expect(verb({ words: slots.count(""), more: slots.text("more", "") })).not.toThrow();
+	});
+
+	it("refuses an example that its own grammar does not read", () => {
+		const verb = () =>
+			defineVerb({
+				name: "bad",
+				about: "",
+				danger: false,
+				grammar: { command: slots.passthrough("command", "") },
+				example: { command: "a\nb" },
+				plan: () => ({}),
+				describe: () => "",
+				execute: async () => ({ kind: "visible", text: "", data: null }),
+			});
+		expect(verb).toThrow("defineVerb(bad): its example does not read: command must be a string on one line");
 	});
 });
 

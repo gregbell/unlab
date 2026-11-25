@@ -233,11 +233,13 @@ export function createEngine(deps: EngineDeps): Engine {
 
 	/** Why a line cannot be typed into the session now, or null when it can. */
 	const refusal = (s: SessionEntry | undefined, id: SessionId): ExecRefused | null => {
-		if (s?.state !== "open" || !readyVm(s.machine)) return new ExecRefused(`${id} is not open.`);
+		if (s?.state !== "open" || !readyVm(s.machine))
+			return new ExecRefused(`${id} is not open, so use another session.`);
 		// Only a shell at a prompt can be told when its next command ends.
-		if (s.screen.shell === "unknown") return new ExecRefused(`${id} has not shown a prompt yet.`);
-		if (s.screen.shell === "running" || s.injection) return new ExecRefused(`${id} is running a program.`);
-		if (s.drafting) return new ExecRefused(`${id} has a half-typed line.`);
+		if (s.screen.shell === "unknown") return new ExecRefused(`${id} has not shown a prompt yet, so wait until it has.`);
+		if (s.screen.shell === "running" || s.injection)
+			return new ExecRefused(`${id} is running a program, so wait until it ends.`);
+		if (s.drafting) return new ExecRefused(`${id} has a half-typed line, so finish it there or use another session.`);
 		return null;
 	};
 
@@ -665,7 +667,7 @@ export function createEngine(deps: EngineDeps): Engine {
 					return;
 				}
 				if (entry?.phase !== "ready") {
-					resolve({ kind: "refused", reason: `${machine} is not ready.` });
+					resolve({ kind: "refused", reason: `${machine} is not ready, so wait until it is.` });
 					return;
 				}
 				const id = ++writes;

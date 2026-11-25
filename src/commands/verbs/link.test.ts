@@ -69,17 +69,17 @@ describe("link", () => {
 			will: "cut the cable to node1 on port 1",
 		});
 		expect(lab.parse("link down node1:eth1")).toEqual({
-			message: "node1 has no NIC called eth1. It has eth0. Nothing was changed.",
+			message: "node1 has no NIC called eth1, so use eth0. Nothing was changed.",
 			token: 2,
 		});
 		expect(lab.parse("link down node3:eth7")).toMatchObject({
-			message: "node3 has no NIC called eth7. It has eth0 and eth1. Nothing was changed.",
+			message: "node3 has no NIC called eth7, so use eth0 or eth1. Nothing was changed.",
 		});
 		expect(lab.parse("link down all:wlan0")).toMatchObject({
-			message: "No NIC is called wlan0. A machine has eth0, eth1, eth2 or eth3. Nothing was changed.",
+			message: "No NIC is called wlan0, so use eth0, eth1, eth2 or eth3. Nothing was changed.",
 		});
 		expect(lab.parse("link down node9:eth0")).toMatchObject({
-			message: "No machine called node9. You have node1, node2, node3. Nothing was changed.",
+			message: "No machine is called node9, so use node1, node2 or node3. Nothing was changed.",
 		});
 		expect(lab.parsed("link down node*:eth1").preview(lab.store.state)).toMatchObject({
 			will: "cut the cable to node3:eth1 on port 4 · skipped node1: no eth1, node2: no eth1",
@@ -108,7 +108,7 @@ describe("link", () => {
 		lab.ready("node8");
 		expect(lab.parsed("link up node8").validate(lab.store.state)).toEqual({
 			message:
-				"switch0 has 1 free port, and this takes 2. Remove a machine with rm to free its ports. Nothing was changed.",
+				"switch0 has 1 free port and this takes 2, so remove a machine with rm to free its ports. Nothing was changed.",
 			token: 2,
 		});
 	});
@@ -121,7 +121,7 @@ describe("link", () => {
 			will: "cut the cables to node1 and node2 on ports 1 and 2 · skipped node3: still booting",
 		});
 		expect(lab.parse("link down node3")).toEqual({
-			message: "link has no machine to act on. Skipped node3: still booting. Nothing was changed.",
+			message: "link wants a ready or off machine here, and node3 is still booting. Nothing was changed.",
 			token: 2,
 		});
 	});

@@ -130,8 +130,11 @@ function header(rows: readonly ListedMachine[]): string {
 export const ls = defineVerb({
 	name: "ls",
 	about: "list machines, addresses, links and disks",
+	description:
+		"List every machine with its state (booting, ready, stopping, off, restoring, failed or removing), why it failed, and its sessions, disks, checkpoints and NICs. A checkpoint has the bytes of storage it takes. Each NIC has its MAC, the address and prefix the lab set, switch port and link. Only a ready machine runs commands and takes files.",
 	danger: false,
 	grammar: {},
+	example: {},
 	plan: (_a, lab) => ({ machines: machineList(lab) }),
 	describe: (plan) => `list ${count(plan.machines.length, "machine")} with their addresses, links and disks`,
 	async execute(plan) {
@@ -150,8 +153,6 @@ export const ls = defineVerb({
 	tool: {
 		name: "machines_list",
 		title: "List machines",
-		description:
-			"List every machine in the lab with its state, sessions, disks, checkpoints and NICs. A checkpoint has the bytes of storage it takes. Each NIC has its MAC, the address and prefix the lab set, switch port and link.",
 		policy: "run",
 		annotations: { readOnlyHint: true },
 	},

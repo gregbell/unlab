@@ -185,6 +185,7 @@ describe("the artboards, replayed", () => {
 			"checkpoint",
 			"restore",
 			"forget",
+			"help",
 		]);
 		expect(view.chosen).toBe(3);
 		expect(view.hint).toBe("tab → spawn");
@@ -280,6 +281,7 @@ describe("the artboards, replayed", () => {
 				{ machine: "node2", hue: 2, status: { kind: "exit", code: 1 }, lastLine: LOSS, focus: "node2:console" },
 				{ machine: "node3", hue: 3, status: { kind: "exit", code: 0 }, lastLine: OK, focus: "node3:console" },
 			],
+			rows: [],
 		});
 
 		h.take();
@@ -436,7 +438,7 @@ describe("the artboards, replayed", () => {
 		h.press({ kind: "enter", keepOpen: false });
 		await h.lab.run("sh node3");
 		expect(h.view()).toMatchObject({
-			block: { kind: "error", sentence: "What this does to node3 has changed since it was asked." },
+			block: { kind: "error", sentence: "What this does to node3 has changed since it was asked, so ask again." },
 			hint: "↵ ask again",
 			footer: ["↵ ask again", "esc keep it"],
 		});
@@ -461,7 +463,7 @@ describe("the artboards, replayed", () => {
 		await h.settle();
 		expect(h.view().block).toMatchObject({
 			kind: "error",
-			sentence: "What this does to node1, node2, node3 has changed since it was asked.",
+			sentence: "What this does to node1, node2, node3 has changed since it was asked, so ask again.",
 		});
 		expect(h.lab.store.state.rail).toEqual(["node1", "node2", "node3", "node4"]);
 	});
@@ -478,7 +480,7 @@ describe("the artboards, replayed", () => {
 		await line.run({ source: "agent", signal: h.lab.signal, approval: grantApproval("rm node3", asked) });
 		expect(h.view().block).toMatchObject({
 			kind: "error",
-			sentence: "No machine called node3. You have node1, node2.",
+			sentence: "No machine is called node3, so use node1 or node2.",
 		});
 		h.press({ kind: "enter", keepOpen: false });
 		expect(h.take().filter((e) => e.type === "run")).toEqual([]);

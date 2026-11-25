@@ -114,8 +114,9 @@ function expansion(line: string, blocks: readonly ReportBlock[], machines: Machi
 }
 
 /**
- * An exec or ls result: a summary line, one block per machine with its hue
- * bar, then what was skipped and why.
+ * A summary line and what there is to read: one block per machine with its
+ * hue bar for exec and ls, or rows of terms for help. Then what was skipped
+ * and why.
  */
 export function resultBlock(
 	block: Extract<BarBlock, { kind: "result" }>,
@@ -130,6 +131,13 @@ export function resultBlock(
 			${expansion(block.line, block.blocks, lab.machines)}
 			<span class="header">${header(block.header)}</span>
 		</div>
+		${
+			block.rows.length === 0
+				? nothing
+				: html`<dl class="rows">
+					${block.rows.map(({ term, text }) => html`<dt>${term}</dt><dd>${text}</dd>`)}
+				</dl>`
+		}
 		${shown.map(
 			(b) => html`<div class="machine-result" data-hue=${b.hue}>
 				<div class="top">

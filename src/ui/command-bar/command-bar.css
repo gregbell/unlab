@@ -315,6 +315,21 @@
 			color: var(--machine-hue);
 		}
 
+		.rows {
+			display: grid;
+			grid-template-columns: fit-content(40%) minmax(0, 1fr);
+			gap: 6px 16px;
+			margin: 0;
+			padding: 10px var(--gutter);
+			border-top: 1px solid var(--line);
+		}
+
+		.rows dd {
+			margin: 0;
+			color: var(--text-2);
+			overflow-wrap: anywhere;
+		}
+
 		.machine-result {
 			display: flex;
 			flex-direction: column;

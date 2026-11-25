@@ -43,6 +43,7 @@ describe("<unlab-agent-panel>", () => {
 			.toHaveAttribute("href", "https://github.com/gregbell/unlab#use-the-lab-with-an-ai-agent");
 		const rows = [...element.querySelectorAll(".tool .name")].map(text);
 		expect(rows).toEqual([
+			"lab_help(verb)",
 			"machines_list()",
 			"machines_spawn(count, image, mem, cpus, disk, extraDisk, name, nics, net, addr, gateway)",
 			"machines_boot(names)",
@@ -204,7 +205,7 @@ describe("<unlab-agent-panel>", () => {
 		expect(text(element.querySelector(".about"))).toBe(
 			"This tab has no WebMCP, so no agent can call these yet. In Chrome or Edge 150 or later, open chrome://flags/#enable-webmcp-testing, choose Enabled and relaunch. Or let an agent open the lab in its own Chrome: connect an agent.",
 		);
-		expect(element.querySelectorAll(".tool")).toHaveLength(14);
+		expect(element.querySelectorAll(".tool")).toHaveLength(15);
 		expect(page.getByRole("button", { name: "try a call" }).elements()).toEqual([]);
 
 		const copy = page.getByRole("button", { name: "copy address" }).element();

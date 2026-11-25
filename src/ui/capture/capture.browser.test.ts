@@ -137,7 +137,11 @@ describe("<unlab-capture mode=dock>", () => {
 		await userEvent.fill(field, "icmp nodez");
 		await settle();
 		await expect.element(field).toHaveAttribute("aria-invalid", "true");
-		await expect.element(field).toHaveAccessibleDescription("Capture cannot read nodez.");
+		await expect
+			.element(field)
+			.toHaveAccessibleDescription(
+				"Capture cannot read nodez, so use a protocol, a machine, a NIC (node2:eth1), an address, a MAC or port:N.",
+			);
 		expect(getComputedStyle(part(element, ".filter")).borderTopColor).toBe(tokenColor("down"));
 		expect(rows(element).map(text)).toEqual(before);
 

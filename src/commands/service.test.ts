@@ -17,7 +17,7 @@ describe("createCommandService", () => {
 	it("parses and completes against the lab as it is now", async () => {
 		const { lab, commands } = service();
 		expect(commands.parse("focus node1")).toMatchObject({
-			message: expect.stringContaining("No machine called node1"),
+			message: expect.stringContaining("No machine is called node1"),
 		});
 		expect(commands.complete("rm ", 3).suggestions.map((s) => s.insert)).toEqual(["all"]);
 		await lab.lab(1);

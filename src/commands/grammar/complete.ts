@@ -53,7 +53,7 @@ export function complete(grammar: Grammar, line: string, caret: number, ctx: Rea
 			if ("value" in entry.variant) pending = { key: entry.key, value: entry.variant.value };
 			continue;
 		}
-		if (positionals[next]?.[1].kind === "positional") next++;
+		if (positionals[next]?.[1].kind !== "rest") next++;
 	}
 	if (pending) return offer(pending.value.suggest(typed, ctx), slotOf(pending.key));
 
@@ -66,5 +66,6 @@ export function complete(grammar: Grammar, line: string, caret: number, ctx: Rea
 	const positional = positionals[next];
 	if (!positional) return offer(options, null);
 	const [key, slot] = positional;
-	return offer(slot.kind === "positional" ? slot.suggest(typed, ctx) : [], slotOf(key));
+	const value = slot.kind === "optional" ? slot.value : slot;
+	return offer(value.kind === "positional" ? value.suggest(typed, ctx) : [], slotOf(key));
 }

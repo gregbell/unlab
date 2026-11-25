@@ -190,7 +190,7 @@ describe.skipIf(!haveImage)("real kernels", () => {
 
 		const busy = engine.exec.inject("node1:sh1", "sleep 30", "bar", never);
 		await expect(engine.exec.inject("node1:sh1", "ls", "bar", never)).rejects.toThrow(
-			"node1:sh1 is running a program.",
+			"node1:sh1 is running a program, so wait until it ends.",
 		);
 
 		const stopAsked = performance.now();

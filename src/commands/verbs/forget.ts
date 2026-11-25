@@ -1,5 +1,5 @@
 import { type Checkpoint, type CheckpointName, type Machine, type MachineName, sizeText } from "../../model/index.ts";
-import { defineVerb, Refusal, refuse } from "../define.ts";
+import { defineVerb, machineNow, Refusal, refuse } from "../define.ts";
 import * as slots from "../grammar/slots.ts";
 import { checkpointOf } from "./checkpoint.ts";
 
@@ -16,12 +16,14 @@ export interface ForgetData {
 export const forget = defineVerb({
 	name: "forget",
 	about: "delete a checkpoint",
+	description: "Delete one checkpoint of a machine and free its storage. The machine's disks are left alone.",
 	danger: true,
 	phases: ["booting", "ready", "stopping", "off", "restoring", "failed"],
 	grammar: { machine: slots.machine(), checkpoint: slots.checkpoint() },
-	plan(a, lab): Plan | Refusal<"machine" | "checkpoint"> {
-		const machine = lab.machines[a.machine];
-		if (!machine) return refuse(`${a.machine} is gone.`, "machine");
+	example: { machine: "node2", checkpoint: "before" },
+	plan(a, _lab, ctx): Plan | Refusal<"machine" | "checkpoint"> {
+		const machine = machineNow(a.machine, ctx, "machine");
+		if (machine instanceof Refusal) return machine;
 		const checkpoint = checkpointOf(machine, a.checkpoint);
 		if (checkpoint instanceof Refusal) return checkpoint;
 		if (machine.life.phase === "restoring" && machine.life.from.set === checkpoint.set) {
@@ -54,7 +56,6 @@ export const forget = defineVerb({
 	tool: {
 		name: "checkpoint_remove",
 		title: "Delete a checkpoint",
-		description: "Delete one checkpoint of a machine and free its storage. The machine's disks are left alone.",
 		policy: "ask",
 		annotations: { consequentialHint: true },
 	},
