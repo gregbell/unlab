@@ -3,7 +3,7 @@ import axe from "axe-core";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import type { LabState } from "../../model/index.ts";
-import { lab, mount, ready, spawn, tokenColor, unmountAll } from "../base/testing.ts";
+import { addSwitch, lab, mount, ready, spawn, switchNamed, tokenColor, unmountAll } from "../base/testing.ts";
 
 beforeEach(() => page.viewport(1440, 900));
 afterEach(unmountAll);
@@ -134,6 +134,26 @@ describe("<unlab-spawn-form> preview", () => {
 			.element(page.getByRole("alert"))
 			.toHaveTextContent("The lab has no room for another machine, so remove one with rm first. Nothing was changed.");
 		expect(rows()).toEqual([]);
+	});
+});
+
+describe("<unlab-spawn-form> with several switches", () => {
+	it("offers each, and names the one that each port is on", async () => {
+		const lan = switchNamed("lan");
+		const { element, runs, settle } = await mount("unlab-spawn-form", {
+			state: lab(addSwitch(lan), spawn(1), ready()),
+		});
+		element.querySelector("details")?.setAttribute("open", "");
+		const network = page.getByRole("group", { name: "Network" });
+		const choices = [...network.element().querySelectorAll("button")].map((button) => button.textContent?.trim());
+		expect(choices).toEqual(["plug into switch0", "plug into lan", "leave unplugged"]);
+		const ports = () => [...element.querySelectorAll(".you-get .port")].map((port) => port.textContent);
+		expect(ports()).toEqual(["switch0 port 2", "switch0 port 3"]);
+		await network.getByRole("button", { name: "plug into lan" }).click();
+		await settle();
+		expect(ports()).toEqual(["lan port 1", "lan port 2"]);
+		await page.getByRole("button", { name: "Boot 2 machines" }).click();
+		expect(runs.map((run) => run.line)).toEqual(["spawn 2 alpine --net lan"]);
 	});
 });
 

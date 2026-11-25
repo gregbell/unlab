@@ -2,7 +2,7 @@ import { disksOf, type Machine, type MachineName, machineList, plugsOf, portsOf 
 import { ip4str } from "../../net/index.ts";
 import { defineVerb, machineNow, Refusal } from "../define.ts";
 import * as slots from "../grammar/slots.ts";
-import { andList, count, diskList, ports, portsFree, skippedPart } from "./words.ts";
+import { andList, count, diskList, portsFree, portsOn, skippedPart } from "./words.ts";
 
 /** The addresses a machine answers its peers on: it is ready, and the cable to their NIC is up. */
 function answers(m: Machine): string[] {
@@ -60,12 +60,12 @@ export const rm = defineVerb({
 		}
 		return { machines, skipped: a.names.skipped };
 	},
-	describe(plan) {
+	describe(plan, lab) {
 		const names = plan.machines.map((m) => m.name);
 		const freed = plan.machines.flatMap((m) => portsOf(m.life));
 		return [
 			`remove ${andList(names)} with ${theirDisks(plan.machines)}`,
-			...(freed.length > 0 ? [`frees ${ports(freed.map(({ port }) => port))}`] : []),
+			...(freed.length > 0 ? [`frees ${portsOn(lab, freed)}`] : []),
 			...skippedPart(plan.skipped),
 		].join(" · ");
 	},

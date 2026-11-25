@@ -6,6 +6,8 @@ import {
 	type PortNo,
 	type PortRef,
 	type SwitchName,
+	type SwitchPlanError,
+	switchLabel,
 } from "../../model/index.ts";
 import { addressStr, ip4str, nicName, subnetStr } from "../../net/index.ts";
 import { list, type Selection } from "../grammar/slots.ts";
@@ -31,6 +33,26 @@ function bySwitch(refs: readonly PortRef[]): readonly (readonly [SwitchName, rea
 	return [...grouped].map(([on, held]) => [on, held.map(({ port }) => port)]);
 }
 
+/** `port 3`, `ports 3 and 4`, or `switch0 port 3 and lan ports 1 and 2` in a lab with several switches. */
+export function portsOn(lab: LabState, refs: readonly PortRef[]): string {
+	return andList(
+		bySwitch(refs).map(([on, held]) => {
+			const label = switchLabel(lab, on);
+			return label === null ? ports(held) : `${label} ${ports(held)}`;
+		}),
+	);
+}
+
+/** A port as a tool returns it, with its switch in a lab that has several. */
+export function portOf(
+	lab: LabState,
+	ref: PortRef | null | undefined,
+): { readonly switch?: SwitchName; readonly port: PortNo | null } {
+	if (!ref) return { port: null };
+	const label = switchLabel(lab, ref.switch);
+	return label === null ? { port: ref.port } : { switch: label, port: ref.port };
+}
+
 /** `plugged into switch0 on ports 2 and 3`, or `unplugged`. */
 export function pluggedInto(refs: readonly PortRef[]): string {
 	const where = bySwitch(refs).map(([on, list]) => `${on} on ${ports(list)}`);
@@ -50,6 +72,14 @@ export function skippedPart(skipped: Selection["skipped"]): string[] {
 	return skipped.length === 0 ? [] : [`skipped ${skipped.map((s) => `${s.name}: ${s.reason}`).join(", ")}`];
 }
 
+/** Whoever has the name, and what to do about it. */
+export function nameTaken(
+	{ name, by }: Extract<PlanError | SwitchPlanError, { kind: "name-taken" }>,
+	how = "",
+): string {
+	return `A ${by} is already called ${name}, so give another name${how}.`;
+}
+
 /** A plan error from the model, as the verb says it. `ports` is what would make a switch's ports enough. */
 export function planErrorSentence(error: PlanError, ports = "remove a machine with rm to free its ports"): string {
 	switch (error.kind) {
@@ -62,7 +92,7 @@ export function planErrorSentence(error: PlanError, ports = "remove a machine wi
 		case "unknown-image":
 			return `No image is called ${error.image}, so spawn another machine from an image that the lab has.`;
 		case "name-taken":
-			return `A ${error.by} is already called ${error.name}, so give another name with --name.`;
+			return nameTaken(error, " with --name");
 		case "address-taken":
 			return `${ip4str(error.address.ip)} is already ${error.by.machine}'s, so give another address with --addr.`;
 		case "address-overlap":

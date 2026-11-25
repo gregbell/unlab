@@ -30,9 +30,8 @@ const MAX_CPUS = 16;
 const NETWORKS = slots.networks();
 export const DEFAULT_CPUS = MULTICPU_BLOCKER ? 1 : 2;
 
-/** `--net` as typed, for a machine of `nics` NICs. Null when it names some other number of them. */
-function networks(nics: number, written: string): readonly NicSpec["net"][] | null {
-	const nets = written.split(",").map((net): NicSpec["net"] => (net === "none" ? "none" : DEFAULT_SWITCH));
+/** `--net` for a machine of `nics` NICs. Null when it names some other number of them. */
+function networks(nics: number, nets: readonly NicSpec["net"][]): readonly NicSpec["net"][] | null {
 	if (nets.length === 1) return Array.from({ length: nics }, () => nets[0]);
 	return nets.length === nics ? nets : null;
 }
@@ -72,7 +71,7 @@ function addressParts(nics: readonly NicRequest[]): string[] {
 export const spawn = defineVerb({
 	name: "spawn",
 	about: "boot machines",
-	description: `Boot new Linux machines and return their names. Each boots on its own: ls (machines_list) says when it is ready, or failed and why. A NIC that is plugged in takes one of ${DEFAULT_SWITCH}'s 8 ports. The package gateway gives eth0 10.0.2.15 and a default route, for package installs only. gateway off leaves it out, so DHCP on eth0 goes to the other machines. Chosen addresses are set again at every boot, and each machine's /etc/hosts names the others.`,
+	description: `Boot new Linux machines and return their names. Each boots on its own: ls (machines_list) says when it is ready, or failed and why. A NIC that is plugged in takes the lowest free one of its switch's 8 ports. The package gateway gives eth0 10.0.2.15 and a default route, for package installs only. gateway off leaves it out, so DHCP on eth0 goes to the other machines. Chosen addresses are set again at every boot, and each machine's /etc/hosts names the others.`,
 	danger: false,
 	grammar: {
 		count: slots.count(`How many machines. The lab holds ${MAX_MACHINES}.`, {
@@ -125,14 +124,18 @@ export const spawn = defineVerb({
 		),
 	},
 	example: { count: 1, image: "lab", name: "router", nics: 2, addr: "10.1.0.1/24,10.2.0.1/24", extraDisk: "1" },
-	plan(a, lab) {
+	plan(a, lab, ctx) {
 		if (a.mem > MAX_MEM_MIB) return refuse(`--mem wants at most ${MAX_MEM_MIB} MiB of memory, not ${a.mem}.`, "mem");
 		if (a.cpus > MAX_CPUS) return refuse(`--cpus wants 1 to ${MAX_CPUS} CPUs, not ${a.cpus}.`, "cpus");
 		if (a.cpus > 1 && MULTICPU_BLOCKER) return refuse(`--cpus wants 1 here, because ${MULTICPU_BLOCKER}.`, "cpus");
 		if (a.nics > MAX_NICS) return refuse(`--nics wants 1 to ${MAX_NICS} NICs, not ${a.nics}.`, "nics");
-		const nets = networks(a.nics, a.net);
+		const written = a.net.split(",");
+		const read = written.flatMap((net) => slots.readNetwork(net, lab) ?? []);
+		// One may have gone since the line was read.
+		if (read.length < written.length) return refuse(slots.noNetwork(ctx, a.net), "net");
+		const nets = networks(a.nics, read);
 		if (nets === null) {
-			const named = a.net.split(",").length;
+			const named = written.length;
 			return refuse(
 				named > MAX_NICS
 					? `A machine has 1 to ${MAX_NICS} NICs, and --net names ${named}.`
@@ -166,7 +169,10 @@ export const spawn = defineVerb({
 			nics: nets.map((net, nic) => ({ net, address: requestedAddress(a.addr, nic) })),
 		});
 		if (!isPlanError(plan)) return plan;
-		const ports = `add --no-net to boot unplugged, or leave some NICs out with --net ${DEFAULT_SWITCH},none`;
+		const ports =
+			lab.switches.length > 1
+				? "choose another switch with --net, or add --no-net to boot unplugged"
+				: `add --no-net to boot unplugged, or leave some NICs out with --net ${DEFAULT_SWITCH},none`;
 		return refuse(planErrorSentence(plan, ports), ABOUT[plan.kind]);
 	},
 	describe(plan, lab) {

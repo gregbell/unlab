@@ -18,12 +18,17 @@ import {
 	type NicSpec,
 	nicsOf,
 	type Phase,
+	PORTS,
 	parseCheckpointName,
 	parseChosenName,
 	parseGiB,
+	parseSwitchName,
 	plugsOf,
+	portLabel,
 	type SessionId,
+	type SwitchName,
 	sizeText,
+	takenPorts,
 } from "../../model/index.ts";
 import {
 	type AddressFault,
@@ -141,7 +146,17 @@ export interface CableSelection {
 	readonly written: string;
 }
 
-const NETWORKS: readonly NicSpec["net"][] = [DEFAULT_SWITCH, "none"];
+/** What a NIC can be plugged into. */
+const networksOf = (lab: LabState): readonly NicSpec["net"][] => [...lab.switches, "none"];
+
+/** One part of `--net`, unless it names a switch that is not there. */
+export function readNetwork(text: string, lab: LabState): NicSpec["net"] | null {
+	return networksOf(lab).find((network) => network === text) ?? null;
+}
+
+export function noNetwork({ verb, lab }: Pick<ReadContext, "verb" | "lab">, text: string): string {
+	return `${verb} wants ${list(networksOf(lab), "or")} after --net, not ${text}.`;
+}
 
 /** The state a machine is in, as a reason to leave it out. */
 export const PHASE_REASON: Readonly<Record<Phase, string>> = {
@@ -203,10 +218,10 @@ function linkWord(m: Machine): string {
 	}
 }
 
-function plugDetail(m: Machine, nic: NicNo): string {
+function plugDetail(lab: LabState, m: Machine, nic: NicNo): string {
 	const plug = plugsOf(m.life)[nic];
 	if (plug?.kind !== "port") return "no cable";
-	return `port ${plug.port.port} · ${plug.link === "up" ? "up" : "down"}`;
+	return `${portLabel(lab, plug.port)} · ${plug.link === "up" ? "up" : "down"}`;
 }
 
 function machineSuggestion(m: Machine, insert: string = m.name): Suggestion {
@@ -317,19 +332,20 @@ export function machine(): Value<MachineName> {
 	};
 }
 
-function nameFault(text: string, fault: NameFault): string {
+/** `wants` is what asks for the name, and `such` one that would do. */
+function nameFault(text: string, fault: NameFault, wants: string, such: string): string {
 	switch (fault.kind) {
 		case "unreadable": {
 			const lower = text.toLowerCase();
 			const reads = !isNameFault(parseChosenName(lower));
 			return reads
-				? `--name wants lowercase letters, so use ${lower}.`
-				: `--name wants lowercase letters, digits and hyphens, starting with a letter and not ending with a hyphen, such as web-1, not ${text}.`;
+				? `${wants} wants lowercase letters, so use ${lower}.`
+				: `${wants} wants lowercase letters, digits and hyphens, starting with a letter and not ending with a hyphen, such as ${such}, not ${text}.`;
 		}
 		case "too-long":
-			return `--name wants at most ${MAX_NAME} characters, and that is ${fault.length}.`;
+			return `${wants} wants at most ${MAX_NAME} characters, and that is ${fault.length}.`;
 		case "lab":
-			return `The lab gives out ${text} itself, so use another name, such as web-1.`;
+			return `The lab gives out ${text} itself, so use another name, such as ${such}.`;
 		case "word":
 			return `${text} already means something in the lab, so use another name, such as ${text}-1.`;
 	}
@@ -345,10 +361,64 @@ export function newName(): Value<MachineName | null> {
 			"The machine's name and hostname: lowercase letters, digits and hyphens, such as web-1. Left out, node and a number. Needs count 1.",
 		read(text) {
 			const name = parseChosenName(text);
-			return isNameFault(name) ? new Miss(nameFault(text, name), undefined, false) : name;
+			return isNameFault(name) ? new Miss(nameFault(text, name, "--name", "web-1"), undefined, false) : name;
 		},
 		suggest: () => [],
 		format: String,
+		schema: { type: "string" },
+	};
+}
+
+/** A name for a switch that is not there yet. Whether it is free is the verb's to say. */
+export function newSwitch(): Value<SwitchName> {
+	return {
+		kind: "positional",
+		label: "name",
+		noun: "a name for the switch such as lan",
+		about:
+			"The switch's name, which no machine or switch has: lowercase letters, digits and hyphens, such as lan. Left out, switch and a number.",
+		read(text, { verb }) {
+			const name = parseSwitchName(text);
+			return isNameFault(name) ? new Miss(nameFault(text, name, verb, "lan"), undefined, false) : name;
+		},
+		suggest: () => [],
+		format: (name) => name,
+		schema: { type: "string" },
+	};
+}
+
+/** The switch, unless it is not there or is the one that every lab has. */
+export function readAddedSwitch(text: string, { switches }: LabState): SwitchName | Miss {
+	const others = switches.filter((name) => name !== DEFAULT_SWITCH);
+	const found = others.find((name) => name === text);
+	if (found) return found;
+	const instead = others.length === 0 ? "and the lab has no other switch" : `so use ${list(others, "or")}`;
+	return text === DEFAULT_SWITCH
+		? new Miss(`${DEFAULT_SWITCH} cannot be removed, ${instead}.`, undefined, false)
+		: new Miss(
+				others.length === 0
+					? `No switch is called ${text}, and ${DEFAULT_SWITCH}, the only one, cannot be removed.`
+					: `No switch is called ${text}, ${instead}.`,
+			);
+}
+
+/** A switch that was added. */
+export function addedSwitch(): Value<SwitchName> {
+	return {
+		kind: "positional",
+		label: "switch",
+		noun: "a switch such as lan",
+		about: `A switch's name, such as lan. ${DEFAULT_SWITCH} stays.`,
+		read: (text, { lab }) => readAddedSwitch(text, lab),
+		suggest: (_typed, { lab }) =>
+			lab.switches
+				.filter((name) => name !== DEFAULT_SWITCH)
+				.map((name) => ({
+					insert: name,
+					label: name,
+					detail: `${takenPorts(lab, name).size} of ${PORTS.length} ports taken`,
+				})),
+		format: (name) => name,
 		schema: { type: "string" },
 	};
 }
@@ -644,7 +714,7 @@ export function cables(): Value<CableSelection> {
 						machineSuggestion(m, head + m.name),
 						...(nics.length > 1 ? nics : []).map(({ nic }): Suggestion => {
 							const label = `${m.name}:${nicName(nic)}`;
-							return { insert: head + label, label, detail: plugDetail(m, nic), hue: m.hue };
+							return { insert: head + label, label, detail: plugDetail(ctx.lab, m, nic), hue: m.hue };
 						}),
 					];
 				});
@@ -662,17 +732,17 @@ export function networks(): Value<string> {
 	return {
 		kind: "positional",
 		label: "network,...",
-		noun: `${DEFAULT_SWITCH} or none`,
-		about: `${DEFAULT_SWITCH} or none for every NIC, or a comma list with one for each, eth0 first, such as ${DEFAULT_SWITCH},none. A NIC with none boots unplugged.`,
-		read(text) {
+		noun: `a switch such as ${DEFAULT_SWITCH}, or none`,
+		about: `A switch or none for every NIC, or a comma list with one for each, eth0 first, such as ${DEFAULT_SWITCH},none. A NIC with none boots unplugged.`,
+		read(text, ctx) {
 			for (const { part, ...span } of listParts(text)) {
-				if (NETWORKS.every((network) => network !== part)) return new Miss(undefined, span);
+				if (readNetwork(part, ctx.lab) === null) return new Miss(noNetwork(ctx, text), span);
 			}
 			return text;
 		},
-		suggest(typed) {
+		suggest(typed, { lab }) {
 			const head = typed.slice(0, typed.lastIndexOf(",") + 1);
-			return NETWORKS.map((network) => ({ insert: head + network, label: network }));
+			return networksOf(lab).map((network) => ({ insert: head + network, label: network }));
 		},
 		format: (written) => written,
 		schema: { type: "string" },

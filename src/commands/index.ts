@@ -110,6 +110,17 @@ export function completeLine(registry: Registry, line: string, caret: number, la
 		: { replace: { start: caret, end: caret }, suggestions: [], slot: null };
 }
 
-export type { CableState, ExecData, ExecRun, ListedMachine, RemoveData, SpawnData, WriteData } from "./verbs/index.ts";
+export type {
+	CableState,
+	ExecData,
+	ExecRun,
+	ListedMachine,
+	RemoveData,
+	RemovedSwitch,
+	SpawnData,
+	SwitchData,
+	Topology,
+	WriteData,
+} from "./verbs/index.ts";
 /** The one verb list. Everything that runs a line builds its registry from it. */
 export { VERBS } from "./verbs/index.ts";

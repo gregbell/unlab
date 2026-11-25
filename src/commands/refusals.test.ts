@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { startAgent, type WebMcpTool } from "../agent/index.ts";
-import type { CheckpointName, LabState, MachineName, Phase } from "../model/index.ts";
+import {
+	type CheckpointName,
+	isNameFault,
+	type LabState,
+	type MachineName,
+	type Phase,
+	parseSwitchName,
+} from "../model/index.ts";
 import { createRegistry, isLineError, parseLine, VERBS } from "./index.ts";
 import { fakeDeps, IMAGES, labWith, type MachineFixture } from "./testing/lab.ts";
 
@@ -49,6 +56,12 @@ function withCheckpoint(lab: LabState, name: MachineName): LabState {
 	return { ...lab, machines: { ...lab.machines, [name]: { ...machine, sets } } };
 }
 
+function withSwitch(lab: LabState, text: string): LabState {
+	const name = parseSwitchName(text);
+	if (isNameFault(name)) throw new Error(`${text}: ${name.kind}`);
+	return { ...lab, switches: ["switch0", name] };
+}
+
 const images = [...IMAGES, { name: "lab", label: "lab" }];
 const fixtures: readonly MachineFixture[] = [
 	{ n: 1 },
@@ -60,9 +73,14 @@ const fixtures: readonly MachineFixture[] = [
 const plain = labWith(fixtures, images);
 const lab = withCheckpoint(plain, "node2");
 
+const LABS: Readonly<Record<string, LabState>> = {
+	checkpoint: plain,
+	boot: labWith([{ n: 1 }, { n: 2, phase: "off" }], images),
+	rmswitch: withSwitch(plain, "lan"),
+};
+
 /** The labs that the examples make sense in: `boot` wants node2 off, and `checkpoint` a name that is free. */
-const labFor = (verb: string): LabState =>
-	verb === "checkpoint" ? plain : verb === "boot" ? labWith([{ n: 1 }, { n: 2, phase: "off" }], images) : lab;
+const labFor = (verb: string): LabState => LABS[verb] ?? lab;
 
 /** One sentence: it ends once, in a full stop. */
 function expectSentence(message: string | null): string {
@@ -231,6 +249,32 @@ const ROWS: readonly Row[] = [
 	spawnOption("--nics", "nics", "two", "spawn wants a number of NICs such as 2 after --nics, not two."),
 	spawnOption("--nics", "nics", "5", "--nics wants 1 to 4 NICs, not 5."),
 	spawnOption("--net", "net", "lan", "spawn wants switch0 or none after --net, not lan."),
+	[
+		"mkswitch my_lan",
+		`mkswitch ${NAME_SHAPE.replace("web-1", "lan").replace("my_web", "my_lan")}`,
+		["switch_add", { name: "my_lan" }],
+	],
+	["mkswitch web", "A machine is already called web, so give another name.", ["switch_add", { name: "web" }]],
+	[
+		"mkswitch none",
+		"none already means something in the lab, so use another name, such as none-1.",
+		["switch_add", { name: "none" }],
+	],
+	[
+		"mkswitch node9",
+		"The lab gives out node9 itself, so use another name, such as lan.",
+		["switch_add", { name: "node9" }],
+	],
+	[
+		"rmswitch switch0",
+		"switch0 cannot be removed, and the lab has no other switch.",
+		["switch_remove", { switch: "switch0" }],
+	],
+	[
+		"rmswitch lan",
+		"No switch is called lan, and switch0, the only one, cannot be removed.",
+		["switch_remove", { switch: "lan" }],
+	],
 	spawnOption("--net", "net", "none,none", "--net names 2 NICs, so add --nics 2."),
 	spawnOption(
 		"--addr",
@@ -387,6 +431,15 @@ describe("a line that cannot run", () => {
 			"No machine is called node1, and the lab has none yet, so spawn one first.",
 		);
 		expect(sentenceOf(bar("exec all -- ls", empty))).toBe("The lab has no machine for exec yet, so spawn one first.");
+	});
+
+	it("names the limit that a lab with eight switches is at", async () => {
+		const [first] = lab.switches;
+		const names = ["a", "b", "c", "d", "e", "f", "g"].map((text) => withSwitch(lab, text).switches[1] ?? first);
+		const full: LabState = { ...lab, switches: [first, ...names] };
+		const limit = "The lab has all 8 switches that it can, so remove one with rmswitch first.";
+		expect(sentenceOf(bar("mkswitch", full))).toBe(limit);
+		expect(sentenceOf(await agent("switch_add", { name: "lan" }, full))).toBe(limit);
 	});
 
 	it("names the room and the ports that a full lab has none of", () => {

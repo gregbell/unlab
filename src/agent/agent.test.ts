@@ -80,11 +80,14 @@ function fakeModelContext() {
 const ALL_TOOLS: readonly ToolName[] = [
 	"lab_help",
 	"machines_list",
+	"topology_read",
 	"machines_spawn",
 	"machines_boot",
 	"machines_reboot",
 	"machines_poweroff",
 	"machines_remove",
+	"switch_add",
+	"switch_remove",
 	"checkpoint_save",
 	"checkpoint_restore",
 	"checkpoint_remove",
@@ -178,6 +181,7 @@ describe("registration", () => {
 	it("titles every tool, and keeps what it says about itself within the lengths Chrome recommends", async () => {
 		const { context } = await setup();
 		expect([...context.tools.values()].map((tool) => tool.title).sort()).toEqual([
+			"Add a switch",
 			"Boot machines",
 			"Delete a checkpoint",
 			"Explain the lab's verbs",
@@ -187,7 +191,9 @@ describe("registration", () => {
 			"Power machines on",
 			"Read a terminal",
 			"Read captured frames",
+			"Read the topology",
 			"Reboot machines",
+			"Remove a switch",
 			"Remove machines",
 			"Restore a checkpoint",
 			"Run a shell command",
