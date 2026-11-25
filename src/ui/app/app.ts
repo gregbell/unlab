@@ -10,13 +10,13 @@ import "../switch/switch.ts";
 import "../spawn-form/spawn-form.ts";
 import { ContextProvider } from "@lit/context";
 import { html, LitElement, nothing, type PropertyValues, type TemplateResult } from "lit";
-import { type PanelName, selectTiling, type UiEvent, visiblePanels } from "../../model/index.ts";
+import { type PanelName, parkedPanels, selectTiling, type UiEvent, visiblePanels } from "../../model/index.ts";
 import { AGENT_PANEL_ID } from "../agent-panel/agent-panel.ts";
 import { plusIcon, Select, servicesContext } from "../base/index.ts";
-import { DOCK_ID } from "../panel-bar/panel-bar.ts";
 import type { AppServices } from "../services.ts";
 
 const ANNOUNCER = "unlab-announcer";
+const DOCK_ID = "unlab-dock";
 
 /**
  * The shell: top bar, body and status line, with the services every element
@@ -35,8 +35,8 @@ export class UnlabApp extends LitElement {
 	readonly #empty = new Select(this, (state) => state.rail.length === 0);
 	readonly #panels = new Select(this, (state) => state.panels);
 	readonly #tiling = new Select(this, selectTiling);
-	/** The panel that had the focus before this render, which may park it. */
-	#focusedPanel: PanelName | null = null;
+	/** The panel that had the focus before this render, in the dock or by its name in the bar. */
+	#focused: { readonly panel: PanelName; readonly at: "dock" | "bar" } | null = null;
 
 	get app(): AppServices {
 		if (!this.services) throw new Error("<unlab-app> needs its services before it connects");
@@ -68,17 +68,30 @@ export class UnlabApp extends LitElement {
 	protected override willUpdate(changed: PropertyValues<this>): void {
 		super.willUpdate(changed);
 		if (changed.has("services") && this.services) this.#provider.setValue(this.services);
-		const focused = document.activeElement?.closest(`#${DOCK_ID} > unlab-capture, #${DOCK_ID} > unlab-switch`);
-		this.#focusedPanel = focused ? (focused.localName === "unlab-capture" ? "capture" : "switch0") : null;
+		const focused = document.activeElement;
+		const panel = focused?.closest<HTMLElement>("[data-panel]")?.dataset.panel as PanelName | undefined;
+		this.#focused = panel ? { panel, at: focused?.closest(`#${DOCK_ID}`) ? "dock" : "bar" } : null;
 	}
 
 	protected override updated(changed: PropertyValues<this>): void {
 		super.updated(changed);
-		const panel = this.#focusedPanel;
-		this.#focusedPanel = null;
-		// Its button went with it, so its name in the bar takes the focus: that is the way back.
-		if (panel && !visiblePanels(this.#panels.value).includes(panel))
-			this.querySelector<HTMLElement>(`unlab-panel-bar [data-panel="${panel}"]`)?.focus();
+		const from = this.#focused;
+		this.#focused = null;
+		if (!from) return;
+		const parked = parkedPanels(this.#panels.value).includes(from.panel);
+		if (parked === (from.at === "dock")) void this.#followPanel(from.panel, parked);
+	}
+
+	/**
+	 * The button that parked a panel, or brought it back, goes with the press.
+	 * The focus moves to the one that undoes it, once that is drawn.
+	 */
+	async #followPanel(panel: PanelName, parked: boolean): Promise<void> {
+		if (parked) await this.querySelector("unlab-statusline")?.updateComplete;
+		const place = parked ? "unlab-panel-bar" : `#${DOCK_ID} > [data-panel="${panel}"]`;
+		const host = this.querySelector<LitElement>(place);
+		await host?.updateComplete;
+		host?.querySelector<HTMLElement>(parked ? `[data-panel="${panel}"]` : `[aria-label="Park ${panel}"]`)?.focus();
 	}
 
 	override render(): TemplateResult {
@@ -109,8 +122,8 @@ export class UnlabApp extends LitElement {
 						</div>
 						<div id=${DOCK_ID} class="dock" ?data-maximised=${maximised !== null} ?hidden=${empty || panels.length === 0}
 							style=${dockDivider ? `--dock-columns: ${columns}; --dock-divider: ${dockDivider}` : nothing}>
-							${panels.includes("capture") ? html`<unlab-capture mode=${maximised ? "full" : "dock"}></unlab-capture>` : nothing}
-							${panels.includes("switch0") ? html`<unlab-switch ?compact=${!maximised}></unlab-switch>` : nothing}
+							${panels.includes("capture") ? html`<unlab-capture data-panel="capture" mode=${maximised ? "full" : "dock"}></unlab-capture>` : nothing}
+							${panels.includes("switch0") ? html`<unlab-switch data-panel="switch0" ?compact=${!maximised}></unlab-switch>` : nothing}
 						</div>
 					</main>
 				</div>

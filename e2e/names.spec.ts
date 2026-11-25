@@ -134,7 +134,8 @@ test("every command that takes a machine takes its name", async ({ page }) => {
 		/52:54:00:88:00:0b\s+web-1/,
 	);
 	if (shots) await page.screenshot({ path: `${shots}/names-capture.png` });
-	await page.getByRole("button", { name: /^switch0/ }).click();
+	await page.getByRole("button", { name: "Maximise capture" }).click();
+	await page.getByRole("button", { name: "Maximise switch0" }).click();
 	await expect(page.locator("unlab-mac-table tr", { hasText: "52:54:00:88:00:0c" })).toContainText("db");
 	await page.keyboard.press("Control+/");
 	await page.keyboard.type("capture dbx");

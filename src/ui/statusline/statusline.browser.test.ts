@@ -57,8 +57,11 @@ describe("<unlab-statusline>", () => {
 		expect(colour("webmcp")).toBe(tokenColor("warn"));
 	});
 
-	it("starts the panel bar where the panels start, and has none without machines or over another view", async () => {
+	it("starts the panel bar where the panels start, and has none with nothing parked or over another view", async () => {
 		const { element, store, settle } = await mount("unlab-statusline", { state: lab(spawn(2), ready()) });
+		expect(document.querySelector("unlab-panel-bar")).toBeNull();
+		store.dispatchUi({ type: "ui/panel-parked", panel: "capture" });
+		await settle();
 		const bar = document.querySelector("unlab-panel-bar");
 		expect(bar?.getBoundingClientRect().left).toBe(element.getBoundingClientRect().left + 232 + 8);
 		expect(element.getBoundingClientRect().height).toBe(26);
@@ -66,7 +69,9 @@ describe("<unlab-statusline>", () => {
 		await settle();
 		expect(document.querySelector("unlab-panel-bar")).toBeNull();
 		unmountAll();
-		await mount("unlab-statusline", { state: lab() });
+		const empty = await mount("unlab-statusline", { state: lab() });
+		empty.store.dispatchUi({ type: "ui/panel-parked", panel: "capture" });
+		await empty.settle();
 		expect(document.querySelector("unlab-panel-bar")).toBeNull();
 	});
 });

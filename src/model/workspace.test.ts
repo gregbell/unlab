@@ -227,11 +227,11 @@ test.each([
 test("the open panels come back, and none maximised", () => {
 	const s = run(
 		labWith(1),
-		{ type: "ui/panel-toggled", panel: "capture" },
+		{ type: "ui/panel-parked", panel: "capture" },
 		{ type: "ui/panel-maximised", panel: "switch0" },
 	);
 	const { state } = restoreWorkspace(initialState(IMAGES, WIDE), saveWorkspace(s));
-	expect(state.panels).toEqual({ open: ["switch0"], maximised: null, putAway: [] });
+	expect(state.panels).toEqual({ open: ["switch0"], maximised: null });
 });
 
 test.each([

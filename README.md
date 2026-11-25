@@ -29,8 +29,8 @@ the tab before launching the app so it can open that lab.
 
 To see what a broken link looks like, press `Esc` to return to the consoles and
 click the cable above port 2. Ping again, then click the cable to reconnect it.
-The bar at the bottom names each panel: click one to park it, and again to bring
-it back.
+Park a panel with the dash at its top right. Its name then waits in the bar at
+the bottom: click it to bring the panel back.
 
 ## Lab commands
 

@@ -43,7 +43,7 @@ export {
 	severalNics,
 	takenPorts,
 } from "./machines.ts";
-export { visiblePanels } from "./panels.ts";
+export { parkedPanels, visiblePanels } from "./panels.ts";
 export { capacity, gridFor, parkedPanes, visiblePanes } from "./panes.ts";
 export * from "./selectors.ts";
 export { createStore, type ReadStore, type Schedule, type Store } from "./store.ts";

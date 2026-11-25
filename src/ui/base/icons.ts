@@ -17,5 +17,4 @@ export const parkIcon = line("M2 10h8");
 export const pauseIcon = line("M4 2v8M8 2v8");
 export const resumeIcon = line("M3.5 2v8l6-4z");
 export const clearIcon = line("M2 3.5h8M4.5 3.5v-2h3v2M3.2 3.5l.5 7h4.6l.5-7");
-export const downIcon = line("M2.5 4l3.5 4 3.5-4");
 export const upIcon = line("M2.5 8l3.5-4 3.5 4");

@@ -16,28 +16,15 @@
 			height: 26px;
 			padding: 0 12px;
 			border: 0;
-			border-bottom: 2px solid transparent;
 			background: var(--glass-panel);
 			color: var(--text-2);
 			white-space: nowrap;
 			cursor: pointer;
 		}
 
-		.all {
-			padding: 0 7px;
-		}
-
-		button:hover,
-		.panel[aria-pressed="true"] {
-			color: var(--text);
-		}
-
 		button:hover {
 			background: var(--line);
-		}
-
-		.panel[aria-pressed="true"] {
-			border-bottom-color: var(--text-2);
+			color: var(--text);
 		}
 
 		button:focus-visible {

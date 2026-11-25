@@ -27,15 +27,7 @@ import {
 	stage,
 	stopped,
 } from "./machines.ts";
-import {
-	ALL_OPEN,
-	maximisePanel,
-	openPanels,
-	parkPanel,
-	restorePanels,
-	toggleMaximisedPanel,
-	togglePanel,
-} from "./panels.ts";
+import { ALL_OPEN, maximisePanel, parkPanel, restorePanels, toggleMaximisedPanel, unparkPanel } from "./panels.ts";
 import {
 	addPanes,
 	emptyPanes,
@@ -226,14 +218,12 @@ function reduce(state: LabState, event: LabEvent): Step {
 			return step(patch(state, { view: event.view }));
 		case "ui/agent-panel":
 			return step(patch(state, { agentPanel: event.open }));
-		case "ui/panel-toggled":
-			return panels(state, togglePanel(state.panels, event.panel));
+		case "ui/panel-unparked":
+			return panels(state, unparkPanel(state.panels, event.panel));
 		case "ui/panel-parked":
 			return panels(state, parkPanel(state.panels, event.panel));
 		case "ui/panel-maximised":
 			return panels(state, toggleMaximisedPanel(state.panels, event.panel));
-		case "ui/panels":
-			return panels(state, openPanels(state.panels, event.open));
 		case "ui/bar":
 			return event.open ? openBar(state) : closeBar(state);
 		case "ui/capture-filter":

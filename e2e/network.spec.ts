@@ -40,7 +40,7 @@ test("pings show in the dock; cutting a cable by its port floods, flushes and re
 	);
 	await expect(node2).toContainText("cut");
 	await expect(faceplate.locator('[data-port="2"] .word')).toHaveText("cut");
-	await expect(page.getByRole("button", { name: "switch0 1 of 2 up" })).toBeVisible();
+	await expect(page.getByText("1 of 2 links up")).toBeVisible();
 
 	// The console takes the line once its shell is back at a prompt; until then exec refuses it.
 	await expect(async () => {
@@ -59,7 +59,8 @@ test("pings show in the dock; cutting a cable by its port floods, flushes and re
 
 	await shoot(page, "switch-maximised");
 
-	await page.getByRole("button", { name: /^capture live/ }).click();
+	await page.getByRole("button", { name: "Maximise switch0" }).click();
+	await page.getByRole("button", { name: "Maximise capture" }).click();
 	const full = page.locator("unlab-capture[mode=full]");
 	await full.getByRole("textbox", { name: "filter" }).fill("icmp");
 	const list = full.getByRole("listbox", { name: "Captured frames" });

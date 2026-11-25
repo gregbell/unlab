@@ -59,7 +59,8 @@ test("a two-NIC machine forwards in the browser, and the capture and its filter 
 	await page.keyboard.press("ArrowUp");
 	await expect(page.locator("unlab-frame-detail")).toContainText("node3:eth1");
 	if (shots) await page.screenshot({ path: `${shots}/capture-nics.png` });
-	await page.getByRole("button", { name: /^switch0/ }).click();
+	await page.getByRole("button", { name: "Maximise capture" }).click();
+	await page.getByRole("button", { name: "Maximise switch0" }).click();
 	await expect(page.locator("unlab-mac-table tr", { hasText: "52:54:00:88:01:0d" })).toContainText("node3:eth1");
 	await page.keyboard.press("Escape");
 

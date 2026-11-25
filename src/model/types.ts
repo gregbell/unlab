@@ -333,8 +333,6 @@ export interface Panels {
 	readonly open: readonly PanelName[];
 	/** While one panel is maximised it stands in for the panes and the other panels. Always an open one. */
 	readonly maximised: PanelName | null;
-	/** What parking every panel at once put away. */
-	readonly putAway: readonly PanelName[];
 }
 
 export interface Departed {
@@ -512,10 +510,9 @@ export type UiEvent =
 	| { readonly type: "ui/area-resized"; readonly width: number; readonly height: number }
 	| { readonly type: "ui/view"; readonly view: View }
 	| { readonly type: "ui/agent-panel"; readonly open: boolean }
-	| { readonly type: "ui/panel-toggled"; readonly panel: PanelName }
+	| { readonly type: "ui/panel-unparked"; readonly panel: PanelName }
 	| { readonly type: "ui/panel-parked"; readonly panel: PanelName }
 	| { readonly type: "ui/panel-maximised"; readonly panel: PanelName }
-	| { readonly type: "ui/panels"; readonly open: boolean }
 	| { readonly type: "ui/bar"; readonly open: boolean }
 	| { readonly type: "ui/capture-filter"; readonly filter: string }
 	| { readonly type: "ui/capture-pause"; readonly paused: boolean }

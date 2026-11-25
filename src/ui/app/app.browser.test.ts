@@ -264,24 +264,25 @@ describe("<unlab-app> panels", () => {
 		const { store, settle } = await mountApp();
 		await expect.poll(() => store.state.panes.grid.cols).toBe(2);
 		const open = box("unlab-pane-area").height;
-		await name("switch0").click();
+		await page.getByRole("button", { name: "Park switch0" }).click();
 		await settle();
 		expect(box("unlab-capture").width).toBe(box("main.centre").width);
 		expect(document.querySelector("unlab-app unlab-switch")).toBeNull();
 		expect(box("unlab-pane-area").height).toBeGreaterThanOrEqual(open);
 
-		await name("capture").click();
+		await page.getByRole("button", { name: "Park capture" }).click();
 		await settle();
 		expect(the(".dock").hidden).toBe(true);
 		expect(box("unlab-pane-area").bottom).toBe(box(".body").bottom);
 
-		await page.getByRole("button", { name: "All panels" }).click();
+		await name("capture").click();
+		await name("switch0").click();
 		await settle();
 		expect(box("unlab-pane-area").height).toBe(open);
 	});
 
 	it.each(["capture", "switch0"])(
-		"parks %s from its own button, and its name in the bar takes the focus",
+		"parks %s from its own button and brings it back by its name, and the focus follows",
 		async (panel) => {
 			const { settle } = await mountApp();
 			const park = page.getByRole("button", { name: `Park ${panel}` });
@@ -292,7 +293,8 @@ describe("<unlab-app> panels", () => {
 			await expect.element(name(panel)).toHaveFocus();
 			await userEvent.keyboard("{Enter}");
 			await settle();
-			await expect.element(park).toBeVisible();
+			await expect.element(park).toHaveFocus();
+			await expect.element(name(panel)).not.toBeInTheDocument();
 		},
 	);
 
@@ -314,6 +316,18 @@ describe("<unlab-app> panels", () => {
 		expect(the("unlab-pane[machine=node2]")).toBe(pane);
 	});
 
+	it("shows a parked panel beside the others when its name is clicked under a maximised one", async () => {
+		const { store, settle } = await mountApp();
+		store.dispatchUi({ type: "ui/panel-parked", panel: "switch0" });
+		store.dispatchUi({ type: "ui/panel-maximised", panel: "capture" });
+		await settle();
+		await name("switch0").click();
+		await settle();
+		expect(the(".panes").hidden).toBe(false);
+		expect(the("unlab-capture").getAttribute("mode")).toBe("dock");
+		expect(the("unlab-switch").hasAttribute("compact")).toBe(true);
+	});
+
 	it("brings a machine's pane back from under a maximised panel when its rail row is chosen", async () => {
 		const { store, runs } = await mountApp();
 		store.dispatchUi({ type: "ui/panel-maximised", panel: "switch0" });
@@ -328,10 +342,14 @@ describe("<unlab-app> panels", () => {
 		for (const width of [1280, 1462, 1920]) {
 			unmountAll();
 			await page.viewport(width, 827);
-			await mountApp(lab(spawn(2), ready()));
+			const { store, settle } = await mountApp(lab(spawn(2), ready()));
 			for (const toolbar of ["unlab-capture .toolbar", "unlab-switch .header"])
 				expect(box(toolbar).height, `${toolbar} at ${width}`).toBe(35);
 			expect(box("unlab-statusline").height, `status line at ${width}`).toBe(26);
+			store.dispatchUi({ type: "ui/panel-parked", panel: "capture" });
+			store.dispatchUi({ type: "ui/panel-parked", panel: "switch0" });
+			await settle();
+			expect(box("unlab-statusline").height, `status line with both names at ${width}`).toBe(26);
 		}
 	});
 });

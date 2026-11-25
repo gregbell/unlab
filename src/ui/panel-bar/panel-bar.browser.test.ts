@@ -7,10 +7,17 @@ import { lab, link, mount, ready, spawn, tokenColor, unmountAll } from "../base/
 beforeEach(() => page.viewport(1440, 900));
 afterEach(unmountAll);
 
-const mountBar = (state: LabState = lab(spawn(2), ready())) => mount("unlab-panel-bar", { state });
-const all = page.getByRole("button", { name: "All panels" });
-const capture = page.getByRole("button", { name: "capture live" });
-const faceplate = page.getByRole("button", { name: /^switch0/ });
+async function mountBar(state: LabState = lab(spawn(2), ready())) {
+	const mounted = await mount("unlab-panel-bar", { state });
+	const park = async (...panels: ("capture" | "switch0")[]) => {
+		for (const panel of panels) mounted.store.dispatchUi({ type: "ui/panel-parked", panel });
+		await mounted.settle();
+	};
+	return { ...mounted, park };
+}
+
+const names = (): (string | undefined)[] =>
+	[...document.querySelectorAll<HTMLElement>("unlab-panel-bar button")].map((button) => button.dataset.panel);
 
 function word(panel: string): HTMLElement {
 	const found = document.querySelector<HTMLElement>(`[data-panel="${panel}"] .word`);
@@ -19,48 +26,39 @@ function word(panel: string): HTMLElement {
 }
 
 describe("<unlab-panel-bar>", () => {
-	it("names every panel with its state, pressed while it is on show", async () => {
-		await mountBar();
-		await expect.element(capture).toHaveAttribute("aria-pressed", "true");
-		await expect
-			.element(page.getByRole("button", { name: "switch0 2 of 2 up" }))
-			.toHaveAttribute("aria-pressed", "true");
+	it("names only the parked panels, each with its state, in the order the panels have", async () => {
+		const { park } = await mountBar();
+		expect(names()).toEqual([]);
+		await park("switch0");
+		expect(names()).toEqual(["switch0"]);
+		await park("capture");
+		expect(names()).toEqual(["capture", "switch0"]);
+		await expect.element(page.getByRole("button", { name: "capture live" })).toBeVisible();
+		await expect.element(page.getByRole("button", { name: "switch0 2 of 2 up" })).toBeVisible();
 		expect(getComputedStyle(word("capture")).color).toBe(tokenColor("ok"));
 		expect(getComputedStyle(word("switch0")).color).toBe(tokenColor("text-2"));
 	});
 
-	it("parks a panel and shows it again by its name", async () => {
-		const { store } = await mountBar();
-		await faceplate.click();
-		await expect.element(faceplate).toHaveAttribute("aria-pressed", "false");
-		await expect.element(capture).toHaveAttribute("aria-pressed", "true");
-		expect(store.state.panels.open).toEqual(["capture"]);
-		await faceplate.click();
-		expect(store.state.panels.open).toEqual(["capture", "switch0"]);
+	it("brings a panel back by its name, which leaves the bar", async () => {
+		const { store, park, settle } = await mountBar();
+		await park("capture", "switch0");
+		await page.getByRole("button", { name: /^switch0/ }).click();
+		await settle();
+		expect(store.state.panels.open).toEqual(["switch0"]);
+		expect(names()).toEqual(["capture"]);
 	});
 
-	it("parks every panel from the arrow, and brings them back", async () => {
-		const { store } = await mountBar();
-		await expect.element(all).toHaveAttribute("aria-expanded", "true");
-		await all.click();
-		await expect.element(all).toHaveAttribute("aria-expanded", "false");
-		expect(store.state.panels.open).toEqual([]);
-		await all.click();
-		expect(store.state.panels.open).toEqual(["capture", "switch0"]);
-	});
-
-	it("presses only the maximised panel", async () => {
+	it("leaves out a panel that a maximised one covers", async () => {
 		const { store, settle } = await mountBar();
 		store.dispatchUi({ type: "ui/panel-maximised", panel: "switch0" });
 		await settle();
-		await expect.element(capture).toHaveAttribute("aria-pressed", "false");
-		await expect.element(faceplate).toHaveAttribute("aria-pressed", "true");
+		expect(names()).toEqual([]);
 	});
 
-	it("says when the capture is paused and a cable is cut", async () => {
-		const { store, settle } = await mountBar(lab(spawn(3), ready(), link("down", "node2")));
+	it("says when a parked capture is paused and a cable is cut", async () => {
+		const { store, park } = await mountBar(lab(spawn(3), ready(), link("down", "node2")));
 		store.dispatchUi({ type: "ui/capture-pause", paused: true });
-		await settle();
+		await park("capture", "switch0");
 		expect([word("capture").textContent, getComputedStyle(word("capture")).color]).toEqual([
 			"paused",
 			tokenColor("warn"),
