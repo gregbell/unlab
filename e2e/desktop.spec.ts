@@ -85,3 +85,27 @@ test("on a phone, the first two machines share the screen with the rack through 
 	await page.getByRole("button", { name: "Restore node2 · terminal from dock" }).click();
 	await expect(page.getByRole("region", { name: "node2 · terminal", exact: true })).toBeVisible();
 });
+
+test("the wizard opens every new terminal above the desktop and sends typing to the front guest", async ({ page }) => {
+	await page.setViewportSize({ width: 390, height: 844 });
+	await page.goto("/");
+	await page.getByRole("button", { name: "Customize machines" }).click();
+	const wizard = page.getByRole("region", { name: "Add machines" });
+	await wizard.getByRole("button", { name: /Review$/ }).click();
+	await wizard.getByRole("button", { name: "Boot 2 machines" }).click();
+	await expect(wizard).toHaveCount(0);
+	for (const name of ["node1", "node2"])
+		await expect(page.getByRole("region", { name: `${name} · terminal`, exact: true })).toBeVisible();
+	const front = page.getByRole("region", { name: "node2 · terminal", exact: true });
+	await expect(front.getByRole("textbox")).toBeFocused({ timeout: 60_000 });
+	await page.keyboard.type("echo terminal-$((6*7))");
+	await page.keyboard.press("Enter");
+	await expect(front.locator(".wterm")).toContainText("terminal-42");
+	await page.getByRole("button", { name: "Lab menu" }).click();
+	await page.getByRole("menuitem", { name: "Add machines…" }).click();
+	await wizard.getByRole("button", { name: /Review$/ }).click();
+	await wizard.getByRole("button", { name: "Boot 1 machine" }).click();
+	const extra = page.getByRole("region", { name: "node3 · terminal", exact: true });
+	await expect(extra).toHaveAttribute("data-active", "true");
+	await expect(extra.getByRole("textbox")).toBeFocused({ timeout: 60_000 });
+});

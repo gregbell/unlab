@@ -180,18 +180,28 @@ class Desktop extends UnlabElement {
 			}
 			if (before.rail.length === 0 && next.rail.length > 0) this.dismissUtility("welcome");
 			if (before.rail.length > 0 && next.rail.length === 0) this.utility("welcome");
-			for (const name of next.rail) {
-				const machine = next.machines[name];
-				if (before.machines[name] || !machine) continue;
+			if (next.rail !== before.rail) {
+				const added = next.rail.filter((name) => !before.machines[name]);
+				const fromWizard = before.view === "spawn";
 				const firstBoot = !before.rail.length;
-				const index = next.rail.indexOf(name);
 				const boxes = startupBoxes();
-				const slot = firstBoot && index < (boxes.narrow ? 1 : 2) ? boxes.terminal(index) : undefined;
-				const window = this.showSession(machine.activeSession, false, slot);
-				if (firstBoot && !slot) {
-					window.state = "mini";
-					this.active = this.front?.id ?? "";
-					this.changed();
+				const columns = boxes.narrow ? 1 : 2;
+				for (const [index, name] of added.entries()) {
+					const machine = next.machines[name];
+					if (!machine) continue;
+					let box: Box | undefined;
+					if ((firstBoot || fromWizard) && index < columns) box = boxes.terminal(index);
+					else if (fromWizard) {
+						const base = boxes.terminal(index % columns);
+						const offset = Math.min(Math.floor(index / columns) * 32, base.h - 128);
+						box = { ...base, y: base.y + offset, h: base.h - offset };
+					}
+					const win = this.showSession(machine.activeSession, fromWizard && index === added.length - 1, box);
+					if (firstBoot && !fromWizard && index >= columns) {
+						win.state = "mini";
+						this.active = this.front?.id ?? "";
+						this.changed();
+					}
 				}
 			}
 			const command = next.log.at(-1);
