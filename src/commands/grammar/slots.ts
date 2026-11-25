@@ -2,8 +2,11 @@ import {
 	type Address,
 	ALL_MACHINES,
 	addressText,
+	type GiB,
 	isNameFault,
 	type LabState,
+	MAX_EXTRA_DISKS,
+	MAX_EXTRA_GIB,
 	MAX_NAME,
 	type Machine,
 	type MachineName,
@@ -14,6 +17,7 @@ import {
 	nicsOf,
 	type Phase,
 	parseChosenName,
+	parseGiB,
 	plugsOf,
 	type SessionId,
 } from "../../model/index.ts";
@@ -558,6 +562,39 @@ export function addresses(): Value<readonly (Address | null)[] | null> {
 			type: "string",
 			description:
 				"An address for each NIC, eth0 first, such as 10.1.0.1/24,none. none leaves it up with no address. Left out, eth0 gets one in 10.88.0.0/24.",
+		},
+	};
+}
+
+/** The size of each extra disk. Null is what no option says: none. */
+export function diskSizes(): Value<readonly GiB[] | null> {
+	return {
+		kind: "positional",
+		label: "GiB,...",
+		noun: "sizes in GiB such as 1,4",
+		read(text) {
+			const parts = listParts(text);
+			const read: GiB[] = [];
+			for (const { part, ...span } of parts) {
+				const size = POSITIVE_INTEGER.test(part) ? parseGiB(Number(part)) : null;
+				if (size === null) {
+					const why = `--extra-disk wants whole GiB from 1 to ${MAX_EXTRA_GIB}, such as 1,4, not ${part || "nothing"}.`;
+					return new Miss(why, span, false);
+				}
+				read.push(size);
+			}
+			if (read.length <= MAX_EXTRA_DISKS) return read;
+			const most = `A machine has up to ${MAX_EXTRA_DISKS} extra disks, and --extra-disk names ${read.length}.`;
+			return new Miss(most, undefined, false);
+		},
+		suggest(typed) {
+			const head = typed.slice(0, typed.lastIndexOf(",") + 1);
+			return [1, 4, 16].map((size) => ({ insert: `${head}${size}`, label: `${size} GiB` }));
+		},
+		format: (sizes) => (sizes ?? []).join(","),
+		schema: {
+			type: "string",
+			description: `The size in whole GiB of each blank disk to add, such as 1,4: up to ${MAX_EXTRA_DISKS}, of 1 to ${MAX_EXTRA_GIB} each. They are /dev/wdc and on.`,
 		},
 	};
 }

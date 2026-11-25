@@ -19,7 +19,7 @@ export const SWITCH_NAME = "switch0";
 /** What a command takes for every machine. */
 export const ALL_MACHINES = "all";
 
-/** `n` only goes up and is one machine's for the lab's lifetime. Its MACs, its first address and its disk follow from it. */
+/** `n` only goes up and is one machine's for the lab's lifetime. Its MACs, its first address and its disks follow from it. */
 export interface Identity {
 	readonly n: number;
 	/** What the user types and what everything else keys by. Free again once the machine is gone. */
@@ -57,6 +57,20 @@ export interface ImageInfo {
 export const DISK_SIZES = ["4", "8", "16", "32", "64"] as const;
 export type DiskSize = (typeof DISK_SIZES)[number];
 
+declare const gib: unique symbol;
+/** An extra disk's size: a whole number from 1 to 64. */
+export type GiB = number & { readonly [gib]: true };
+
+export interface Disks {
+	/** The size of the one that keeps the guest's files. */
+	readonly root: DiskSize;
+	/** The blank ones beside it, in the guest's order. */
+	readonly extra: readonly GiB[];
+}
+
+/** The most a guest kernel can address. */
+export const MAX_MEM_MIB = 4096;
+
 export interface NicSpec {
 	readonly net: "switch0" | "none";
 	/** What the lab sets on it at every boot. Null leaves it up with none. */
@@ -64,7 +78,7 @@ export interface NicSpec {
 }
 
 interface Hardware {
-	readonly diskGiB?: DiskSize;
+	readonly disks: Disks;
 	readonly cpus?: number;
 	readonly image: string;
 	readonly memMiB: number;
@@ -371,8 +385,8 @@ export type Effect =
 	| { readonly type: "vm/boot"; readonly machine: MachineName; readonly attempt: number; readonly config: BootConfig }
 	/** Stop, terminate after 250 ms, then report vm/stopped. Idempotent. */
 	| { readonly type: "vm/stop"; readonly machine: MachineName; readonly attempt: number }
-	/** The machine is gone, and nothing can ask for its disk again. */
-	| { readonly type: "disk/delete"; readonly n: number }
+	/** The machine is gone, and nothing can ask for its disks again. */
+	| { readonly type: "disks/delete"; readonly n: number }
 	| { readonly type: "port/attach"; readonly port: PortNo; readonly machine: MachineName; readonly nic: NicNo }
 	| { readonly type: "port/detach"; readonly port: PortNo }
 	/** Changes the switch link and writes the capture event row, in that order. */

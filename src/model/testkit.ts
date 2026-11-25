@@ -1,6 +1,7 @@
 // Shared by the model's tests. Every fixture is built through `update`, the way the app builds state.
 
 import { isAddressFault, parseAddress } from "../net/index.ts";
+import { parseGiB } from "./disks.ts";
 import { isNameFault, parseChosenName } from "./identity.ts";
 import { isPlanError, planBootAgain, planLink, planSpawn } from "./machines.ts";
 import type {
@@ -8,6 +9,7 @@ import type {
 	AgentCall,
 	CommandEvent,
 	Effect,
+	GiB,
 	ImageInfo,
 	LabEvent,
 	LabState,
@@ -57,12 +59,20 @@ export interface SpawnOptions {
 	readonly name?: string;
 	readonly image?: string;
 	readonly memMiB?: number;
+	/** The size of each extra disk. */
+	readonly extra?: readonly number[];
 	readonly at?: number;
 }
 
 export function address(text: string): Address {
 	const read = parseAddress(text);
 	if (isAddressFault(read)) throw new Error(`${text}: ${read.kind}`);
+	return read;
+}
+
+export function gib(size: number): GiB {
+	const read = parseGiB(size);
+	if (read === null) throw new Error(`no disk of ${size} GiB`);
 	return read;
 }
 
@@ -79,6 +89,7 @@ export function spawnRequest(options: SpawnOptions = {}): SpawnRequest {
 		image,
 		...(options.name === undefined ? {} : { name: named(options.name) }),
 		memMiB,
+		disks: { root: "4", extra: (options.extra ?? []).map(gib) },
 		gateway: options.gateway ?? nets[0] === "switch0",
 		nics: nets.map((net, nic) => {
 			if (addr === undefined) return { net, address: nic === 0 ? "default" : null };

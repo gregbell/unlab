@@ -1,4 +1,4 @@
-import type { HueNo, MachineName, SessionId, Source } from "../model/index.ts";
+import type { HueNo, Identity, MachineName, SessionId, Source } from "../model/index.ts";
 
 export interface Token {
 	readonly text: string;
@@ -57,6 +57,8 @@ export interface ConfirmText {
 	readonly detail: string;
 	/** `Remove node3`, never "OK" or "Allow". */
 	readonly actionLabel: string;
+	/** Whose it is, by number too: a name can be another machine's by the time it runs. */
+	readonly machines: readonly Pick<Identity, "n" | "name">[];
 }
 
 export interface ReportBlock {
@@ -111,6 +113,12 @@ export function lineError(message: string, token?: number, fix?: string): LineEr
 		...(token === undefined ? {} : { token }),
 		...(fix === undefined ? {} : { fix }),
 	};
+}
+
+/** Why a yes to `asked` is not a yes to `now`, or null when they ask the same of the same machines. */
+export function changedSinceAsked(asked: ConfirmText, now: ConfirmText): LineError | null {
+	if (JSON.stringify(asked) === JSON.stringify(now)) return null;
+	return lineError(`What this does to ${asked.machines.map((m) => m.name).join(", ")} has changed since it was asked.`);
 }
 
 export function isLineError(value: object): value is LineError {

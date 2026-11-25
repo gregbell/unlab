@@ -63,8 +63,8 @@ export interface EngineDeps {
 	readonly startVm: StartVm;
 	/** Image bytes by manifest name, fetched once however many machines ask. Rejects, never throws. */
 	readonly image: (name: string) => Promise<ArrayBufferLike>;
-	/** Delete machine n's disk. */
-	readonly deleteDisk: (n: number) => void;
+	/** Delete every disk machine n has. */
+	readonly deleteDisks: (n: number) => void;
 	/** The page's one polite live region. */
 	readonly announce: (text: string) => void;
 	/** Run fn every ms until the returned function is called. */
@@ -346,8 +346,8 @@ export function createEngine(deps: EngineDeps): Engine {
 				});
 				return;
 			}
-			case "disk/delete":
-				deps.deleteDisk(effect.n);
+			case "disks/delete":
+				deps.deleteDisks(effect.n);
 				return;
 			case "port/attach": {
 				const { port, machine, nic } = effect;

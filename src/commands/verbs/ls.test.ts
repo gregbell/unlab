@@ -18,26 +18,26 @@ describe("ls", () => {
 			[
 				"node1",
 				{ kind: "state", text: "ready" },
-				"10.88.0.11/24 · 52:54:00:88:00:0b · up on port 1 · console, sh1",
+				"10.88.0.11/24 · 52:54:00:88:00:0b · up on port 1 · 4 GiB disk · console, sh1",
 				"node1:sh1",
 			],
 			[
 				"node2",
 				{ kind: "state", text: "ready" },
-				"10.88.0.12/24 · 52:54:00:88:00:0c · cut on port 2 · console",
+				"10.88.0.12/24 · 52:54:00:88:00:0c · cut on port 2 · 4 GiB disk · console",
 				"node2:console",
 			],
 			[
 				"node3",
 				{ kind: "state", text: "ready" },
-				"10.88.0.13/24 · 52:54:00:88:00:0d · up on port 3 · console",
+				"10.88.0.13/24 · 52:54:00:88:00:0d · up on port 3 · 4 GiB disk · console",
 				"node3:console",
 			],
 			["node4", { kind: "state", text: "failed" }, "No prompt after 120 s.", "node4:console"],
 			[
 				"node5",
 				{ kind: "state", text: "booting" },
-				"10.88.0.15/24 · 52:54:00:88:00:0f · unplugged · console",
+				"10.88.0.15/24 · 52:54:00:88:00:0f · unplugged · 4 GiB disk · console",
 				"node5:console",
 			],
 		]);
@@ -47,6 +47,7 @@ describe("ls", () => {
 			address: "10.88.0.12",
 			gateway: true,
 			nics: [{ name: "eth0", mac: "52:54:00:88:00:0c", address: "10.88.0.12", prefix: 24, port: 2, link: "cut" }],
+			disks: [{ device: "/dev/wdb", gib: 4 }],
 			sessions: ["node2:console"],
 		});
 	});
@@ -62,7 +63,7 @@ describe("ls", () => {
 			"eth0 · 10.88.0.11/24 · 52:54:00:88:00:0b · up on port 1",
 			"eth1 · no address · 52:54:00:88:01:0b · cut on port 2",
 			"eth2 · no address · 52:54:00:88:02:0b · unplugged",
-			"console",
+			"4 GiB disk · console",
 		]);
 		expect(result.data).toMatchObject([
 			{
@@ -71,6 +72,25 @@ describe("ls", () => {
 					{ name: "eth0", mac: "52:54:00:88:00:0b", address: "10.88.0.11", port: 1, link: "up" },
 					{ name: "eth1", mac: "52:54:00:88:01:0b", address: null, port: 2, link: "cut" },
 					{ name: "eth2", mac: "52:54:00:88:02:0b", address: null, port: null, link: "unplugged" },
+				],
+			},
+		]);
+	});
+
+	it("lists every disk of a machine with its size", async () => {
+		const lab = storeLab();
+		await lab.run("spawn 1 alpine --disk 8 --extra-disk 1,64 --no-net");
+		const result = await lab.run("ls");
+		if (result.kind !== "report") throw new Error("ls reports");
+		expect(result.blocks[0].lastLine).toBe(
+			"10.88.0.11/24 · 52:54:00:88:00:0b · unplugged · /dev/wdb 8 GiB, /dev/wdc 1 GiB, /dev/wdd 64 GiB · console",
+		);
+		expect(result.data).toMatchObject([
+			{
+				disks: [
+					{ device: "/dev/wdb", gib: 8 },
+					{ device: "/dev/wdc", gib: 1 },
+					{ device: "/dev/wdd", gib: 64 },
 				],
 			},
 		]);
@@ -86,9 +106,9 @@ describe("ls", () => {
 			[
 				"eth0 · no address · 52:54:00:88:00:0b · port 1 reserved",
 				"eth1 · 10.2.0.1/16 · 52:54:00:88:01:0b · port 2 reserved",
-				"no package gateway · console",
+				"no package gateway · 4 GiB disk · console",
 			],
-			["no address · 52:54:00:88:00:0c · port 3 reserved · console"],
+			["no address · 52:54:00:88:00:0c · port 3 reserved · 4 GiB disk · console"],
 		]);
 		expect(result.data).toMatchObject([
 			{
@@ -106,7 +126,7 @@ describe("ls", () => {
 	it("says so when the lab is empty", async () => {
 		const lab = storeLab();
 		expect(lab.parsed("ls").preview(lab.store.state)).toMatchObject({
-			will: "list 0 machines with their addresses and links",
+			will: "list 0 machines with their addresses, links and disks",
 		});
 		expect(await lab.run("ls")).toEqual({ kind: "report", header: "no machines yet", blocks: [], data: [] });
 	});

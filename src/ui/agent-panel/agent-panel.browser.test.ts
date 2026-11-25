@@ -25,7 +25,7 @@ const WAITING: LabEvent = called(4, {
 	tool: "machines_remove",
 	line: "rm node3",
 	status: "waiting",
-	preview: "Its console closes and everything on its disk is gone. There is no undo.",
+	preview: "Its console closes and everything on its 4 GiB disk is gone. There is no undo.",
 	actionLabel: "Remove node3",
 });
 
@@ -44,7 +44,7 @@ describe("<unlab-agent-panel>", () => {
 		const rows = [...element.querySelectorAll(".tool .name")].map(text);
 		expect(rows).toEqual([
 			"machines_list()",
-			"machines_spawn(count, image, mem, cpus, disk, name, nics, net, addr, gateway)",
+			"machines_spawn(count, image, mem, cpus, disk, extraDisk, name, nics, net, addr, gateway)",
 			"machines_remove(names)",
 			"shell_exec(targets, command)",
 			"shell_read(machine, lines)",

@@ -39,6 +39,7 @@ import { clockHz, initialState, update } from "./update.ts";
 const alpineAt = (text: string): MachineSpec => ({
 	image: "alpine",
 	memMiB: 256,
+	disks: { root: "4", extra: [] },
 	gateway: true,
 	nics: [{ net: "switch0", address: address(text) }],
 });
@@ -355,7 +356,7 @@ describe("rm", () => {
 			{ type: "port/detach", port: 1 },
 			{ type: "screen/dispose", session: "node1:console" },
 			{ type: "screen/dispose", session: "node1:sh1" },
-			{ type: "disk/delete", n: 1 },
+			{ type: "disks/delete", n: 1 },
 			{ type: "hosts/publish", hosts: [{ ip: "10.88.0.12", name: "node2" }] },
 			{ type: "announce", text: "node1 removed" },
 		]);
@@ -379,7 +380,7 @@ describe("rm", () => {
 			"clock",
 			"port/detach",
 			"screen/dispose",
-			"disk/delete",
+			"disks/delete",
 			"hosts/publish",
 			"announce",
 		]);
@@ -390,7 +391,7 @@ describe("rm", () => {
 		expect(effectsOf(s, remove("node1"), hasStopped("node1")).map((e) => e.type)).toEqual([
 			"vm/stop",
 			"screen/dispose",
-			"disk/delete",
+			"disks/delete",
 			"hosts/publish",
 			"announce",
 		]);

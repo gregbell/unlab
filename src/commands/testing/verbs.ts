@@ -6,7 +6,8 @@ import {
 	type MachineName,
 	type SessionId,
 } from "../../model/index.ts";
-import { defineVerb, type ParsedLine, refuse } from "../define.ts";
+import { type Approval, grantApproval } from "../approval.ts";
+import { type DangerLine, defineVerb, type ParsedLine, refuse } from "../define.ts";
 import * as slots from "../grammar/slots.ts";
 import { createRegistry } from "../index.ts";
 import { isLineError, type LineError } from "../types.ts";
@@ -81,6 +82,7 @@ export const spawn = defineVerb({
 				request: {
 					image: plan.image,
 					memMiB: plan.memMiB,
+					disks: { root: "4", extra: [] },
 					gateway: true,
 					nics: [{ net: plan.net, address: "default" }],
 				},
@@ -104,11 +106,15 @@ export const rm = defineVerb({
 		return { machines: a.targets.machines };
 	},
 	describe: (p) => `remove ${names(p.machines)} and ${p.machines.length > 1 ? "their disks" : "its disk"}`,
-	confirm: (p) => ({
-		question: `Remove ${names(p.machines)}?`,
-		detail: p.machines.length > 1 ? "Their disks go with them." : "Its disk goes with it.",
-		actionLabel: `Remove ${names(p.machines)}`,
-	}),
+	confirm(p, lab) {
+		const going = p.machines.flatMap((name) => lab.machines[name] ?? []);
+		return {
+			question: `Remove ${names(p.machines)}?`,
+			detail: `Closes ${going.flatMap((m) => m.sessions).join(", ")}.`,
+			actionLabel: `Remove ${names(p.machines)}`,
+			machines: going.map(({ n, name }) => ({ n, name })),
+		};
+	},
 	async execute(plan, ctx, deps) {
 		deps.dispatch({ type: "cmd/remove", machines: plan.machines, cause: ctx.source });
 		await deps.until((s) => plan.machines.every((m) => !s.machines[m]), ctx.signal);
@@ -193,6 +199,14 @@ export const ls = defineVerb({
 	},
 	tool: { name: "machines_list", title: "List machines", policy: "run", annotations: { readOnlyHint: true } },
 });
+
+/** A yes to what the line asks now, as a person gives it. */
+export function yesTo(line: ParsedLine, lab: LabState): { readonly line: DangerLine; readonly approval: Approval } {
+	if (!line.danger) throw new Error(`${line.line} should be dangerous`);
+	const asked = line.confirm(lab);
+	if (isLineError(asked)) throw new Error(asked.message);
+	return { line, approval: grantApproval(line.line, asked) };
+}
 
 export const TOY_VERBS = [spawn, rm, ls, exec, link, capture, focus, boot] as const;
 

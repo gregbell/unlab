@@ -7,7 +7,7 @@ import { lab, mount, named, ready, spawn, spawnNamed, tokenColor, unmountAll } f
 afterEach(unmountAll);
 
 const QUESTION = "Remove node3?";
-const DETAIL = "Its console closes and everything on its disk is gone. There is no undo.";
+const DETAIL = "Its console closes and everything on its 4 GiB disk is gone. There is no undo.";
 
 function mountConfirm(keys = false) {
 	return mount("unlab-confirm", {

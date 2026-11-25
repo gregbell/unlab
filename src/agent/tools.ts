@@ -8,6 +8,7 @@ import { grantApproval } from "../commands/approval.ts";
 import {
 	isLineError,
 	type JsonSchema,
+	type LineError,
 	type ParsedLine,
 	parseLine,
 	type Registry,
@@ -107,16 +108,32 @@ function summarise(result: Exclude<Result, { kind: "failed" }>): string {
 	return result.header;
 }
 
+interface Asked {
+	readonly preview: string;
+	readonly actionLabel: string;
+	/** Runs the line as it was asked. Only called once the standing policy or the person said yes to it. */
+	run(signal: AbortSignal): Promise<Result>;
+}
+
 /** A danger line asks with its own confirmation; any other line with its preview and the preview's first clause. */
-function confirmation(line: ParsedLine, lab: LabState): { preview: string; actionLabel: string } | string {
+function ask(line: ParsedLine, lab: LabState): Asked | LineError {
 	if (line.danger) {
-		const confirm = line.confirm(lab);
-		return isLineError(confirm) ? confirm.message : { preview: confirm.detail, actionLabel: confirm.actionLabel };
+		const asked = line.confirm(lab);
+		if (isLineError(asked)) return asked;
+		return {
+			preview: asked.detail,
+			actionLabel: asked.actionLabel,
+			run: (signal) => line.run({ source: "agent", signal, approval: grantApproval(line.line, asked) }),
+		};
 	}
 	const preview = line.preview(lab);
-	if (isLineError(preview)) return preview.message;
+	if (isLineError(preview)) return preview;
 	const [action = line.verb] = preview.will.split(" · ");
-	return { preview: `Will ${preview.will}.`, actionLabel: capitalised(action) };
+	return {
+		preview: `Will ${preview.will}.`,
+		actionLabel: capitalised(action),
+		run: (signal) => line.run({ source: "agent", signal }),
+	};
 }
 
 function verbTool(registry: Registry, tool: ToolFace): AgentTool {
@@ -133,17 +150,15 @@ function verbTool(registry: Registry, tool: ToolFace): AgentTool {
 			if (isLineError(line)) return { ok: false, line: text, error: line.message };
 			const invalid = line.validate(lab);
 			if (invalid) return { ok: false, line: line.line, error: invalid.message };
-			const ask = confirmation(line, lab);
-			if (typeof ask === "string") return { ok: false, line: line.line, error: ask };
+			const asked = ask(line, lab);
+			if (isLineError(asked)) return { ok: false, line: line.line, error: asked.message };
 			return {
 				ok: true,
 				line: line.line,
-				...ask,
+				preview: asked.preview,
+				actionLabel: asked.actionLabel,
 				async run(signal) {
-					// Only reached once the standing policy or the person said yes to this line.
-					const result = line.danger
-						? await line.run({ source: "agent", signal, approval: grantApproval(line.line) })
-						: await line.run({ source: "agent", signal });
+					const result = await asked.run(signal);
 					if (result.kind === "failed") throw new Error(result.error.message);
 					const summary = summarise(result);
 					const said = result.kind === "report" ? result.header : summary;

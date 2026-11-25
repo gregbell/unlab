@@ -1,8 +1,8 @@
-import { ACCEPTS, type Machine, type MachineName, machineList, plugsOf, portsOf } from "../../model/index.ts";
+import { ACCEPTS, disksOf, type Machine, type MachineName, machineList, plugsOf, portsOf } from "../../model/index.ts";
 import { ip4str } from "../../net/index.ts";
 import { defineVerb, refuse } from "../define.ts";
 import * as slots from "../grammar/slots.ts";
-import { andList, count, ports, skippedPart } from "./words.ts";
+import { andList, count, diskList, ports, skippedPart } from "./words.ts";
 
 /** The addresses a machine answers its peers on: it is ready, and the cable to their NIC is up. */
 function answers(m: Machine): string[] {
@@ -12,6 +12,22 @@ function answers(m: Machine): string[] {
 		const plug = plugs[nic];
 		return address && plug?.kind === "port" && plug.link === "up" ? [ip4str(address.ip)] : [];
 	});
+}
+
+function theirDisks(machines: readonly Machine[]): string {
+	if (machines.length > 1) return "their disks";
+	const disks = machines.flatMap((m) => disksOf(m.spec)).length;
+	return disks === 1 ? "its disk" : `its ${disks} disks`;
+}
+
+/** `everything on its 4 GiB disk is gone`, and with several disks a list of them. */
+function losses(machines: readonly Machine[]): string {
+	const gone = `everything on ${theirDisks(machines)} is gone`;
+	if (machines.length > 1) {
+		return `${gone}: ${machines.map((m) => `${m.name}'s ${diskList(disksOf(m.spec))}`).join("; ")}`;
+	}
+	const disks = machines.flatMap((m) => disksOf(m.spec));
+	return disks.length === 1 ? `everything on its ${diskList(disks)} disk is gone` : `${gone}: ${diskList(disks)}`;
 }
 
 export const rm = defineVerb({
@@ -34,7 +50,7 @@ export const rm = defineVerb({
 		const names = plan.machines.map((m) => m.name);
 		const freed = plan.machines.flatMap((m) => portsOf(m.life));
 		return [
-			`remove ${andList(names)} with ${names.length === 1 ? "its disk" : "their disks"}`,
+			`remove ${andList(names)} with ${theirDisks(plan.machines)}`,
 			...(freed.length > 0 ? [`frees ${ports(freed)}`] : []),
 			...skippedPart(plan.skipped),
 		].join(" · ");
@@ -50,7 +66,7 @@ export const rm = defineVerb({
 			: shells === 0
 				? "Their consoles close"
 				: `Their consoles and ${count(shells, "shell")} close`;
-		const lost = `${closes} and everything on ${one ? "its disk" : "their disks"} is gone. There is no undo.`;
+		const lost = `${closes} and ${losses(plan.machines)}. There is no undo.`;
 
 		const freed = plan.machines.flatMap((m) => portsOf(m.life));
 		const going = new Set<MachineName>(names);
@@ -68,6 +84,7 @@ export const rm = defineVerb({
 			question: `Remove ${andList(names)}?`,
 			detail: [lost, ...affected].join(" "),
 			actionLabel: `Remove ${andList(names)}`,
+			machines: plan.machines.map(({ n, name }) => ({ n, name })),
 		};
 	},
 	async execute(plan, ctx, deps) {

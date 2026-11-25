@@ -8,15 +8,26 @@ import {
 	parseAddress,
 	parseDefaultName,
 } from "../net/index.ts";
+import { MAX_EXTRA_DISKS, parseGiB } from "./disks.ts";
 import { identity, parseMachineName } from "./identity.ts";
 import { type BootNode, bootMachines, machineList, plugsOf } from "./machines.ts";
 import { addPanes, focusPane, keyboardHolder, parkPane, toggleMaximise } from "./panes.ts";
-import { DISK_SIZES, HUES, type Identity, type LabState, type NicSpec, type Plug, PORTS, type Step } from "./types.ts";
+import {
+	DISK_SIZES,
+	type Disks,
+	HUES,
+	type Identity,
+	type LabState,
+	type NicSpec,
+	type Plug,
+	PORTS,
+	type Step,
+} from "./types.ts";
 
-/** 1 had one NIC, saved in the machine itself. 2 had no addresses and no choice of gateway. 3 had no names. */
-const VERSIONS = [1, 2, 3, 4] as const;
+/** 1 had one NIC, saved in the machine itself. 2 had no addresses and no choice of gateway. 3 had no names. 4 had no extra disks. */
+const VERSIONS = [1, 2, 3, 4, 5] as const;
 type Version = (typeof VERSIONS)[number];
-const VERSION = 4;
+const VERSION = 5;
 
 export function saveWorkspace(state: LabState): string {
 	const nodes = machineList(state)
@@ -90,10 +101,20 @@ function readNics(saved: unknown): readonly SavedNic[] {
 	return saved.map(readNic);
 }
 
+function readDisks(saved: unknown): Disks {
+	if (!record(saved) || !Array.isArray(saved.extra) || saved.extra.length > MAX_EXTRA_DISKS) return invalid();
+	return {
+		root: DISK_SIZES.find((size) => size === saved.root) ?? invalid(),
+		extra: saved.extra.map((size) => parseGiB(size) ?? invalid()),
+	};
+}
+
 /** A machine as this version would have saved it. */
 function upgraded(version: Version, machine: Record<string, unknown>, n: number): Record<string, unknown> {
 	if (version === VERSION) return machine;
-	const named = { ...machine, name: defaultName(n) };
+	const disked = { ...machine, disks: { root: machine.diskGiB ?? "4", extra: [] } };
+	if (version === 4) return disked;
+	const named = { ...disked, name: defaultName(n) };
 	if (version === 3) return named;
 	const nics: unknown = version === 1 ? [machine] : machine.nics;
 	if (!Array.isArray(nics)) return invalid();
@@ -133,10 +154,9 @@ export function restoreWorkspace(base: LabState, raw: string | null): Step {
 			if (taken.has(plug.port)) return invalid();
 			taken.add(plug.port);
 		}
-		const diskGiB = DISK_SIZES.find((d) => d === (m.diskGiB ?? "4"));
+		const disks = readDisks(m.disks);
 		if (
 			!hue ||
-			!diskGiB ||
 			typeof m.gateway !== "boolean" ||
 			typeof m.image !== "string" ||
 			typeof m.memMiB !== "number" ||
@@ -152,7 +172,7 @@ export function restoreWorkspace(base: LabState, raw: string | null): Step {
 			spec: {
 				image: m.image,
 				memMiB: m.memMiB,
-				diskGiB,
+				disks,
 				cpus,
 				gateway: m.gateway,
 				nics: nics.map((nic) => nic.spec),

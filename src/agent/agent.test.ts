@@ -571,6 +571,7 @@ describe("capture_read", () => {
 		const plan = planSpawn(store.state, 1, {
 			image: "alpine",
 			memMiB: 256,
+			disks: { root: "4", extra: [] },
 			gateway: true,
 			nics: [
 				{ net: "switch0", address: "default" },

@@ -61,6 +61,7 @@ export const spawn =
 		const plan = planSpawn(state, count, {
 			image: "alpine",
 			memMiB: 256,
+			disks: { root: "4", extra: [] },
 			gateway: nics[0].net === "switch0",
 			nics,
 		});
@@ -77,7 +78,13 @@ export const spawnAt =
 			if (address && isAddressFault(address)) throw new Error(`${text}: ${address.kind}`);
 			return { net: "switch0", address };
 		});
-		const plan = planSpawn(state, 1, { image: "alpine", memMiB: 256, gateway: true, nics });
+		const plan = planSpawn(state, 1, {
+			image: "alpine",
+			memMiB: 256,
+			disks: { root: "4", extra: [] },
+			gateway: true,
+			nics,
+		});
 		if (isPlanError(plan)) throw new Error(`cannot spawn: ${plan.kind}`);
 		return [{ type: "cmd/spawn", plan, at: state.now }];
 	};
@@ -96,7 +103,14 @@ export const spawnNamed =
 	(name: MachineName) =>
 	(state: LabState): readonly CommandEvent[] => {
 		const nics: NicRequest[] = [{ net: "switch0", address: "default" }];
-		const plan = planSpawn(state, 1, { image: "alpine", memMiB: 256, gateway: true, nics, name });
+		const plan = planSpawn(state, 1, {
+			image: "alpine",
+			memMiB: 256,
+			disks: { root: "4", extra: [] },
+			gateway: true,
+			nics,
+			name,
+		});
 		if (isPlanError(plan)) throw new Error(`cannot spawn ${name}: ${plan.kind}`);
 		return [{ type: "cmd/spawn", plan, at: state.now }];
 	};

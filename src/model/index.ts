@@ -4,6 +4,7 @@
 // dispatchers. The pane functions that `update` calls are not exported, so
 // nothing else can rearrange panes.
 
+export { type Device, type Disk, disksOf, MAX_EXTRA_DISKS, MAX_EXTRA_GIB, parseGiB } from "./disks.ts";
 export {
 	identity,
 	isNameFault,

@@ -1,5 +1,7 @@
 import {
 	addressOf,
+	type Disk,
+	disksOf,
 	type Machine,
 	type MachineName,
 	machineList,
@@ -15,7 +17,7 @@ import {
 import { ip4str, NICS, nicName } from "../../net/index.ts";
 import { defineVerb } from "../define.ts";
 import type { ReportBlock } from "../types.ts";
-import { count } from "./words.ts";
+import { count, diskList } from "./words.ts";
 
 /** One NIC as `machines_list` returns it. */
 export interface ListedNic {
@@ -39,6 +41,8 @@ export interface ListedMachine {
 	readonly gateway: boolean;
 	/** eth0 first. */
 	readonly nics: readonly ListedNic[];
+	/** The one that keeps its files first. */
+	readonly disks: readonly Disk[];
 	readonly sessions: readonly SessionId[];
 	/** Why it did not boot. */
 	readonly reason?: string;
@@ -66,6 +70,7 @@ function listed(m: Machine): ListedMachine {
 		address: address && ip4str(address.ip),
 		gateway: m.spec.gateway,
 		nics,
+		disks: disksOf(m.spec),
 		sessions: m.sessions,
 		...(m.life.phase === "failed" ? { reason: m.life.reason } : {}),
 	};
@@ -85,9 +90,13 @@ function nicLine(nic: ListedNic): string {
 function lines(m: ListedMachine): string {
 	if (m.reason !== undefined) return m.reason;
 	const off = !m.gateway && m.nics[0].port !== null;
-	const sessions = [...(off ? ["no package gateway"] : []), m.sessions.map(sessionLabel).join(", ")].join(" · ");
-	if (m.nics.length === 1) return `${nicLine(m.nics[0])} · ${sessions}`;
-	return [...m.nics.map((nic) => `${nic.name} · ${nicLine(nic)}`), sessions].join("\n");
+	const rest = [
+		...(off ? ["no package gateway"] : []),
+		m.disks.length === 1 ? `${diskList(m.disks)} disk` : diskList(m.disks),
+		m.sessions.map(sessionLabel).join(", "),
+	].join(" · ");
+	if (m.nics.length === 1) return `${nicLine(m.nics[0])} · ${rest}`;
+	return [...m.nics.map((nic) => `${nic.name} · ${nicLine(nic)}`), rest].join("\n");
 }
 
 function header(rows: readonly ListedMachine[]): string {
@@ -102,11 +111,11 @@ function header(rows: readonly ListedMachine[]): string {
 
 export const ls = defineVerb({
 	name: "ls",
-	about: "list machines, addresses and links",
+	about: "list machines, addresses, links and disks",
 	danger: false,
 	grammar: {},
 	plan: (_a, lab) => ({ machines: machineList(lab) }),
-	describe: (plan) => `list ${count(plan.machines.length, "machine")} with their addresses and links`,
+	describe: (plan) => `list ${count(plan.machines.length, "machine")} with their addresses, links and disks`,
 	async execute(plan) {
 		const rows = plan.machines.map(listed);
 		const blocks = plan.machines.map(
@@ -124,7 +133,7 @@ export const ls = defineVerb({
 		name: "machines_list",
 		title: "List machines",
 		description:
-			"List every machine in the lab with its state, sessions and NICs. Each NIC has its MAC, the address and prefix the lab set, switch port and link.",
+			"List every machine in the lab with its state, sessions, disks and NICs. Each NIC has its MAC, the address and prefix the lab set, switch port and link.",
 		policy: "run",
 		annotations: { readOnlyHint: true },
 	},

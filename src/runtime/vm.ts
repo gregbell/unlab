@@ -146,7 +146,7 @@ export function startVm(boot: VmBoot, sink: VmSink, deps: VmDeps): Vm {
 		distro: spec.image,
 		memoryMiB: spec.memMiB,
 		cpus: spec.cpus ?? 1,
-		diskGiB: Number(spec.diskGiB ?? 4),
+		disks: spec.disks,
 		hosts: boot.config.hosts,
 		gateway: spec.gateway,
 		cols: boot.cols,

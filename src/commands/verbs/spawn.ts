@@ -1,8 +1,10 @@
 import {
 	type Address,
 	DISK_SIZES,
+	type Disks,
 	isPlanError,
 	MAX_MACHINES,
+	MAX_MEM_MIB,
 	type MachineName,
 	type NicRequest,
 	type NicSpec,
@@ -49,6 +51,12 @@ const ABOUT: Readonly<Record<PlanError["kind"], "count" | "image" | "addr" | "na
 	"address-gateway": "addr",
 };
 
+/** `extra disk of 1 GiB`, `extra disks of 1 and 4 GiB each`. */
+function extraDisks({ extra }: Disks, many: boolean): string[] {
+	if (extra.length === 0) return [];
+	return [`${extra.length === 1 ? "extra disk" : "extra disks"} of ${andList(extra)} GiB${many ? " each" : ""}`];
+}
+
 /** What the preview says of chosen addresses: nothing when the lab chooses. */
 function addressParts(nics: readonly NicRequest[]): string[] {
 	if (nics[0].address === "default") return [];
@@ -72,6 +80,7 @@ export const spawn = defineVerb({
 		),
 		cpus: slots.option("--cpus", slots.count({ label: "CPUs", suggest: () => [1, 2, 4, 8, 16] }), DEFAULT_CPUS),
 		disk: slots.option("--disk", slots.choice(DISK_SIZES), "4"),
+		extraDisk: slots.option("--extra-disk", slots.diskSizes(), null),
 		name: slots.option("--name", slots.newName(), null),
 		nics: slots.option(
 			"--nics",
@@ -83,6 +92,7 @@ export const spawn = defineVerb({
 		gateway: slots.exclusive<"on" | "off">("on", [slots.flag("--no-gateway", "off")]),
 	},
 	plan(a, lab) {
+		if (a.mem > MAX_MEM_MIB) return refuse(`A machine has at most ${MAX_MEM_MIB} MiB of memory.`, "mem");
 		if (a.cpus > 16) return refuse("Choose 1 to 16 CPUs per machine.", "cpus");
 		if (a.cpus > 1 && MULTICPU_BLOCKER) return refuse(`Multiple CPUs unavailable: ${MULTICPU_BLOCKER}.`, "cpus");
 		if (a.nics > MAX_NICS) return refuse(`A machine has 1 to ${MAX_NICS} NICs.`, "nics");
@@ -116,7 +126,7 @@ export const spawn = defineVerb({
 			image: a.image,
 			...(a.name === null ? {} : { name: a.name }),
 			memMiB: a.mem,
-			diskGiB: a.disk,
+			disks: { root: a.disk, extra: a.extraDisk ?? [] },
 			cpus: a.cpus,
 			gateway: a.gateway === "on" && nets[0] === "switch0",
 			nics: nets.map((net, nic) => ({ net, address: requestedAddress(a.addr, nic) })),
@@ -135,7 +145,8 @@ export const spawn = defineVerb({
 			imageLabel(lab, spec.image),
 			`${spec.memMiB} MiB${many ? " each" : ""}`,
 			`${spec.cpus ?? 1} CPU${(spec.cpus ?? 1) === 1 ? "" : "s"}`,
-			`${spec.diskGiB ?? "4"} GiB disk`,
+			`${spec.disks.root} GiB disk`,
+			...extraDisks(spec.disks, many),
 			...(spec.nics.length === 1 ? [] : [`${spec.nics.length} NICs${many ? " each" : ""}`]),
 			plugged.length === 0 ? "unplugged" : `plugged into switch0 on ${ports(plugged)}`,
 			...(plugged.length === 0 || loose.length === 0 ? [] : [`${andList(loose)} unplugged`]),

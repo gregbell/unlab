@@ -475,7 +475,7 @@ export function gone(state: LabState, name: MachineName, attempt: number): Step 
 	const effects = portsOf(machine.life).map((port): Effect => ({ type: "port/detach", port }));
 	for (const session of machine.sessions) effects.push({ type: "screen/dispose", session });
 	effects.push(
-		{ type: "disk/delete", n: machine.n },
+		{ type: "disks/delete", n: machine.n },
 		{ type: "hosts/publish", hosts: hostsFor(next) },
 		{ type: "announce", text: `${name} removed` },
 	);

@@ -3,6 +3,7 @@
 // compare with Object.is.
 
 import { addressStr, ip4str, LAB_SUBNET, type NameBook, NICS, nicName, subnetStr } from "../net/index.ts";
+import { type Device, disksOf } from "./disks.ts";
 import { nicLabel, nicMac, sessionLabel } from "./identity.ts";
 import { ACCEPTS, type Accepts, addressOf, machineList, nameBook, nicPortsOf, plugsOf, portsOf } from "./machines.ts";
 import { keyboardHolder, parkedPanes, visiblePanes } from "./panes.ts";
@@ -127,6 +128,7 @@ export interface DetailRow {
 		| "image"
 		| "CPUs"
 		| "disk"
+		| Device
 		| "memory"
 		| "address"
 		| "mac"
@@ -185,6 +187,12 @@ function linkRow(label: "link" | NicName, { life }: Machine, nic: NicNo): Detail
 	return { label, value: `connected on port ${plug.port}`, tone: "ok" };
 }
 
+/** The only disk is the machine's own. Several are told apart by device. */
+function diskRows({ spec }: Machine): DetailRow[] {
+	const disks = disksOf(spec);
+	return disks.map(({ device, gib }) => ({ label: disks.length === 1 ? "disk" : device, value: `${gib} GiB` }));
+}
+
 /** One NIC reads as the machine's own address and link. Several are told apart by name. */
 function nicRows(machine: Machine): DetailRow[] {
 	const { spec } = machine;
@@ -236,7 +244,7 @@ export const selectDetails: (state: LabState) => MachineDetails | null = memo(
 				{ label: "state", value: stateValue(machine, now), ...stateTone(machine) },
 				{ label: "image", value: image ? image.label : machine.spec.image },
 				{ label: "CPUs", value: String(machine.spec.cpus ?? 1) },
-				{ label: "disk", value: `${machine.spec.diskGiB ?? 4} GiB` },
+				...diskRows(machine),
 				{ label: "memory", value: `${machine.spec.memMiB} MiB` },
 				...nicRows(machine),
 				{ label: "shells", value: machine.sessions.map(sessionLabel).join(", ") },

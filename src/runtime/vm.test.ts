@@ -6,7 +6,13 @@ import { STOP_GRACE_MS, startVm, type VmSink, type WorkerEvents } from "./vm.ts"
 
 const NODE3: BootConfig = {
 	identity: { n: 3, name: "node3", mac: "52:54:00:88:00:0d" },
-	spec: { image: "alpine", memMiB: 256, gateway: true, nics: [{ net: "switch0", address: defaultAddress(3) }] },
+	spec: {
+		image: "alpine",
+		memMiB: 256,
+		disks: { root: "4", extra: [] },
+		gateway: true,
+		nics: [{ net: "switch0", address: defaultAddress(3) }],
+	},
 	hosts: [
 		{ ip: "10.88.0.11", name: "node1" },
 		{ ip: "10.88.0.13", name: "node3" },
@@ -113,7 +119,7 @@ describe("boot", () => {
 					distro: "alpine",
 					memoryMiB: 256,
 					cpus: 1,
-					diskGiB: 4,
+					disks: { root: "4", extra: [] },
 					hosts: NODE3.hosts,
 					gateway: true,
 					cols: 100,

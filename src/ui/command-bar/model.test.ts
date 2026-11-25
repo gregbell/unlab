@@ -160,7 +160,7 @@ describe("the artboards, replayed", () => {
 		expect(view.rows.slice(3, 6)).toEqual([
 			{ kind: "verb", name: "spawn", signature: "<count> <image>", about: "boot machines" },
 			{ kind: "verb", name: "rm", signature: "<machines>", about: "remove machines and their disks" },
-			{ kind: "verb", name: "ls", signature: "", about: "list machines, addresses and links" },
+			{ kind: "verb", name: "ls", signature: "", about: "list machines, addresses, links and disks" },
 		]);
 		expect(view.rows.filter((r) => r.kind === "verb").map((r) => r.kind === "verb" && r.name)).toEqual([
 			"spawn",
@@ -194,6 +194,7 @@ describe("the artboards, replayed", () => {
 				"[--mem MiB]",
 				"[--cpus CPUs]",
 				"[--disk 4 | 8 | 16 | 32 | 64]",
+				"[--extra-disk GiB,...]",
 				"[--name name]",
 				"[--nics NICs]",
 				"[--net network,... | --no-net]",
@@ -359,9 +360,10 @@ describe("the artboards, replayed", () => {
 			confirm: {
 				question: "Remove node3?",
 				detail:
-					"Its console closes and everything on its disk is gone. There is no undo. " +
+					"Its console closes and everything on its 4 GiB disk is gone. There is no undo. " +
 					"Port 3 on switch0 frees up. node1 and node2 will stop getting answers from 10.88.0.13.",
 				actionLabel: "Remove node3",
+				machines: [{ n: 3, name: "node3" }],
 			},
 		});
 		expect(view.hint).toBe("↵ again to remove");
@@ -414,6 +416,43 @@ describe("the artboards, replayed", () => {
 		expect(h.take()).toEqual([]);
 	});
 
+	it("…turns into the error if what it asks changes while it waits, and Enter asks again", async () => {
+		const h = await harness();
+		h.press({ kind: "open" });
+		h.type("rm node3");
+		h.press({ kind: "enter", keepOpen: false });
+		await h.lab.run("sh node3");
+		expect(h.view()).toMatchObject({
+			block: { kind: "error", sentence: "What this does to node3 has changed since it was asked." },
+			hint: "↵ ask again",
+			footer: ["↵ ask again", "esc keep it"],
+		});
+		h.press({ kind: "enter", keepOpen: false });
+		expect(h.take()).toEqual([]);
+		expect(h.view().block).toMatchObject({
+			kind: "confirm",
+			confirm: { detail: expect.stringContaining("Its console and 1 shell close") },
+		});
+		h.press({ kind: "enter", keepOpen: false });
+		await h.settle();
+		expect(h.lab.store.state.rail).toEqual(["node1", "node2"]);
+	});
+
+	it("…does not run a yes to the Remove button that comes after what it asked changed", async () => {
+		const h = await harness();
+		h.press({ kind: "open" });
+		h.type("rm node*");
+		h.press({ kind: "enter", keepOpen: false });
+		await h.lab.run("spawn 1 alpine");
+		h.press({ kind: "approve" });
+		await h.settle();
+		expect(h.view().block).toMatchObject({
+			kind: "error",
+			sentence: "What this does to node1, node2, node3 has changed since it was asked.",
+		});
+		expect(h.lab.store.state.rail).toEqual(["node1", "node2", "node3", "node4"]);
+	});
+
 	it("…turns into the error if the machine goes while it waits", async () => {
 		const h = await harness();
 		h.press({ kind: "open" });
@@ -421,7 +460,9 @@ describe("the artboards, replayed", () => {
 		h.press({ kind: "enter", keepOpen: false });
 		const line = h.lab.parsed("rm node3");
 		if (!line.danger) throw new Error("rm is dangerous");
-		await line.run({ source: "agent", signal: h.lab.signal, approval: grantApproval("rm node3") });
+		const asked = line.confirm(h.lab.store.state);
+		if (isLineError(asked)) throw new Error(asked.message);
+		await line.run({ source: "agent", signal: h.lab.signal, approval: grantApproval("rm node3", asked) });
 		expect(h.view().block).toMatchObject({
 			kind: "error",
 			sentence: "No machine called node3. You have node1, node2.",

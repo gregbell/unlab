@@ -33,7 +33,8 @@ export interface SpawnChoice {
 	/** The form gives every machine one NIC. The bar's `--nics` gives more. */
 	readonly nics: 1;
 	readonly net: NicSpec["net"];
-	/** The form leaves these to the lab. The bar's `--name`, `--addr` and `--no-gateway` choose. */
+	/** The form leaves these to the lab. The bar's `--extra-disk`, `--name`, `--addr` and `--no-gateway` choose. */
+	readonly extraDisk: null;
 	readonly name: null;
 	readonly addr: null;
 	readonly gateway: "on";
@@ -70,6 +71,7 @@ export function defaultChoice(lab: LabState): SpawnChoice {
 		mem: 256,
 		cpus: DEFAULT_CPUS,
 		disk: "4",
+		extraDisk: null,
 		nics: 1,
 		net: SWITCH_NAME,
 		name: null,
@@ -85,8 +87,14 @@ function mostOf(choice: SpawnChoice, lab: LabState): number {
 	return 0;
 }
 
-function requestOf({ image, mem, net }: SpawnChoice): SpawnRequest {
-	return { image, memMiB: mem, gateway: net === SWITCH_NAME, nics: [{ net, address: "default" }] };
+function requestOf({ image, mem, disk, net }: SpawnChoice): SpawnRequest {
+	return {
+		image,
+		memMiB: mem,
+		disks: { root: disk, extra: [] },
+		gateway: net === SWITCH_NAME,
+		nics: [{ net, address: "default" }],
+	};
 }
 
 function memoryTotal(mib: number): string {

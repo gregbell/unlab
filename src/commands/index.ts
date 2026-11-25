@@ -44,7 +44,7 @@ export type {
 	Token,
 	Tokenized,
 } from "./types.ts";
-export { isLineError, NOTHING_CHANGED } from "./types.ts";
+export { changedSinceAsked, isLineError, NOTHING_CHANGED } from "./types.ts";
 export * from "./verbs/index.ts";
 
 /** The single list of commands. The bar's verbs group, completion and the agent tool table all read it. */

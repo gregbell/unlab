@@ -170,6 +170,17 @@ describe("machine details", () => {
 
 	const value = (s: LabState, label: string) => selectDetails(s)?.rows.find((r) => r.label === label)?.value;
 
+	test("a machine with extra disks has a row for each disk, by its device", () => {
+		let s = emptyLab();
+		s = run(s, spawnEvent(s, 1, { extra: [1, 64] }), focus("node1"));
+		const rows = selectDetails(s)?.rows.filter((r) => r.value.endsWith("GiB"));
+		expect(rows).toEqual([
+			{ label: "/dev/wdb", value: "4 GiB" },
+			{ label: "/dev/wdc", value: "1 GiB" },
+			{ label: "/dev/wdd", value: "64 GiB" },
+		]);
+	});
+
 	test("the link row reads connected, cable cut or unplugged", () => {
 		const s = oneOfEach();
 		expect(value(run(s, focus("node1")), "link")).toBe("connected on port 1");

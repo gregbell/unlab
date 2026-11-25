@@ -67,13 +67,18 @@ test("a lab saved before machines had several NICs restores with one each, on th
 		["node2", [{ net: "switch0" }], { phase: "booting", plugs: [{ kind: "port", port: 3, link: "cut" }] }],
 		["node3", [{ net: "none" }], { phase: "booting", plugs: [{ kind: "none" }] }],
 	]);
-	expect(machine(state, "node2").spec).toMatchObject({ image: "debian", memMiB: 512, diskGiB: "8", cpus: 1 });
+	expect(machine(state, "node2").spec).toMatchObject({
+		image: "debian",
+		memMiB: 512,
+		disks: { root: "8", extra: [] },
+		cpus: 1,
+	});
 	expect(state.rail.map((name) => [addressText(machine(state, name)), machine(state, name).spec.gateway])).toEqual([
 		["10.88.0.11", true],
 		["10.88.0.12", true],
 		["10.88.0.13", false],
 	]);
-	expect(JSON.parse(saveWorkspace(state))).toMatchObject({ version: 4 });
+	expect(JSON.parse(saveWorkspace(state))).toMatchObject({ version: 5 });
 });
 
 test("a lab saved before machines chose addresses restores with the ones they had", () => {
@@ -112,6 +117,48 @@ test("a lab saved before machines had names restores each as node and its number
 	const { state } = restoreWorkspace(initialState(IMAGES, WIDE), JSON.stringify(saved));
 	expect(state.rail).toEqual(["node2"]);
 	expect(machine(state, "node2").spec).toMatchObject({ gateway: false, nics: [{ address: address("10.1.0.9/24") }] });
+});
+
+test("a machine comes back with its disks", () => {
+	let s = emptyLab();
+	s = run(s, spawnEvent(s, 1, { extra: [1, 64] }));
+	const { effects } = restoreWorkspace(initialState(IMAGES, WIDE), saveWorkspace(s));
+	expect(effects.flatMap((e) => (e.type === "vm/boot" ? [e.config.spec.disks] : []))).toEqual([
+		{ root: "4", extra: [1, 64] },
+	]);
+});
+
+const VERSION_4 = {
+	...VERSION_1,
+	version: 4,
+	nodes: [
+		{
+			...{ n: 1, name: "web", hue: 1, image: "alpine", memMiB: 256, diskGiB: "16", cpus: 2, gateway: true },
+			nics: [{ net: "switch0", port: 1, cut: false, address: null }],
+		},
+	],
+};
+
+test("a lab saved before machines had extra disks restores with the root disk it had", () => {
+	const { state } = restoreWorkspace(initialState(IMAGES, WIDE), JSON.stringify(VERSION_4));
+	expect(machine(state, state.rail[0])).toMatchObject({ name: "web", spec: { disks: { root: "16", extra: [] } } });
+	expect(JSON.parse(saveWorkspace(state))).toMatchObject({
+		version: 5,
+		nodes: [{ disks: { root: "16", extra: [] } }],
+	});
+});
+
+test.each([
+	undefined,
+	{ root: "4" },
+	{ root: "5", extra: [] },
+	{ root: "4", extra: [0] },
+	{ root: "4", extra: [65] },
+	{ root: "4", extra: ["1"] },
+	{ root: "4", extra: [1, 1, 1, 1, 1] },
+])("a saved machine with the disks %j is refused", (disks) => {
+	const saved = { ...VERSION_4, version: 5, nodes: [{ ...VERSION_4.nodes[0], disks }] };
+	expect(() => restoreWorkspace(initialState(IMAGES, WIDE), JSON.stringify(saved))).toThrow("could not be read");
 });
 
 test.each([["node2"], ["Web"], ["node01"], [""], [7], [undefined], ["twin", "twin"]])(

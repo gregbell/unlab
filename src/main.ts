@@ -13,6 +13,7 @@ import {
 	type Effect,
 	type ImageInfo,
 	initialState,
+	machineList,
 	restoreWorkspace,
 	type Store,
 	saveWorkspace,
@@ -20,7 +21,7 @@ import {
 	severalNics,
 } from "./model/index.ts";
 import { compileFilter } from "./net/index.ts";
-import { createRuntime, type DistroManifest, type Engine } from "./runtime/index.ts";
+import { createRuntime, type DistroManifest, type Engine, sweepDisks } from "./runtime/index.ts";
 import type { AppServices, TerminalHost } from "./ui/services.ts";
 
 interface Manifest extends DistroManifest {
@@ -85,6 +86,8 @@ async function main(): Promise<void> {
 		initialState(images, { width: window.innerWidth - 232, height: window.innerHeight - 300 }),
 		localStorage.getItem(key),
 	);
+	const kept = new Set(machineList(restored.state).map((machine) => machine.n));
+	await sweepDisks((n) => n < restored.state.nextN && !kept.has(n));
 	const store: Store = createStore(
 		restored.state,
 		(effect: Effect) => {

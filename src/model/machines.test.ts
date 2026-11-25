@@ -52,6 +52,7 @@ const UNPLUGGED = spawnRequest({ net: "none" });
 const alpineAt = (text: string, net: "switch0" | "none" = "switch0"): MachineSpec => ({
 	image: "alpine",
 	memMiB: 256,
+	disks: { root: "4", extra: [] },
 	gateway: true,
 	nics: [{ net, address: address(text) }],
 });
@@ -694,7 +695,7 @@ describe("a machine's name", () => {
 		}
 		s = run(s, remove(web));
 		expect(update(s, hasStopped(web, 2))).toEqual({ state: s, effects: [] });
-		expect(update(s, hasStopped(web, 3)).effects).toContainEqual({ type: "disk/delete", n: 2 });
+		expect(update(s, hasStopped(web, 3)).effects).toContainEqual({ type: "disks/delete", n: 2 });
 	});
 
 	test("a lab that is restored has no one late to ignore", () => {

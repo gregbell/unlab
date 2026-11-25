@@ -2,11 +2,11 @@
 // a kernel owns its thread (it blocks in Atomics.wait while idle), so a busy
 // machine must never be able to stall another one or the page.
 
-import type { Address, HostEntry } from "../model/index.ts";
+import type { Address, Disks, HostEntry } from "../model/index.ts";
 import type { NicNo } from "../net/index.ts";
 
 export interface VmConfig {
-	/** The machine's number, which its disk is kept under. */
+	/** The machine's number, which its disks are kept under. */
 	n: number;
 	/** Its hostname. */
 	name: string;
@@ -19,7 +19,7 @@ export interface VmConfig {
 	/** Which image that is, for display. */
 	distro: string;
 	memoryMiB: number;
-	diskGiB?: number;
+	disks: Disks;
 	cpus?: number;
 	hosts: readonly HostEntry[];
 	/** Attach the gateway for signed distro repositories to eth0. */

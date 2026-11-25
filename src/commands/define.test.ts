@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { grantApproval } from "./approval.ts";
+import type { LabState } from "../model/index.ts";
 import { createRegistry, defineVerb, type Grammar, type ParsedLine, parseLine, slots } from "./index.ts";
 import { fakeDeps, labWith } from "./testing/lab.ts";
-import { link, parsedOk, rm, spawn, TOY_VERBS, toyRegistry } from "./testing/verbs.ts";
+import { link, parsedOk, rm, spawn, TOY_VERBS, toyRegistry, yesTo } from "./testing/verbs.ts";
 
 const lab = labWith([{ n: 1 }, { n: 2 }, { n: 3 }, { n: 4, phase: "booting" }, { n: 5, phase: "failed" }]);
 const signal = new AbortController().signal;
@@ -60,8 +60,9 @@ describe("confirm", () => {
 		if (!line.danger) throw new Error("rm is dangerous");
 		expect(line.confirm(lab)).toEqual({
 			question: "Remove node3?",
-			detail: "Its disk goes with it.",
+			detail: "Closes node3:console.",
 			actionLabel: "Remove node3",
+			machines: [{ n: 3, name: "node3" }],
 		});
 	});
 });
@@ -96,8 +97,8 @@ describe("run", () => {
 	it("runs a dangerous line with an approval for that line, and resolves once its effect is visible", async () => {
 		const { registry, events, setState } = toyRegistry(lab);
 		const line = parsedOk(parseLine(registry, "rm node3", lab));
-		if (!line.danger) throw new Error("rm is dangerous");
-		const running = line.run({ source: "bar", signal, approval: grantApproval(line.line) });
+		const yes = yesTo(line, lab);
+		const running = yes.line.run({ source: "bar", signal, approval: yes.approval });
 		expect(events).toEqual([{ type: "cmd/remove", machines: ["node3"], cause: "bar" }]);
 		setState(labWith([{ n: 1 }, { n: 2 }, { n: 4, phase: "booting" }, { n: 5, phase: "failed" }]));
 		expect(await running).toMatchObject({ kind: "visible", data: { removed: ["node3"] } });
@@ -108,9 +109,24 @@ describe("run", () => {
 		const { registry, events } = toyRegistry(lab);
 		const command = registry.command(rm);
 		const args = { targets: { machines: ["node3" as const], skipped: [], written: "node3" } };
-		expect(await command.run(args, { source: "agent", signal, approval: grantApproval("rm node2") })).toEqual({
+		const { approval } = yesTo(parsedOk(parseLine(registry, "rm node2", lab)), lab);
+		expect(await command.run(args, { source: "agent", signal, approval })).toEqual({
 			kind: "failed",
 			error: { message: "That approval was for rm node2, not rm node3. Nothing was changed." },
+		});
+		expect(events).toEqual([expect.objectContaining({ type: "cmd/logged", line: "rm node3", outcome: "failed" })]);
+	});
+
+	it.each<[string, LabState]>([
+		["another machine has its name", labWith([{ n: 1 }, { n: 2 }, { n: 9, name: "node3" }])],
+		["it would ask for more", labWith([{ n: 1 }, { n: 2 }, { n: 3, shells: 1 }])],
+	])("refuses an approval once %s", async (_what, later) => {
+		const { registry, events, setState } = toyRegistry(lab);
+		const yes = yesTo(parsedOk(parseLine(registry, "rm node3", lab)), lab);
+		setState(later);
+		expect(await yes.line.run({ source: "agent", signal, approval: yes.approval })).toEqual({
+			kind: "failed",
+			error: { message: "What this does to node3 has changed since it was asked. Nothing was changed." },
 		});
 		expect(events).toEqual([expect.objectContaining({ type: "cmd/logged", line: "rm node3", outcome: "failed" })]);
 	});
@@ -118,9 +134,9 @@ describe("run", () => {
 	it("logs a failure and rethrows when execution is aborted", async () => {
 		const { registry, events } = toyRegistry(lab);
 		const line = parsedOk(parseLine(registry, "rm node3", lab));
-		if (!line.danger) throw new Error("rm is dangerous");
+		const yes = yesTo(line, lab);
 		const abort = new AbortController();
-		const running = line.run({ source: "agent", signal: abort.signal, approval: grantApproval("rm node3") });
+		const running = yes.line.run({ source: "agent", signal: abort.signal, approval: yes.approval });
 		abort.abort(new Error("agent went away"));
 		await expect(running).rejects.toThrow("agent went away");
 		expect(events.map((e) => e.type)).toEqual(["cmd/remove", "cmd/logged"]);
