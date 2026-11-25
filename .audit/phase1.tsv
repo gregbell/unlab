@@ -18,3 +18,8 @@ ts	phase	decision	why	evidence	result
 2026-11-24T23:29:23Z	names	the chosen name replaces node<n> as the machine's key; n stays the numeric identity for MAC and disk	one name per machine everywhere a person or agent reads	src/model/identity.ts	settles the 4.4 decision
 2026-11-24T23:29:23Z	names	my brief was wrong that the prompt shows the hostname; it shows it only for a chosen name	defaults must not change, and both images ship a prompt without it	src/runtime/guest.ts namedPrompt	kept
 2026-11-24T23:29:23Z	names	a waiting rm approval can remove a newer machine with the same name	reusing a name is new, and approving deletes a disk	names worker report	open, carried to the disks slice
+2026-11-25T00:17:14Z	names	merged PR 10	CI green: 31 integration, 265 browser, 34 e2e	PR 10; Actions run 45510408823	merged
+2026-11-25T00:17:14Z	disks	I narrowed the worker's startup sweep to numbers the lab gave out and dropped	with the worker's rule a lost workspace record deleted every disk	e2e/disks.spec.ts rm lists every disk	red without the guard, green with it
+2026-11-25T00:17:14Z	disks	an approval runs only while the command would still ask the same	a reused name could otherwise be removed by an old yes	src/commands/define.ts changedSinceAsked	fixed
+2026-11-25T00:17:14Z	disks	formatting with tools already in the image is not met on stock images	Alpine and Debian ship no formatter for a file system the kernel mounts	.audit/phase1-stories.md 2.1	open, carried to the lab image
+2026-11-25T00:17:14Z	disks	known corner left open: wiping the root disk's label while an extra carries it makes the image mount the extra	no safe fix from the page was found	disks worker report	open
