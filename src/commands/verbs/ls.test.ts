@@ -48,6 +48,7 @@ describe("ls", () => {
 			gateway: true,
 			nics: [{ name: "eth0", mac: "52:54:00:88:00:0c", address: "10.88.0.12", prefix: 24, port: 2, link: "cut" }],
 			disks: [{ device: "/dev/wdb", gib: 4 }],
+			checkpoints: [],
 			sessions: ["node2:console"],
 		});
 	});

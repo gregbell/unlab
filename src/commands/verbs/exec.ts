@@ -48,6 +48,7 @@ interface Target {
 const NOT_READY: Readonly<Record<Exclude<Phase, "ready">, string>> = {
 	booting: "still booting",
 	stopping: "stopping",
+	restoring: "being restored",
 	off: "off",
 	failed: "failed",
 	removing: "being removed",

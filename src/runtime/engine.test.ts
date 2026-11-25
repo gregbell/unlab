@@ -3,10 +3,12 @@ import { arpRequest, mac, ping, routedPing } from "../../test/support/frames.ts"
 import { createCaptureLog } from "../capture/index.ts";
 import {
 	type BootConfig,
+	type DiskCopy,
 	type Effect,
 	type HostEntry,
 	identity,
 	type MachineName,
+	parseCheckpointName,
 	parseMachineName,
 	type RuntimeEvent,
 	type SessionId,
@@ -15,6 +17,7 @@ import {
 
 import { defaultAddress } from "../net/index.ts";
 import { createEngine, ExecRefused } from "./engine.ts";
+import type { CopyJob, CopyReport } from "./protocol.ts";
 import type { LineMark, MarkSource, Screen, ScreenIo, Screens } from "./screens.ts";
 import { createShellTracker } from "./shell-tracker.ts";
 import { LabSwitch } from "./switch.ts";
@@ -42,6 +45,7 @@ function config(n: number, hosts: readonly HostEntry[] = hostsOf(n), image = "al
 			gateway: true,
 			nics: [{ net: "switch0", address: defaultAddress(n) }],
 		},
+		set: 0,
 		hosts,
 	};
 }
@@ -173,6 +177,7 @@ function fakeVms() {
 			openPty: (pty, cols, rows) => sent.push(["openPty", pty, cols, rows]),
 			closePty: (pty) => sent.push(["closePty", pty]),
 			reconfigure: (hosts) => sent.push(["reconfigure", hosts]),
+			checkpoint: (copy) => sent.push(["checkpoint", copy]),
 			deliver: (nic, frame) => sent.push(["deliver", nic, frame]),
 			stop(how) {
 				vm.stops.push(how);
@@ -196,7 +201,8 @@ function setup() {
 	let clock = 0;
 	const events: RuntimeEvent[] = [];
 	const announced: string[] = [];
-	const deleted: number[] = [];
+	const deleted: [n: number, ...sets: number[]][] = [];
+	const copies: { job: CopyJob; report: (report: CopyReport) => void; dropped: boolean }[] = [];
 	const imagesAsked: string[] = [];
 	const intervals: { ms: number; fn: () => void; cancelled: boolean }[] = [];
 	const sw = new LabSwitch({ now: () => clock });
@@ -214,7 +220,14 @@ function setup() {
 			imagesAsked.push(name);
 			return Promise.resolve(new ArrayBuffer(4));
 		},
-		deleteDisks: (n) => deleted.push(n),
+		deleteDisks: (n, sets) => deleted.push([n, ...sets]),
+		startCopy(job, report) {
+			const copy = { job, report, dropped: false };
+			copies.push(copy);
+			return () => {
+				copy.dropped = true;
+			};
+		},
 		announce: (text) => announced.push(text),
 		every(ms, fn) {
 			const interval = { ms, fn, cancelled: false };
@@ -262,6 +275,7 @@ function setup() {
 		events,
 		announced,
 		deleted,
+		copies,
 		imagesAsked,
 		intervals,
 		sw,
@@ -300,9 +314,9 @@ describe("a name used again", () => {
 			{ type: "port/detach", port: 1 },
 			{ type: "screen/dispose", session: `${web}:console` },
 			{ type: "screen/dispose", session: `${web}:sh1` },
-			{ type: "disks/delete", n: 1 },
+			{ type: "disks/delete", n: 1, sets: [0] },
 		);
-		expect(t.deleted).toEqual([1]);
+		expect(t.deleted).toEqual([[1, 0]]);
 
 		const next = bootWeb(t, 2, 2);
 		t.run({ type: "screen/create", session: `${web}:sh1` }, { type: "pty/open", session: `${web}:sh1` });
@@ -318,7 +332,7 @@ describe("a name used again", () => {
 		expect(t.take()).toEqual([]);
 		expect(t.screens.get(`${web}:console`).text()).toBe("");
 		expect(t.capture.counters.in).toBe(0);
-		expect(t.deleted).toEqual([1]);
+		expect(t.deleted).toEqual([[1, 0]]);
 
 		next.sink.ready(next.ref, 20);
 		expect(t.take()).toEqual([{ type: "vm/ready", machine: "web", attempt: 2, bootMs: 20 }]);
@@ -1279,5 +1293,118 @@ describe("exec", () => {
 		const exited = t.engine.exec.inject("node3:sh1", "exit", "bar", never);
 		other.sink.ptyExited(other.ref, 1, false);
 		await expect(exited).rejects.toThrow("node3:sh1 closed before the command returned.");
+	});
+});
+
+describe("checkpoints", () => {
+	const checkpoint = parseCheckpointName("before");
+	if (!checkpoint) throw new Error("no name");
+	const copy = (attempt: number, from: number, to: number): DiskCopy => ({
+		machine: "node1",
+		attempt,
+		n: 1,
+		extras: 1,
+		checkpoint,
+		from,
+		to,
+	});
+	const stopped = async (t: ReturnType<typeof setup>, how: StopHow, attempt = 1) => {
+		t.run({ type: "vm/stop", machine: "node1", attempt, how });
+		t.vms.of("node1").finishStop();
+		await settle();
+		t.take();
+	};
+
+	test("a running guest saves its own, and what it reports is passed on", () => {
+		const t = setup();
+		const vm = t.ready(1);
+		t.take();
+		t.run({ type: "checkpoint/save", copy: copy(1, 0, 1) });
+		expect(vm.sent.at(-1)).toEqual(["checkpoint", copy(1, 0, 1)]);
+		expect(t.copies).toEqual([]);
+		vm.sink.copied(vm.ref, { kind: "progress", percent: 40 });
+		vm.sink.copied(vm.ref, { kind: "done", bytes: 4096 });
+		vm.sink.copied(vm.ref, { kind: "done", bytes: 1 });
+		expect(t.take()).toEqual([
+			{ type: "checkpoint/progress", machine: "node1", attempt: 1, set: 1, percent: 40 },
+			{ type: "checkpoint/saved", machine: "node1", attempt: 1, set: 1, bytes: 4096 },
+		]);
+		t.run({ type: "checkpoint/save", copy: copy(1, 0, 2) });
+		vm.sink.copied(vm.ref, { kind: "failed", reason: "Full." });
+		expect(t.take()).toEqual([{ type: "checkpoint/unsaved", machine: "node1", attempt: 1, set: 2, reason: "Full." }]);
+		expect(t.deleted).toEqual([]);
+	});
+
+	test("what a guest had copied when it went is deleted once its worker is gone, and so is what it finishes late", async () => {
+		const t = setup();
+		const vm = t.ready(1);
+		t.run({ type: "checkpoint/save", copy: copy(1, 0, 1) });
+		vm.sink.halted(vm.ref, "off");
+		t.run({ type: "vm/stop", machine: "node1", attempt: 1, how: "save" });
+		t.take();
+		vm.sink.copied(vm.ref, { kind: "done", bytes: 4096 });
+		expect(t.take()).toEqual([]);
+		expect(t.deleted).toEqual([]);
+		vm.finishStop();
+		await settle();
+		expect(t.deleted).toEqual([[1, 1]]);
+	});
+
+	test("the disks of a machine that is off are copied by a worker of their own", async () => {
+		const t = setup();
+		t.ready(1);
+		await stopped(t, "off");
+		t.run({ type: "checkpoint/save", copy: copy(1, 0, 1) });
+		const [made] = t.copies;
+		expect(made.job).toEqual({ copy: copy(1, 0, 1), why: "save" });
+		made.report({ kind: "done", bytes: 4096 });
+		expect(t.take()).toEqual([{ type: "checkpoint/saved", machine: "node1", attempt: 1, set: 1, bytes: 4096 }]);
+		made.report({ kind: "failed", reason: "late" });
+		expect(t.take()).toEqual([]);
+	});
+
+	test("a restore waits for the worker that has the disks, and reports that they are back or why not", async () => {
+		const t = setup();
+		const vm = t.ready(1);
+		t.run({ type: "vm/stop", machine: "node1", attempt: 2, how: "drop" });
+		t.run({ type: "checkpoint/restore", copy: copy(2, 1, 2) });
+		await settle();
+		expect(t.copies).toEqual([]);
+		vm.finishStop();
+		await settle();
+		t.take();
+		expect(t.copies[0].job).toEqual({ copy: copy(2, 1, 2), why: "restore" });
+		t.copies[0].report({ kind: "progress", percent: 7 });
+		t.copies[0].report({ kind: "done", bytes: 4096 });
+		expect(t.take()).toEqual([
+			{ type: "checkpoint/progress", machine: "node1", attempt: 2, set: 2, percent: 7 },
+			{ type: "checkpoint/restored", machine: "node1", attempt: 2, set: 2, at: 0 },
+		]);
+		t.run({ type: "checkpoint/restore", copy: copy(2, 1, 3) });
+		t.copies[1].report({ kind: "failed", reason: "Full." });
+		expect(t.take()).toEqual([{ type: "vm/failed", machine: "node1", attempt: 2, reason: "Full." }]);
+	});
+
+	test("a machine that is removed drops its copy, also one that has not begun, and what it wrote goes", async () => {
+		const t = setup();
+		t.run({ type: "checkpoint/restore", copy: copy(1, 1, 2) });
+		t.run({ type: "vm/stop", machine: "node1", attempt: 1, how: "drop" });
+		expect(t.copies[0].dropped).toBe(true);
+		expect(t.deleted).toEqual([[1, 2]]);
+		expect(t.take()).toEqual([{ type: "vm/stopped", machine: "node1", attempt: 1, clean: true, at: 0 }]);
+		t.copies[0].report({ kind: "done", bytes: 1 });
+		expect(t.take()).toEqual([]);
+
+		const vm = t.ready(1, 2);
+		t.run({ type: "vm/stop", machine: "node1", attempt: 3, how: "drop" });
+		t.run({ type: "checkpoint/restore", copy: copy(3, 1, 3) });
+		t.run({ type: "vm/stop", machine: "node1", attempt: 3, how: "drop" });
+		vm.finishStop();
+		await settle();
+		expect(t.copies).toHaveLength(1);
+		expect(t.deleted).toEqual([
+			[1, 2],
+			[1, 3],
+		]);
 	});
 });

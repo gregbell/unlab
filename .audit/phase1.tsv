@@ -27,3 +27,7 @@ ts	phase	decision	why	evidence	result
 2026-11-25T03:44:23Z	power	a worker built reboot and power off; I read the runtime, engine and lifecycle reducer	stories 5.1, 5.2 and the waiting boxes of 2.2 and 4.1	PR for phase1/06-power	worker reports all gates exit 0; CI pending
 2026-11-25T03:44:23Z	power	boot, reboot and poweroff run without asking by default	they destroy no disk, and shell_exec, which already runs, can type reboot	src/model/update.ts DEFAULT_POLICIES	a preference the user may change
 2026-11-25T03:44:23Z	image	the user approved hosting the lab image as a GitHub release	asked before publishing under their name	user message 2026-11-25	approved
+2026-11-25T05:36:42Z	power	merged PR 12	CI green	52 e2e, Actions run 45542054915	merged
+2026-11-25T05:36:42Z	checkpoints	numbered disk sets: restore copies to a new set, live pointer changes in one step	a machine is always restored or untouched	e2e/checkpoints.spec.ts 11 tests; live-copy.browser.test.ts 12 mutations red	worker report reviewed against diff
+2026-11-25T05:36:42Z	checkpoints	accepted: browser process death can lose localStorage's last seconds after a restore	record could name a deleted set; checkpoints remain to restore from	inferred, not tested	open item
+2026-11-25T05:36:42Z	checkpoints	left unkernel CowDisk discard race alone	present before this slice, reproduced without our code	worker Node repro	open item for user

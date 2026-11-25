@@ -10,7 +10,15 @@ import {
 	parseDefaultName,
 	parseNicName,
 } from "../net/index.ts";
-import { ALL_MACHINES, type Identity, type Machine, type MachineName, type SessionId, SWITCH_NAME } from "./types.ts";
+import {
+	ALL_MACHINES,
+	type CheckpointName,
+	type Identity,
+	type Machine,
+	type MachineName,
+	type SessionId,
+	SWITCH_NAME,
+} from "./types.ts";
 
 /** A number is never reused, so a lab runs out of MACs after MAX_NODE. `planSpawn` checks before it asks. */
 export function identity(n: number, name: MachineName = defaultName(n)): Identity {
@@ -40,6 +48,11 @@ const isHostname = (text: string): text is MachineName => HOSTNAME.test(text) &&
 export function parseMachineName(text: string): MachineName | null {
 	if (!isHostname(text)) return null;
 	return DEFAULT_NAME.test(text) && parseDefaultName(text) === null ? null : text;
+}
+
+/** The spelling of a machine's chosen name. Only its own machine's checkpoints are beside it, so it may be a word. */
+export function parseCheckpointName(text: string): CheckpointName | null {
+	return HOSTNAME.test(text) && text.length <= MAX_NAME ? (text as string as CheckpointName) : null;
 }
 
 /** Why a text is not a name that someone can give a machine. */

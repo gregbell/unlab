@@ -1,5 +1,7 @@
 import {
 	addressOf,
+	type Checkpoint,
+	type CheckpointName,
 	type Disk,
 	disksOf,
 	type Machine,
@@ -11,7 +13,9 @@ import {
 	type Phase,
 	type PortNo,
 	type SessionId,
+	savingOf,
 	sessionLabel,
+	sizeText,
 } from "../../model/index.ts";
 import { ip4str, NICS, nicName } from "../../net/index.ts";
 import { defineVerb } from "../define.ts";
@@ -43,6 +47,10 @@ export interface ListedMachine {
 	readonly nics: readonly ListedNic[];
 	/** The one that keeps its files first. */
 	readonly disks: readonly Disk[];
+	/** Oldest first, with the storage each takes. */
+	readonly checkpoints: readonly Pick<Checkpoint, "name" | "bytes">[];
+	/** The checkpoint that is being saved. */
+	readonly saving?: CheckpointName;
 	readonly sessions: readonly SessionId[];
 	/** Why it did not boot. */
 	readonly reason?: string;
@@ -62,6 +70,7 @@ function listed(m: Machine): ListedMachine {
 		};
 	});
 	const address = addressOf(m);
+	const saving = savingOf(m.life);
 	return {
 		name: m.name,
 		state: m.life.phase,
@@ -69,6 +78,8 @@ function listed(m: Machine): ListedMachine {
 		gateway: m.spec.gateway,
 		nics,
 		disks: disksOf(m.spec),
+		checkpoints: m.sets.checkpoints.map(({ name, bytes }) => ({ name, bytes })),
+		...(saving ? { saving: saving.name } : {}),
 		sessions: m.sessions,
 		...(m.life.phase === "failed" ? { reason: m.life.reason } : {}),
 	};
@@ -84,6 +95,14 @@ function nicLine(nic: ListedNic): string {
 	return [nic.address === null ? "no address" : `${nic.address}/${nic.prefix}`, nic.mac, cableLine(nic)].join(" · ");
 }
 
+function checkpointPart({ checkpoints, saving }: ListedMachine): string[] {
+	const kept = checkpoints.map(({ name, bytes }) => `${name} ${sizeText(bytes)}`).join(", ");
+	return [
+		...(checkpoints.length === 0 ? [] : [`${checkpoints.length === 1 ? "checkpoint" : "checkpoints"} ${kept}`]),
+		...(saving === undefined ? [] : [`saving ${saving}`]),
+	];
+}
+
 /** A machine with one NIC is one line. With more, each NIC has its own. */
 function lines(m: ListedMachine): string {
 	if (m.reason !== undefined) return m.reason;
@@ -92,6 +111,7 @@ function lines(m: ListedMachine): string {
 		...(off ? ["no package gateway"] : []),
 		m.disks.length === 1 ? `${diskList(m.disks)} disk` : diskList(m.disks),
 		m.sessions.map(sessionLabel).join(", "),
+		...checkpointPart(m),
 	].join(" · ");
 	if (m.nics.length === 1) return `${nicLine(m.nics[0])} · ${rest}`;
 	return [...m.nics.map((nic) => `${nic.name} · ${nicLine(nic)}`), rest].join("\n");
@@ -99,7 +119,7 @@ function lines(m: ListedMachine): string {
 
 function header(rows: readonly ListedMachine[]): string {
 	if (rows.length === 0) return "no machines yet";
-	const phases: readonly Phase[] = ["ready", "booting", "stopping", "off", "failed", "removing"];
+	const phases: readonly Phase[] = ["ready", "booting", "restoring", "stopping", "off", "failed", "removing"];
 	const tally = phases.flatMap((phase) => {
 		const n = rows.filter((r) => r.state === phase).length;
 		return n === 0 ? [] : [`${n} ${phase}`];
@@ -131,7 +151,7 @@ export const ls = defineVerb({
 		name: "machines_list",
 		title: "List machines",
 		description:
-			"List every machine in the lab with its state, sessions, disks and NICs. Each NIC has its MAC, the address and prefix the lab set, switch port and link.",
+			"List every machine in the lab with its state, sessions, disks, checkpoints and NICs. A checkpoint has the bytes of storage it takes. Each NIC has its MAC, the address and prefix the lab set, switch port and link.",
 		policy: "run",
 		annotations: { readOnlyHint: true },
 	},

@@ -235,7 +235,11 @@ function shellRead(screens: SessionScreens): AgentTool {
 			const lines = wholeNumber(name, "lines", parsed.fields.get("lines"), SHELL_LINES, SHELL_MAX);
 			if (typeof lines !== "number") return { ok: false, line: asCalled(name, input), error: lines.error };
 			const line = `${name}(${machine}, ${lines})`;
-			const read = target.read(machine, { verb: name, lab, phases: ["booting", "ready", "stopping", "off", "failed"] });
+			const read = target.read(machine, {
+				verb: name,
+				lab,
+				phases: ["booting", "ready", "stopping", "off", "restoring", "failed"],
+			});
 			if (read instanceof slots.Miss) {
 				return { ok: false, line, error: read.message ?? `${name} wants a machine or session, not ${machine}.` };
 			}

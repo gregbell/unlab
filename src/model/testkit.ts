@@ -2,11 +2,12 @@
 
 import { isAddressFault, parseAddress } from "../net/index.ts";
 import { parseGiB } from "./disks.ts";
-import { isNameFault, parseChosenName } from "./identity.ts";
-import { isPlanError, planBoot, planLink, planSpawn } from "./machines.ts";
+import { isNameFault, parseCheckpointName, parseChosenName } from "./identity.ts";
+import { isPlanError, planBoot, planLink, planRestore, planSpawn } from "./machines.ts";
 import type {
 	Address,
 	AgentCall,
+	CheckpointName,
 	CommandEvent,
 	Effect,
 	GiB,
@@ -118,6 +119,41 @@ export const power = (next: Next, ...machines: readonly MachineName[]): CommandE
 	machines,
 	next,
 });
+
+export function checkpointed(text: string): CheckpointName {
+	const name = parseCheckpointName(text);
+	if (!name) throw new Error(`${text} is no checkpoint's name`);
+	return name;
+}
+
+export const checkpoint = (machine: MachineName, name: string): CommandEvent => ({
+	type: "cmd/checkpoint",
+	machine,
+	name: checkpointed(name),
+});
+
+export const isSaved = (machine: MachineName, set: number, attempt = 1, bytes = 2 ** 20): RuntimeEvent => ({
+	type: "checkpoint/saved",
+	machine,
+	attempt,
+	set,
+	bytes,
+});
+
+export const isRestored = (machine: MachineName, set: number, attempt = 2, at = 0): RuntimeEvent => ({
+	type: "checkpoint/restored",
+	machine,
+	attempt,
+	set,
+	at,
+});
+
+/** Back to the checkpoint whose set has that number. */
+export function restoreEvent(state: LabState, machine: MachineName, set: number): CommandEvent {
+	const plan = planRestore(state, machine, set);
+	if (plan === null || isPlanError(plan)) throw new Error(`cannot plan the restore: ${JSON.stringify(plan)}`);
+	return { type: "cmd/restore", plan };
+}
 
 export const hasHalted = (
 	machine: MachineName,

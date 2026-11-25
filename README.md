@@ -53,7 +53,10 @@ a guest console, or use `exec` in the bar to address a guest by name.
 | `reboot node2`                               | Shut the machine down and boot it again, with its disks, name, addresses, and cables. `reboot` typed in the guest does the same.       |
 | `poweroff node2`                             | Shut the machine down and leave it off. It keeps its disks and its ports, and uses no memory.                                          |
 | `boot node2`                                 | Boot a machine that is off, or retry a failed boot.                                                                                    |
-| `rm node2`                                   | Remove the machine and delete its disks, after a confirmation that lists them.                                                         |
+| `checkpoint node2 before`                    | Save all of the machine's disks as they are now, under a name. The machine runs on, or is off.                                         |
+| `restore node2 before`                       | Put the disks back as they were at the checkpoint and boot, after a confirmation.                                                      |
+| `forget node2 before`                        | Delete the checkpoint and free its storage, after a confirmation.                                                                      |
+| `rm node2`                                   | Remove the machine and delete its disks and its checkpoints, after a confirmation that lists them.                                     |
 
 Commands that accept multiple machines can take a list (`node1,node3`), a glob
 (`node*`), or `all`. Globs and `all` select the machines that the command can act
@@ -139,7 +142,7 @@ When you are done, turn remote debugging off.
 ### Connect a browser extension
 
 1. [Open the lab](https://gregbell.github.io/unlab/) in Chrome. The bottom right
-   reads `webmcp: 10 tools registered`.
+   reads `webmcp: 13 tools registered`.
 2. To see a call without an agent, click that text, then click **try a call**. The
    call and its result appear in the panel.
 3. Install
@@ -161,18 +164,21 @@ The agent panel sets each tool to `run`, `ask me`, or `off`. A call to an
 `ask me` tool waits until you approve or deny it. **pause tools** hides all of
 them. Your choices survive a reload.
 
-| Tool                | What it does                             | Default  |
-| ------------------- | ---------------------------------------- | -------- |
-| `machines_list`     | List machines, addresses, links, disks.  | `run`    |
-| `machines_spawn`    | Boot machines.                           | `ask me` |
-| `machines_boot`     | Boot machines that are off or failed.    | `run`    |
-| `machines_reboot`   | Reboot machines.                         | `run`    |
-| `machines_poweroff` | Shut machines down and keep their disks. | `run`    |
-| `machines_remove`   | Remove machines and delete their disks.  | `ask me` |
-| `shell_exec`        | Run a command in a guest's shell.        | `run`    |
-| `shell_read`        | Read what a guest's terminal shows.      | `run`    |
-| `link_set`          | Cut or reconnect a machine's cables.     | `run`    |
-| `capture_read`      | Read captured frames from the switch.    | `run`    |
+| Tool                 | What it does                             | Default  |
+| -------------------- | ---------------------------------------- | -------- |
+| `machines_list`      | List machines, addresses, links, disks.  | `run`    |
+| `machines_spawn`     | Boot machines.                           | `ask me` |
+| `machines_boot`      | Boot machines that are off or failed.    | `run`    |
+| `machines_reboot`    | Reboot machines.                         | `run`    |
+| `machines_poweroff`  | Shut machines down and keep their disks. | `run`    |
+| `machines_remove`    | Remove machines and delete their disks.  | `ask me` |
+| `checkpoint_save`    | Save a machine's disks as they are now.  | `run`    |
+| `checkpoint_restore` | Go back to a checkpoint and boot.        | `ask me` |
+| `checkpoint_remove`  | Delete a checkpoint.                     | `ask me` |
+| `shell_exec`         | Run a command in a guest's shell.        | `run`    |
+| `shell_read`         | Read what a guest's terminal shows.      | `run`    |
+| `link_set`           | Cut or reconnect a machine's cables.     | `run`    |
+| `capture_read`       | Read captured frames from the switch.    | `run`    |
 
 Commands run inside the guests, not on your computer. Guest output can contain
 text that tries to instruct the agent, so unlab marks it as untrusted.
@@ -217,6 +223,14 @@ a separate window opens when you wanted your own browser, reconnect `unlab` in
   disk first. Its programs, and settings that only its memory held, are gone. Shells
   opened beside the console close, and the console says so. A guest that does not shut
   down within 10 seconds is stopped, and the lab says that too.
+- A checkpoint is all of a machine's disks at one moment. The guest first writes its
+  files to them, and it runs on while they are copied: about 10 seconds for each GiB
+  that the disks hold. A checkpoint takes as much storage as that, which the
+  machine's details and `ls` show, and goes with its machine. `restore` stops a
+  running guest without shutting it down, and boots afresh: programs and memory are
+  not saved. The machine's other checkpoints stay. It takes about 20 seconds for each
+  GiB, and room for another copy of the disks while it runs. One that a reload
+  cuts short starts again, and one that fails leaves the disks as they were.
 - Reloading the page boots each machine from its own IndexedDB-backed disks, except
   those that are off, which stay off. Switch ports and cable connections survive a
   reload. Shell processes and packet captures start fresh. One tab at a time owns the

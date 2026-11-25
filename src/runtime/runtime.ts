@@ -2,13 +2,14 @@
 // Everything it owns stays behind the Engine it returns.
 
 import type { CaptureLog } from "../capture/index.ts";
-import { deleteMachineDisks } from "./disk-stores.ts";
+import { MAX_EXTRA_DISKS } from "../model/index.ts";
+import { deleteDisks } from "./disk-stores.ts";
 import { createEngine, type Engine, type RuntimeStore } from "./engine.ts";
 import { type DistroManifest, imageSource } from "./image.ts";
 import { createScreens } from "./screens.ts";
 import { LabSwitch } from "./switch.ts";
 import { startVm } from "./vm.ts";
-import { spawnVmWorker } from "./worker.ts";
+import { spawnVmWorker, startCopy } from "./worker.ts";
 
 export interface RuntimeOptions {
 	readonly store: RuntimeStore;
@@ -37,7 +38,8 @@ export function createRuntime(options: RuntimeOptions): Engine {
 				now,
 			}),
 		image: imageSource(options.manifest),
-		deleteDisks: deleteMachineDisks,
+		deleteDisks: (n, sets) => void deleteDisks(n, sets, MAX_EXTRA_DISKS),
+		startCopy,
 		announce: options.announce,
 		every(ms, fn) {
 			const id = setInterval(fn, ms);

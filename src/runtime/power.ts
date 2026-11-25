@@ -37,6 +37,24 @@ export async function shutDown(
 	return exit?.kind === "halt";
 }
 
+/** How long a guest has to write back its file systems when it is asked to as it runs. */
+const SYNC_RUNNING_MS = 30_000;
+
+/** Has the guest write everything its programs have written to its disks. Rejects when it has not. */
+export async function syncGuest(vm: Pick<KernelInstance, "exec">): Promise<void> {
+	const { promise: late, reject } = Promise.withResolvers<never>();
+	const timer = setTimeout(
+		() => reject(new Error(`Its guest did not write its files to disk in ${SYNC_RUNNING_MS / 1000} s.`)),
+		SYNC_RUNNING_MS,
+	);
+	try {
+		const { exitCode, stderr } = await Promise.race([execAsRoot(vm, "sync"), late]);
+		if (exitCode !== 0) throw new Error(`Its guest could not write its files to disk: ${String(stderr).trim()}`);
+	} finally {
+		clearTimeout(timer);
+	}
+}
+
 /** Saves every write the disks have taken. False when one could not be saved, which the disk has reported. */
 export async function saveDisks(disks: readonly Pick<CowDisk, "busy" | "flush">[]): Promise<boolean> {
 	const saved = await Promise.allSettled(

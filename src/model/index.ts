@@ -4,7 +4,7 @@
 // dispatchers. The pane functions that `update` calls are not exported, so
 // nothing else can rearrange panes.
 
-export { type Device, type Disk, disksOf, MAX_EXTRA_DISKS, MAX_EXTRA_GIB, parseGiB } from "./disks.ts";
+export { type Device, type Disk, disksOf, MAX_EXTRA_DISKS, MAX_EXTRA_GIB, parseGiB, sizeText } from "./disks.ts";
 export {
 	identity,
 	isNameFault,
@@ -12,6 +12,7 @@ export {
 	type NameFault,
 	nicLabel,
 	nicMac,
+	parseCheckpointName,
 	parseChosenName,
 	parseMachineName,
 	parseSessionId,
@@ -34,9 +35,11 @@ export {
 	nicsOf,
 	planBoot,
 	planLink,
+	planRestore,
 	planSpawn,
 	plugsOf,
 	portsOf,
+	savingOf,
 	severalNics,
 	takenPorts,
 } from "./machines.ts";

@@ -17,6 +17,7 @@ import { addressText } from "./selectors.ts";
 import {
 	address,
 	bootEvent,
+	checkpoint,
 	effectsOf,
 	emptyLab,
 	hasFailed,
@@ -24,12 +25,15 @@ import {
 	hasStopped,
 	IMAGES,
 	isReady,
+	isRestored,
+	isSaved,
 	labWith,
 	linkEvent,
 	machine,
 	named,
 	power,
 	remove,
+	restoreEvent,
 	run,
 	type SpawnOptions,
 	spawnEvent,
@@ -59,10 +63,20 @@ const alpineAt = (text: string, net: "switch0" | "none" = "switch0"): MachineSpe
 	nics: [{ net, address: address(text) }],
 });
 
+const reloaded = (s: LabState): LabState => restoreWorkspace(initialState(IMAGES, WIDE), saveWorkspace(s)).state;
+
+/** Both are booting, and node1 has a checkpoint in its set 1. */
+const CHECKPOINTED = reloaded(run(labWith(2), checkpoint("node1", "before"), isSaved("node1", 1)));
+
 /** A lab whose node1 is in `phase` on boot attempt `attempt`, beside a ready node2. */
 function labIn(phase: Phase, attempt: 1 | 2): LabState {
-	let s = emptyLab();
-	s = run(s, spawnEvent(s, 2, { at: 1000 }), isReady("node2"));
+	let s = run(CHECKPOINTED, isReady("node2"));
+	if (phase === "restoring") {
+		s = run(s, isReady("node1"));
+		s = run(s, restoreEvent(s, "node1", 1));
+		// One that a reload cut short goes on on the first attempt.
+		return attempt === 2 ? s : run(reloaded(s), isReady("node2"));
+	}
 	if (attempt === 2) {
 		s = run(s, hasFailed("node1", 1));
 		s = run(s, bootEvent(s, "node1", 2000));
@@ -93,6 +107,10 @@ const TABLE: Readonly<Record<Phase, Readonly<Record<Column, Outcome>>>> = {
 		"vm/halted": "stopping",
 		"vm/nic-lost": "ignored",
 		"vm/stopped": "ignored",
+		"checkpoint/progress": "ignored",
+		"checkpoint/saved": "ignored",
+		"checkpoint/unsaved": "ignored",
+		"checkpoint/restored": "ignored",
 		"session/opened": "ignored",
 		"session/ended": "ignored",
 		"session/shell": "untouched",
@@ -103,6 +121,9 @@ const TABLE: Readonly<Record<Phase, Readonly<Record<Column, Outcome>>>> = {
 		"cmd/remove": "removing",
 		"cmd/boot": "ignored",
 		"cmd/power": "ignored",
+		"cmd/checkpoint": "ignored",
+		"cmd/restore": "ignored",
+		"cmd/forget": "untouched",
 		"cmd/link": "ignored",
 		"cmd/shell": "ignored",
 		"cmd/focus": "untouched",
@@ -116,6 +137,10 @@ const TABLE: Readonly<Record<Phase, Readonly<Record<Column, Outcome>>>> = {
 		"vm/halted": "stopping",
 		"vm/nic-lost": "ready",
 		"vm/stopped": "ignored",
+		"checkpoint/progress": "ignored",
+		"checkpoint/saved": "ignored",
+		"checkpoint/unsaved": "ignored",
+		"checkpoint/restored": "ignored",
 		"session/opened": "ignored",
 		"session/ended": "ignored",
 		"session/shell": "untouched",
@@ -126,6 +151,9 @@ const TABLE: Readonly<Record<Phase, Readonly<Record<Column, Outcome>>>> = {
 		"cmd/remove": "removing",
 		"cmd/boot": "ignored",
 		"cmd/power": "stopping",
+		"cmd/checkpoint": "ready",
+		"cmd/restore": "restoring",
+		"cmd/forget": "untouched",
 		"cmd/link": "ready",
 		"cmd/shell": "ready",
 		"cmd/focus": "untouched",
@@ -139,6 +167,10 @@ const TABLE: Readonly<Record<Phase, Readonly<Record<Column, Outcome>>>> = {
 		"vm/halted": "ignored",
 		"vm/nic-lost": "ignored",
 		"vm/stopped": "off",
+		"checkpoint/progress": "ignored",
+		"checkpoint/saved": "ignored",
+		"checkpoint/unsaved": "ignored",
+		"checkpoint/restored": "ignored",
 		"session/opened": "ignored",
 		"session/ended": "ignored",
 		"session/shell": "untouched",
@@ -149,6 +181,9 @@ const TABLE: Readonly<Record<Phase, Readonly<Record<Column, Outcome>>>> = {
 		"cmd/remove": "removing",
 		"cmd/boot": "ignored",
 		"cmd/power": "ignored",
+		"cmd/checkpoint": "ignored",
+		"cmd/restore": "ignored",
+		"cmd/forget": "untouched",
 		"cmd/link": "ignored",
 		"cmd/shell": "ignored",
 		"cmd/focus": "untouched",
@@ -162,6 +197,10 @@ const TABLE: Readonly<Record<Phase, Readonly<Record<Column, Outcome>>>> = {
 		"vm/halted": "ignored",
 		"vm/nic-lost": "ignored",
 		"vm/stopped": "ignored",
+		"checkpoint/progress": "ignored",
+		"checkpoint/saved": "ignored",
+		"checkpoint/unsaved": "ignored",
+		"checkpoint/restored": "ignored",
 		"session/opened": "ignored",
 		"session/ended": "ignored",
 		"session/shell": "untouched",
@@ -172,7 +211,40 @@ const TABLE: Readonly<Record<Phase, Readonly<Record<Column, Outcome>>>> = {
 		"cmd/remove": "removing",
 		"cmd/boot": "booting",
 		"cmd/power": "ignored",
+		"cmd/checkpoint": "off",
+		"cmd/restore": "restoring",
+		"cmd/forget": "untouched",
 		"cmd/link": "off",
+		"cmd/shell": "ignored",
+		"cmd/focus": "untouched",
+		"cmd/capture": "untouched",
+		"cmd/logged": "untouched",
+	},
+	restoring: {
+		"vm/stage": "ignored",
+		"vm/ready": "ignored",
+		"vm/failed": "failed",
+		"vm/halted": "ignored",
+		"vm/nic-lost": "ignored",
+		"vm/stopped": "ignored",
+		"checkpoint/progress": "restoring",
+		"checkpoint/saved": "ignored",
+		"checkpoint/unsaved": "ignored",
+		"checkpoint/restored": "booting",
+		"session/opened": "ignored",
+		"session/ended": "ignored",
+		"session/shell": "untouched",
+		"session/marked": "untouched",
+		tick: "untouched",
+		"tick past the boot timeout": "untouched",
+		"cmd/spawn": "untouched",
+		"cmd/remove": "removing",
+		"cmd/boot": "ignored",
+		"cmd/power": "ignored",
+		"cmd/checkpoint": "ignored",
+		"cmd/restore": "ignored",
+		"cmd/forget": "ignored",
+		"cmd/link": "ignored",
 		"cmd/shell": "ignored",
 		"cmd/focus": "untouched",
 		"cmd/capture": "untouched",
@@ -185,6 +257,10 @@ const TABLE: Readonly<Record<Phase, Readonly<Record<Column, Outcome>>>> = {
 		"vm/halted": "ignored",
 		"vm/nic-lost": "ignored",
 		"vm/stopped": "ignored",
+		"checkpoint/progress": "ignored",
+		"checkpoint/saved": "ignored",
+		"checkpoint/unsaved": "ignored",
+		"checkpoint/restored": "ignored",
 		"session/opened": "ignored",
 		"session/ended": "ignored",
 		"session/shell": "untouched",
@@ -195,6 +271,9 @@ const TABLE: Readonly<Record<Phase, Readonly<Record<Column, Outcome>>>> = {
 		"cmd/remove": "removing",
 		"cmd/boot": "booting",
 		"cmd/power": "ignored",
+		"cmd/checkpoint": "ignored",
+		"cmd/restore": "restoring",
+		"cmd/forget": "untouched",
 		"cmd/link": "ignored",
 		"cmd/shell": "ignored",
 		"cmd/focus": "untouched",
@@ -208,6 +287,10 @@ const TABLE: Readonly<Record<Phase, Readonly<Record<Column, Outcome>>>> = {
 		"vm/halted": "ignored",
 		"vm/nic-lost": "ignored",
 		"vm/stopped": "gone",
+		"checkpoint/progress": "ignored",
+		"checkpoint/saved": "ignored",
+		"checkpoint/unsaved": "ignored",
+		"checkpoint/restored": "ignored",
 		"session/opened": "ignored",
 		"session/ended": "ignored",
 		"session/shell": "untouched",
@@ -218,6 +301,9 @@ const TABLE: Readonly<Record<Phase, Readonly<Record<Column, Outcome>>>> = {
 		"cmd/remove": "ignored",
 		"cmd/boot": "ignored",
 		"cmd/power": "ignored",
+		"cmd/checkpoint": "ignored",
+		"cmd/restore": "ignored",
+		"cmd/forget": "ignored",
 		"cmd/link": "ignored",
 		"cmd/shell": "ignored",
 		"cmd/focus": "untouched",
@@ -225,6 +311,9 @@ const TABLE: Readonly<Record<Phase, Readonly<Record<Column, Outcome>>>> = {
 		"cmd/logged": "untouched",
 	},
 };
+
+/** The last set the machine was given the number of. */
+const newest = (s: LabState, name: MachineName): number => (s.machines[name]?.sets.next ?? 0) - 1;
 
 /** One concrete event per column, aimed at `name` on boot attempt `attempt`. */
 function eventFor(column: Column, s: LabState, name: MachineName, attempt: number): LabEvent {
@@ -241,6 +330,20 @@ function eventFor(column: Column, s: LabState, name: MachineName, attempt: numbe
 			return { type: "vm/nic-lost", machine: name, attempt, nic: 0, reason: "eth0 stopped: signal 9." };
 		case "vm/stopped":
 			return hasStopped(name, attempt);
+		case "checkpoint/progress":
+			return { type: "checkpoint/progress", machine: name, attempt, set: newest(s, name), percent: 40 };
+		case "checkpoint/saved":
+			return isSaved(name, 2, attempt);
+		case "checkpoint/unsaved":
+			return { type: "checkpoint/unsaved", machine: name, attempt, set: 2, reason: "Browser storage is full." };
+		case "checkpoint/restored":
+			return isRestored(name, newest(s, name), attempt);
+		case "cmd/checkpoint":
+			return checkpoint(name, "after");
+		case "cmd/restore":
+			return { type: "cmd/restore", plan: { machine: name, set: 1, ports: [1] } };
+		case "cmd/forget":
+			return { type: "cmd/forget", machine: name, set: 1 };
 		case "session/opened":
 			return { type: "session/opened", session: `${name}:console` };
 		case "session/ended":
@@ -278,10 +381,21 @@ function eventFor(column: Column, s: LabState, name: MachineName, attempt: numbe
 	}
 }
 
-const PHASES: readonly Phase[] = ["booting", "ready", "stopping", "off", "failed", "removing"];
+const PHASES: readonly Phase[] = ["booting", "ready", "stopping", "off", "restoring", "failed", "removing"];
 const ATTEMPTS = [1, 2] as const;
 const COLUMNS = Object.keys(TABLE.booting).filter((key): key is Column => key in TABLE.booting);
-const VM_EVENTS = ["vm/stage", "vm/ready", "vm/failed", "vm/halted", "vm/nic-lost", "vm/stopped"] as const;
+const VM_EVENTS = [
+	"vm/stage",
+	"vm/ready",
+	"vm/failed",
+	"vm/halted",
+	"vm/nic-lost",
+	"vm/stopped",
+	"checkpoint/progress",
+	"checkpoint/saved",
+	"checkpoint/unsaved",
+	"checkpoint/restored",
+] as const;
 /** Every event that names a machine or one of its sessions. */
 const ADDRESSED = COLUMNS.filter(
 	(column) => !["tick", "tick past the boot timeout", "cmd/spawn", "cmd/capture", "cmd/logged"].includes(column),
@@ -338,12 +452,13 @@ describe("the lifecycle table", () => {
 
 	test("what each phase accepts", () => {
 		expect(ACCEPTS).toEqual({
-			booting: { commands: false, boot: false, cables: false, remove: true },
-			ready: { commands: true, boot: false, cables: true, remove: true },
-			stopping: { commands: false, boot: false, cables: false, remove: true },
-			off: { commands: false, boot: true, cables: true, remove: true },
-			failed: { commands: false, boot: true, cables: false, remove: true },
-			removing: { commands: false, boot: false, cables: false, remove: false },
+			booting: { commands: false, boot: false, cables: false, remove: true, restore: false },
+			ready: { commands: true, boot: false, cables: true, remove: true, restore: true },
+			stopping: { commands: false, boot: false, cables: false, remove: true, restore: false },
+			off: { commands: false, boot: true, cables: true, remove: true, restore: true },
+			restoring: { commands: false, boot: false, cables: false, remove: true, restore: false },
+			failed: { commands: false, boot: true, cables: false, remove: true, restore: true },
+			removing: { commands: false, boot: false, cables: false, remove: false, restore: false },
 		});
 	});
 
@@ -776,7 +891,7 @@ describe("a machine's name", () => {
 		}
 		s = run(s, remove(web));
 		expect(update(s, hasStopped(web, 2))).toEqual({ state: s, effects: [] });
-		expect(update(s, hasStopped(web, 3)).effects).toContainEqual({ type: "disks/delete", n: 2 });
+		expect(update(s, hasStopped(web, 3)).effects).toContainEqual({ type: "disks/delete", n: 2, sets: [0] });
 	});
 
 	test("a lab that is restored has no one late to ignore", () => {

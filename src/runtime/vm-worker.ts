@@ -9,18 +9,19 @@
 // vm.spawn(), so a machine can have several independent shells.
 
 import { BootError, CowDisk, createKernel, type KernelInstance, NetStack, type Pty } from "unkernel";
-import { type Device, disksOf, SHUTDOWN_MS } from "../model/index.ts";
+import { type Device, type DiskCopy, disksOf, SHUTDOWN_MS } from "../model/index.ts";
 import { defaultName } from "../net/index.ts";
 import { rootStore } from "./disk-stores.ts";
 import { keepSaved, openExtraDisk } from "./extra-disk.ts";
 import { execAsRoot, hostsScript, setupScript } from "./guest.ts";
 import { MemoryDisk } from "./image.ts";
+import { copyLive, type LiveCopy, type LiveDisk, watchable } from "./live-copy.ts";
 import { MachineNics } from "./machine-nics.ts";
 import { alpinePackageSetup, packageBackend } from "./package-repositories.ts";
-import { nextOf, saveDisks, shutDown } from "./power.ts";
+import { nextOf, saveDisks, shutDown, syncGuest } from "./power.ts";
 import type { FromVm, PtySpec, ToVm, VmConfig } from "./protocol.ts";
 import { createShellTracker } from "./shell-tracker.ts";
-import { memoryShortage, storageFailure } from "./shortage.ts";
+import { copyFailure, memoryShortage, storageFailure } from "./shortage.ts";
 
 function post(m: FromVm, transfer: Transferable[] = []): void {
 	self.postMessage(m, transfer);
@@ -36,6 +37,9 @@ type Queued = Exclude<ToVm, { type: "boot" | "frame" | "release" }>;
 const GOING_DOWN_MS = 5000;
 
 let vm: KernelInstance | undefined;
+/** Every disk the guest writes, the root's first. */
+let disks: readonly LiveDisk[] = [];
+let copying: LiveCopy | undefined;
 /** Once the kernel has ended and its disks are saved. Whether they were. */
 let saved: Promise<boolean> | undefined;
 /** The kernel has ended. */
@@ -115,6 +119,9 @@ function handle(m: Queued): void {
 			void ptys.get(m.sid)?.kill();
 			ptys.delete(m.sid);
 			return;
+		case "checkpoint":
+			void checkpoint(m.copy);
+			return;
 		case "stop":
 			for (const p of ptys.values()) void p.kill();
 			ptys.clear();
@@ -127,6 +134,24 @@ async function reconfigure(m: Extract<ToVm, { type: "reconfigure" }>): Promise<v
 	if (!vm) return;
 	const r = await execAsRoot(vm, hostsScript({ hostname: m.name, hosts: m.hosts }));
 	if (r.exitCode !== 0) fail(`reconfigure: ${String(r.stderr).trim()}`, false);
+}
+
+async function checkpoint(copy: DiskCopy): Promise<void> {
+	if (!vm || over) return;
+	const guest = vm;
+	const running = copyLive(
+		copy,
+		disks,
+		() => syncGuest(guest),
+		(percent) => post({ type: "copy", report: { kind: "progress", percent } }),
+	);
+	copying = running;
+	try {
+		post({ type: "copy", report: { kind: "done", bytes: await running.done } });
+	} catch (error) {
+		post({ type: "copy", report: { kind: "failed", reason: copyFailure(copy, "save", error) } });
+	}
+	copying = undefined;
 }
 
 /**
@@ -205,14 +230,14 @@ async function boot(c: VmConfig): Promise<void> {
 		post({ type: "stage", stage: "download" });
 		const extras = await Promise.all(
 			extra.map(({ device, gib }, i) =>
-				openExtraDisk({ n: c.n, k: i + 1, gib, onError: unsaved(device) }).catch((error: unknown) => {
+				openExtraDisk({ n: c.n, set: c.set, k: i + 1, gib, onError: unsaved(device) }).catch((error: unknown) => {
 					throw new Error(storageFailure(c.name, device, error));
 				}),
 			),
 		);
 		vm = await createKernel({
 			distro: new MemoryDisk(c.image),
-			disks: [{ kind: "data", template: "bundled", name: rootStore(c.n), size: root.gib * 2 ** 30 }, ...extras],
+			disks: [{ kind: "data", template: "bundled", name: rootStore(c.n, c.set), size: root.gib * 2 ** 30 }, ...extras],
 			// The extra disks report their own.
 			onDiskError: (_, error) => unsaved(root.device)(error),
 			net: nics.eth0,
@@ -240,11 +265,13 @@ async function boot(c: VmConfig): Promise<void> {
 	}
 
 	const kept = vm.kernel.block.disks.filter((disk) => disk instanceof CowDisk);
+	disks = kept.map((disk) => ({ disk, store: watchable(disk) }));
 	saved = vm.exited.then((exit) => {
 		over = true;
 		const next = nextOf(exit);
 		if (next) post({ type: "halted", next });
 		else if (exit.kind !== "stopped") post({ type: "exited", code: exit.code, reason: exit.reason });
+		void copying?.giveUp(new Error("It stopped."));
 		return saveDisks(kept);
 	});
 

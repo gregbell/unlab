@@ -60,6 +60,15 @@ function frameScheduler(): (fn: () => void) => void {
 	};
 }
 
+/** What acts on a guest or its disks. The lab must come back from a reload knowing that it had been asked. */
+const RECORDED: ReadonlySet<Effect["type"]> = new Set<Effect["type"]>([
+	"vm/boot",
+	"vm/stop",
+	"checkpoint/save",
+	"checkpoint/restore",
+	"disks/delete",
+]);
+
 async function loadManifest(): Promise<Manifest> {
 	const res = await fetch("distros/distros.json");
 	if (!res.ok) throw new Error("No mirrored images. Run: npm run distros alpine");
@@ -86,13 +95,17 @@ async function main(): Promise<void> {
 		initialState(images, { width: window.innerWidth - 232, height: window.innerHeight - 300 }),
 		localStorage.getItem(key),
 	);
-	const kept = new Set(machineList(restored.state).map((machine) => machine.n));
-	await sweepDisks((n) => n < restored.state.nextN && !kept.has(n));
+	const kept = new Map(machineList(restored.state).map(({ n, sets }) => [n, sets]));
+	await sweepDisks((n, set) => {
+		const sets = kept.get(n);
+		if (!sets) return n < restored.state.nextN;
+		return set < sets.next && set !== sets.live && sets.checkpoints.every((checkpoint) => checkpoint.set !== set);
+	});
 	const store: Store = createStore(
 		restored.state,
 		(effect: Effect) => {
 			// Before anything is done that a reload could cut short.
-			if (effect.type === "vm/boot" || effect.type === "vm/stop") save();
+			if (RECORDED.has(effect.type)) save();
 			runtime?.run(effect);
 		},
 		schedule,
@@ -113,6 +126,7 @@ async function main(): Promise<void> {
 		announce: (text) => app.announce(text),
 		now,
 	});
+	save();
 	for (const effect of restored.effects) runtime.run(effect);
 	// The model asks for a faster clock while machines boot; at rest it still needs one, or its idea of now never moves.
 	runtime.run({ type: "clock", hz: clockHz(store.state) });

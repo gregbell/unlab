@@ -28,6 +28,7 @@ const config = (n: number): BootConfig => ({
 		gateway: true,
 		nics: [{ net: "switch0", address: defaultAddress(n) }],
 	},
+	set: 0,
 	hosts: HOSTS,
 });
 

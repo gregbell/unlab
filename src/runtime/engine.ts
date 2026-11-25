@@ -13,6 +13,7 @@
 import type { CaptureLog } from "../capture/index.ts";
 import type { ExecOutcome, ExecPort } from "../commands/index.ts";
 import {
+	type DiskCopy,
 	type Effect,
 	type HostEntry,
 	type MachineName,
@@ -23,6 +24,7 @@ import {
 	type SessionId,
 	type StopHow,
 } from "../model/index.ts";
+import type { CopyJob, CopyReport } from "./protocol.ts";
 import type { LineMark, Screen, Screens } from "./screens.ts";
 import type { ShellEvent } from "./shell-tracker.ts";
 import type { LabSwitch, MacEntry, PortCounters } from "./switch.ts";
@@ -64,8 +66,10 @@ export interface EngineDeps {
 	readonly startVm: StartVm;
 	/** Image bytes by manifest name, fetched once however many machines ask. Rejects, never throws. */
 	readonly image: (name: string) => Promise<ArrayBufferLike>;
-	/** Delete every disk machine n has. */
-	readonly deleteDisks: (n: number) => void;
+	/** Delete those sets of machine n's disks, however many disks it has. */
+	readonly deleteDisks: (n: number, sets: readonly number[]) => void;
+	/** Copy disks that no guest has open. Returns what drops the copy, which then reports nothing and leaves what it wrote. */
+	readonly startCopy: (job: CopyJob, on: (report: CopyReport) => void) => () => void;
 	/** The page's one polite live region. */
 	readonly announce: (text: string) => void;
 	/** Run fn every ms until the returned function is called. */
@@ -91,7 +95,14 @@ interface VmEntry {
 	readonly promptToken: string;
 	/** Shells the guest took away. It is going down, or it will not say why. */
 	readonly lost: SessionId[];
+	/** The copy of its disks that it is making. */
+	saving: DiskCopy | null;
 	stopped: Promise<void> | null;
+}
+
+/** A copy of disks that no guest has open, or that waits until none has. */
+interface Job {
+	drop(): void;
 }
 
 /** An injected line, from the call to its result. */
@@ -145,6 +156,7 @@ export function createEngine(deps: EngineDeps): Engine {
 
 	const vms = new Map<MachineName, VmEntry>();
 	const sessions = new Map<SessionId, SessionEntry>();
+	const jobs = new Map<MachineName, Job>();
 	const ports = new Map<PortNo, NicRef>();
 	let published: readonly HostEntry[] | null = null;
 	let clock: { readonly hz: 1 | 10; readonly stop: () => void } | null = null;
@@ -251,6 +263,14 @@ export function createEngine(deps: EngineDeps): Engine {
 			endSessions(ref.machine, STOPPED_FOR[next]?.(ref.machine));
 			dispatch({ type: "vm/halted", ...ref, next, closed: entry.lost });
 		},
+		copied(ref, report) {
+			const entry = listening(ref);
+			// What a guest that has gone down goes on to report is deleted once its worker is gone.
+			if (!entry?.saving) return;
+			const copy = entry.saving;
+			if (report.kind !== "progress") entry.saving = null;
+			reportSave(copy, report);
+		},
 		nicLost(ref, nic, reason) {
 			if (listening(ref)) dispatch({ type: "vm/nic-lost", ...ref, nic, reason });
 		},
@@ -286,6 +306,59 @@ export function createEngine(deps: EngineDeps): Engine {
 			abandon(s);
 			dispatch({ type: "session/ended", session: s.id });
 		},
+	};
+
+	/** What became of a checkpoint, whoever copied it. */
+	const reportSave = ({ machine, attempt, to: set }: DiskCopy, report: CopyReport) => {
+		switch (report.kind) {
+			case "progress":
+				dispatch({ type: "checkpoint/progress", machine, attempt, set, percent: report.percent });
+				return;
+			case "done":
+				dispatch({ type: "checkpoint/saved", machine, attempt, set, bytes: report.bytes });
+				return;
+			case "failed":
+				dispatch({ type: "checkpoint/unsaved", machine, attempt, set, reason: report.reason });
+				return;
+		}
+	};
+
+	const reportRestore = ({ machine, attempt, to: set }: DiskCopy, report: CopyReport) => {
+		switch (report.kind) {
+			case "progress":
+				dispatch({ type: "checkpoint/progress", machine, attempt, set, percent: report.percent });
+				return;
+			case "done":
+				dispatch({ type: "checkpoint/restored", machine, attempt, set, at: deps.now() });
+				return;
+			case "failed":
+				dispatch({ type: "vm/failed", machine, attempt, reason: report.reason });
+				return;
+		}
+	};
+
+	const startJob = (job: CopyJob, released: Promise<void> | undefined) => {
+		const { copy, why } = job;
+		const { machine, n, to } = copy;
+		let drop: (() => void) | null = null;
+		const entry: Job = {
+			drop() {
+				jobs.delete(machine);
+				drop?.();
+				deps.deleteDisks(n, [to]);
+			},
+		};
+		jobs.set(machine, entry);
+		const start = () => {
+			if (jobs.get(machine) !== entry) return;
+			drop = deps.startCopy(job, (report) => {
+				if (jobs.get(machine) !== entry) return;
+				if (report.kind !== "progress") jobs.delete(machine);
+				(why === "save" ? reportSave : reportRestore)(copy, report);
+			});
+		};
+		if (released) void released.then(start);
+		else start();
 	};
 
 	const createSession = (id: SessionId) => {
@@ -363,11 +436,12 @@ export function createEngine(deps: EngineDeps): Engine {
 					sink,
 				);
 				const { hosts } = config;
-				vms.set(machine, { attempt, vm, phase: "booting", hosts, promptToken, lost: [], stopped: null });
+				vms.set(machine, { attempt, vm, phase: "booting", hosts, promptToken, lost: [], saving: null, stopped: null });
 				return;
 			}
 			case "vm/stop": {
 				const { machine, attempt, how } = effect;
+				jobs.get(machine)?.drop();
 				const entry = vms.get(machine);
 				if (!entry) {
 					dispatch({ type: "vm/stopped", machine, attempt, clean: true, at: deps.now() });
@@ -380,12 +454,32 @@ export function createEngine(deps: EngineDeps): Engine {
 				const stopped = entry.vm.stop(how);
 				entry.stopped ??= stopped.then((clean) => {
 					if (vms.get(machine) === entry) vms.delete(machine);
+					if (entry.saving) deps.deleteDisks(entry.saving.n, [entry.saving.to]);
 					dispatch({ type: "vm/stopped", machine, attempt, clean, at: deps.now() });
 				});
 				return;
 			}
 			case "disks/delete":
-				deps.deleteDisks(effect.n);
+				deps.deleteDisks(effect.n, effect.sets);
+				return;
+			case "checkpoint/save": {
+				const { copy } = effect;
+				const entry = vms.get(copy.machine);
+				if (!entry) {
+					startJob({ copy, why: "save" }, undefined);
+				} else if (entry.phase === "ready") {
+					entry.saving = copy;
+					entry.vm.checkpoint(copy);
+				} else {
+					reportSave(copy, {
+						kind: "failed",
+						reason: `${copy.machine} stopped before checkpoint ${copy.checkpoint} was saved.`,
+					});
+				}
+				return;
+			}
+			case "checkpoint/restore":
+				startJob({ copy: effect.copy, why: "restore" }, vms.get(effect.copy.machine)?.stopped ?? undefined);
 				return;
 			case "port/attach": {
 				const { port, machine, nic } = effect;
@@ -547,6 +641,7 @@ export function createEngine(deps: EngineDeps): Engine {
 			untap();
 			for (const port of ports.keys()) sw.detach(port);
 			ports.clear();
+			for (const job of jobs.values()) job.drop();
 			for (const entry of vms.values()) void entry.vm.stop("drop");
 			vms.clear();
 			for (const s of sessions.values()) {

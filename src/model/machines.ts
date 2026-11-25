@@ -10,6 +10,7 @@ import {
 	type NodeNic,
 	subnetsOverlap,
 } from "../net/index.ts";
+import { FIRST_SETS } from "./disks.ts";
 import { identity, nicLabel, sessionLabel } from "./identity.ts";
 import { without } from "./record.ts";
 import { andThen, later, patch, step } from "./step.ts";
@@ -18,6 +19,10 @@ import {
 	BOOT_TIMEOUT_MS,
 	type BootPlan,
 	type Cause,
+	type Checkpoint,
+	type CheckpointName,
+	type DiskCopy,
+	type DiskSets,
 	type Effect,
 	type HostEntry,
 	HUES,
@@ -38,6 +43,8 @@ import {
 	type Plug,
 	PORTS,
 	type PortNo,
+	type RestorePlan,
+	type Saving,
 	type Session,
 	type SessionId,
 	SHUTDOWN_MS,
@@ -53,17 +60,20 @@ export interface Accepts {
 	readonly boot: boolean;
 	readonly cables: boolean;
 	readonly remove: boolean;
+	readonly restore: boolean;
 }
 
 export const ACCEPTS: Readonly<Record<Phase, Accepts>> = {
-	booting: { commands: false, boot: false, cables: false, remove: true },
-	ready: { commands: true, boot: false, cables: true, remove: true },
-	stopping: { commands: false, boot: false, cables: false, remove: true },
-	off: { commands: false, boot: true, cables: true, remove: true },
-	failed: { commands: false, boot: true, cables: false, remove: true },
-	removing: { commands: false, boot: false, cables: false, remove: false },
+	booting: { commands: false, boot: false, cables: false, remove: true, restore: false },
+	ready: { commands: true, boot: false, cables: true, remove: true, restore: true },
+	stopping: { commands: false, boot: false, cables: false, remove: true, restore: false },
+	off: { commands: false, boot: true, cables: true, remove: true, restore: true },
+	restoring: { commands: false, boot: false, cables: false, remove: true, restore: false },
+	failed: { commands: false, boot: true, cables: false, remove: true, restore: true },
+	removing: { commands: false, boot: false, cables: false, remove: false, restore: false },
 };
 
+const FAILS: readonly Phase[] = ["booting", "ready", "stopping", "restoring"];
 const BOOT_TIMEOUT_REASON = `No prompt after ${BOOT_TIMEOUT_MS / 1000} s.`;
 /** What a stop that the guest did not finish leaves to say. */
 export const FORCED_STOP = `It did not shut down in ${SHUTDOWN_MS / 1000} s, so it was stopped, and what it had not written to disk may be lost.`;
@@ -87,6 +97,11 @@ export function nicPortsOf(life: Lifecycle): NicPorts {
 
 export function portsOf(life: Lifecycle): readonly PortNo[] {
 	return nicPortsOf(life).flatMap((port) => port ?? []);
+}
+
+/** The checkpoint that is being saved. Its disks are not to stop or start under it. */
+export function savingOf(life: Lifecycle): Saving | null {
+	return life.phase === "ready" || life.phase === "off" ? (life.saving ?? null) : null;
 }
 
 export function takenPorts(state: LabState): ReadonlySet<PortNo> {
@@ -263,7 +278,9 @@ export function planLink(
 
 /** Those of the machines that are off or failed. */
 export function planBoot(state: LabState, names: readonly MachineName[]): readonly BootPlan[] | PlanError {
-	const machines = [...new Set(names)].flatMap((name) => state.machines[name] ?? []);
+	const machines = [...new Set(names)]
+		.flatMap((name) => state.machines[name] ?? [])
+		.filter(({ life }) => savingOf(life) === null);
 	const unplugged = machines.filter((machine) => machine.life.phase === "failed");
 	const ports = claimPorts(
 		state,
@@ -280,13 +297,24 @@ export function planBoot(state: LabState, names: readonly MachineName[]): readon
 	});
 }
 
+/** What going back to the checkpoint of that number would take, or null when the machine cannot now. */
+export function planRestore(state: LabState, name: MachineName, set: number): RestorePlan | PlanError | null {
+	const machine = state.machines[name];
+	if (!machine?.sets.checkpoints.some((checkpoint) => checkpoint.set === set)) return null;
+	const { life, spec } = machine;
+	if (!ACCEPTS[life.phase].restore || savingOf(life)) return null;
+	if (life.phase !== "failed") return { machine: name, set, ports: nicPortsOf(life) };
+	const ports = claimPorts(state, pluggedNics(spec.nics));
+	return isPlanError(ports) ? ports : { machine: name, set, ports: nicPorts(spec.nics, ports) };
+}
+
 function claimPorts(state: LabState, wanted: number): readonly PortNo[] | PlanError {
 	const ports = lowestFreePorts(state, wanted);
 	return ports.length < wanted ? { kind: "no-ports", free: ports.length, wanted } : ports;
 }
 
 /** Both are plain data that one planner laid out. */
-function samePlan(a: SpawnPlan["machines"] | readonly BootPlan[], b: typeof a): boolean {
+function samePlan(a: SpawnPlan["machines"] | readonly BootPlan[] | RestorePlan, b: typeof a): boolean {
 	return JSON.stringify(a) === JSON.stringify(b);
 }
 
@@ -328,13 +356,40 @@ function attachEffects({ name, life }: Machine): Effect[] {
 	return cablesOf(life).map(({ port, nic }) => ({ type: "port/attach", port, machine: name, nic }));
 }
 
-function bootEffect({ n, name, mac, spec, life }: Machine, state: LabState): Effect {
+function bootEffect({ n, name, mac, spec, life, sets }: Machine, state: LabState): Effect {
 	return {
 		type: "vm/boot",
 		machine: name,
 		attempt: life.attempt,
-		config: { identity: { n, name, mac }, spec, hosts: hostsFor(state) },
+		config: { identity: { n, name, mac }, spec, set: sets.live, hosts: hostsFor(state) },
 	};
+}
+
+function diskCopy({ n, name, spec, life }: Machine, checkpoint: CheckpointName, from: number, to: number): DiskCopy {
+	return { machine: name, attempt: life.attempt, n, extras: spec.disks.extra.length, checkpoint, from, to };
+}
+
+/** The machine on its way back to a checkpoint. A new attempt, so nothing its last guest says is about this. */
+function restoring(
+	machine: Machine,
+	from: Checkpoint,
+	attempt: number,
+	plugs: readonly Plug[],
+	closed: readonly SessionId[],
+): Machine {
+	const set = machine.sets.next;
+	return {
+		...machine,
+		sets: { ...machine.sets, next: set + 1 },
+		unsaved: null,
+		life: { phase: "restoring", attempt, from, set, percent: 0, plugs, closed },
+	};
+}
+
+function restoreEffects(machine: Machine): Effect[] {
+	if (machine.life.phase !== "restoring") return [];
+	const { from, set } = machine.life;
+	return [{ type: "checkpoint/restore", copy: diskCopy(machine, from.name, from.set, set) }];
 }
 
 /**
@@ -354,6 +409,9 @@ export interface BootNode {
 	failure?: string;
 	/** It is there, but it does not boot. */
 	off?: boolean;
+	sets?: DiskSets;
+	/** A checkpoint it was going back to. */
+	restore?: Checkpoint;
 	identity: ReturnType<typeof identity>;
 	hue: HueNo;
 	spec: MachineSpec;
@@ -364,10 +422,10 @@ export function bootMachines(state: LabState, nodes: readonly BootNode[], nextN:
 	const machines = { ...state.machines };
 	const sessions = { ...state.sessions };
 	const added: Machine[] = [];
-	for (const { identity: id, hue, spec, plugs, failure, off } of nodes) {
+	for (const { identity: id, hue, spec, plugs, failure, off, restore, sets = FIRST_SETS } of nodes) {
 		const tab: SessionId = `${id.name}:console`;
 		const attempt = (state.departed[id.name]?.attempt ?? 0) + 1;
-		const machine: Machine = {
+		const spawned: Machine = {
 			...id,
 			life:
 				failure !== undefined
@@ -381,7 +439,10 @@ export function bootMachines(state: LabState, nodes: readonly BootNode[], nextN:
 			activeSession: tab,
 			nextShell: 1,
 			lastStop: null,
+			sets,
+			unsaved: null,
 		};
+		const machine = restore ? restoring(spawned, restore, attempt, plugs, []) : spawned;
 		machines[id.name] = machine;
 		sessions[tab] = { id: tab, machine: id.name, kind: "console", state: "open", shell: "unknown", agentLines: false };
 		added.push(machine);
@@ -398,6 +459,7 @@ export function bootMachines(state: LabState, nodes: readonly BootNode[], nextN:
 		{ type: "screen/create", session: machine.activeSession },
 		...attachEffects(machine),
 		...(machine.life.phase === "booting" ? [bootEffect(machine, next)] : []),
+		...restoreEffects(machine),
 	]);
 	return step(next, effects);
 }
@@ -438,14 +500,15 @@ function shellsClosed(state: LabState, machine: Machine): { state: LabState; mac
 }
 
 /**
- * A boot that errs or times out, or a guest that dies. The cables are
- * withdrawn and the ports freed. The console stays for scrolling back.
+ * A boot that errs or times out, a guest that dies, or a checkpoint that cannot
+ * be gone back to. The cables are withdrawn and the ports freed. The console
+ * stays for scrolling back.
  */
 export function fail(state: LabState, name: MachineName, attempt: number, reason: string): Step {
 	const machine = onAttempt(state, name, attempt);
 	if (!machine) return step(state);
 	const { life } = machine;
-	if (life.phase !== "booting" && life.phase !== "ready" && life.phase !== "stopping") return step(state);
+	if (!FAILS.includes(life.phase)) return step(state);
 
 	const alone = shellsClosed(state, machine);
 	const effects: Effect[] = [
@@ -498,7 +561,8 @@ export function power(state: LabState, names: readonly MachineName[], next: Next
 	for (const name of new Set(names)) {
 		result = andThen(result, (s) => {
 			const machine = s.machines[name];
-			return machine && ACCEPTS[machine.life.phase].commands ? stopping(s, machine, next, next) : step(s);
+			const takes = machine && ACCEPTS[machine.life.phase].commands && !savingOf(machine.life);
+			return takes ? stopping(s, machine, next, next) : step(s);
 		});
 	}
 	return result;
@@ -596,7 +660,7 @@ function gone(state: LabState, machine: Machine): Step {
 	const effects = portsOf(machine.life).map((port): Effect => ({ type: "port/detach", port }));
 	for (const session of machine.sessions) effects.push({ type: "screen/dispose", session });
 	effects.push(
-		{ type: "disks/delete", n: machine.n },
+		{ type: "disks/delete", n: machine.n, sets: Array.from({ length: machine.sets.next }, (_, set) => set) },
 		{ type: "hosts/publish", hosts: hostsFor(next) },
 		{ type: "announce", text: `${name} removed` },
 	);
@@ -629,6 +693,126 @@ export function bootStopped(state: LabState, plan: readonly BootPlan[], at: numb
 		});
 	}
 	return result;
+}
+
+/** A person's name for the machine's disks as they are now. Ignored unless it is free. */
+export function saveCheckpoint(state: LabState, name: MachineName, checkpoint: CheckpointName): Step {
+	const machine = state.machines[name];
+	if (machine?.life.phase !== "ready" && machine?.life.phase !== "off") return step(state);
+	const { life, sets } = machine;
+	if (life.saving || sets.checkpoints.some((other) => other.name === checkpoint)) return step(state);
+	const set = sets.next;
+	const saving: Machine = {
+		...machine,
+		sets: { ...sets, next: set + 1 },
+		unsaved: null,
+		life: { ...life, saving: { name: checkpoint, set, percent: 0 } },
+	};
+	return step(put(state, saving), [
+		{ type: "checkpoint/save", copy: diskCopy(machine, checkpoint, sets.live, set) },
+		{ type: "announce", text: `saving checkpoint ${checkpoint} of ${name}` },
+	]);
+}
+
+/** How much of the set that a machine is writing has been written. */
+export function checkpointProgress(
+	state: LabState,
+	name: MachineName,
+	attempt: number,
+	set: number,
+	percent: number,
+): Step {
+	const machine = onAttempt(state, name, attempt);
+	if (!machine) return step(state);
+	const { life } = machine;
+	if (life.phase === "restoring" && life.set === set)
+		return step(put(state, { ...machine, life: patch(life, { percent }) }));
+	const saving = savingOf(life);
+	if ((life.phase !== "ready" && life.phase !== "off") || saving?.set !== set) return step(state);
+	return step(put(state, { ...machine, life: { ...life, saving: patch(saving, { percent }) } }));
+}
+
+/** The machine, no longer saving the set, or null when it was not. */
+function savingOver(state: LabState, name: MachineName, attempt: number, set: number): [Machine, Saving] | null {
+	const machine = onAttempt(state, name, attempt);
+	if (machine?.life.phase !== "ready" && machine?.life.phase !== "off") return null;
+	const { saving, ...life } = machine.life;
+	return saving?.set === set ? [{ ...machine, life }, saving] : null;
+}
+
+export function checkpointSaved(state: LabState, name: MachineName, attempt: number, set: number, bytes: number): Step {
+	const over = savingOver(state, name, attempt, set);
+	if (!over) return step(state);
+	const [machine, saving] = over;
+	const checkpoints = [...machine.sets.checkpoints, { name: saving.name, set, bytes }];
+	return step(put(state, { ...machine, sets: { ...machine.sets, checkpoints } }), [
+		{ type: "announce", text: `checkpoint ${saving.name} of ${name} saved` },
+	]);
+}
+
+export function checkpointUnsaved(
+	state: LabState,
+	name: MachineName,
+	attempt: number,
+	set: number,
+	reason: string,
+): Step {
+	const over = savingOver(state, name, attempt, set);
+	if (!over) return step(state);
+	return step(put(state, { ...over[0], unsaved: { set, reason } }), [{ type: "announce", text: reason }]);
+}
+
+/** The guest is dropped, as its disks are, and the machine keeps its cables in. Ignored unless that is still the plan. */
+export function restore(state: LabState, plan: RestorePlan): Step {
+	const fresh = planRestore(state, plan.machine, plan.set);
+	if (fresh === null || isPlanError(fresh) || !samePlan(fresh, plan)) return step(state);
+	const machine = state.machines[fresh.machine];
+	const from = machine?.sets.checkpoints.find(({ set }) => set === fresh.set);
+	if (!machine || !from) return step(state);
+	const { name, life } = machine;
+	const alone = shellsClosed(state, machine);
+	const [, ...closed] = machine.sessions;
+	const held = life.phase === "failed" ? null : plugsOf(life);
+	const back = restoring(alone.machine, from, life.attempt + 1, held ?? plugInto(fresh.ports), closed);
+	const doing = `${name} going back to checkpoint ${from.name}`;
+	const said = closed.length === 0 ? doing : [`${doing}.`, ...closedWithIt(closed)].join(" ");
+	return step(put(alone.state, { ...back, lastStop: held ? "clean" : null }), [
+		...linksDown(machine, "power"),
+		{ type: "vm/stop", machine: name, attempt: back.life.attempt, how: "drop" },
+		...(held ? [] : attachEffects(back)),
+		...alone.effects,
+		{ type: "announce", text: said },
+		...restoreEffects(back),
+	]);
+}
+
+/** The copy is whole, so it is what the machine has from here on. */
+export function restored(state: LabState, name: MachineName, attempt: number, set: number, at: number): Step {
+	const machine = onAttempt(state, name, attempt);
+	if (machine?.life.phase !== "restoring" || machine.life.set !== set) return step(state);
+	const { plugs, from, closed } = machine.life;
+	const replaced = machine.sets.live;
+	const booting = boot({ ...machine, sets: { ...machine.sets, live: set } }, plugs, at);
+	const after = put({ ...state, now: later(state.now, at) }, booting);
+	const note = [`${name} is back at checkpoint ${from.name}.`, ...closedWithIt(closed)].join(" ");
+	return step(after, [
+		{ type: "screen/note", session: machine.sessions[0], text: note },
+		{ type: "disks/delete", n: machine.n, sets: [replaced] },
+		bootEffect(booting, after),
+	]);
+}
+
+/** A checkpoint that the machine is going back to stays until it has. */
+export function forget(state: LabState, name: MachineName, set: number): Step {
+	const machine = state.machines[name];
+	if (!machine || machine.life.phase === "removing") return step(state);
+	if (machine.life.phase === "restoring" && machine.life.from.set === set) return step(state);
+	const checkpoints = machine.sets.checkpoints.filter((checkpoint) => checkpoint.set !== set);
+	if (checkpoints.length === machine.sets.checkpoints.length) return step(state);
+	return step(put(state, { ...machine, sets: { ...machine.sets, checkpoints } }), [
+		{ type: "disks/delete", n: machine.n, sets: [set] },
+		{ type: "announce", text: `checkpoint of ${name} deleted` },
+	]);
 }
 
 export function link(state: LabState, changes: readonly LinkChange[], cause: Cause): Step {

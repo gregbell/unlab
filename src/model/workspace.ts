@@ -8,12 +8,14 @@ import {
 	parseAddress,
 	parseDefaultName,
 } from "../net/index.ts";
-import { MAX_EXTRA_DISKS, parseGiB } from "./disks.ts";
-import { identity, parseMachineName } from "./identity.ts";
+import { FIRST_SETS, MAX_EXTRA_DISKS, parseGiB } from "./disks.ts";
+import { identity, parseCheckpointName, parseMachineName } from "./identity.ts";
 import { type BootNode, bootMachines, machineList, plugsOf } from "./machines.ts";
 import { addPanes, focusPane, keyboardHolder, parkPane, toggleMaximise } from "./panes.ts";
 import {
+	type Checkpoint,
 	DISK_SIZES,
+	type DiskSets,
 	type Disks,
 	HUES,
 	type Identity,
@@ -24,10 +26,10 @@ import {
 	type Step,
 } from "./types.ts";
 
-/** 1 had one NIC, saved in the machine itself. 2 had no addresses and no choice of gateway. 3 had no names. 4 had no extra disks. */
-const VERSIONS = [1, 2, 3, 4, 5] as const;
+/** 1 had one NIC, saved in the machine itself. 2 had no addresses and no choice of gateway. 3 had no names. 4 had no extra disks. 5 had no checkpoints. */
+const VERSIONS = [1, 2, 3, 4, 5, 6] as const;
 type Version = (typeof VERSIONS)[number];
-const VERSION = 5;
+const VERSION = 6;
 
 export function saveWorkspace(state: LabState): string {
 	const nodes = machineList(state)
@@ -49,6 +51,9 @@ export function saveWorkspace(state: LabState): string {
 					};
 				}),
 				failure: m.life.phase === "failed" ? m.life.reason : undefined,
+				sets: m.sets,
+				// A restore that a reload cuts short is done again from the start, and one that is not in here never was.
+				restore: m.life.phase === "restoring" ? m.life.from.set : undefined,
 				// A stop that a reload cuts short ends as it was going to.
 				off: m.life.phase === "off" || (m.life.phase === "stopping" && m.life.next === "off") ? true : undefined,
 			};
@@ -111,10 +116,36 @@ function readDisks(saved: unknown): Disks {
 	};
 }
 
+const isCount = (v: unknown): v is number => typeof v === "number" && Number.isSafeInteger(v) && v >= 0;
+
+function readCheckpoint(saved: unknown): Checkpoint {
+	if (!record(saved)) return invalid();
+	const name = typeof saved.name === "string" ? parseCheckpointName(saved.name) : null;
+	const { set, bytes } = saved;
+	return name && isCount(set) && isCount(bytes) ? { name, set, bytes } : invalid();
+}
+
+function readSets(saved: unknown): DiskSets {
+	if (!record(saved) || !isCount(saved.live) || !isCount(saved.next) || !Array.isArray(saved.checkpoints))
+		return invalid();
+	const { live, next } = saved;
+	const checkpoints = saved.checkpoints.map(readCheckpoint);
+	const sets = [live, ...checkpoints.map(({ set }) => set)];
+	const names = checkpoints.map(({ name }) => name);
+	const distinct = new Set(sets).size === sets.length && new Set(names).size === names.length;
+	return distinct && sets.every((set) => set < next) ? { live, next, checkpoints } : invalid();
+}
+
+function readRestore(saved: unknown, { checkpoints }: DiskSets): Checkpoint | undefined {
+	return saved === undefined ? undefined : (checkpoints.find(({ set }) => set === saved) ?? invalid());
+}
+
 /** A machine as this version would have saved it. */
 function upgraded(version: Version, machine: Record<string, unknown>, n: number): Record<string, unknown> {
 	if (version === VERSION) return machine;
-	const disked = { ...machine, disks: { root: machine.diskGiB ?? "4", extra: [] } };
+	const numbered = { ...machine, sets: FIRST_SETS };
+	if (version === 5) return numbered;
+	const disked = { ...numbered, disks: { root: machine.diskGiB ?? "4", extra: [] } };
 	if (version === 4) return disked;
 	const named = { ...disked, name: defaultName(n) };
 	if (version === 3) return named;
@@ -157,6 +188,7 @@ export function restoreWorkspace(base: LabState, raw: string | null): Step {
 			taken.add(plug.port);
 		}
 		const disks = readDisks(m.disks);
+		const sets = readSets(m.sets);
 		if (
 			!hue ||
 			typeof m.gateway !== "boolean" ||
@@ -171,6 +203,8 @@ export function restoreWorkspace(base: LabState, raw: string | null): Step {
 			identity: id,
 			failure: typeof m.failure === "string" ? m.failure : undefined,
 			off: m.off === true,
+			sets,
+			restore: readRestore(m.restore, sets),
 			hue,
 			spec: {
 				image: m.image,

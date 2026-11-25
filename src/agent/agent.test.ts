@@ -78,6 +78,9 @@ const ALL_TOOLS: readonly ToolName[] = [
 	"machines_reboot",
 	"machines_poweroff",
 	"machines_remove",
+	"checkpoint_save",
+	"checkpoint_restore",
+	"checkpoint_remove",
 	"shell_exec",
 	"shell_read",
 	"link_set",
@@ -168,6 +171,7 @@ describe("registration", () => {
 		const { context } = await setup();
 		expect([...context.tools.values()].map((tool) => tool.title).sort()).toEqual([
 			"Boot machines",
+			"Delete a checkpoint",
 			"List machines",
 			"Plug in or cut cables",
 			"Power machines off",
@@ -176,7 +180,9 @@ describe("registration", () => {
 			"Read captured frames",
 			"Reboot machines",
 			"Remove machines",
+			"Restore a checkpoint",
 			"Run a shell command",
+			"Save a checkpoint",
 		]);
 		const long = [...context.tools.values()].flatMap(({ name, description, inputSchema }) => [
 			...(name.length > 30 ? [name] : []),

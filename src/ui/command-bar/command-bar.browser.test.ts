@@ -188,6 +188,9 @@ describe("<unlab-command-bar> CmdOpen: just opened", () => {
 			"boot",
 			"reboot",
 			"poweroff",
+			"checkpoint",
+			"restore",
+			"forget",
 		]);
 		const listbox = the('[role="listbox"]');
 		expect(listbox.offsetHeight).toBe(8 * 32 + 2 * 28);

@@ -15,6 +15,10 @@ export const boot = defineVerb({
 		const plans = planBoot(lab, a.names.machines);
 		if (isPlanError(plans)) return refuse(planErrorSentence(plans), "names");
 		const machines = plans.flatMap(({ machine }) => lab.machines[machine] ?? []);
+		const busy = a.names.machines.find(
+			(name) => lab.machines[name]?.life.phase === "off" && !plans.some((p) => p.machine === name),
+		);
+		if (busy) return refuse(`${busy} is saving a checkpoint, so wait until it is done.`, "names");
 		const running = a.names.machines.find((name) => !plans.some(({ machine }) => machine === name));
 		if (running) return refuse(`${running} is not off, and it has not failed.`, "names");
 		return { plans, machines, skipped: a.names.skipped };
