@@ -4,6 +4,7 @@
 
 import { type CommandService, DEFAULT_CPUS, isLineError, type LineError, spawn } from "../../commands/index.ts";
 import {
+	DEFAULT_SWITCH,
 	type DiskSize,
 	type HueNo,
 	isPlanError,
@@ -14,7 +15,6 @@ import {
 	PORTS,
 	planSpawn,
 	type SpawnRequest,
-	SWITCH_NAME,
 	takenPorts,
 } from "../../model/index.ts";
 import { addressStr } from "../../net/index.ts";
@@ -73,7 +73,7 @@ export function defaultChoice(lab: LabState): SpawnChoice {
 		disk: "4",
 		extraDisk: null,
 		nics: 1,
-		net: SWITCH_NAME,
+		net: DEFAULT_SWITCH,
 		name: null,
 		addr: null,
 		gateway: "on",
@@ -92,7 +92,7 @@ function requestOf({ image, mem, disk, net }: SpawnChoice): SpawnRequest {
 		image,
 		memMiB: mem,
 		disks: { root: disk, extra: [] },
-		gateway: net === SWITCH_NAME,
+		gateway: net !== "none",
 		nics: [{ net, address: "default" }],
 	};
 }
@@ -110,7 +110,7 @@ function networkNote(choice: SpawnChoice, lab: LabState): string {
 			: "They boot with no cable. Plug them in later from the switch.";
 	}
 	const left = PORTS.length - takenPorts(lab).size - choice.count;
-	return `${Math.max(0, left)} of ${PORTS.length} ports left on ${SWITCH_NAME} afterwards.`;
+	return `${Math.max(0, left)} of ${PORTS.length} ports left on ${DEFAULT_SWITCH} afterwards.`;
 }
 
 function machinesOf(choice: SpawnChoice, lab: LabState): readonly NewMachine[] {

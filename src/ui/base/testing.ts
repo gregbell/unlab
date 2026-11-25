@@ -12,6 +12,7 @@ import {
 	type CommandEvent,
 	createStore,
 	DEFAULT_POLICIES,
+	DEFAULT_SWITCH,
 	type Effect,
 	initialState,
 	isNameFault,
@@ -56,14 +57,14 @@ export function lab(...steps: readonly Step[]): LabState {
 export const spawn =
 	(count: number, ...nets: readonly NicSpec["net"][]): Step =>
 	(state) => {
-		const nics = (nets.length > 0 ? nets : ["switch0" as const]).map(
+		const nics = (nets.length > 0 ? nets : [DEFAULT_SWITCH]).map(
 			(net, nic): NicRequest => ({ net, address: nic === 0 ? "default" : null }),
 		);
 		const plan = planSpawn(state, count, {
 			image: "alpine",
 			memMiB: 256,
 			disks: { root: "4", extra: [] },
-			gateway: nics[0].net === "switch0",
+			gateway: nics[0].net !== "none",
 			nics,
 		});
 		if (isPlanError(plan)) throw new Error(`cannot spawn ${count}: ${plan.kind}`);
@@ -77,7 +78,7 @@ export const spawnAt =
 		const nics = addresses.map((text): NicRequest => {
 			const address = text === null ? null : parseAddress(text);
 			if (address && isAddressFault(address)) throw new Error(`${text}: ${address.kind}`);
-			return { net: "switch0", address };
+			return { net: DEFAULT_SWITCH, address };
 		});
 		const plan = planSpawn(state, 1, {
 			image: "alpine",
@@ -103,7 +104,7 @@ export function named(text: string): MachineName {
 export const spawnNamed =
 	(name: MachineName) =>
 	(state: LabState): readonly CommandEvent[] => {
-		const nics: NicRequest[] = [{ net: "switch0", address: "default" }];
+		const nics: NicRequest[] = [{ net: DEFAULT_SWITCH, address: "default" }];
 		const plan = planSpawn(state, 1, {
 			image: "alpine",
 			memMiB: 256,

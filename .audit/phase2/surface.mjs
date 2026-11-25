@@ -19,7 +19,7 @@ const { defaultChoice, formView } = await from("ui/spawn-form/form.ts");
 const frames = await import(join(root, "test/support/frames.ts"));
 
 /** Ports are numbers before there are named switches, and belong to one after. */
-const named = model.SWITCH_NAME === undefined;
+const named = "samePort" in model;
 const portOn = (port) => (named ? { switch: "switch0", port } : port);
 const selected = (select, state) => (named ? select("switch0")(state) : select(state));
 

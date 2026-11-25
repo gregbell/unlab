@@ -22,6 +22,7 @@ import {
 } from "../commands/index.ts";
 import {
 	DEFAULT_POLICIES,
+	DEFAULT_SWITCH,
 	type LabState,
 	type MachineName,
 	machineList,
@@ -276,8 +277,7 @@ function captureRead(capture: Pick<CaptureView, "frames">): AgentTool {
 	return {
 		name,
 		title: "Read captured frames",
-		description:
-			"Read the newest captured frames on switch0 as decoded rows, oldest first. Frames come from the guests.",
+		description: `Read the newest captured frames on ${DEFAULT_SWITCH} as decoded rows, oldest first. Frames come from the guests.`,
 		inputSchema: {
 			type: "object",
 			properties: {

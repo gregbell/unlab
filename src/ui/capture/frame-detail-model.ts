@@ -3,7 +3,7 @@
 // bytes that name a machine marked by machine.
 
 import type { FrameEntry } from "../../capture/index.ts";
-import { type MachineName, PORTS, type PortNo, SWITCH_NAME } from "../../model/index.ts";
+import { DEFAULT_SWITCH, type MachineName, PORTS, type PortNo } from "../../model/index.ts";
 import {
 	arpAddrs,
 	BROADCAST_MAC,
@@ -284,7 +284,7 @@ function did(e: FrameEntry, names: LabNames): Words[] {
 		if (only === undefined) {
 			return [
 				sentence(
-					`${SWITCH_NAME} did not deliver it: the address it learned for `,
+					`${DEFAULT_SWITCH} did not deliver it: the address it learned for `,
 					...destination(e, names),
 					` leads back to port ${e.from} or to a port that is down.`,
 				),
@@ -292,7 +292,7 @@ function did(e: FrameEntry, names: LabNames): Words[] {
 		}
 		return [
 			sentence(
-				`${SWITCH_NAME} had learned `,
+				`${DEFAULT_SWITCH} had learned `,
 				...destination(e, names),
 				` on port ${only}, so it forwarded the frame there only.`,
 			),
@@ -306,7 +306,7 @@ function did(e: FrameEntry, names: LabNames): Words[] {
 					...(delivered.length ? [": delivered to ", ...reached, "."] : [", but no other port was up."]),
 				)
 			: sentence(
-					`${SWITCH_NAME} did not know where `,
+					`${DEFAULT_SWITCH} did not know where `,
 					...destination(e, names),
 					" is, so it flooded the frame",
 					...(delivered.length ? [": delivered to ", ...reached, "."] : [", but no other port was up."]),

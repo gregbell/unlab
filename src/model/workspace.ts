@@ -14,6 +14,7 @@ import { type BootNode, bootMachines, machineList, plugsOf } from "./machines.ts
 import { addPanes, focusPane, keyboardHolder, parkPane, toggleMaximise } from "./panes.ts";
 import {
 	type Checkpoint,
+	DEFAULT_SWITCH,
 	DISK_SIZES,
 	type DiskSets,
 	type Disks,
@@ -26,7 +27,6 @@ import {
 	type Plug,
 	PORTS,
 	type Step,
-	SWITCH_NAME,
 } from "./types.ts";
 
 export function saveWorkspace(state: LabState): string {
@@ -86,7 +86,7 @@ function readNic(saved: unknown): SavedNic {
 	if (
 		(saved.port !== null && !port) ||
 		typeof saved.cut !== "boolean" ||
-		(saved.net !== "none" && saved.net !== "switch0")
+		(saved.net !== "none" && saved.net !== DEFAULT_SWITCH)
 	)
 		return invalid();
 	return {
@@ -165,7 +165,7 @@ const UPGRADES: readonly ((lab: SavedLab) => SavedLab)[] = [
 		if (!eth0) return invalid();
 		const address = addressStr(defaultAddress(node.n));
 		return {
-			gateway: eth0.net === SWITCH_NAME,
+			gateway: eth0.net === DEFAULT_SWITCH,
 			nics: [{ ...eth0, address }, ...rest.map((nic) => ({ ...nic, address: null }))],
 		};
 	}),

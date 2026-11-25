@@ -15,7 +15,11 @@ export type HueNo = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
 export const PORTS: readonly PortNo[] = [1, 2, 3, 4, 5, 6, 7, 8];
 export const HUES: readonly HueNo[] = [1, 2, 3, 4, 5, 6, 7, 8];
 export const MAX_MACHINES = 8;
-export const SWITCH_NAME = "switch0";
+/** The switch that every lab has. */
+export const DEFAULT_SWITCH = "switch0" as const;
+declare const switchName: unique symbol;
+/** What a switch goes by: the default one's name, or one that was chosen and checked. */
+export type SwitchName = typeof DEFAULT_SWITCH | (string & { readonly [switchName]: true });
 /** What a command takes for every machine. */
 export const ALL_MACHINES = "all";
 
@@ -104,7 +108,7 @@ export interface Saving {
 export const MAX_MEM_MIB = 4096;
 
 export interface NicSpec {
-	readonly net: "switch0" | "none";
+	readonly net: SwitchName | "none";
 	/** What the lab sets on it at every boot. Null leaves it up with none. */
 	readonly address: Address | null;
 }
@@ -326,7 +330,7 @@ export interface LogEntry {
 export type View = "lab" | "spawn";
 
 /** The panels under the panes, left to right, which is also their order in the panel bar. */
-export const PANELS = ["capture", "switch0"] as const;
+export const PANELS = ["capture", DEFAULT_SWITCH] as const;
 export type PanelName = (typeof PANELS)[number];
 
 export interface Panels {
@@ -351,6 +355,8 @@ export interface LabState {
 	readonly rail: readonly MachineName[];
 	/** The last machine of each name that is gone. Frames still name it, and the name's next machine boots on from its attempt. */
 	readonly departed: Readonly<Partial<Record<MachineName, Departed>>>;
+	/** In the order they are shown. */
+	readonly switches: readonly [typeof DEFAULT_SWITCH, ...SwitchName[]];
 	readonly sessions: Readonly<Partial<Record<SessionId, Session>>>;
 	readonly panes: Panes;
 	readonly keyboard: Keyboard;

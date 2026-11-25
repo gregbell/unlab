@@ -10,7 +10,14 @@ import "../switch/switch.ts";
 import "../spawn-form/spawn-form.ts";
 import { ContextProvider } from "@lit/context";
 import { html, LitElement, nothing, type PropertyValues, type TemplateResult } from "lit";
-import { type PanelName, parkedPanels, selectTiling, type UiEvent, visiblePanels } from "../../model/index.ts";
+import {
+	DEFAULT_SWITCH,
+	type PanelName,
+	parkedPanels,
+	selectTiling,
+	type UiEvent,
+	visiblePanels,
+} from "../../model/index.ts";
 import { AGENT_PANEL_ID } from "../agent-panel/agent-panel.ts";
 import { modalOpen, plusIcon, Select, servicesContext } from "../base/index.ts";
 import type { AppServices } from "../services.ts";
@@ -123,7 +130,7 @@ export class UnlabApp extends LitElement {
 						<div id=${DOCK_ID} class="dock" ?data-maximised=${maximised !== null} ?hidden=${empty || panels.length === 0}
 							style=${dockDivider ? `--dock-columns: ${columns}; --dock-divider: ${dockDivider}` : nothing}>
 							${panels.includes("capture") ? html`<unlab-capture data-panel="capture" mode=${maximised ? "full" : "dock"}></unlab-capture>` : nothing}
-							${panels.includes("switch0") ? html`<unlab-switch data-panel="switch0" ?compact=${!maximised}></unlab-switch>` : nothing}
+							${panels.includes(DEFAULT_SWITCH) ? html`<unlab-switch data-panel=${DEFAULT_SWITCH} ?compact=${!maximised}></unlab-switch>` : nothing}
 						</div>
 					</main>
 				</div>

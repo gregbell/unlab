@@ -222,13 +222,13 @@ function addressClash(spec: MachineSpec, held: ReadonlyMap<number, NicRef>): Pla
 }
 
 function pluggedNics(nics: readonly Pick<NicSpec, "net">[]): number {
-	return nics.filter((nic) => nic.net === "switch0").length;
+	return nics.filter((nic) => nic.net !== "none").length;
 }
 
 /** The claimed ports, in order, to the NICs that plug in. */
 function nicPorts(nics: readonly Pick<NicSpec, "net">[], ports: readonly PortNo[]): NicPorts {
 	let next = 0;
-	return nics.map((nic) => (nic.net === "switch0" ? ports[next++] : null));
+	return nics.map((nic) => (nic.net === "none" ? null : ports[next++]));
 }
 
 function plugInto(ports: NicPorts): readonly Plug[] {

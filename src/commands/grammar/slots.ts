@@ -3,6 +3,7 @@ import {
 	ALL_MACHINES,
 	addressText,
 	type CheckpointName,
+	DEFAULT_SWITCH,
 	type GiB,
 	isNameFault,
 	type LabState,
@@ -140,7 +141,7 @@ export interface CableSelection {
 	readonly written: string;
 }
 
-const NETWORKS: readonly NicSpec["net"][] = ["switch0", "none"];
+const NETWORKS: readonly NicSpec["net"][] = [DEFAULT_SWITCH, "none"];
 
 /** The state a machine is in, as a reason to leave it out. */
 export const PHASE_REASON: Readonly<Record<Phase, string>> = {
@@ -661,9 +662,8 @@ export function networks(): Value<string> {
 	return {
 		kind: "positional",
 		label: "network,...",
-		noun: "switch0 or none",
-		about:
-			"switch0 or none for every NIC, or a comma list with one for each, eth0 first, such as switch0,none. A NIC with none boots unplugged.",
+		noun: `${DEFAULT_SWITCH} or none`,
+		about: `${DEFAULT_SWITCH} or none for every NIC, or a comma list with one for each, eth0 first, such as ${DEFAULT_SWITCH},none. A NIC with none boots unplugged.`,
 		read(text) {
 			for (const { part, ...span } of listParts(text)) {
 				if (NETWORKS.every((network) => network !== part)) return new Miss(undefined, span);
