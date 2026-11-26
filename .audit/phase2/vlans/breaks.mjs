@@ -160,6 +160,20 @@ export const BREAKS = [
 		tests: [{ kind: "browser", files: ["src/ui/switch/switch.browser.test.ts"], grep: "VLAN" }],
 	},
 	{
+		name: "vlan is a word that nothing may be called",
+		file: "src/net/filter.ts",
+		from: "[...FILTER_PROTOCOLS, OR, PORT_WORD];",
+		to: '[...FILTER_PROTOCOLS, OR, PORT_WORD, "vlan"];',
+		tests: [savedUnit],
+	},
+	{
+		name: "vlan alone never names a machine or a switch",
+		file: "src/net/filter.ts",
+		from: "|| !isNamed(word, known))",
+		to: "|| true)",
+		tests: [savedUnit],
+	},
+	{
 		name: "e2e: every port carries every VLAN",
 		file: FABRIC,
 		from: "const carries = (mode: Mode, vlan: number): boolean => (mode.trunk ? allows(mode, vlan) : mode.vlan === vlan);",
