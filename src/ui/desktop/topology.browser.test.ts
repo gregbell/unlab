@@ -77,7 +77,8 @@ async function topology(state: LabState) {
 		...mounted,
 		map,
 		note: (name: string) => nodeOf(name).querySelector("small")?.textContent?.replaceAll("\u00a0", " "),
-		description: (name: string) => nodeOf(name).getAttribute("aria-description"),
+		/** The node, for what it says to a screen reader. */
+		described: (name: string) => page.elementLocator(nodeOf(name)),
 		/** Each line's state, by the nodes its ends are on, as `switch0 node1 up`. */
 		lines: () => {
 			const centre = (el: Element) => {
@@ -103,7 +104,7 @@ async function topology(state: LabState) {
 
 describe("the Topology window", () => {
 	it("draws every switch, machine and cable, and says which NIC and which port each cable goes to", async () => {
-		const { map, lines, note, description } = await topology(wired());
+		const { map, lines, note, described } = await topology(wired());
 		expect([...map.querySelectorAll(".n-node strong")].map((name) => name.textContent)).toEqual([
 			"switch0",
 			"lan",
@@ -122,16 +123,22 @@ describe("the Topology window", () => {
 		]);
 		expect(note("node3")).toBe("alpine · eth0 switch0:3 · eth1 lan:1");
 		expect(note("node1")).toBe("alpine");
-		expect(description("node3")).toBe("eth0 · to switch0 port 3 · up. eth1 · to lan port 1 · up");
-		expect(description("node1")).toBe("eth0 · to switch0 port 1 · up");
-		expect(description("switch0")).toBe(
-			"Port 1 · node1 · up. Port 2 · node2 · up. Port 3 · node3:eth0 · up. Port 8 · to lan port 8 · up",
-		);
-		expect(description("lan")).toBe("Port 1 · node3:eth1 · up. Port 2 · node4 · up. Port 8 · to switch0 port 8 · up");
+		await expect
+			.element(described("node3"))
+			.toHaveAccessibleDescription("eth0 · to switch0 port 3 · up. eth1 · to lan port 1 · up");
+		await expect.element(described("node1")).toHaveAccessibleDescription("eth0 · to switch0 port 1 · up");
+		await expect
+			.element(described("switch0"))
+			.toHaveAccessibleDescription(
+				"Port 1 · node1 · up. Port 2 · node2 · up. Port 3 · node3:eth0 · up. Port 8 · to lan port 8 · up",
+			);
+		await expect
+			.element(described("lan"))
+			.toHaveAccessibleDescription("Port 1 · node3:eth1 · up. Port 2 · node4 · up. Port 8 · to switch0 port 8 · up");
 	});
 
 	it("follows each command without a reload: a moved, cut and impaired cable, a VLAN, a trunk and a storm", async () => {
-		const { element, store, settle, lines, note, description } = await topology(wired());
+		const { element, store, settle, lines, note, described } = await topology(wired());
 		const step = async (...steps: Step[]) => {
 			send(store, ...steps);
 			await settle();
@@ -140,7 +147,7 @@ describe("the Topology window", () => {
 		await step({ type: "cmd/plug", plan: { machine: node(1), nic: 0, to: port(lan, 3) }, cause: "bar" });
 		expect(lines()).toContain("lan node1 up");
 		expect(lines()).not.toContain("switch0 node1 up");
-		expect(description("node1")).toBe("eth0 · to lan port 3 · up");
+		await expect.element(described("node1")).toHaveAccessibleDescription("eth0 · to lan port 3 · up");
 
 		await step(link("down", node(2)), {
 			type: "cmd/cable-link",
@@ -149,25 +156,31 @@ describe("the Topology window", () => {
 		});
 		expect(lines()).toContain("switch0 node2 cut");
 		expect(lines()).toContain("switch0 lan cut");
-		expect(description("node2")).toBe("eth0 · to switch0 port 2 · cut");
-		expect(description("lan")).toContain("Port 8 · to switch0 port 8 · cut");
+		await expect.element(described("node2")).toHaveAccessibleDescription("eth0 · to switch0 port 2 · cut");
+		await expect
+			.element(described("lan"))
+			.toHaveAccessibleDescription(expect.stringContaining("Port 8 · to switch0 port 8 · cut"));
 
 		await step({
 			type: "cmd/conditions",
 			changes: [{ port: port(DEFAULT_SWITCH, 3), conditions: conditions({ delay: 50, loss: 10 }) }],
 		});
 		expect(note("node3")).toBe("alpine · eth0 switch0:3 · eth1 lan:1 · impaired");
-		expect(description("node3")).toBe(
-			"eth0 · to switch0 port 3 · up · delay 50 ms, loss 10%. eth1 · to lan port 1 · up",
-		);
+		await expect
+			.element(described("node3"))
+			.toHaveAccessibleDescription("eth0 · to switch0 port 3 · up · delay 50 ms, loss 10%. eth1 · to lan port 1 · up");
 
 		await step(vlan(port(lan, 2), 10), trunk(port(lan, 8), 1, 10));
 		expect(note("node4")).toBe("alpine · v10");
 		expect(note("node3")).toBe("alpine · eth0 switch0:3 · eth1 lan:1 · impaired");
 		expect(note("lan")).toBe("4 / 8 ports · v10, trunk");
 		expect(note("switch0")).toBe("3 / 8 ports · impaired");
-		expect(description("node4")).toBe("eth0 · to lan port 2 · up · vlan 10");
-		expect(description("lan")).toContain("Port 8 · to switch0 port 8 · cut · trunk of 1 and 10, native 1");
+		await expect.element(described("node4")).toHaveAccessibleDescription("eth0 · to lan port 2 · up · vlan 10");
+		await expect
+			.element(described("lan"))
+			.toHaveAccessibleDescription(
+				expect.stringContaining("Port 8 · to switch0 port 8 · cut · trunk of 1 and 10, native 1"),
+			);
 
 		await step(vlan(port(lan, 1), 20));
 		expect(note("node3")).toBe("alpine · eth0 switch0:3 · eth1 lan:1 v20 · impaired");
@@ -184,7 +197,7 @@ describe("the Topology window", () => {
 	});
 
 	it("can be used by keyboard, and says in words what a line shows by its colour", async () => {
-		const { map, store, settle, description } = await topology(wired());
+		const { map, store, settle, described } = await topology(wired());
 		send(store, link("down", node(2)));
 		await settle();
 		const title = map.querySelector<HTMLElement>(".dt-title");
@@ -206,7 +219,7 @@ describe("the Topology window", () => {
 		if (!cut || !up) throw new Error("no cut line beside an up one");
 		expect(getComputedStyle(up).strokeDasharray).toBe("none");
 		expect(getComputedStyle(cut).strokeDasharray).not.toBe("none");
-		expect(description("node2")).toBe("eth0 · to switch0 port 2 · cut");
+		await expect.element(described("node2")).toHaveAccessibleDescription("eth0 · to switch0 port 2 · cut");
 
 		map.querySelector<HTMLElement>('.n-node[data-machine="node3"]')?.focus();
 		await userEvent.keyboard("{Enter}");
