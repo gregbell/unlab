@@ -8,6 +8,7 @@ play with networking between linux boxes right in a tab. Send a ping, pull a
 cable, and see what happens to the packets.
 
 **[Open the live lab](https://unlab.run/)** ·
+[Follow your first ping](#follow-your-first-ping) ·
 [Reach it from your terminal](#reach-the-lab-from-your-terminal) ·
 [Run locally](#run-locally) · [Contribute](#contribute)
 
@@ -19,18 +20,32 @@ the tab before launching the app so it can open that lab.
 
 ## Follow your first ping
 
-1. In **Welcome to unLAB**, select **Boot 2 machines**. The preview shows the
-   names, addresses and switch ports before either guest starts. For CPU, disk
-   and network settings, select **Customize machines**.
-2. In **Rack manager**, select **node1**. When both guests are ready, select
-   **Ping node2** under **Network**. The replies appear in node1’s terminal.
-3. Beside **switch0** in the rack, select **Open capture** to follow traffic.
-   For frame headers, cable filters and a Wireshark download, open the logo menu
-   and choose **Packet capture → Packet inspector**.
-4. Select **switch0** in the rack. Cut the cable to node2, watch its port block
-   change, then reconnect it. Open **Topology** to see how the machines are wired.
+In a fresh lab, send one ping, cut the cable, and try the same ping again.
 
-![The running desktop with the rack, network topology and two terminals.](docs/images/desktop-lab.jpg)
+1. In **Welcome to unLAB**, keep the two Alpine machines and select **Boot 2 machines**.
+   Wait for **2 links up** in **Rack manager**.
+2. In node1's terminal, run the command below. It sends one ping to node2 and
+   waits up to two seconds for a reply.
+
+   ```sh
+   ping -c 1 -W 2 node2
+   ```
+
+3. Look for `0% packet loss` in the terminal. In **Rack manager**, select
+   **Open capture** beside **switch0**. Find the ICMP `echo request` from node1
+   to node2 and the `echo reply` going back to node1.
+4. Select **switch0** in the rack. In the **node2** port row, select **Cut cable**.
+   When the link reads `cut`, repeat the command in node1's terminal. This time
+   the summary reads `100% packet loss`. No new echo reply appears in the capture.
+5. Select **Reconnect** in the same port row. When the link reads `up`, repeat
+   the ping. A new echo reply appears in the capture and packet loss returns to 0%.
+
+To bring the terminal forward, select the terminal icon beside **node1** in the rack.
+You can also select **node1** itself and choose **Ping node2** under **Network**.
+For frame headers, capture filters, or a Wireshark download, open
+**Packet capture** in the logo menu and choose **Packet inspector**.
+
+![Node1 reports 100% packet loss with its peer disconnected, then 0% after reconnecting. The switch capture shows the cable events and the returning echo reply.](docs/images/desktop-lab.jpg)
 
 Drag a window by its title bar, double-click to maximize it, or minimize it to
 the bottom-left dock. Right-click a title bar, a machine, a switch or the desktop
