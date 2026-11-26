@@ -446,10 +446,30 @@ The SSH programs in [public/ssh](public/ssh/) are built from pinned releases by
 `npm run cli` builds it, and
 `node cli/dist/cli.mjs --origin http://localhost:5173` takes that lab's pages.
 
-To release the CLI, raise `version` in [cli/package.json](cli/package.json), merge it, then tag that commit
-`cli-v` and the version, as in `git tag cli-v0.1.2 && git push origin cli-v0.1.2`. The
-[CLI workflow](.github/workflows/cli.yml) tests it and publishes it to npm with provenance. That needs the repository
-secret `NPM_TOKEN` in its `npm` environment: a granular npm token that may publish `unlab.run`.
+### Release the CLI
+
+Only the package's owner publishes `unlab.run`, by hand, from their own terminal. CI tests it and never publishes it,
+and npm takes no token for it, so each release needs the owner's two-factor approval in a browser.
+
+1. On an up-to-date `main`, raise `version` in [cli/package.json](cli/package.json) in a pull request, and merge it.
+2. Build and pack exactly what was merged:
+
+   ```sh
+   git switch main && git pull && npm ci
+   npm run cli
+   npm pack ./cli
+   ```
+
+3. Publish that file, in a terminal of your own, not through an agent: npm opens the browser for the approval and
+   waits for it.
+
+   ```sh
+   npm publish unlab.run-0.1.2.tgz --access public
+   ```
+
+4. Tag the release: `git tag cli-v0.1.2 && git push origin cli-v0.1.2`.
+
+Check it with `npm view unlab.run version`, and `npx unlab.run@latest --version`.
 
 ## How it works
 

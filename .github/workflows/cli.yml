@@ -4,15 +4,15 @@ on:
   pull_request:
   push:
     branches: [main]
-    tags: ["cli-v*"]
 
 permissions:
   contents: read
 
 concurrency:
   group: cli-${{ github.ref }}
-  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+  cancel-in-progress: true
 
+# This tests the CLI and never publishes it: its owner releases it by hand. See "Release the CLI" in the README.
 jobs:
   # The oldest Node.js it runs on, on both systems it runs on.
   test:
@@ -31,27 +31,3 @@ jobs:
       - run: npx vitest run --project unit cli src/streams
       - run: npx vitest run --project integration test/integration/cli-link.test.ts
       - run: node cli/dist/cli.mjs --version
-
-  # A tag of cli/package.json's version publishes it, from this repository and this run.
-  publish:
-    if: startsWith(github.ref, 'refs/tags/cli-v')
-    needs: test
-    runs-on: ubuntu-latest
-    environment: npm
-    permissions:
-      contents: read
-      id-token: write
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: npm
-          registry-url: https://registry.npmjs.org
-      - run: npm ci
-      - run: npm run cli
-      - run: test "cli-v$(node -p "require('./cli/package.json').version")" = "$GITHUB_REF_NAME"
-      - run: npm publish --provenance --access public
-        working-directory: cli
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

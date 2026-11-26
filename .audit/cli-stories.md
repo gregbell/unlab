@@ -198,6 +198,8 @@ As a person who never runs the CLI, I find the lab as it is today.
 As a person, I can find out how to use the CLI and trust what I run.
 
 - [ ] `npx unlab.run` installs from npm a package that CI built from this repository and published with provenance.
+
+  Not wanted for now: the person decided on 2026-11-26 that only they release it, by hand.
 - [x] It runs on Node.js 22.12 or later, on Linux and macOS.
 - [x] The README has a section for it in its own voice: start it, open a shell, copy a file, reach the internet, and what to do when it does not link.
 - [x] What's new has an entry.
