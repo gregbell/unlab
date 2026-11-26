@@ -75,6 +75,9 @@ export function onLines(socket: Socket, line: (text: string) => "more" | (() => 
 	socket.on("data", read);
 }
 
+/** How long a single command that started the CLI waits for no one to come before it ends it. */
+const QUIET_MS = 1500;
+
 const sentence = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
 export class Core {
@@ -87,6 +90,8 @@ export class Core {
 	/** Every connection to the socket: the prompt's, ssh's, other runs of the CLI. */
 	readonly #clients = new Set<Socket>();
 	#idle: (() => void) | undefined;
+	/** How many have ever connected, so that one that came and went is seen. */
+	#connections = 0;
 	#port = 0;
 	#states = new Map<string, string>();
 	#local: Server | undefined;
@@ -195,13 +200,19 @@ export class Core {
 				: new Promise<void>((resolve) => {
 						this.#idle = resolve;
 					});
-		await none();
+		// A connection the system has taken is told only a moment later, and closing would reset it.
+		for (let came = -1; came !== this.#connections; ) {
+			await none();
+			came = this.#connections;
+			await new Promise((resolve) => setTimeout(resolve, QUIET_MS));
+		}
 		await new Promise((resolve) => this.#local?.close(resolve) ?? resolve(null));
 		rmSync(socketPath(), { force: true });
 		await none();
 	}
 
 	#came(socket: Socket): void {
+		this.#connections++;
 		this.#clients.add(socket);
 		socket.once("close", () => {
 			this.#clients.delete(socket);
