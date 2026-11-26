@@ -184,6 +184,7 @@ function fakeVms() {
 			openPty: (pty, cols, rows) => sent.push(["openPty", pty, cols, rows]),
 			closePty: (pty) => sent.push(["closePty", pty]),
 			reconfigure: (hosts) => sent.push(["reconfigure", hosts]),
+			shareSsh: () => {},
 			link: (target) => sent.push(["link", target]),
 			checkpoint: (copy) => sent.push(["checkpoint", copy]),
 			writeFile: (id, file) => sent.push(["writeFile", id, file]),

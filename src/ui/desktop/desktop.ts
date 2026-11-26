@@ -26,6 +26,7 @@ import { closeIcon, UnlabElement } from "../base/index.ts";
 import { CLI_COMMAND, cliGuidance } from "../cli-link/cli-link.ts";
 import { AUTHOR_URL, LIVE_LAB_URL, REPO_URL, X_ACCOUNT, X_URL } from "../links.ts";
 import { peerPing } from "../machine-details/peer-ping.ts";
+import "../share-ssh/share-ssh.ts";
 import {
 	alignWithLab,
 	type Box,
@@ -1083,7 +1084,7 @@ class Desktop extends UnlabElement {
 			const port = ports[i],
 				held = port && selectPorts(port.switch)(this.lab).find((p) => p.port === port.port);
 			return html`<div class="dt-link"><span>eth${i}<small>${nic.address ? addressStr(nic.address) : "No address"}</small></span><span>${port ? `${port.switch}:${port.port}` : "Unplugged"}<small>${held?.state ?? ""}</small></span><button ?disabled=${!accepts.cables} @click=${() => this.patchInterface(`${m.name}:eth${i}`)}>Patch</button></div>`;
-		})}</div>`;
+		})}<unlab-share-ssh .machine=${m.name}></unlab-share-ssh></div>`;
 	}
 	private switchDetails(name: SwitchName) {
 		const ports = selectPorts(name)(this.lab),

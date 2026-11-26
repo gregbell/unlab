@@ -23,7 +23,9 @@ import {
 	switchLabel,
 } from "./model/index.ts";
 import { createRuntime, type DistroManifest, type Engine, sweepDisks } from "./runtime/index.ts";
+import { startTailcat } from "./runtime/tailcat.ts";
 import type { AppServices, TerminalHost } from "./ui/services.ts";
+import { createShareService } from "./ui/share-ssh/service.ts";
 
 interface Manifest extends DistroManifest {
 	readonly distros: readonly {
@@ -176,6 +178,9 @@ async function main(): Promise<void> {
 		registry,
 		machines: (target) => engine.link(target && { ...target, programs: new URL("ssh/", document.baseURI).href }),
 	});
+	const share = createShareService(store, (machine, key, onState) =>
+		startTailcat({ key, connect: (port) => engine.shareSsh(machine, port), onState }),
+	);
 	const takeHash = () => {
 		const asked = linkAsked(location.hash);
 		if (!asked) return;
@@ -208,11 +213,13 @@ async function main(): Promise<void> {
 		},
 		agent,
 		link: { set: (on) => link.set(on) },
+		share,
 	};
 	app.services = services;
 	document.body.append(app);
 	window.addEventListener("pagehide", () => {
 		save();
+		share.dispose();
 		agent.dispose();
 		link.dispose();
 		handOver.close();

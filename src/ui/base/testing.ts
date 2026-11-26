@@ -38,6 +38,7 @@ import {
 } from "../../model/index.ts";
 import { isAddressFault, MATCH_ALL, parseAddress } from "../../net/index.ts";
 import type { AgentService, AppServices, SwitchReadout, TerminalService } from "../services.ts";
+import { createShareService } from "../share-ssh/service.ts";
 import { servicesContext } from "./context.ts";
 
 const TEST_IMAGES = [{ name: "alpine", label: "alpine 3.24" }] as const;
@@ -215,6 +216,7 @@ export interface MountOptions<E extends HTMLElement> {
 	readonly terminals?: TerminalService;
 	/** What `services.agent.tryCall` is. Defaults to null, as where a page cannot call tools. */
 	readonly tryCall?: AgentService["tryCall"];
+	readonly shareStart?: Parameters<typeof createShareService>[1];
 	/** Runs before the element connects: <unlab-app> takes its services here. */
 	readonly prepare?: (element: E, services: AppServices) => void;
 }
@@ -294,6 +296,13 @@ export async function mount<K extends keyof HTMLElementTagNameMap>(
 				links.push(on);
 			},
 		},
+		share: createShareService(
+			store,
+			options.shareStart ??
+				(() => {
+					throw new Error("This fixture has no SSH share runtime.");
+				}),
+		),
 	};
 
 	const host = document.createElement("div");

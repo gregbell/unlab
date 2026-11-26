@@ -1,0 +1,72 @@
+@layer tokens, base, components;
+
+@layer components {
+	@scope (unlab-share-ssh) {
+		:scope {
+			display: block;
+			margin-top: 14px;
+		}
+
+		.share {
+			display: grid;
+			gap: 8px;
+		}
+
+		h3,
+		p {
+			margin: 0;
+		}
+
+		p {
+			color: var(--text-2);
+		}
+
+		form {
+			display: grid;
+			gap: 8px;
+		}
+
+		label {
+			color: var(--text-2);
+		}
+
+		textarea {
+			box-sizing: border-box;
+			width: 100%;
+			min-width: 0;
+			padding: 7px 9px;
+			border: 1px solid var(--line-strong);
+			border-radius: var(--r-control);
+			background: var(--crust);
+			color: var(--text);
+			font: var(--fs-ui) / var(--lh-ui) var(--font-mono);
+			resize: vertical;
+		}
+
+		.command {
+			display: block;
+			padding: 8px 10px;
+			border-radius: var(--r-control);
+			background: var(--crust);
+			color: var(--text);
+			font: var(--fs-ui) / var(--lh-ui) var(--font-mono);
+			white-space: pre-wrap;
+			overflow-wrap: anywhere;
+			user-select: all;
+		}
+
+		.share-actions {
+			display: flex;
+			flex-wrap: wrap;
+			gap: 6px;
+		}
+
+		button {
+			justify-self: start;
+		}
+
+		.error {
+			color: var(--down);
+		}
+	}
+}

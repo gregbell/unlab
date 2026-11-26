@@ -23,7 +23,12 @@ jobs:
         with:
           node-version: 24
           cache: npm
+      - uses: actions/setup-go@v5
+        with:
+          go-version: 1.27.4
+          cache-dependency-path: tailcat/go.sum
       - run: npm ci
+      - run: npm run tailcat
       - run: npm run distros alpine debian lab
       - run: npm run build
         env:

@@ -413,3 +413,12 @@ describe("stop", () => {
 		expect(t.messages()).toEqual([{ type: "stop" }]);
 	});
 });
+
+test("SSH sharing transfers its channel to this VM worker", () => {
+	const t = boot();
+	const channel = new MessageChannel();
+	t.vm.shareSsh(channel.port2);
+	expect(t.posted).toEqual([{ message: { type: "share-ssh", port: channel.port2 }, transfer: [channel.port2] }]);
+	channel.port1.close();
+	channel.port2.close();
+});
