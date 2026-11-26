@@ -343,8 +343,7 @@ export function createCaptureLog(opts: CaptureOptions): CaptureLog {
 			const out: CaptureRow[] = [];
 			for (let i = matchLen - 1; i >= 0 && out.length < k; i--) {
 				const entry = at(matchAt(i));
-				if (entry && isOn(entry, on))
-					out.push(captureRow(entry, rowNames));
+				if (entry && isOn(entry, on)) out.push(captureRow(entry, rowNames));
 			}
 			return out.reverse();
 		},
