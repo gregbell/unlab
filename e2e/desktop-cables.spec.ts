@@ -34,7 +34,7 @@ async function wire(topology: Locator, a: string, b: string): Promise<string | n
 	return null;
 }
 
-test("the desktop draws a cable between switches, cuts and removes it from the switch's ports, and shows a storm until its loop is cut", async ({
+test("the desktop draws a cable between switches, cuts and removes it from the switch's ports, shows a storm until its loop is cut, and maps a VLAN and a moved cable", async ({
 	page,
 }) => {
 	const errors: string[] = [];
@@ -96,5 +96,15 @@ test("the desktop draws a cable between switches, cuts and removes it from the s
 	await expect(port.getByRole("button", { name: "Patch" })).toBeVisible();
 	await expect.poll(() => wire(topology, "switch0", "lan")).toBeNull();
 	await expect(topology.locator('[data-switch="lan"] small')).toHaveText("3 / 8 ports");
+
+	await typed(page, "vlan node2 10");
+	await expect(topology.locator('[data-machine="node2"] small')).toHaveText("lab · v10");
+	await expect(topology.locator('[data-switch="lan"] small')).toHaveText("3 / 8 ports · v10");
+	await typed(page, "plug node1 lan");
+	await expect.poll(() => wire(topology, "lan", "node1")).toBe("up");
+	await expect.poll(() => wire(topology, "switch0", "node1")).toBeNull();
+	await expect(topology.getByRole("button", { name: "Inspect machine node1" })).toHaveAccessibleDescription(
+		"eth0 · to lan port 2 · up",
+	);
 	expect(errors).toEqual([]);
 });

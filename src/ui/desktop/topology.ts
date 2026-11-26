@@ -5,19 +5,27 @@ import {
 	type MachineName,
 	type PortHolder,
 	type PortNo,
+	type PortRef,
+	type PortVlanView,
 	type SwitchName,
 	selectPorts,
 	selectStorm,
 } from "../../model/index.ts";
+import { type NicName, nicName } from "../../net/index.ts";
 
 export type Device = { kind: "switch"; name: SwitchName } | { kind: "machine"; name: MachineName };
 export type Selection = Device | { kind: "port"; name: SwitchName; port: PortNo };
 export const art = (kind: Device["kind"]) => html`<span aria-hidden="true" class="n-art ${kind}"><i></i><b></b></span>`;
 
-/** A drawn line's end: a switch at one of its ports, or a machine. */
+/** A drawn line's end: a switch at one of its ports, or a machine at one of its NICs. */
 interface End {
 	name: string;
+	/** What the far end calls this one: `lan port 2`, or `router:eth1` as `link` does. */
+	label: string;
 	port?: PortNo;
+	nic?: NicName;
+	/** What the port carries, when that is not VLAN 1. */
+	vlan?: PortVlanView;
 }
 interface Edge {
 	ends: readonly [End, End];
@@ -26,9 +34,40 @@ interface Edge {
 	/** Its conditions, when it has some. */
 	conditions?: string;
 }
+/** A cable as one of its ends sees it. A cable from a switch to itself has a side at each of its ports. */
+interface Side {
+	edge: Edge;
+	end: End;
+	other: End;
+}
 const far = (edge: Edge, name: string) =>
 	edge.ends[0].name === name ? edge.ends[1].name : edge.ends[1].name === name ? edge.ends[0].name : null;
 const pair = (edge: Edge) => [edge.ends[0].name, edge.ends[1].name].sort().join(" ");
+const sidesAt = (edges: readonly Edge[], name: string): Side[] =>
+	edges
+		.flatMap((edge) => {
+			const [a, b] = edge.ends;
+			return [
+				{ edge, end: a, other: b },
+				{ edge, end: b, other: a },
+			];
+		})
+		.filter(({ end }) => end.name === name)
+		.sort((x, y) => (x.end.port ?? 0) - (y.end.port ?? 0) || (x.end.nic ?? "").localeCompare(y.end.nic ?? ""));
+/** What the port at this side carries: its own, or for a NIC the switch port's. */
+const vlanAt = ({ end, other }: Side) => (end.port === undefined ? other.vlan : end.vlan);
+/** `eth1 · to lan port 2 · up · vlan 10`, or `Port 2 · router:eth1 · cut`, as the rack says a port. */
+const sideWords = (side: Side) =>
+	[
+		side.end.port === undefined
+			? `${side.end.nic} · to ${side.other.label}`
+			: `Port ${side.end.port} · ${side.other.port === undefined ? "" : "to "}${side.other.label}`,
+		side.edge.state,
+		vlanAt(side)?.text,
+		side.edge.conditions,
+	]
+		.filter(Boolean)
+		.join(" · ");
 
 /** Breadth-first columns, one row group per connected component. Every drawn line is a held port or a cable between switches. */
 export function topologyMap(lab: LabState, selected: Selection | null, pick: (s: Selection) => void) {
@@ -36,13 +75,20 @@ export function topologyMap(lab: LabState, selected: Selection | null, pick: (s:
 		...lab.switches.map((name) => ({ kind: "switch" as const, name })),
 		...lab.rail.map((name) => ({ kind: "machine" as const, name })),
 	];
+	const at = (ref: PortRef): End => {
+		const view = selectPorts(ref.switch)(lab).find((p) => p.port === ref.port);
+		return { name: ref.switch, label: `${ref.switch} port ${ref.port}`, port: ref.port, vlan: view?.vlan };
+	};
 	const edges: Edge[] = [
 		...lab.switches.flatMap((on) =>
 			selectPorts(on)(lab).flatMap((p) =>
 				p.machine
 					? [
 							{
-								ends: [{ name: on, port: p.port }, { name: p.machine.name }] as const,
+								ends: [
+									at({ switch: on, port: p.port }),
+									{ name: p.machine.name, label: p.machine.label, nic: p.machine.nic ?? nicName(0) },
+								] as const,
 								hue: p.machine.hue,
 								state: p.state,
 								conditions: p.conditions,
@@ -52,10 +98,7 @@ export function topologyMap(lab: LabState, selected: Selection | null, pick: (s:
 			),
 		),
 		...lab.switchCables.map(({ ends: [a, b], link }) => ({
-			ends: [
-				{ name: a.switch, port: a.port },
-				{ name: b.switch, port: b.port },
-			] as const,
+			ends: [at(a), at(b)] as const,
 			state: link,
 			conditions: selectPorts(a.switch)(lab).find((p) => p.port === a.port)?.conditions,
 		})),
@@ -120,14 +163,34 @@ export function topologyMap(lab: LabState, selected: Selection | null, pick: (s:
 		${devices.map((d) => {
 			const p = point(d.name),
 				m = d.kind === "machine" ? lab.machines[d.name] : null;
-			// A wire has no words of its own, so each end of a cable with conditions says so.
-			const impaired = edges.some((edge) => edge.conditions && edge.ends.some((end) => end.name === d.name));
-			const marked = impaired ? ` · ${IMPAIRED}` : "";
+			const sides = sidesAt(edges, d.name);
+			// A wire has no words of its own, so each end says what the line would show only by its colour, or not at all.
+			const vlans = [...new Set(sides.flatMap((side) => vlanAt(side)?.tag ?? []))];
+			const marks = [
+				...(d.kind === "switch" && selectStorm(d.name)(lab) ? ["storming"] : []),
+				...(sides.some(({ edge }) => edge.conditions) ? [IMPAIRED] : []),
+			];
 			const meta =
 				d.kind === "switch"
-					? `${selectPorts(d.name)(lab).filter((port) => port.state !== "empty").length} / 8 ports${selectStorm(d.name)(lab) ? " · storming" : ""}${marked}`
-					: `${m?.spec.image ?? ""}${marked}`;
-			return html`<button class="n-node" data-machine=${d.kind === "machine" ? d.name : nothing} data-switch=${d.kind === "switch" ? d.name : nothing} data-hue=${m?.hue ?? nothing} aria-pressed=${selected?.name === d.name} data-selected=${selected?.name === d.name} style=${`left:${(100 * p.x) / width}%;top:${p.y}px`} @click=${() => pick(d)}>
-				<span class="visually-hidden">Inspect ${d.kind} </span>${art(d.kind)}<span class="n-node-label"><strong>${d.name}</strong> <small>${meta}</small></span></button>`;
+					? [
+							`${selectPorts(d.name)(lab).filter((port) => port.state !== "empty").length} / 8 ports`,
+							...marks,
+							...(vlans.length ? [vlans.join(", ")] : []),
+						]
+					: [
+							m?.spec.image ?? "",
+							// Which NIC each line goes to, when there is more than one it could be, each kept on one line of the note.
+							...((m?.spec.nics.length ?? 0) > 1
+								? sides.map((side) =>
+										[side.end.nic, `${side.other.name}:${side.other.port}`, vlanAt(side)?.tag]
+											.filter(Boolean)
+											.join("\u00a0"),
+									)
+								: vlans),
+							...marks,
+						];
+			const words = sides.map(sideWords);
+			return html`<button class="n-node" data-machine=${d.kind === "machine" ? d.name : nothing} data-switch=${d.kind === "switch" ? d.name : nothing} data-hue=${m?.hue ?? nothing} aria-pressed=${selected?.name === d.name} data-selected=${selected?.name === d.name} aria-description=${words.length ? words.join(". ") : nothing} title=${words.length ? words.join("\n") : nothing} style=${`left:${(100 * p.x) / width}%;top:${p.y}px`} @click=${() => pick(d)}>
+				<span class="visually-hidden">Inspect ${d.kind} </span>${art(d.kind)}<span class="n-node-label"><strong>${d.name}</strong> <small>${meta.join(" · ")}</small></span></button>`;
 		})}</div></div>`;
 }
