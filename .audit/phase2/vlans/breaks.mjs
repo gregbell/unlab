@@ -4,6 +4,8 @@ const FABRIC = "src/runtime/fabric.ts";
 const fabricUnit = { kind: "unit", files: ["src/runtime/fabric.test.ts"], grep: "VLANs" };
 const modelUnit = { kind: "unit", files: ["src/model/vlans.test.ts"] };
 const savedUnit = { kind: "unit", files: ["src/commands/saved-labs.test.ts"] };
+const verbUnit = { kind: "unit", files: ["src/commands/verbs/vlan.test.ts"] };
+const topologyUnit = { kind: "unit", files: ["src/commands/verbs/switches.test.ts"], grep: "topology" };
 
 export const BREAKS = [
 	{
@@ -89,5 +91,33 @@ export const BREAKS = [
 		from: "\t(lab) => ({ ...lab, vlans: [] }),\n",
 		to: "",
 		tests: [savedUnit],
+	},
+	{
+		name: "a VLAN ID can be 4095",
+		file: "src/model/vlans.ts",
+		from: "\treturn n >= MIN_VLAN && n <= MAX_VLAN ?",
+		to: "\treturn n >= MIN_VLAN && n <= MAX_VLAN + 1 ?",
+		tests: [modelUnit, verbUnit],
+	},
+	{
+		name: "a set back to VLAN 1 is kept",
+		file: "src/model/vlans.ts",
+		from: "portVlans: isDefault(vlan) ? others : [...others, { port, vlan }]",
+		to: "portVlans: [...others, { port, vlan }]",
+		tests: [modelUnit],
+	},
+	{
+		name: "a NIC's port can be a trunk",
+		file: "src/commands/verbs/vlan.ts",
+		from: "\t\tif (holdsNic(held)) {\n\t\t\tconst nic",
+		to: "\t\tif (!held) {\n\t\t\tconst nic",
+		tests: [verbUnit],
+	},
+	{
+		name: "topology says no VLAN",
+		file: "src/commands/verbs/topology.ts",
+		from: "cable: holder ? cable(holder) : null, vlan: vlanOf(lab, { switch: name, port })",
+		to: "cable: holder ? cable(holder) : null, vlan: vlanOf({ portVlans: [] }, { switch: name, port })",
+		tests: [topologyUnit],
 	},
 ];

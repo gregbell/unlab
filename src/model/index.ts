@@ -60,4 +60,5 @@ export { planSwitch, portLabel, portName, portText, switchLabel } from "./switch
 export { type Tile, type Tiling, tile } from "./tiling.ts";
 export * from "./types.ts";
 export { clockHz, DEFAULT_POLICIES, initialState, update } from "./update.ts";
+export { carries, parseVlanId, sameVlan, vlanList, vlanOf, vlanText } from "./vlans.ts";
 export { restoreWorkspace, saveWorkspace } from "./workspace.ts";

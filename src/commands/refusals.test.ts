@@ -97,6 +97,7 @@ const LABS: Readonly<Record<string, LabState>> = {
 	plug: switched,
 	cable: two,
 	uncable: cabled,
+	trunk: cabled,
 };
 
 /** The labs that the examples make sense in: `boot` wants node2 off, and `checkpoint` a name that is free. */

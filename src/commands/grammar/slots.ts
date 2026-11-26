@@ -15,13 +15,16 @@ import {
 	MAX_EXTRA_DISKS,
 	MAX_EXTRA_GIB,
 	MAX_NAME,
+	MAX_VLAN,
 	type Machine,
 	type MachineName,
+	MIN_VLAN,
 	machineLink,
 	type NameFault,
 	type NicRef,
 	type NicSpec,
 	nicLabel,
+	nicPortsOf,
 	nicsOf,
 	type Phase,
 	type Place,
@@ -32,6 +35,7 @@ import {
 	parseChosenName,
 	parseGiB,
 	parseSwitchName,
+	parseVlanId,
 	plugsOf,
 	portLabel,
 	portName,
@@ -40,6 +44,10 @@ import {
 	selectNames,
 	sizeText,
 	takenPorts,
+	type VlanId,
+	vlanList,
+	vlanOf,
+	vlanText,
 } from "../../model/index.ts";
 import {
 	type AddressFault,
@@ -726,6 +734,95 @@ export function readSwitchCable(text: string, lab: LabState): PortRef | Miss {
 	if (!holdsNic(read.held)) return read.ref;
 	const nic = nicLabel(read.held.machine, read.held.nic);
 	return new Miss(`${text} holds the cable of ${nic}, so use unplug ${nic}.`, undefined, false);
+}
+
+/** A port that something is in, by its name, or by the NIC whose cable is in it. */
+export function readPort(text: string, ctx: ReadContext): { readonly ref: PortRef; readonly held: HeldPort } | Miss {
+	const read = readHeldPort(text, ctx.lab);
+	if (read !== null) return read;
+	const nic = readNic(text, ctx);
+	if (nic instanceof Miss) return nic;
+	const ref = nicPortsOf(nic.machine.life)[nic.nic];
+	const held = ref && heldPorts(ctx.lab, ref.switch).find((other) => other.port === ref.port);
+	if (ref && held) return { ref, held };
+	const label = nicLabel(nic.machine, nic.nic);
+	return new Miss(`${label} is in no port, so plug it into one first.`, undefined, false);
+}
+
+/** A port that something is in, named by itself or by the NIC in it. */
+export function port(): Value<string> {
+	return {
+		kind: "positional",
+		label: "port",
+		noun: "a port such as lan:3, or the NIC in it such as node2",
+		about: "A port that something is in (lan:3), or the NIC whose cable is in it (node2, node2:eth1).",
+		read(text, ctx) {
+			const read = readPort(text, ctx);
+			return read instanceof Miss ? read : text;
+		},
+		suggest: (_typed, { lab }) =>
+			lab.switches.flatMap((on) =>
+				heldPorts(lab, on).map(({ port }): Suggestion => {
+					const label = portName({ switch: on, port });
+					return {
+						insert: label,
+						label,
+						detail: `${portDetail(lab, on, port)} · ${vlanText(vlanOf(lab, { switch: on, port }))}`,
+					};
+				}),
+			),
+		format: (written) => written,
+		schema: { type: "string" },
+	};
+}
+
+const noVlan = (text: string): string => `${text} is no VLAN, so use one from ${MIN_VLAN} to ${MAX_VLAN}.`;
+
+/** The VLANs that some port is in, or a trunk's native one, and 1. */
+function vlansInUse(lab: LabState): readonly VlanId[] {
+	const used = lab.portVlans.map(({ vlan }) => (vlan.mode === "access" ? vlan.vlan : vlan.native));
+	return vlanList([MIN_VLAN as VlanId, ...used]);
+}
+
+export function vlanId(about: string, label = "vlan"): Value<VlanId> {
+	return {
+		kind: "positional",
+		label,
+		noun: `a VLAN ID from ${MIN_VLAN} to ${MAX_VLAN}`,
+		about,
+		read: (text) => parseVlanId(text) ?? new Miss(noVlan(text), undefined, false),
+		suggest: (_typed, { lab }) => vlansInUse(lab).map((id) => ({ insert: String(id), label: String(id) })),
+		format: String,
+		schema: { type: "integer", minimum: MIN_VLAN, maximum: MAX_VLAN },
+	};
+}
+
+export const ALL_VLANS = "all";
+
+/** The VLANs a trunk allows: a comma list, or all of them. */
+export function vlans(about: string): Value<readonly VlanId[] | typeof ALL_VLANS> {
+	return {
+		kind: "positional",
+		label: "vlan,...",
+		noun: "VLAN IDs such as 10,20, or all",
+		about,
+		read(text) {
+			if (text === ALL_VLANS) return ALL_VLANS;
+			const ids: VlanId[] = [];
+			for (const { part, start, end } of listParts(text)) {
+				const id = parseVlanId(part);
+				if (id === null) return new Miss(part === "" ? undefined : noVlan(part), { start, end }, part === "");
+				ids.push(id);
+			}
+			return vlanList(ids);
+		},
+		suggest: (_typed, { lab }) => [
+			{ insert: ALL_VLANS, label: ALL_VLANS, detail: "every VLAN" },
+			...vlansInUse(lab).map((id) => ({ insert: String(id), label: String(id) })),
+		],
+		format: (ids) => (ids === ALL_VLANS ? ALL_VLANS : ids.join(",")),
+		schema: { type: "string" },
+	};
 }
 
 /** A cable between two switches, by either of the ports it is in. */

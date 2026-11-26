@@ -183,6 +183,8 @@ describe("the artboards, replayed", () => {
 			"rmswitch",
 			"cable",
 			"uncable",
+			"vlan",
+			"trunk",
 			"topology",
 			"capture",
 			"focus",

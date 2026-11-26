@@ -197,12 +197,15 @@ describe("rmswitch", () => {
 });
 
 describe("topology", () => {
-	it("lists every switch and port, what is in it and its link, and what is in none", async () => {
+	it("lists every switch and port, what is in it, its link and what it carries, and what is in none", async () => {
 		const lab = await wired();
 		await lab.run("spawn 1 alpine --no-net");
 		await lab.run("link down node2:eth1");
+		await lab.run("vlan node1 10");
+		await lab.run("vlan lan:2 30");
 		const nic = (machine: string, no: string, state: string) => ({ kind: "nic", machine, nic: no, state });
-		const free = (...ports: number[]) => ports.map((port) => ({ port, cable: null }));
+		const access = (vlan: number) => ({ mode: "access", vlan });
+		const free = (...ports: number[]) => ports.map((port) => ({ port, cable: null, vlan: access(1) }));
 		expect(await lab.run("topology")).toEqual({
 			kind: "report",
 			header: "2 switches · 4 of 16 ports taken",
@@ -210,11 +213,11 @@ describe("topology", () => {
 			rows: [
 				{
 					term: "switch0",
-					text: "port 1 · node1 · up\nport 2 · node2:eth1 · cut\nports 3, 4, 5, 6, 7 and 8 · free",
+					text: "port 1 · node1 · up · vlan 10\nport 2 · node2:eth1 · cut\nports 3, 4, 5, 6, 7 and 8 · free",
 				},
 				{
 					term: "lan",
-					text: "port 1 · node2:eth0 · up\nport 2 · node3 · down · off\nports 3, 4, 5, 6, 7 and 8 · free",
+					text: "port 1 · node2:eth0 · up\nport 2 · node3 · down · off · vlan 30\nports 3, 4, 5, 6, 7 and 8 · free",
 				},
 				{ term: "unplugged", text: "node4 · no cable · booting" },
 			],
@@ -223,16 +226,16 @@ describe("topology", () => {
 					{
 						name: "switch0",
 						ports: [
-							{ port: 1, cable: { to: nic("node1", "eth0", "ready"), link: "up" } },
-							{ port: 2, cable: { to: nic("node2", "eth1", "ready"), link: "cut" } },
+							{ port: 1, cable: { to: nic("node1", "eth0", "ready"), link: "up" }, vlan: access(10) },
+							{ port: 2, cable: { to: nic("node2", "eth1", "ready"), link: "cut" }, vlan: access(1) },
 							...free(3, 4, 5, 6, 7, 8),
 						],
 					},
 					{
 						name: "lan",
 						ports: [
-							{ port: 1, cable: { to: nic("node2", "eth0", "ready"), link: "up" } },
-							{ port: 2, cable: { to: nic("node3", "eth0", "off"), link: "down" } },
+							{ port: 1, cable: { to: nic("node2", "eth0", "ready"), link: "up" }, vlan: access(1) },
+							{ port: 2, cable: { to: nic("node3", "eth0", "off"), link: "down" }, vlan: access(30) },
 							...free(3, 4, 5, 6, 7, 8),
 						],
 					},
