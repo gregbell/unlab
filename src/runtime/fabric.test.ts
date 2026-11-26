@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { arpReply, arpRequest, ping } from "../../test/support/frames.ts";
 import type { PortNo, PortVlan, VlanId } from "../model/index.ts";
-import { vlanTag, withoutTag } from "../net/index.ts";
+import { vlanTag, withoutTag, withTag } from "../net/index.ts";
 import {
 	Fabric,
 	LOOPED_LIMIT,
@@ -798,6 +798,22 @@ describe("VLANs", () => {
 		far.send(2, arpRequest(2, 9));
 		expect(far.reached()).toEqual({});
 		expect(far.fabric.counters(far.at("b8").slot, 8)).toMatchObject({ rxFrames: 1, dropped: 1 });
+	});
+
+	test("a trunk takes a tag of VLAN 0, which gives only a priority, as no tag, and drops one of VLAN 4095, which is reserved", () => {
+		const t = vlanNet(["a1:20", "a2"]);
+		const { slot } = t.at("a8");
+		t.fabric.attach(slot, 8, { deliver: () => {} });
+		t.fabric.setVlan(slot, 8, trunk("all", 20));
+		const sent = arpRequest(9, 1);
+		t.fabric.receive(slot, 8, withTag(sent, 0), 0);
+		expect(t.reached()).toEqual({ 1: 1 });
+		expect(t.last(1)).toEqual(sent);
+		expect(t.taps.map(({ e }) => [e.vlan, e.tagged])).toEqual([[20, 0]]);
+		t.clear();
+		t.fabric.receive(slot, 8, withTag(sent, 4095), 0);
+		expect([t.reached(), t.taps]).toEqual([{}, []]);
+		expect(t.fabric.counters(slot, 8)).toMatchObject({ rxFrames: 2, dropped: 1 });
 	});
 
 	test("a native VLAN that the trunk does not allow does not cross it untagged", () => {

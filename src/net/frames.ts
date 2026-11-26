@@ -59,6 +59,10 @@ export function ethertype(f: Uint8Array): number {
 /** The 802.1Q tag: its type where the frame's own type would be, then the VLAN ID in the low 12 bits of the next two bytes. */
 export const ETH_VLAN = 0x8100;
 const TAG = 4;
+/** A tag of VLAN 0 gives only a priority, so the frame is in the VLAN it would be in with no tag. */
+export const PRIORITY_ONLY = 0;
+/** No frame is in VLAN 4095. */
+export const RESERVED_VLAN = 4095;
 
 /** The VLAN ID in the frame's 802.1Q tag, or null for a frame that has none. */
 export function vlanTag(f: Uint8Array): number | null {

@@ -195,6 +195,20 @@ export const BREAKS = [
 		tests: [verbUnit],
 	},
 	{
+		name: "a tag of VLAN 0 puts a frame in VLAN 0",
+		file: FABRIC,
+		from: "const vlan = tag === null || tag === PRIORITY_ONLY ? mode.vlan : tag;",
+		to: "const vlan = tag ?? mode.vlan;",
+		tests: [fabricUnit],
+	},
+	{
+		name: "a trunk carries VLAN 4095",
+		file: FABRIC,
+		from: "(vlan === RESERVED_VLAN || !allows(mode, vlan))",
+		to: "(!allows(mode, vlan))",
+		tests: [fabricUnit],
+	},
+	{
 		name: "e2e: every port carries every VLAN",
 		file: FABRIC,
 		from: "const carries = (mode: Mode, vlan: number): boolean => (mode.trunk ? allows(mode, vlan) : mode.vlan === vlan);",

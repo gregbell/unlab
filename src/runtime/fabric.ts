@@ -23,7 +23,7 @@
 // Addresses are numbers here. They are text only where someone reads a table.
 
 import type { PortNo, PortVlan } from "../model/index.ts";
-import { type Flood, vlanTag, withoutTag, withTag } from "../net/index.ts";
+import { type Flood, PRIORITY_ONLY, RESERVED_VLAN, vlanTag, withoutTag, withTag } from "../net/index.ts";
 
 export interface PortCounters {
 	rxFrames: number;
@@ -501,8 +501,8 @@ export class Fabric {
 		// An access port carries whatever comes in as its VLAN's, tag and all, as a switch that knows no VLANs would.
 		const mode = sw.modes[from];
 		const tag = mode.trunk ? vlanTag(frame) : null;
-		const vlan = tag ?? mode.vlan;
-		if (mode.trunk && !allows(mode, vlan)) {
+		const vlan = tag === null || tag === PRIORITY_ONLY ? mode.vlan : tag;
+		if (mode.trunk && (vlan === RESERVED_VLAN || !allows(mode, vlan))) {
 			src.counters.dropped++;
 			return;
 		}
@@ -511,7 +511,7 @@ export class Fabric {
 		if (came && looped) this.#stormed(sw, slot, vlan, now, came.looped ? came.due : now);
 		const plain = tag === null ? frame : withoutTag(frame);
 		/** The frame as it goes out of a trunk, made when the first needs it. */
-		let tagged = tag === null ? null : frame;
+		let tagged = tag === vlan ? frame : null;
 
 		sw.totals.in++;
 		const tap = this.#events.tap;
@@ -521,7 +521,7 @@ export class Fabric {
 
 		let flood: Flood | null = null;
 		let to = 0;
-		let tags = tag === null ? 0 : 1 << (from - 1);
+		let tags = tag === vlan ? 1 << (from - 1) : 0;
 		const left = looped ? null : { slot, vlan, before: came?.trail ?? null };
 		const out = (p: number, port: Port): boolean => {
 			const egress = sw.modes[p];
