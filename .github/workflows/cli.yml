@@ -12,7 +12,7 @@ concurrency:
   group: cli-${{ github.ref }}
   cancel-in-progress: true
 
-# This tests the CLI and never publishes it: its owner releases it by hand. See "Release the CLI" in the README.
+# This tests the CLI. cli-release.yml publishes it, when its owner runs that by hand.
 jobs:
   # The oldest Node.js it runs on, on both systems it runs on.
   test:

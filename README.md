@@ -448,28 +448,22 @@ The SSH programs in [public/ssh](public/ssh/) are built from pinned releases by
 
 ### Release the CLI
 
-Only the package's owner publishes `unlab.run`, by hand, from their own terminal. CI tests it and never publishes it,
-and npm takes no token for it, so each release needs the owner's two-factor approval in a browser.
+Only the repository's owner releases `unlab.run`, and only by hand. npm takes a release from the
+[release workflow](.github/workflows/cli-release.yml) alone, through
+[trusted publishing](https://docs.npmjs.com/trusted-publishers), so no npm token is kept anywhere, and each release
+says on npm which commit of this repository it was built from.
 
-1. On an up-to-date `main`, raise `version` in [cli/package.json](cli/package.json) in a pull request, and merge it.
-2. Build and pack exactly what was merged:
+1. Raise `version` in [cli/package.json](cli/package.json) in a pull request, and merge it.
+2. In **Actions**, choose **Release the CLI**, then **Run workflow** on `main`.
 
-   ```sh
-   git switch main && git pull && npm ci
-   npm run cli
-   npm pack ./cli
-   ```
+It tests and builds the CLI from `main`, publishes it, and tags that commit `cli-v` and the version. It refuses a
+version that is published or tagged already, a branch other than `main`, and anyone but the owner. Check it with
+`npx unlab.run@latest --version`.
 
-3. Publish that file, in a terminal of your own, not through an agent: npm opens the browser for the approval and
-   waits for it.
-
-   ```sh
-   npm publish unlab.run-0.1.2.tgz --access public
-   ```
-
-4. Tag the release: `git tag cli-v0.1.2 && git push origin cli-v0.1.2`.
-
-Check it with `npm view unlab.run version`, and `npx unlab.run@latest --version`.
+Set up once: in the package's settings on npmjs.com, under **Trusted publishing**, add GitHub Actions with the
+repository `gregbell/unlab`, the workflow `cli-release.yml` and the environment `npm`. Under **Publishing access**,
+choose **Require two-factor authentication and disallow tokens**. The repository's `npm` environment lets only `main`
+deploy.
 
 ## How it works
 
