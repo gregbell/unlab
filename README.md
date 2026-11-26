@@ -59,7 +59,9 @@ every command, and `help spawn` explains one, with its options and an example.
 | `rmswitch lan`                               | Remove a switch, after a confirmation that lists what is plugged in and its cables to other switches. The machines run on.             |
 | `cable lan wan:8`                            | Put a cable between two switches, so that their machines share a segment. `lan` alone is its lowest free port.                         |
 | `uncable lan:3`                              | Take out the cable between switches that is in port 3 of `lan`. Either of its two ports names it.                                      |
-| `topology`                                   | List every switch, every port, what is in it, whether its link is up, and which switches are storming.                                 |
+| `topology`                                   | List every switch, every port, what is in it, whether its link is up, its VLAN, and which switches are storming.                       |
+| `vlan node2 10`                              | Put the port that node2 is in, or one named as `lan:3`, in VLAN 10. It reaches only the ports of VLAN 10. Every port starts in 1.      |
+| `trunk lan:8 --allow 10,20 --native 1`       | Make the port of a cable between switches a trunk of VLANs 10 and 20, tagged, and 1 untagged. Make the far end a trunk too.            |
 | `plug node2 lan:3`                           | Move node2's cable to port 3 of `lan`, or plug it in. `lan` alone is its lowest free port. Name one of several with `node2:eth1`.      |
 | `unplug node2:eth1`                          | Take the interface's cable out and free its port, also for later boots.                                                                |
 | `exec node1 -- ping -c 1 10.88.0.12`         | Send one ping from node1 and read the exit code from its shell.                                                                        |
@@ -293,6 +295,8 @@ them. Your choices survive a reload.
 | `switch_remove`      | Remove a switch and unplug its cables.   | `ask me` |
 | `switch_cable`       | Cable two switches together.             | `run`    |
 | `switch_uncable`     | Remove a cable between switches.         | `run`    |
+| `port_vlan`          | Put a switch port in a VLAN.             | `run`    |
+| `port_trunk`         | Make a switch port a trunk.              | `run`    |
 | `checkpoint_save`    | Save a machine's disks as they are now.  | `run`    |
 | `checkpoint_restore` | Go back to a checkpoint and boot.        | `ask me` |
 | `checkpoint_remove`  | Delete a checkpoint.                     | `ask me` |
@@ -344,6 +348,15 @@ a separate window opens when you wanted your own browser, reconnect `unlab` in
   keeps at most 64 waiting there, so the machines and the page still answer. What does not
   fit is dropped and counted, and no other frame is slowed. When its storm ends, a switch
   forgets its MAC table, so that pings work again. A mesh storms on until every loop is cut.
+- A port is in VLAN 1 until `vlan` puts it in another, and is again once nothing is in it,
+  so whatever is plugged in next starts there. A cut or a reboot leaves it as it is. Each
+  VLAN floods within itself, and a switch learns addresses for each VLAN apart, so a loop in
+  one VLAN storms in that VLAN alone. A trunk tags each frame with its VLAN, but for its
+  native VLAN, which goes untagged. Ends with different native VLANs move untagged frames
+  from one VLAN to the other, as real switches do. The guest kernels have no 802.1Q, so a
+  machine's port cannot be a trunk: a router takes one interface for each VLAN. A frame's
+  capture row says its VLAN, and the ports it had its tag on, and `capture vlan 10` keeps
+  those of VLAN 10. A cable's `.pcap` has each frame as it was on that cable, tagged or not.
 - The capture keeps its newest 10,000 rows. In a storm that is the last seven seconds of
   one loop of three switches, and less than a second of a mesh of four. A frame that has
   looped says so in its row. Pause the capture to read it. The counters and each storm's

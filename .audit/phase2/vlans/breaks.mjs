@@ -8,6 +8,7 @@ const verbUnit = { kind: "unit", files: ["src/commands/verbs/vlan.test.ts"] };
 const kernels = { kind: "integration", files: ["test/integration/vlans.test.ts"] };
 const captureUnit = { kind: "unit", files: ["src/capture/cables.test.ts", "src/net/filter.test.ts"], grep: "VLAN" };
 const detailUnit = { kind: "unit", files: ["src/ui/capture/frame-detail-model.test.ts"], grep: "VLAN" };
+const e2e = { kind: "e2e", files: ["e2e/vlans.spec.ts"] };
 const topologyUnit = { kind: "unit", files: ["src/commands/verbs/switches.test.ts"], grep: "topology" };
 
 export const BREAKS = [
@@ -157,5 +158,40 @@ export const BREAKS = [
 		from: "[held.nic, port.vlan?.tag]",
 		to: "[held.nic]",
 		tests: [{ kind: "browser", files: ["src/ui/switch/switch.browser.test.ts"], grep: "VLAN" }],
+	},
+	{
+		name: "e2e: every port carries every VLAN",
+		file: FABRIC,
+		from: "const carries = (mode: Mode, vlan: number): boolean => (mode.trunk ? allows(mode, vlan) : mode.vlan === vlan);",
+		to: "const carries = (_mode: Mode, _vlan: number): boolean => true;",
+		tests: [e2e],
+	},
+	{
+		name: "e2e: a cable's file has each frame as it came in",
+		file: "src/ui/capture/capture.ts",
+		from: "e.tagged, at?.port ?? e.from)",
+		to: "e.tagged, e.from)",
+		tests: [e2e],
+	},
+	{
+		name: "e2e: the desktop has no VLAN column",
+		file: "src/ui/desktop/desktop.ts",
+		from: "vlans = ports.some((p) => p.vlan);",
+		to: "vlans = false;",
+		tests: [e2e],
+	},
+	{
+		name: "e2e: a reload does not tell the switches",
+		file: "src/model/workspace.ts",
+		from: "...vlanEffects(state), ",
+		to: "",
+		tests: [e2e],
+	},
+	{
+		name: "e2e: a NIC's port can be a trunk",
+		file: "src/commands/verbs/vlan.ts",
+		from: "\t\tif (holdsNic(held)) {\n\t\t\tconst nic",
+		to: "\t\tif (!held) {\n\t\t\tconst nic",
+		tests: [e2e],
 	},
 ];
