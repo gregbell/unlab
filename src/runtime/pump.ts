@@ -52,19 +52,27 @@ export function createPump(fabric: Fabric, clock: Clock): Pump {
 		if (running || resuming || stopped) return;
 		running = true;
 		let now = started;
-		while (fabric.drain(now, BATCH) > 0) {
-			now = clock.now();
-			if (now - started < BUDGET_MS) continue;
+		// Until the fabric says that nothing is due, it has more: its time is up, or it threw on a frame, which by
+		// then had left its cable. Whoever called hears what it threw, and the rest goes on in a task of its own.
+		let more = true;
+		try {
+			while (fabric.drain(now, BATCH) > 0) {
+				now = clock.now();
+				if (now - started >= BUDGET_MS) return;
+			}
+			more = false;
+		} finally {
 			running = false;
-			resuming = true;
-			clock.soon(() => {
-				resuming = false;
-				run();
-			});
-			return;
+			if (more) {
+				resuming = true;
+				clock.soon(() => {
+					resuming = false;
+					run();
+				});
+			} else {
+				sleep(now);
+			}
 		}
-		running = false;
-		sleep(now);
 	};
 
 	return {

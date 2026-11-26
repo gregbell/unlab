@@ -223,6 +223,13 @@ export const BREAKS = [
 		tests: [fabricUnit],
 	},
 	{
+		name: "the pump stays busy for good once the fabric has thrown",
+		file: "src/runtime/pump.ts",
+		from: "\t\t\trunning = false;\n\t\t\tif (more) {",
+		to: "\t\t\tif (!more || now - started >= BUDGET_MS) running = false;\n\t\t\tif (more && now - started >= BUDGET_MS) {",
+		tests: [{ kind: "unit", files: ["src/runtime/pump.test.ts"] }],
+	},
+	{
 		name: "the frame detail dumps a frame without the tag it came in with",
 		file: "src/ui/capture/frame-detail-model.ts",
 		from: "const wire = onWire(e.bytes, e.vlan, e.tagged, e.from);",
