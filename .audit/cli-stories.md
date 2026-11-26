@@ -226,7 +226,7 @@ Stories 6.1 and 6.2 are met a part at a time, with each step.
 
 | Decision | Settled |
 | --- | --- |
-| How the lab learns a CLI is there | A fixed port, 47122, tried about once a second, only after the person linked once or the CLI opened the lab at `#cli`. A page opened beside an open lab hands over with a BroadcastChannel |
+| How the lab learns a CLI is there | A fixed port, 27122, tried about once a second, only after the person linked once or the CLI opened the lab at `#cli`. A page opened beside an open lab hands over with a BroadcastChannel |
 | What the browser's permission prompt needs | Open. Needs a person at a browser |
 | Where the lab's end of the link runs | Commands on the page: hidden for seven minutes, its WebSocket answered within 4.7 ms (`.audit/spikes/cli-link/hidden-ws.ts`). Streams in each machine's worker. Redialling is timed by a worker, as a hidden page's timers are held |
 | Whether Chrome freezes a hidden lab | Not tested under Energy Saver. The lab holds a lock, which exempted a tab when freezing shipped |
@@ -239,6 +239,9 @@ Stories 6.1 and 6.2 are met a part at a time, with each step.
 Built otherwise than the vision says: the relay is not Wisp. unkernel's Wisp client reports a connection open before the
 far end has answered, has no half-close and does not hold a fast sender back, so a refused port would read as one that
 opened and closed. Connections are streams of the link's own instead (`src/streams/mux.ts`).
+
+The port was 47122 in version 0.1.0. Linux gives such ports to outgoing connections, and one that has it keeps the CLI
+from listening.
 
 Found on the way: the lab wrote Alpine's repositories as one line that only `apk` reads, so the image's installer of
 missing commands, which its `curl` uses for most options, never worked. They are two lines now, also on machines that
@@ -294,4 +297,5 @@ have the one.
 | 5.3 | All boxes | `cli/src/relay.test.ts`; `test/integration/cli-relay.test.ts`: it ends within five seconds of the CLI quitting, and a link from another CLI brings it back; `cli/src/relay.test.ts`: with --lan a machine reaches this computer, and still not the CLI's own port; `test/integration/cli-link.test.ts`: a machine's channel needs the token |
 | 6.1 | Never linked; saved labs; WebMCP beside it | `e2e/cli.spec.ts`: a lab that has never linked…; an agent uses the lab's tools while a CLI is linked; `e2e/saved-labs.spec.ts` |
 | 6.2 | Node.js 22.12, on Linux and macOS | the matrix of `.github/workflows/cli.yml`, which passed on both: the link's rules, not SSH into a machine, which ran on Linux with Node.js 24 |
+| 0 | On the live lab, on each image | by hand on 2026-11-25, with `unlab.run@0.1.0` from npm and https://unlab.run in headless Chromium, given the permission beforehand: `ssh`, `curl -sI https://example.org` and 10 MiB by `scp` each way on alpine, debian and lab. A lab that had never linked dialled nothing, and one without the permission said `cli: blocked` |
 | 6.1 | The existing suites pass | CI on pull request 27 |

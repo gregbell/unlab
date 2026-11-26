@@ -9,7 +9,7 @@ import { type SshPrograms, SshServer } from "./ssh-server.ts";
 
 /** Where the CLI is, and what the page was given to show it. */
 export interface LinkTarget {
-	/** `ws://127.0.0.1:47122` */
+	/** `ws://127.0.0.1:27122` */
 	readonly url: string;
 	readonly token: string;
 	/** Where the SSH server's programs are fetched from. */
