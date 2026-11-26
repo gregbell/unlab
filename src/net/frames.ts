@@ -56,6 +56,36 @@ export function ethertype(f: Uint8Array): number {
 	return f.length < ETH_HDR ? -1 : (f[12] << 8) | f[13];
 }
 
+/** The 802.1Q tag: its type where the frame's own type would be, then the VLAN ID in the low 12 bits of the next two bytes. */
+export const ETH_VLAN = 0x8100;
+const TAG = 4;
+
+/** The VLAN ID in the frame's 802.1Q tag, or null for a frame that has none. */
+export function vlanTag(f: Uint8Array): number | null {
+	if (f.length < ETH_HDR + TAG || f[12] !== ETH_VLAN >> 8 || f[13] !== (ETH_VLAN & 255)) return null;
+	return ((f[14] & 15) << 8) | f[15];
+}
+
+/** The frame with an 802.1Q tag for the VLAN after its addresses. */
+export function withTag(f: Uint8Array, vlan: number): Uint8Array {
+	const out = new Uint8Array(f.length + TAG);
+	out.set(f.subarray(0, 12));
+	out[12] = ETH_VLAN >> 8;
+	out[13] = ETH_VLAN & 255;
+	out[14] = (vlan >> 8) & 15;
+	out[15] = vlan & 255;
+	out.set(f.subarray(12), 12 + TAG);
+	return out;
+}
+
+/** The frame without the 802.1Q tag that `vlanTag` found. */
+export function withoutTag(f: Uint8Array): Uint8Array {
+	const out = new Uint8Array(f.length - TAG);
+	out.set(f.subarray(0, 12));
+	out.set(f.subarray(12 + TAG), 12);
+	return out;
+}
+
 /** Broadcast, or any multicast (low bit of the first octet). */
 export function isGroupMac(f: Uint8Array): boolean {
 	return (f[0] & 1) === 1;

@@ -12,10 +12,15 @@
 // the wire. One that comes back to a switch has looped, and stays so. Looped
 // frames wait their turn at a pace, and nothing else is slowed.
 //
+// A frame is classified into a VLAN at the port it comes in by, and goes out
+// only of ports that carry that VLAN, so each VLAN floods within itself and
+// has a table of its own. On a cable between switches it is as it would be on
+// the wire: tagged, but for a trunk's native VLAN.
+//
 // Addresses are numbers here. They are text only where someone reads a table.
 
-import type { PortNo } from "../model/index.ts";
-import type { Flood } from "../net/index.ts";
+import type { PortNo, PortVlan } from "../model/index.ts";
+import { type Flood, vlanTag, withoutTag, withTag } from "../net/index.ts";
 
 export interface PortCounters {
 	rxFrames: number;
@@ -57,9 +62,14 @@ export interface TapEvent {
 	readonly frame: Uint8Array;
 	/** It had come back to a switch that it had left. */
 	readonly looped: boolean;
+	/** The VLAN the switch carried it in. `frame` is without its tag. */
+	readonly vlan: number;
+	/** The ports it had an 802.1Q tag on, as a mask: the one it came in by, those it went out of, or none. */
+	readonly tagged: number;
 }
 
 export interface MacEntry {
+	readonly vlan: number;
 	readonly mac: string;
 	readonly port: PortNo;
 	/** When the address was last seen, on the clock that is passed in. */
@@ -176,6 +186,31 @@ class Direction {
 	}
 }
 
+/** What a port carries, ready for the frames. */
+interface Mode {
+	readonly trunk: boolean;
+	/** An access port's VLAN, or a trunk's native one. */
+	readonly vlan: number;
+	/** A trunk's VLANs, a bit each, or null for all of them. */
+	readonly allows: Uint8Array | null;
+}
+
+const ACCESS_1: Mode = { trunk: false, vlan: 1, allows: null };
+
+function modeOf(vlan: PortVlan): Mode {
+	if (vlan.mode === "access") return vlan.vlan === 1 ? ACCESS_1 : { trunk: false, vlan: vlan.vlan, allows: null };
+	if (vlan.allowed === "all") return { trunk: true, vlan: vlan.native, allows: null };
+	const allows = new Uint8Array(512);
+	for (const id of vlan.allowed) allows[id >> 3] |= 1 << (id & 7);
+	return { trunk: true, vlan: vlan.native, allows };
+}
+
+const allows = ({ allows }: Mode, vlan: number): boolean =>
+	allows === null || (allows[vlan >> 3] & (1 << (vlan & 7))) !== 0;
+
+/** Whether a frame of the VLAN goes out of a port of this mode. */
+const carries = (mode: Mode, vlan: number): boolean => (mode.trunk ? allows(mode, vlan) : mode.vlan === vlan);
+
 interface Port {
 	up: boolean;
 	/** Where a machine's port hands its frames. */
@@ -196,12 +231,29 @@ interface Storm {
 
 class Switch {
 	readonly ports: (Port | undefined)[] = new Array<Port | undefined>(PORTS + 1).fill(undefined);
-	readonly table = new Map<number, Learned>();
+	/** Whatever is in the port, or nothing. */
+	readonly modes: Mode[] = new Array<Mode>(PORTS + 1).fill(ACCESS_1);
+	/** A table for each VLAN that has had a frame. */
+	readonly tables = new Map<number, Map<number, Learned>>();
 	readonly totals = { in: 0, delivered: 0, flooded: 0, dropped: 0 };
 	agedAt = 0;
 	/** When a looped frame last came in. */
 	loopedAt = 0;
 	storm: Storm | null = null;
+}
+
+function tableOf(sw: Switch, vlan: number): Map<number, Learned> {
+	let table = sw.tables.get(vlan);
+	if (!table) {
+		table = new Map();
+		sw.tables.set(vlan, table);
+	}
+	return table;
+}
+
+/** Every address learned on the port, in each VLAN. */
+function forget(sw: Switch, port: number): void {
+	for (const table of sw.tables.values()) for (const [mac, e] of table) if (e.port === port) table.delete(mac);
 }
 
 function newCounters(): PortCounters {
@@ -327,7 +379,15 @@ export class Fabric {
 
 	#unplug(sw: Switch, port: number): void {
 		sw.ports[port] = undefined;
-		for (const [mac, e] of sw.table) if (e.port === port) sw.table.delete(mac);
+		forget(sw, port);
+	}
+
+	/** What the port carries from now on. The switch forgets what it had learned on it. */
+	setVlan(slot: number, port: PortNo, vlan: PortVlan): void {
+		const sw = this.#switches[slot];
+		if (!sw) return;
+		sw.modes[port] = modeOf(vlan);
+		forget(sw, port);
 	}
 
 	/**
@@ -351,7 +411,7 @@ export class Fabric {
 		if (held.out) held.out.up = up;
 		if (up) return;
 		if (held.out) this.#lose(held.out);
-		for (const e of sw.table.values()) if (e.port === port) e.flushed = true;
+		for (const table of sw.tables.values()) for (const e of table.values()) if (e.port === port) e.flushed = true;
 	}
 
 	/** What waits in the direction is lost. */
@@ -377,12 +437,15 @@ export class Fabric {
 		const sw = this.#switches[slot];
 		if (!sw) return [];
 		this.#age(sw, now);
-		return Array.from(sw.table, ([mac, e]) => ({
-			mac: macText(mac),
-			port: e.port as PortNo,
-			seen: e.seen,
-			flushed: e.flushed,
-		}));
+		return Array.from(sw.tables).flatMap(([vlan, table]) =>
+			Array.from(table, ([mac, e]) => ({
+				vlan,
+				mac: macText(mac),
+				port: e.port as PortNo,
+				seen: e.seen,
+				flushed: e.flushed,
+			})),
+		);
 	}
 
 	/** Null for a switch that no looped frame comes into. */
@@ -417,23 +480,46 @@ export class Fabric {
 			return;
 		}
 
+		// An access port carries whatever comes in as its VLAN's, tag and all, as a switch that knows no VLANs would.
+		const mode = sw.modes[from];
+		const tag = mode.trunk ? vlanTag(frame) : null;
+		const vlan = tag ?? mode.vlan;
+		if (mode.trunk && !allows(mode, vlan)) {
+			src.counters.dropped++;
+			return;
+		}
+		const plain = tag === null ? frame : withoutTag(frame);
+		/** The frame as it goes out of a trunk, made when the first needs it. */
+		let tagged = tag === null ? null : frame;
+
 		sw.totals.in++;
 		const tap = this.#events.tap;
-		const snapshot = tap ? frame.slice() : frame;
-		this.#learn(sw, macAt(frame, 6), from, now);
+		const snapshot = tap ? plain.slice() : plain;
+		const table = tableOf(sw, vlan);
+		this.#learn(sw, table, macAt(plain, 6), from, now);
 
 		let flood: Flood | null = null;
 		let to = 0;
+		let tags = tag === null ? 0 : 1 << (from - 1);
 		const left = visited | (1 << slot);
-		if (frame[0] & 1) {
+		const out = (p: number, port: Port): boolean => {
+			const egress = sw.modes[p];
+			if (!carries(egress, vlan)) return false;
+			if (!egress.trunk || egress.vlan === vlan) return this.#send(sw, port, plain, now, left, looped);
+			tagged ??= withTag(plain, vlan);
+			if (!this.#send(sw, port, tagged, now, left, looped)) return false;
+			tags |= 1 << (p - 1);
+			return true;
+		};
+		if (plain[0] & 1) {
 			flood = "group";
 		} else {
-			const entry = sw.table.get(macAt(frame, 0));
+			const entry = table.get(macAt(plain, 0));
 			if (!entry || entry.flushed || this.#aged(entry, now)) {
 				flood = "unknown";
 			} else if (entry.port !== from) {
 				const target = sw.ports[entry.port];
-				if (target && this.#send(sw, target, frame, now, left, looped)) to = 1 << (entry.port - 1);
+				if (target && out(entry.port, target)) to = 1 << (entry.port - 1);
 			}
 		}
 		if (flood) {
@@ -441,13 +527,13 @@ export class Fabric {
 			sw.totals.flooded++;
 			for (let p = 1; p <= PORTS; p++) {
 				const port = sw.ports[p];
-				if (p !== from && port && this.#send(sw, port, frame, now, left, looped)) to |= 1 << (p - 1);
+				if (p !== from && port && out(p, port)) to |= 1 << (p - 1);
 			}
 		}
 
 		if (!tap) return;
 		try {
-			tap(slot, { from: from as PortNo, to, flood, frame: snapshot, looped });
+			tap(slot, { from: from as PortNo, to, flood, frame: snapshot, looped, vlan, tagged: tags });
 		} catch {
 			// A broken inspector must never break the wire.
 		}
@@ -457,9 +543,9 @@ export class Fabric {
 		return this.#macAgeMs > 0 && now - entry.seen > this.#macAgeMs;
 	}
 
-	#learn(sw: Switch, mac: number, port: number, now: number): void {
+	#learn(sw: Switch, table: Map<number, Learned>, mac: number, port: number, now: number): void {
 		if (mac === BROADCAST) return;
-		const known = sw.table.get(mac);
+		const known = table.get(mac);
 		if (known) {
 			const moved = known.port !== port;
 			known.port = port;
@@ -467,14 +553,16 @@ export class Fabric {
 			known.flushed = false;
 			if (!moved) return;
 		} else {
-			sw.table.set(mac, { port, seen: now, flushed: false });
+			table.set(mac, { port, seen: now, flushed: false });
 		}
-		if (sw.table.size > 1 && now - sw.agedAt >= AGE_EVERY_MS) this.#age(sw, now);
+		if (table.size > 1 && now - sw.agedAt >= AGE_EVERY_MS) this.#age(sw, now);
 	}
 
 	#age(sw: Switch, now: number): void {
 		sw.agedAt = now;
-		for (const [mac, e] of sw.table) if (!e.flushed && this.#aged(e, now)) sw.table.delete(mac);
+		for (const table of sw.tables.values()) {
+			for (const [mac, e] of table) if (!e.flushed && this.#aged(e, now)) table.delete(mac);
+		}
 	}
 
 	#send(sw: Switch, port: Port, frame: Uint8Array, now: number, left: number, looped: boolean): boolean {
@@ -641,7 +729,7 @@ export class Fabric {
 			if (!sw || !storm || now - sw.loopedAt < STORM_QUIET_MS || this.#stillComing(slot)) continue;
 			sw.storm = null;
 			this.#storming--;
-			sw.table.clear();
+			sw.tables.clear();
 			this.#events.storm?.(slot, readingOf(storm, now), true);
 		}
 	}

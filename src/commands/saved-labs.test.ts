@@ -104,8 +104,35 @@ describe("a lab saved before there were cables between switches", () => {
 		expect(portsOf(on("node5") as never).map((port) => port.switch)).toEqual(["switch0", "wan", "switch0"]);
 
 		const saved = JSON.parse(saveWorkspace(state));
-		expect(saved).toMatchObject({ version: 8, switches: ["switch0", "lan", "wan"], cables: [] });
+		expect(saved).toMatchObject({ version: 9, switches: ["switch0", "lan", "wan"], cables: [], vlans: [] });
 		const again = await open(JSON.stringify(saved));
 		expect([again.cables, again.booted]).toEqual([cables, booted]);
+	});
+});
+
+describe("a lab saved before ports had VLANs", () => {
+	test("version 8 opens with its cables between switches, cut or not, and every port in VLAN 1", async () => {
+		const { state, booted } = await open(savedBy(8));
+		expect(state.switchCables).toEqual([
+			{
+				ends: [
+					{ switch: "switch0", port: 8 },
+					{ switch: "lan", port: 7 },
+				],
+				link: "up",
+			},
+			{
+				ends: [
+					{ switch: "lan", port: 8 },
+					{ switch: "wan", port: 8 },
+				],
+				link: "cut",
+			},
+		]);
+		expect(state.portVlans).toEqual([]);
+		const saved = JSON.parse(saveWorkspace(state));
+		expect(saved).toMatchObject({ version: 9, vlans: [] });
+		const again = await open(JSON.stringify(saved));
+		expect([again.state.switchCables, again.booted]).toEqual([state.switchCables, booted]);
 	});
 });
