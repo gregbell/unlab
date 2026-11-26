@@ -456,15 +456,49 @@ describe("a loop of cables", () => {
 			expect(Math.abs((reading?.rate ?? 0) - came(on, t.now - 1000)), on).toBeLessThan(20);
 			// Two cables bring them, a thousand a second each.
 			expect(reading?.rate, on).toBeGreaterThan(1700);
-			expect(reading?.rate, on).toBeLessThanOrEqual(2010);
+			expect(reading?.rate, on).toBeLessThanOrEqual(2000);
 			expect(reading?.looped, on).toBe(came(on, -1));
 			expect(reading?.since, on).toBeLessThan(5);
 		}
 		// The switch beyond the loop is handed the same frames, at the pace of its one cable.
 		const beyond = t.fabric.storm(t.slot("d"), t.now);
 		expect(beyond?.rate).toBeGreaterThan(900);
-		expect(beyond?.rate).toBeLessThanOrEqual(1010);
+		expect(beyond?.rate).toBeLessThanOrEqual(1000);
 		expect(beyond?.looped).toBe(came("d", -1));
+	});
+
+	test("reads a rate no higher than its cables' pace, whenever it is read", () => {
+		/** Carries what is due after each gap, as a page does that gets to it when it can, and reads every rate. */
+		const highest = (t: ReturnType<typeof net>, letters: readonly Letter[], ms: number, gaps = [1]) => {
+			const most = Object.fromEntries(letters.map((on) => [on, 0]));
+			for (let i = 0; t.now < ms; i++) {
+				t.stall(gaps[i % gaps.length]);
+				t.drain();
+				for (const on of letters) most[on] = Math.max(most[on], t.fabric.storm(t.slot(on), t.now)?.rate ?? 0);
+			}
+			return most;
+		};
+		// The first copies of the broadcast are not paced, and a second later they are out of the rate.
+		const mesh = net(["a", "b", "c", "d"], MESH);
+		mesh.send("a", arpRequest(1, 9));
+		mesh.run(1500);
+		// Three cables bring each switch a thousand looped frames a second each, and the mesh keeps all three full.
+		expect(highest(mesh, ["a", "b", "c", "d"], 2500)).toEqual({ a: 3000, b: 3000, c: 3000, d: 3000 });
+
+		const late = net(["a", "b", "c", "d"], MESH);
+		late.send("a", arpRequest(1, 9));
+		late.run(1500);
+		expect(highest(late, ["a", "b", "c", "d"], 3500, [0.3, 1.7, 0.6, 1.4, 1.3])).toEqual({
+			a: 3000,
+			b: 3000,
+			c: 3000,
+			d: 3000,
+		});
+
+		// Both ways round one cable, from the first frame that comes back: a storm younger than a second too.
+		const one = net(["a"], ["a7-a8"]);
+		one.send("a", arpRequest(1, 9));
+		expect(highest(one, ["a"], 1500)).toEqual({ a: 2000 });
 	});
 
 	test("drops and counts what does not fit behind the pace, and never has more waiting than its bound", () => {
