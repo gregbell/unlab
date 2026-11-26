@@ -22,6 +22,7 @@ import {
 	nameOf,
 	nicLabel,
 	nicOfMac,
+	onWire,
 } from "../../net/index.ts";
 
 /** Machine n, and how to write it: its name, or `node2:eth1` where the name alone does not say which NIC. */
@@ -154,12 +155,14 @@ function addressSpans(e: FrameEntry): { readonly start: number; readonly end: nu
 	return spans;
 }
 
-function dump(e: FrameEntry): DumpRow[] {
-	const f = e.bytes;
+/** `f` is the frame as it was on the wire: with a tag after its addresses, it is longer than `e.bytes` by the tag. */
+function dump(e: FrameEntry, f: Uint8Array): DumpRow[] {
+	const tag = f.length - e.bytes.length;
 	const owner: (number | null)[] = new Array(f.length).fill(null);
 	const starts = new Set<number>();
-	for (const { start, end, n } of addressSpans(e)) {
-		owner.fill(n, start, end);
+	for (const span of addressSpans(e)) {
+		const start = span.start < 12 ? span.start : span.start + tag;
+		owner.fill(span.n, start, start + span.end - span.start);
 		starts.add(start);
 	}
 	const rows: DumpRow[] = [];
@@ -361,16 +364,18 @@ function did(e: FrameEntry, names: LabNames): Words[] {
 }
 
 export function frameDetail(e: FrameEntry, names: LabNames): FrameDetail {
+	// As it came in, as the summary says, so the bytes have the tag that it had there.
+	const wire = onWire(e.bytes, e.vlan, e.tagged, e.from);
 	return {
 		title: `frame ${e.seq}`,
 		summary: [
-			`${e.bytes.length} bytes`,
+			`${wire.length} bytes`,
 			`${(e.t / 1000).toFixed(2)} s`,
 			`in on ${portWord(e, e.from, names)}`,
 			...(e.vlan !== 1 || e.tagged !== 0 ? [`vlan ${e.vlan}`] : []),
 		].join(" · "),
 		groups: groups(e, names),
 		did: did(e, names),
-		dump: dump(e),
+		dump: dump(e, wire),
 	};
 }

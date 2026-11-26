@@ -209,6 +209,13 @@ export const BREAKS = [
 		tests: [fabricUnit],
 	},
 	{
+		name: "the frame detail dumps a frame without the tag it came in with",
+		file: "src/ui/capture/frame-detail-model.ts",
+		from: "const wire = onWire(e.bytes, e.vlan, e.tagged, e.from);",
+		to: "const wire = e.bytes;",
+		tests: [detailUnit],
+	},
+	{
 		name: "e2e: every port carries every VLAN",
 		file: FABRIC,
 		from: "const carries = (mode: Mode, vlan: number): boolean => (mode.trunk ? allows(mode, vlan) : mode.vlan === vlan);",
