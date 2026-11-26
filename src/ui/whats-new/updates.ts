@@ -13,6 +13,13 @@ export interface Update {
 /** Newest first, and only what people notice in the lab. */
 export const UPDATES: readonly Update[] = [
 	{
+		date: "2026-11-26",
+		title: "Cable switches together, and make a loop",
+		detail:
+			"Join two switches with a cable, cut it, or take it out. Close a loop, as a cable from a switch to itself does, to watch a broadcast storm: each switch says how fast it runs, and the lab still answers.",
+		example: "cable switch0 switch0",
+	},
+	{
 		date: "2026-11-25",
 		title: "Follow a packet from switch to switch",
 		detail:

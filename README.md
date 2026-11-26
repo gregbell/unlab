@@ -50,15 +50,18 @@ every command, and `help spawn` explains one, with its options and an example.
 | `spawn 1 alpine --nics 2 --net switch0,none` | Add a machine with two network interfaces: `eth0` plugged in and `eth1` left unplugged. Without `--net`, each takes its own port.      |
 | `spawn 1 alpine --addr 10.1.0.1/24`          | Add a machine with an address you choose. With `--nics`, give each interface an address or `none`: `--nics 2 --addr 10.1.0.1/24,none`. |
 | `spawn 1 alpine --no-gateway`                | Add a machine on the switch but without the package gateway. DHCP on its `eth0` then goes to the other machines.                       |
-| `mkswitch lan`                               | Add a switch called `lan`. Without a name, it is the next free `switch1`. Frames do not pass from one switch to another.               |
+| `mkswitch lan`                               | Add a switch called `lan`. Without a name, it is the next free `switch1`. Frames pass from one switch to another only over a cable.    |
 | `spawn 1 alpine --nics 2 --net switch0,lan`  | Add a machine with one network interface on each switch. `--net lan` puts every interface on `lan`.                                    |
-| `rmswitch lan`                               | Remove a switch, after a confirmation that lists what is plugged in. Those interfaces are left unplugged, and the machines run on.     |
-| `topology`                                   | List every switch, every port, what is in it, and whether its link is up.                                                              |
+| `rmswitch lan`                               | Remove a switch, after a confirmation that lists what is plugged in and its cables to other switches. The machines run on.             |
+| `cable lan wan:8`                            | Put a cable between two switches, so that their machines share a segment. `lan` alone is its lowest free port.                         |
+| `uncable lan:3`                              | Take out the cable between switches that is in port 3 of `lan`. Either of its two ports names it.                                      |
+| `topology`                                   | List every switch, every port, what is in it, whether its link is up, and which switches are storming.                                 |
 | `plug node2 lan:3`                           | Move node2's cable to port 3 of `lan`, or plug it in. `lan` alone is its lowest free port. Name one of several with `node2:eth1`.      |
 | `unplug node2:eth1`                          | Take the interface's cable out and free its port, also for later boots.                                                                |
 | `exec node1 -- ping -c 1 10.88.0.12`         | Send one ping from node1 and read the exit code from its shell.                                                                        |
 | `write node1 /etc/motd --mode 644 -- hello`  | Put a text in a file on the machine, as root, with the directories it needs. `--owner user:group` sets whose it is.                    |
 | `link down node2`                            | Cut node2's cables, whether it is on or off. Reconnect them with `link up node2`. Name one of several with `node2:eth1`.               |
+| `link down lan:3`                            | Cut the cable in that port, also one between switches. Both switches forget what they learned over it. `link up lan:3` reconnects it.  |
 | `capture arp or node2`                       | Maximise the capture with a filter for ARP or traffic involving node2. `node2:eth1` keeps one interface's frames.                      |
 | `capture lan:3 icmp`                         | Show the pings that crossed one cable, the one in port 3 of `lan`. `lan` alone is all that the switch carried.                         |
 | `sh node2`                                   | Open another shell on node2.                                                                                                           |
@@ -78,8 +81,10 @@ a MAC, a switch, a cable such as `lan:3`, or `port:3` for that port of every
 switch. A machine or an interface is matched on every switch that its frames went
 through, so a ping across routers shows each hop, in order. With several switches,
 each row says which one carried the frame and the ports it came in by and went out
-of. **save .pcap** saves everything captured, or only the frames shown when the
-filter names a switch or a cable.
+of. A cable between two switches has a port at each end, and either names it: the
+same frames, each as the switch at that end carried it. **save .pcap** saves
+everything captured, or only the frames shown when the filter names a switch or a
+cable.
 
 Commands that accept multiple machines can take a list (`node1,node3`), a glob
 (`node*`), or `all`. Globs and `all` select the machines that the command can act
@@ -276,13 +281,15 @@ them. Your choices survive a reload.
 | `machines_remove`    | Remove machines and delete their disks.  | `ask me` |
 | `switch_add`         | Add a switch.                            | `run`    |
 | `switch_remove`      | Remove a switch and unplug its cables.   | `ask me` |
+| `switch_cable`       | Cable two switches together.             | `run`    |
+| `switch_uncable`     | Remove a cable between switches.         | `run`    |
 | `checkpoint_save`    | Save a machine's disks as they are now.  | `run`    |
 | `checkpoint_restore` | Go back to a checkpoint and boot.        | `ask me` |
 | `checkpoint_remove`  | Delete a checkpoint.                     | `ask me` |
 | `shell_exec`         | Run a command in a guest's shell.        | `run`    |
 | `shell_read`         | Read what a guest's terminal shows.      | `run`    |
 | `file_write`         | Put a text in a file on a machine.       | `run`    |
-| `link_set`           | Cut or reconnect a machine's cables.     | `run`    |
+| `link_set`           | Cut or reconnect cables.                 | `run`    |
 | `cable_plug`         | Plug a NIC in, or move its cable.        | `run`    |
 | `cable_unplug`       | Unplug a NIC and free its port.          | `run`    |
 | `capture_read`       | Read captured frames from the switches.  | `run`    |
@@ -315,6 +322,22 @@ a separate window opens when you wanted your own browser, reconnect `unlab` in
 - `lan:3` is port 3 of the switch `lan`. A cable moves as it is, so one that is cut stays
   cut until `link up`. The switch that it leaves forgets what it learned from it. A machine
   that fails boots on the switch its cable was moved to, at the lowest free port.
+- `cable` joins two switches, at a port of each. Each switch learns the far machines on
+  the cable's port, and a cut or a removal makes both forget what they learned over it. A
+  switch further away keeps the port it learned for a machine until that machine sends a
+  frame from where it is now, or five minutes pass, as a real switch does. So after `plug`
+  moves a machine to another switch, ping from it first.
+- Cables may make a loop, and a switch can be cabled to itself. One broadcast then goes
+  round until a cable of the loop is cut. Every switch that such frames come into says that
+  it is storming, on its faceplate, in `topology` and in the capture, with the looped
+  frames it takes a second. The lab lets 1,000 looped frames a second along each cable and
+  keeps at most 64 waiting there, so the machines and the page still answer. What does not
+  fit is dropped and counted, and no other frame is slowed. When its storm ends, a switch
+  forgets its MAC table, so that pings work again. A mesh storms on until every loop is cut.
+- The capture keeps its newest 10,000 rows. In a storm that is the last seven seconds of
+  one loop of three switches, and less than a second of a mesh of four. A frame that has
+  looped says so in its row. Pause the capture to read it. The counters and each storm's
+  own rows say what it came to.
 - With more than one switch, the switch panel's title chooses which one it shows, with
   its ports, frame counts and MAC table.
 - Unless you choose, `eth0` starts with an address in `10.88.0.0/24` and `eth1` and
