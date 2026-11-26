@@ -2,10 +2,11 @@
 // address that is checked is the one that is connected to, so that a public
 // name for a private address is refused too.
 
+import { execFile } from "node:child_process";
 import { lookup } from "node:dns/promises";
 import { connect, isIPv4, type Socket } from "node:net";
 import { networkInterfaces } from "node:os";
-import { type Asked, type FromMachine, NO_SUCH_NAME, type Stream, WINDOW } from "../../src/streams/index.ts";
+import { type Asked, type FromMachine, NO_SUCH_NAME, type Pong, type Stream, WINDOW } from "../../src/streams/index.ts";
 
 /** Network, prefix length. Loopback, private, link-local, carrier-grade NAT, and what is no one host's. */
 const NOT_PUBLIC: readonly (readonly [string, number])[] = [
@@ -49,6 +50,8 @@ export interface Connection {
 export interface RelayOptions {
 	/** Whether machines may reach this computer and its local network. */
 	readonly lan: boolean;
+	/** Whether a connection is said as it opens. */
+	readonly log?: boolean;
 	/** The CLI's own port, which no machine may reach whatever else it may. */
 	readonly ownPort: () => number;
 	/** One is open, with the name the machine looked up for it. */
@@ -56,6 +59,21 @@ export interface RelayOptions {
 }
 
 const CONNECT_MS = 20_000;
+/** As long as a guest's own ping waits for a reply, unless it is told otherwise. */
+const PING_S = 2;
+const NO_REPLY = "no reply";
+
+/** The far end's TTL, or null when it did not answer in time or there is no ping here. */
+export function pingOnce(address: string): Promise<Pong | null> {
+	// The wait is in seconds with -W on Linux, and with -t on macOS, whose -W is in milliseconds.
+	const wait = process.platform === "darwin" ? ["-t", String(PING_S)] : ["-W", String(PING_S)];
+	return new Promise((resolve) => {
+		execFile("ping", ["-n", "-c", "1", ...wait, address], { timeout: (PING_S + 2) * 1000 }, (error, stdout) => {
+			const ttl = /ttl=(\d+)/i.exec(stdout);
+			resolve(error || !ttl ? null : { ttl: Number(ttl[1]) });
+		});
+	});
+}
 
 export class Relay {
 	readonly open = new Set<Connection>();
@@ -71,6 +89,7 @@ export class Relay {
 		const to = asked.to as FromMachine;
 		if (to.kind === "lookup") await this.#lookup(machine, to.name, asked);
 		else if (to.kind === "tcp") this.#connect(machine, to.host, to.port, asked);
+		else if (to.kind === "ping") await this.#ping(machine, to.address, asked);
 		else asked.refuse("The CLI does not know how to open that.");
 	}
 
@@ -84,6 +103,24 @@ export class Relay {
 			const code = (error as NodeJS.ErrnoException).code;
 			asked.refuse(code === "ENOTFOUND" ? NO_SUCH_NAME : `The name server did not answer: ${code}.`);
 		}
+	}
+
+	/** This computer's own ping, once: Node has no way to send an echo itself without rights it is not given. */
+	async #ping(machine: string, address: string, asked: Asked): Promise<void> {
+		const refusal = this.#refusal(address, 0);
+		if (refusal !== null) {
+			asked.refuse(refusal);
+			return;
+		}
+		const echoed = await pingOnce(address);
+		if (echoed === null) {
+			asked.refuse(NO_REPLY);
+			return;
+		}
+		if (this.#options.log) {
+			this.#options.opened({ machine, host: address, port: 0, sent: 0, received: 0 }, "ping");
+		}
+		asked.accept(echoed).reset();
 	}
 
 	#refusal(host: string, port: number): string | null {

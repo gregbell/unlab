@@ -20,6 +20,7 @@ import { copyLive, type LiveCopy, type LiveDisk, watchable } from "./live-copy.t
 import { type Channel, type LinkTarget, MachineLink } from "./machine-link.ts";
 import { MachineNics } from "./machine-nics.ts";
 import { alpinePackageSetup, packageBackend } from "./package-repositories.ts";
+import { PingingGateway } from "./ping.ts";
 import { nextOf, saveDisks, shutDown, syncGuest } from "./power.ts";
 import type { FromVm, PtySpec, ToVm, VmConfig } from "./protocol.ts";
 import { createShellTracker } from "./shell-tracker.ts";
@@ -230,7 +231,7 @@ async function boot(c: VmConfig): Promise<void> {
 	// The gateway is a NetStack of its own, told the same MAC as eth0 so its
 	// DHCP lease and ARP replies are addressed to this machine.
 	const backend = c.gateway ? new GatewayBackend(packageBackend()) : undefined;
-	const gateway = backend && new NetStack({ mac: c.macs[0], backend });
+	const gateway = backend && new PingingGateway(new NetStack({ mac: c.macs[0], backend }), (to) => backend.ping(to));
 	link = new MachineLink({
 		n: c.n,
 		name: c.name,

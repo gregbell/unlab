@@ -154,9 +154,10 @@ checkpoint, no switch carries it, and port 22 stays yours. A reboot removes it.
 ### The internet
 
 While the CLI is linked, each machine that has a gateway reaches the internet through
-your computer: names, and TCP connections to IPv4 addresses. Package downloads take the
-same path. It starts and ends on running machines, and `ls` says which have it.
-`--no-gateway` leaves a machine out. It carries no `ping`, UDP or IPv6, and nothing on
+your computer: names, TCP connections to IPv4 addresses, and `ping`, which your
+computer's own `ping` sends for each echo, so its times are a few milliseconds longer
+than the far end's. Package downloads take the same path. It starts and ends on running machines, and `ls` says which have it.
+`--no-gateway` leaves a machine out. It carries no UDP, `traceroute` or IPv6, and nothing on
 the internet can connect to a machine. `npx unlab.run --log` prints each connection.
 
 Sites see your computer's address. A machine cannot reach your computer or your local
@@ -444,6 +445,11 @@ The SSH programs in [public/ssh](public/ssh/) are built from pinned releases by
 [Zig](https://ziglang.org) and make. To use the CLI with your own copy of the lab,
 `npm run cli` builds it, and
 `node cli/dist/cli.mjs --origin http://localhost:5173` takes that lab's pages.
+
+To release the CLI, raise `version` in [cli/package.json](cli/package.json), merge it, then tag that commit
+`cli-v` and the version, as in `git tag cli-v0.1.2 && git push origin cli-v0.1.2`. The
+[CLI workflow](.github/workflows/cli.yml) tests it and publishes it to npm with provenance. That needs the repository
+secret `NPM_TOKEN` in its `npm` environment: a granular npm token that may publish `unlab.run`.
 
 ## How it works
 
