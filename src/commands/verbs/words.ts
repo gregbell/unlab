@@ -1,8 +1,10 @@
 import {
 	andList,
+	cablesOf,
 	type Disk,
 	type LabState,
 	lowestFreePorts,
+	type NicRef,
 	nicLabel,
 	type PlanError,
 	type PlugPlanError,
@@ -106,19 +108,25 @@ export function planErrorSentence(error: PlanError, ports = "remove a machine wi
 	}
 }
 
-/** A plan error from the model, as `plug` says it. */
+/** `node2:eth1`, or `the cable to wan:8` for one from another port of a switch. */
+function holderText(lab: LabState, by: NicRef | PortRef): string {
+	if (!("machine" in by)) return `the cable to ${portName(by)}`;
+	const holder = lab.machines[by.machine];
+	return holder ? nicLabel(holder, by.nic) : by.machine;
+}
+
+/** A plan error from the model, as `plug` and `cable` say it. */
 export function plugErrorSentence(lab: LabState, error: PlugPlanError): string {
 	const on = error.kind === "no-ports" ? error.switch : error.port.switch;
 	const [free] = lowestFreePorts(lab, on, 1);
+	const unplug = cablesOf(lab, on).length === 0 ? "unplug" : "unplug or uncable";
 	const others = lab.switches.filter((other) => other !== on && lowestFreePorts(lab, other, 1).length > 0);
 	const instead =
 		free === undefined
-			? `so ${others.length === 0 ? "" : `use ${list(others, "or")}, or `}free a port with unplug`
+			? `so ${others.length === 0 ? "" : `use ${list(others, "or")}, or `}free a port with ${unplug}`
 			: `so use ${portName({ switch: on, port: free })}`;
 	if (error.kind === "no-ports") return `${on} has no free port, ${instead}.`;
-	const { machine, nic } = error.by;
-	const holder = lab.machines[machine];
-	const taken = `${portName(error.port)} is taken by ${holder ? nicLabel(holder, nic) : machine}`;
+	const taken = `${portName(error.port)} is taken by ${holderText(lab, error.by)}`;
 	return free === undefined ? `${taken} and ${on} has no free port, ${instead}.` : `${taken}, ${instead}.`;
 }
 

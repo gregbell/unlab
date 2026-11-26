@@ -132,6 +132,10 @@ const TABLE: Readonly<Record<Phase, Readonly<Record<Column, Outcome>>>> = {
 		"cmd/forget": "untouched",
 		"cmd/link": "ignored",
 		"cmd/plug": "ignored",
+		"cmd/cable": "untouched",
+		"cmd/uncable": "ignored",
+		"cmd/cable-link": "ignored",
+		"switch/storm": "untouched",
 		"cmd/shell": "ignored",
 		"cmd/focus": "untouched",
 		"cmd/capture": "untouched",
@@ -165,6 +169,10 @@ const TABLE: Readonly<Record<Phase, Readonly<Record<Column, Outcome>>>> = {
 		"cmd/forget": "untouched",
 		"cmd/link": "ready",
 		"cmd/plug": "ready",
+		"cmd/cable": "untouched",
+		"cmd/uncable": "ignored",
+		"cmd/cable-link": "ignored",
+		"switch/storm": "untouched",
 		"cmd/shell": "ready",
 		"cmd/focus": "untouched",
 		"cmd/capture": "untouched",
@@ -198,6 +206,10 @@ const TABLE: Readonly<Record<Phase, Readonly<Record<Column, Outcome>>>> = {
 		"cmd/forget": "untouched",
 		"cmd/link": "ignored",
 		"cmd/plug": "ignored",
+		"cmd/cable": "untouched",
+		"cmd/uncable": "ignored",
+		"cmd/cable-link": "ignored",
+		"switch/storm": "untouched",
 		"cmd/shell": "ignored",
 		"cmd/focus": "untouched",
 		"cmd/capture": "untouched",
@@ -231,6 +243,10 @@ const TABLE: Readonly<Record<Phase, Readonly<Record<Column, Outcome>>>> = {
 		"cmd/forget": "untouched",
 		"cmd/link": "off",
 		"cmd/plug": "off",
+		"cmd/cable": "untouched",
+		"cmd/uncable": "ignored",
+		"cmd/cable-link": "ignored",
+		"switch/storm": "untouched",
 		"cmd/shell": "ignored",
 		"cmd/focus": "untouched",
 		"cmd/capture": "untouched",
@@ -264,6 +280,10 @@ const TABLE: Readonly<Record<Phase, Readonly<Record<Column, Outcome>>>> = {
 		"cmd/forget": "ignored",
 		"cmd/link": "ignored",
 		"cmd/plug": "ignored",
+		"cmd/cable": "untouched",
+		"cmd/uncable": "ignored",
+		"cmd/cable-link": "ignored",
+		"switch/storm": "untouched",
 		"cmd/shell": "ignored",
 		"cmd/focus": "untouched",
 		"cmd/capture": "untouched",
@@ -297,6 +317,10 @@ const TABLE: Readonly<Record<Phase, Readonly<Record<Column, Outcome>>>> = {
 		"cmd/forget": "untouched",
 		"cmd/link": "ignored",
 		"cmd/plug": "ignored",
+		"cmd/cable": "untouched",
+		"cmd/uncable": "ignored",
+		"cmd/cable-link": "ignored",
+		"switch/storm": "untouched",
 		"cmd/shell": "ignored",
 		"cmd/focus": "untouched",
 		"cmd/capture": "untouched",
@@ -330,6 +354,10 @@ const TABLE: Readonly<Record<Phase, Readonly<Record<Column, Outcome>>>> = {
 		"cmd/forget": "ignored",
 		"cmd/link": "ignored",
 		"cmd/plug": "ignored",
+		"cmd/cable": "untouched",
+		"cmd/uncable": "ignored",
+		"cmd/cable-link": "ignored",
+		"switch/storm": "untouched",
 		"cmd/shell": "ignored",
 		"cmd/focus": "untouched",
 		"cmd/capture": "untouched",
@@ -401,6 +429,14 @@ function eventFor(column: Column, s: LabState, name: MachineName, attempt: numbe
 			};
 		case "cmd/plug":
 			return { type: "cmd/plug", plan: { machine: name, nic: 0, to: port0(5) }, cause: "bar" };
+		case "cmd/cable":
+			return { type: "cmd/cable", plan: { ends: [port0(7), port0(8)] }, cause: "bar" };
+		case "cmd/uncable":
+			return { type: "cmd/uncable", port: port0(8), cause: "bar" };
+		case "cmd/cable-link":
+			return { type: "cmd/cable-link", changes: [{ port: port0(8), up: false }], cause: "bar" };
+		case "switch/storm":
+			return { type: "switch/storm", switch: "switch0", storm: { since: s.now, rate: 100, dropped: 0 } };
 		case "cmd/shell":
 			return { type: "cmd/shell", machine: name };
 		case "cmd/focus":
@@ -430,9 +466,18 @@ const VM_EVENTS = [
 /** Every event that names a machine or one of its sessions. */
 const ADDRESSED = COLUMNS.filter(
 	(column) =>
-		!["tick", "tick past the boot timeout", "cmd/spawn", "cmd/switch-add", "cmd/capture", "cmd/logged"].includes(
-			column,
-		),
+		![
+			"tick",
+			"tick past the boot timeout",
+			"cmd/spawn",
+			"cmd/switch-add",
+			"cmd/cable",
+			"cmd/uncable",
+			"cmd/cable-link",
+			"switch/storm",
+			"cmd/capture",
+			"cmd/logged",
+		].includes(column),
 );
 
 describe("the lifecycle table", () => {

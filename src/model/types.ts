@@ -51,6 +51,24 @@ export interface NicRef {
 	readonly nic: NicNo;
 }
 
+/**
+ * A cable between two ports of switches, which can both be of one switch. A
+ * port holds one cable, so either of its ports names it. Cut, it keeps both.
+ */
+export interface SwitchCable {
+	readonly ends: readonly [PortRef, PortRef];
+	readonly link: "up" | "cut";
+}
+
+/** A switch that looped frames come into: one on a loop of cables, or one that such a loop reaches. */
+export interface Storm {
+	readonly since: number;
+	/** Looped frames a second, as they came into it over the last second. */
+	readonly rate: number;
+	/** Frames it did not send on since the storm began, which is how the lab stays responsive. */
+	readonly dropped: number;
+}
+
 // ───────────────────────────── machines ─────────────────────────────
 
 export type Source = "bar" | "button" | "agent" | "cli";
@@ -297,6 +315,8 @@ export type ToolName =
 	| "machines_remove"
 	| "switch_add"
 	| "switch_remove"
+	| "switch_cable"
+	| "switch_uncable"
 	| "checkpoint_save"
 	| "checkpoint_restore"
 	| "checkpoint_remove"
@@ -390,6 +410,10 @@ export interface LabState {
 	readonly departedSwitches: readonly SwitchName[];
 	/** The one whose faceplate is on the page. Always one of `switches`. */
 	readonly shownSwitch: SwitchName;
+	/** The cables between switches, in the order they were put in. No two share a port, with each other or with a NIC. */
+	readonly switchCables: readonly SwitchCable[];
+	/** The switches that are storming now, as the runtime last said. Never saved. */
+	readonly storms: Readonly<Partial<Record<SwitchName, Storm>>>;
 	readonly sessions: Readonly<Partial<Record<SessionId, Session>>>;
 	readonly panes: Panes;
 	readonly keyboard: Keyboard;
@@ -461,7 +485,27 @@ interface NoPorts {
 	readonly wanted: number;
 }
 
-export type PlugPlanError = NoPorts | { readonly kind: "port-taken"; readonly port: PortRef; readonly by: NicRef };
+/** What is in a port already: a NIC's cable, or one from another port of a switch. */
+interface PortTaken {
+	readonly kind: "port-taken";
+	readonly port: PortRef;
+	readonly by: NicRef | PortRef;
+}
+
+export type PlugPlanError = NoPorts | PortTaken;
+
+/** The two ports a cable between switches will be in. */
+export interface CablePlan {
+	readonly ends: SwitchCable["ends"];
+}
+
+export type CablePlanError = NoPorts | PortTaken | { readonly kind: "one-port"; readonly port: PortRef };
+
+/** A cable between switches, by either of its ports, and whether its link is to be up. */
+export interface CableChange {
+	readonly port: PortRef;
+	readonly up: boolean;
+}
 
 export type PlanError =
 	| NoPorts
@@ -537,6 +581,8 @@ export type RuntimeEvent =
 			readonly set: number;
 			readonly at: number;
 	  }
+	/** A switch began to storm, its storm goes on with these numbers, or with null it is over. */
+	| { readonly type: "switch/storm"; readonly switch: SwitchName; readonly storm: Storm | null }
 	| { readonly type: "session/opened"; readonly session: SessionId }
 	| { readonly type: "session/ended"; readonly session: SessionId }
 	| { readonly type: "session/shell"; readonly session: SessionId; readonly shell: "prompt" | "running" }
@@ -556,6 +602,9 @@ export type CommandEvent =
 	| { readonly type: "cmd/forget"; readonly machine: MachineName; readonly set: number }
 	| { readonly type: "cmd/link"; readonly changes: readonly LinkChange[]; readonly cause: Cause }
 	| { readonly type: "cmd/plug"; readonly plan: PlugPlan; readonly cause: Cause }
+	| { readonly type: "cmd/cable"; readonly plan: CablePlan; readonly cause: Cause }
+	| { readonly type: "cmd/uncable"; readonly port: PortRef; readonly cause: Cause }
+	| { readonly type: "cmd/cable-link"; readonly changes: readonly CableChange[]; readonly cause: Cause }
 	| { readonly type: "cmd/shell"; readonly machine: MachineName }
 	| {
 			readonly type: "cmd/focus";
@@ -679,6 +728,21 @@ export type Effect =
 			readonly nic: NicNo;
 			readonly cause: Cause;
 			readonly dead: DeadCable;
+	  }
+	/** Puts a cable between two ports of switches, link down. The link is another effect. */
+	| { readonly type: "cable/attach"; readonly ends: SwitchCable["ends"] }
+	/** Takes it out of both. Each switch forgets what it learned over it. */
+	| { readonly type: "cable/detach"; readonly ends: SwitchCable["ends"] }
+	/** Changes the link at both ends and writes the capture event row, in that order. */
+	| {
+			readonly type: "cable/link";
+			readonly ends: SwitchCable["ends"];
+			readonly up: boolean;
+			readonly cause: Cause;
+			/** The cable was put in or taken out, and not cut or reconnected. */
+			readonly plug?: true;
+			/** It was cut when it was taken out, so no link changed. */
+			readonly cut?: true;
 	  }
 	| { readonly type: "pty/open"; readonly session: SessionId }
 	| { readonly type: "pty/close"; readonly session: SessionId }

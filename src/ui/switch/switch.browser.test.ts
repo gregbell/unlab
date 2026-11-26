@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { testCapture } from "../../../test/support/capture.ts";
 import { ping } from "../../../test/support/frames.ts";
+import type { LabEvent } from "../../model/index.ts";
 import {
 	addSwitch,
 	LONG_NAME,
@@ -350,5 +351,104 @@ describe("a machine with a long name", () => {
 		expect(name.scrollWidth).toBeGreaterThan(name.clientWidth);
 		const widths = [1, 2, 3, 4, 5, 6, 7, 8].map((n) => Math.round(column(n).getBoundingClientRect().width));
 		expect(new Set(widths)).toEqual(new Set([44]));
+	});
+});
+
+describe("cables between switches", () => {
+	const lan = switchNamed("lan");
+	const wan = switchNamed("wan");
+	const ends = [
+		{ switch: lan, port: 8 },
+		{ switch: wan, port: 7 },
+	] as const;
+	/** node1 on port 1 of lan, which is the one shown, and a cable from its port 8 to wan's port 7. */
+	const cabled = (...more: readonly LabEvent[]) =>
+		lab(
+			addSwitch(lan),
+			addSwitch(wan),
+			spawn(1, lan),
+			ready(),
+			{ type: "cmd/cable", plan: { ends }, cause: "bar" },
+			{ type: "ui/switch-shown", switch: lan },
+			...more,
+		);
+	const storm = (name: typeof lan, rate: number, dropped: number) =>
+		({ type: "switch/storm", switch: name, storm: { since: 0, rate, dropped } }) as const;
+
+	it("draws one under the name of the switch it goes to, with that port on its tag, and cuts it by its own port", async () => {
+		const { element, runs } = await mount("unlab-switch", { state: cabled() });
+		const port = column(8);
+		expect([".name", ".nic", ".word"].map((part) => port.querySelector(part)?.textContent)).toEqual([
+			"wan",
+			"port 7",
+			"up",
+		]);
+		expect(port.dataset.state).toBe("up");
+		expect(port.title).toBe("to wan port 7");
+		expect(style(part(port, ".light")).backgroundColor).toBe(tokenColor("ok"));
+		// It has no machine's hue, and its name is not the grey of a port's number.
+		expect(port.dataset.hue).toBeUndefined();
+		expect(style(part(port, ".name")).color).toBe(tokenColor("text-2"));
+		expect(part(element, ".links").textContent).toBe("2 of 2 links up");
+
+		await page.getByRole("button", { name: "Cut the cable from lan port 8 to wan port 7" }).click();
+		expect(runs).toEqual([{ line: "link down lan:8", source: "button" }]);
+	});
+
+	it("draws a cut one dashed and red, and reconnects it, from either switch", async () => {
+		const cut = { type: "cmd/cable-link", changes: [{ port: ends[1], up: false }], cause: "bar" } as const;
+		const { element, store, runs, settle } = await mount("unlab-switch", { state: cabled(cut) });
+		const port = column(8);
+		expect(part(port, ".word").textContent).toBe("cut");
+		expect(style(part(port, ".word")).color).toBe(tokenColor("down"));
+		expect(style(part(port, ".cable")).borderLeftStyle).toBe("dashed");
+		expect(part(element, ".links").textContent).toBe("1 of 2 links up");
+		await page.getByRole("button", { name: "Reconnect the cable from lan port 8 to wan port 7" }).click();
+
+		store.dispatchUi({ type: "ui/switch-shown", switch: wan });
+		await settle();
+		expect([".name", ".nic"].map((part) => column(7).querySelector(part)?.textContent)).toEqual(["lan", "port 8"]);
+		await page.getByRole("button", { name: "Reconnect the cable from wan port 7 to lan port 8" }).click();
+		expect(runs.map((run) => run.line)).toEqual(["link up lan:8", "link up wan:7"]);
+	});
+
+	it("says above its ports that it storms, how fast and what it has dropped, and marks each storming switch where one is chosen", async () => {
+		const { element, store, settle } = await mount("unlab-switch", {
+			state: cabled(storm(lan, 1980, 4321), storm(wan, 990, 0)),
+		});
+		const line = part(element, ".storm");
+		expect(line.textContent?.replace(/\s+/g, " ").trim()).toBe(
+			"storming · 1980 looped frames a second · 4321 dropped · cut a cable of the loop to end it",
+		);
+		expect(style(line).color).toBe(tokenColor("down"));
+		const options = [...element.querySelectorAll("option")].map((option) => option.textContent?.trim());
+		expect(options).toEqual(["switch0", "lan · storming", "wan · storming"]);
+
+		store.dispatchUi({ type: "ui/switch-shown", switch: "switch0" });
+		await settle();
+		expect(element.querySelector(".storm")).toBeNull();
+	});
+
+	it("draws a cable from a switch to itself at both its ports, in a lab of one switch", async () => {
+		const self = lab(spawn(1), ready(), {
+			type: "cmd/cable",
+			plan: {
+				ends: [
+					{ switch: "switch0", port: 7 },
+					{ switch: "switch0", port: 8 },
+				],
+			},
+			cause: "bar",
+		});
+		const { element } = await mount("unlab-switch", { state: self });
+		expect([".name", ".nic"].map((part) => column(7).querySelector(part)?.textContent)).toEqual(["switch0", "port 8"]);
+		expect([".name", ".nic"].map((part) => column(8).querySelector(part)?.textContent)).toEqual(["switch0", "port 7"]);
+		expect(part(element, ".links").textContent).toBe("3 of 3 links up");
+	});
+
+	it("passes axe with a cable between switches and a storm", async () => {
+		const { element } = await mount("unlab-switch", { state: cabled(storm(lan, 1980, 4321)) });
+		const results = await axe.run(element);
+		expect(results.violations.map((v) => v.id)).toEqual([]);
 	});
 });

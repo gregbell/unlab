@@ -1,0 +1,32 @@
+run 0 mesh 60 s: 11988 frames/s; each 5 s: 12001 11998 12002 12000 11998 12005 11995 12005 11998 12002 12007 11990
+   main thread: worst gap 8.2 ms, p99 4.3 (n=2972), 60 paints/s; threads: chromium MAIN 0.26, DedicatedWorker 0.11, DedicatedWorker 0.10, ThreadPoolForeg 0.08, DedicatedWorker 0.08, DedicatedWorker 0.07
+   renderers MB: 850 before, then each 5 s 982 1070 1096 1165 1202 1215 1257 1306 1297 1314 1288 1316
+   lab command and guest echo ms, each 5 s: 4/44 3/42 4/40 3/31 6/34 3/31 9/33 2/33 5/28 2/34 4/34 3/31
+   switch0 2996/s dropped 181804; b 2996/s dropped 181812; c 2996/s dropped 181812; d 2996/s dropped 181812
+   after the cut: last looped frame 126.4 ms, storm over 237 ms, ping answered by 284 ms, 0 frames in the next 0.5 s
+run 1 mesh 60 s: 11989 frames/s; each 5 s: 12010 11993 12000 12007 11993 12000 12005 11995 12000 12000 12005 11995
+   main thread: worst gap 10.5 ms, p99 4.4 (n=2973), 60 paints/s; threads: chromium MAIN 0.27, ThreadPoolForeg 0.08, DedicatedWorker 0.08, DedicatedWorker 0.08, DedicatedWorker 0.07, ThreadPoolForeg 0.06
+   renderers MB: 847 before, then each 5 s 987 1072 1096 1168 1229 1233 1284 1320 1308 1324 1301 1327
+   lab command and guest echo ms, each 5 s: 3/50 2/29 3/32 2/34 3/29 4/35 3/32 3/31 4/32 4/27 2/33 2/39
+   switch0 3000/s dropped 181972; b 2999/s dropped 181980; c 2999/s dropped 181980; d 2999/s dropped 181980
+   after the cut: last looped frame 129.1 ms, storm over 235 ms, ping answered by 274 ms, 0 frames in the next 0.5 s
+run 2 mesh 60 s: 11788 frames/s; each 5 s: 12004 12000 12000 12000 12007 11990 12002 11592 9983 11988 11998 12000
+   main thread: worst gap 118.6 ms, p99 36.3 (n=2827), 58 paints/s; threads: chromium MAIN 0.28, DedicatedWorker 0.12, DedicatedWorker 0.09, ThreadPoolForeg 0.08, DedicatedWorker 0.08, DedicatedWorker 0.08
+   renderers MB: 844 before, then each 5 s 981 1061 1080 1154 1207 1221 1267 1307 1289 1311 1322 1318
+   lab command and guest echo ms, each 5 s: 7/48 3/30 3/29 4/33 2/32 5/48 7/35 7/55 16/74 8/34 4/28 3/30
+   switch0 3001/s dropped 52662; b 3000/s dropped 52654; c 3000/s dropped 52647; d 3000/s dropped 52661
+   after the cut: last looped frame 126.2 ms, storm over 248 ms, ping answered by 284 ms, 0 frames in the next 0.5 s
+mesh frames/s over the run: 11988 [11788-11989] n=3
+mesh frames/s in the last 5 s: 11995 [11990-12000] n=3
+mesh worst main-thread gap ms: 10.5 [8.2-118.6] n=3
+mesh main-thread gap p99 ms: 4.4 [4.3-36.3] n=3
+mesh paints/s: 60 [58-60] n=3
+mesh renderers MB before: 847 [844-850] n=3
+mesh renderers MB at 5 s: 982 [981-987] n=3
+mesh renderers MB at the end: 1318 [1316-1327] n=3
+mesh slowest lab command ms: 9 [4-16] n=3
+mesh slowest guest echo ms: 50 [44-74] n=3
+mesh last looped frame after the cut ms: 126.4 [126.2-129.1] n=3
+mesh storm over after the cut ms: 237.0 [235.0-248.0] n=3
+mesh ping answered after the cut ms: 284.0 [274.0-284.0] n=3
+exit 0

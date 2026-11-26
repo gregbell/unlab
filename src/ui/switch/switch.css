@@ -173,6 +173,17 @@
 			border-left-style: dotted;
 		}
 
+		/* A cable to another switch has no machine's hue. */
+		.port:not([data-hue]) {
+			--machine-hue: var(--text-2);
+		}
+
+		.storm {
+			padding: 8px var(--gutter) 0;
+			color: var(--down);
+			font-size: var(--fs-status);
+		}
+
 		.port[data-state="cut"] .cable {
 			border-left: 2px dashed var(--down);
 		}

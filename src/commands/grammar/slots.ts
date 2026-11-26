@@ -3,9 +3,12 @@ import {
 	ALL_MACHINES,
 	addressText,
 	type CheckpointName,
+	cableAt,
 	DEFAULT_SWITCH,
 	type GiB,
+	type HeldPort,
 	heldPorts,
+	holdsNic,
 	isNameFault,
 	type LabState,
 	lowestFreePorts,
@@ -24,6 +27,7 @@ import {
 	type Place,
 	PORTS,
 	type PortNo,
+	type PortRef,
 	parseCheckpointName,
 	parseChosenName,
 	parseGiB,
@@ -163,6 +167,8 @@ export interface Selection {
 /** Cables as typed, expanded to the NICs they are plugged into. */
 export interface CableSelection {
 	readonly nics: readonly NicRef[];
+	/** Those between switches, each by the port that named it. */
+	readonly between: readonly PortRef[];
 	readonly skipped: Selection["skipped"];
 	readonly written: string;
 }
@@ -674,10 +680,83 @@ export function machines(): Value<Selection> {
 	};
 }
 
+/** `lan:3`, `lan:5 or wan:1`, for the ports of the cables that could be meant. */
+function portsWith(held: readonly (readonly [SwitchName, HeldPort])[]): string {
+	return list(
+		held.map(([on, { port }]) => portName({ switch: on, port })),
+		"or",
+	);
+}
+
+/** Every port that a cable between switches is in, lowest first on each switch. */
+function switchCablePorts(lab: LabState): readonly (readonly [SwitchName, HeldPort])[] {
+	return lab.switches.flatMap((on) =>
+		heldPorts(lab, on).flatMap((held) => (holdsNic(held) ? [] : [[on, held] as const])),
+	);
+}
+
+/** The port, when it names one of a switch that is there and something is in it. */
+function readHeldPort(text: string, lab: LabState): { readonly ref: PortRef; readonly held: HeldPort } | Miss | null {
+	const colon = text.indexOf(":");
+	const on = lab.switches.find((name) => name === (colon < 0 ? text : text.slice(0, colon)));
+	if (!on) return null;
+	const all = heldPorts(lab, on);
+	const cabled = all.map((held) => [on, held] as const);
+	if (colon < 0) {
+		const instead =
+			all.length === 0 ? "and nothing is plugged into it" : `so name a port with a cable in it: ${portsWith(cabled)}`;
+		return new Miss(`${on} is a switch, ${instead}.`, undefined, false);
+	}
+	const place = readPlace(text, lab);
+	if (place instanceof Miss) return place;
+	const held = all.find((other) => other.port === place.port);
+	if (place.port !== null && held) return { ref: { switch: on, port: place.port }, held };
+	const instead = all.length === 0 ? `and nothing is plugged into ${on}` : `so use ${portsWith(cabled)}`;
+	return new Miss(`${text} has no cable, ${instead}.`, undefined, false);
+}
+
+/** The port, when a cable between switches is in it. */
+export function readSwitchCable(text: string, lab: LabState): PortRef | Miss {
+	const read = readHeldPort(text, lab);
+	if (read instanceof Miss) return read;
+	if (read === null) {
+		const place = readPlace(text, lab);
+		return place instanceof Miss ? place : new Miss();
+	}
+	if (!holdsNic(read.held)) return read.ref;
+	const nic = nicLabel(read.held.machine, read.held.nic);
+	return new Miss(`${text} holds the cable of ${nic}, so use unplug ${nic}.`, undefined, false);
+}
+
+/** A cable between two switches, by either of the ports it is in. */
+export function switchCable(): Value<string> {
+	return {
+		kind: "positional",
+		label: "switch:port",
+		noun: "a port that a cable between switches is in, such as lan:3",
+		about: "A port that the cable is in (lan:3). Either of its two ports names it.",
+		read(text, { lab }) {
+			const read = readSwitchCable(text, lab);
+			return read instanceof Miss ? read : text;
+		},
+		suggest: (_typed, { lab }) => switchCableSuggestions(lab, ""),
+		format: (written) => written,
+		schema: { type: "string" },
+	};
+}
+
+function switchCableSuggestions(lab: LabState, head: string): readonly Suggestion[] {
+	return switchCablePorts(lab).map(([on, held]) => {
+		const label = portName({ switch: on, port: held.port });
+		return { insert: head + label, label, detail: portDetail(lab, on, held.port) };
+	});
+}
+
 /**
  * Cables, named by the machine or by one of its NICs: `node2`, `node2:eth1`,
  * and the lists, globs and `all` that `machines` takes. A machine alone is
- * every NIC it has.
+ * every NIC it has. A port that a cable is in names that cable, which is how
+ * one between two switches is named: `lan:3`.
  */
 export function cables(): Value<CableSelection> {
 	return {
@@ -685,14 +764,31 @@ export function cables(): Value<CableSelection> {
 		label: "machines",
 		noun: "machines such as node1,node3:eth1 or all",
 		about:
-			"One machine (node2) for all its cables, one NIC (node2:eth1), a comma list (node1,node3:eth1), a glob (node*) or all.",
+			"A machine (node2) for all its cables, a NIC (node2:eth1), the port a cable is in (lan:3), a comma list, a glob (node*) or all.",
 		read(text, ctx) {
 			const picked = new Map<string, NicRef>();
+			const between: PortRef[] = [];
 			const skipped: { name: MachineName; reason: string }[] = [];
 			const skip = (name: MachineName, reason: string) => {
 				if (!skipped.some((s) => s.name === name)) skipped.push({ name, reason });
 			};
 			for (const { part, start, end } of listParts(text)) {
+				const port = readHeldPort(part, ctx.lab);
+				if (port instanceof Miss) {
+					const at = port.part ? { start: start + port.part.start, end: start + port.part.end } : { start, end };
+					return new Miss(port.message, at, port.fixable);
+				}
+				if (port !== null) {
+					const { ref, held } = port;
+					if (!holdsNic(held)) {
+						if (!between.some((other) => cableAt(ctx.lab, other) === cableAt(ctx.lab, ref))) between.push(ref);
+					} else if (allowed(held.machine, ctx)) {
+						picked.set(`${held.machine.name}:${held.nic}`, { machine: held.machine.name, nic: held.nic });
+					} else {
+						skip(held.machine.name, PHASE_REASON[held.machine.life.phase]);
+					}
+					continue;
+				}
 				const colon = part.indexOf(":");
 				const named = colon < 0 ? part : part.slice(0, colon);
 				const asked = colon < 0 ? null : part.slice(colon + 1);
@@ -717,25 +813,28 @@ export function cables(): Value<CableSelection> {
 					}
 				}
 			}
-			if (picked.size === 0) return wrongState(ctx, skipped);
-			return { nics: [...picked.values()], skipped, written: text };
+			if (picked.size === 0 && between.length === 0) return wrongState(ctx, skipped);
+			return { nics: [...picked.values()], between, skipped, written: text };
 		},
 		suggest(typed, ctx) {
 			const comma = typed.lastIndexOf(",");
 			const head = comma < 0 ? "" : typed.slice(0, comma + 1);
 			const listed = head.split(",");
-			const names = machinesOf(ctx.lab)
-				.filter((m) => allowed(m, ctx) && !listed.includes(m.name))
-				.flatMap((m) => {
-					const nics = nicsOf(ctx.lab, m.name);
-					return [
-						machineSuggestion(m, head + m.name),
-						...(nics.length > 1 ? nics : []).map(({ nic }): Suggestion => {
-							const label = `${m.name}:${nicName(nic)}`;
-							return { insert: head + label, label, detail: plugDetail(ctx.lab, m, nic), hue: m.hue };
-						}),
-					];
-				});
+			const names = [
+				...machinesOf(ctx.lab)
+					.filter((m) => allowed(m, ctx) && !listed.includes(m.name))
+					.flatMap((m) => {
+						const nics = nicsOf(ctx.lab, m.name);
+						return [
+							machineSuggestion(m, head + m.name),
+							...(nics.length > 1 ? nics : []).map(({ nic }): Suggestion => {
+								const label = `${m.name}:${nicName(nic)}`;
+								return { insert: head + label, label, detail: plugDetail(ctx.lab, m, nic), hue: m.hue };
+							}),
+						];
+					}),
+				...switchCableSuggestions(ctx.lab, head).filter(({ label }) => !listed.includes(label)),
+			];
 			return head === ""
 				? [...names, { insert: ALL_MACHINES, label: ALL_MACHINES, detail: "every machine that can take it" }]
 				: names;
@@ -982,6 +1081,7 @@ export function text(label: string, about: string): Rest {
 function portDetail(lab: LabState, on: SwitchName, port: PortNo): string {
 	const held = heldPorts(lab, on).find((other) => other.port === port);
 	if (!held) return "no cable";
+	if (!holdsNic(held)) return `cable to ${portName(held.far)} · ${held.link === "cut" ? "down" : "up"}`;
 	const { machine, nic } = held;
 	const plug = plugsOf(machine.life)[nic];
 	return `${nicLabel(machine, nic)} · ${plug?.kind === "port" && plug.link === "cut" ? "down" : "up"}`;

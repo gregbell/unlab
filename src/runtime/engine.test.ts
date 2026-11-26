@@ -1,4 +1,5 @@
 import { describe, expect, test, vi } from "vitest";
+import { testClock } from "../../test/support/clock.ts";
 import { arpRequest, mac, ping, routedPing } from "../../test/support/frames.ts";
 import { port0 } from "../../test/support/ports.ts";
 import { createCaptureLog } from "../capture/index.ts";
@@ -10,6 +11,8 @@ import {
 	type HostEntry,
 	identity,
 	type MachineName,
+	type PortNo,
+	type PortRef,
 	parseCheckpointName,
 	parseMachineName,
 	parseSwitchName,
@@ -21,10 +24,10 @@ import {
 
 import { defaultAddress } from "../net/index.ts";
 import { createEngine, ExecRefused } from "./engine.ts";
+import { Fabric } from "./fabric.ts";
 import type { CopyJob, CopyReport } from "./protocol.ts";
 import type { LineMark, MarkSource, Screen, ScreenIo, Screens } from "./screens.ts";
 import { createShellTracker } from "./shell-tracker.ts";
-import { LabSwitch } from "./switch.ts";
 import type { StartVm, Tty, Vm, VmBoot, VmRef, VmSink } from "./vm.ts";
 
 const ESC = "\x1b";
@@ -204,25 +207,30 @@ function fakeVms() {
 }
 
 function setup() {
-	let clock = 0;
+	const clock = testClock();
 	const events: RuntimeEvent[] = [];
 	const announced: string[] = [];
 	const deleted: [n: number, ...sets: number[]][] = [];
 	const copies: { job: CopyJob; report: (report: CopyReport) => void; dropped: boolean }[] = [];
 	const imagesAsked: string[] = [];
 	const intervals: { ms: number; fn: () => void; cancelled: boolean }[] = [];
-	const sw = new LabSwitch({ now: () => clock });
-	const switches = new Map<SwitchName, LabSwitch>();
-	const capture = createCaptureLog({ now: () => clock, schedule: () => {} });
+	const made: Fabric[] = [];
+	const fabric = (): Fabric => made[0];
+	/** The first switch that a test names, which is switch0 in each. */
+	const sw = {
+		setLink: (port: PortNo, up: boolean) => fabric().setLink(0, port, up),
+		isUp: (port: PortNo) => fabric().isUp(0, port),
+	};
+	const capture = createCaptureLog({ now: () => clock.now(), schedule: () => {} });
 	const vms = fakeVms();
 	const screens = fakeScreens();
 
 	const engine = createEngine({
 		store: { dispatchRuntime: (e) => events.push(e) },
-		newSwitch(name) {
-			const made = name === "switch0" ? sw : new LabSwitch({ now: () => clock });
-			switches.set(name, made);
-			return made;
+		clock,
+		newFabric(events) {
+			made.push(new Fabric(events));
+			return fabric();
 		},
 		capture,
 		screens: screens.screens,
@@ -247,7 +255,6 @@ function setup() {
 				interval.cancelled = true;
 			};
 		},
-		now: () => clock,
 		promptToken: () => TOKEN,
 	});
 
@@ -289,14 +296,13 @@ function setup() {
 		copies,
 		imagesAsked,
 		intervals,
-		switches,
+		fabric,
+		clock,
 		sw,
 		capture,
 		vms,
 		screens,
-		at: (ms: number) => {
-			clock = ms;
-		},
+		at: (ms: number) => clock.at(ms),
 		take: () => events.splice(0),
 	};
 }
@@ -772,33 +778,35 @@ describe("several switches", () => {
 		vm2.sink.frame(vm2.ref, 0, arpRequest(2, 3));
 		vm2.sink.frame(vm2.ref, 0, ping(2, 2));
 		run({ type: "port/detach", port: { switch: lan, port: 1 } });
-		expect(engine.reads.totals("switch0")).toEqual({ in: 1, delivered: 1, flooded: 1 });
-		expect(engine.reads.totals(lan)).toEqual({ in: 2, delivered: 1, flooded: 1 });
-		expect(engine.reads.totals(parseSwitchName("wan") as SwitchName)).toEqual({ in: 0, delivered: 0, flooded: 0 });
+		expect(engine.reads.totals("switch0")).toEqual({ in: 1, delivered: 1, flooded: 1, dropped: 0 });
+		expect(engine.reads.totals(lan)).toEqual({ in: 2, delivered: 1, flooded: 1, dropped: 0 });
+		expect(engine.reads.totals(parseSwitchName("wan") as SwitchName)).toEqual({
+			in: 0,
+			delivered: 0,
+			flooded: 0,
+			dropped: 0,
+		});
 	});
 
 	test("one that is removed lets go of its ports and its tap, and starts empty when it is added again", () => {
-		const { vms, engine, run, capture, switches } = plugged();
+		const { vms, engine, run, capture } = plugged();
 		const [, vm2, vm3] = vms;
 		vm2.sink.frame(vm2.ref, 0, arpRequest(2, 3));
 		run({ type: "switch/remove", switch: lan });
 		expect(engine.reads.macTable(lan)).toEqual([]);
-		expect(engine.reads.totals(lan)).toEqual({ in: 0, delivered: 0, flooded: 0 });
+		expect(engine.reads.totals(lan)).toEqual({ in: 0, delivered: 0, flooded: 0, dropped: 0 });
 		expect(engine.reads.counters({ switch: lan, port: 1 })).toBeUndefined();
 
 		const before = capture.frameCount;
 		vm3.sent.length = 0;
 		vm2.sink.frame(vm2.ref, 0, arpRequest(2, 3));
-		switches.get(lan)?.receive(1, arpRequest(2, 3));
 		expect([capture.frameCount, vm3.sent]).toEqual([before, []]);
 
-		const old = switches.get(lan);
 		const cable = { port: { switch: lan, port: 1 }, machine: "node2", nic: 0 } as const;
 		run({ type: "port/attach", ...cable }, { type: "link/set", ...cable, up: true, cause: "runtime" });
-		expect(switches.get(lan)).not.toBe(old);
 		expect(engine.reads.macTable(lan)).toEqual([]);
 		vm2.sink.frame(vm2.ref, 0, arpRequest(2, 3));
-		expect(engine.reads.totals(lan)).toEqual({ in: 1, delivered: 0, flooded: 1 });
+		expect(engine.reads.totals(lan)).toEqual({ in: 1, delivered: 0, flooded: 1, dropped: 0 });
 		expect(capture.frameCount).toBe(before + 1);
 		expect(vm3.sent).toEqual([]);
 	});
@@ -837,7 +845,7 @@ describe("link/set", () => {
 			{ type: "port/attach", port: port0(1), machine: "node1", nic: 0 },
 			{ type: "port/attach", port: port0(2), machine: "node2", nic: 0 },
 		);
-		const setLink = vi.spyOn(t.sw, "setLink");
+		const setLink = vi.spyOn(t.fabric(), "setLink");
 		const appendLink = vi.spyOn(t.capture, "appendLink");
 		t.at(2500);
 
@@ -1108,8 +1116,10 @@ describe("dispose", () => {
 		expect(t.intervals[0].cancelled).toBe(true);
 		expect(t.screens.disposed).toEqual(["node1:console", "node2:console"]);
 
-		t.sw.attach(1, { deliver() {} });
-		t.sw.receive(1, arpRequest(1, 2));
+		// A switch that the fabric is given behind the engine's back has no name, so nothing of it is captured.
+		const slot = t.fabric().addSwitch();
+		t.fabric().attach(slot, 1, { deliver() {} });
+		t.fabric().receive(slot, 1, arpRequest(1, 2), 0);
 		expect(t.capture.size).toBe(0);
 		expect(t.events).toEqual([]);
 	});
@@ -1600,6 +1610,190 @@ describe("checkpoints", () => {
 		expect(t.deleted).toEqual([
 			[1, 2],
 			[1, 3],
+		]);
+	});
+});
+
+describe("cables between switches", () => {
+	const lan = parseSwitchName("lan") as SwitchName;
+	const wan = parseSwitchName("wan") as SwitchName;
+	const cable = [
+		{ switch: "switch0", port: 8 },
+		{ switch: lan, port: 7 },
+	] as const;
+
+	/** node1 on port 1 of switch0, node2 on port 1 of lan and node3 on port 1 of wan, each with its link up. */
+	const three = () => {
+		const t = setup();
+		const vms = [t.ready(1), t.ready(2), t.ready(3)] as const;
+		for (const [i, on] of (["switch0", lan, wan] as const).entries()) {
+			const plugged = { port: { switch: on, port: 1 }, machine: `node${i + 1}`, nic: 0 } as const;
+			t.run({ type: "port/attach", ...plugged }, { type: "link/set", ...plugged, up: true, cause: "runtime" });
+		}
+		for (const vm of vms) vm.sent.length = 0;
+		return { ...t, vms };
+	};
+	const up = (ends: typeof cable | readonly [PortRef, PortRef]): Effect[] => [
+		{ type: "cable/attach", ends },
+		{ type: "cable/link", ends, up: true, cause: "bar", plug: true },
+	];
+	const hops = (t: ReturnType<typeof three>) => [...t.capture.frames()].map((e) => `${e.switch} ${e.from}`);
+
+	test("carry a machine's frame to the machines on the far switch once the link is raised, and each switch learns over them", () => {
+		const t = three();
+		const [vm1, vm2, vm3] = t.vms;
+		t.run({ type: "cable/attach", ends: cable });
+		vm1.sink.frame(vm1.ref, 0, arpRequest(1, 2));
+		expect(vm2.sent).toEqual([]);
+
+		t.run({ type: "cable/link", ends: cable, up: true, cause: "bar", plug: true });
+		const frame = arpRequest(1, 2);
+		vm1.sink.frame(vm1.ref, 0, frame);
+		expect(vm2.sent).toEqual([["deliver", 0, frame]]);
+		expect(vm3.sent).toEqual([]);
+		expect(hops(t).slice(-2)).toEqual(["switch0 1", "lan 7"]);
+		expect(t.engine.reads.macTable(lan).map((e) => [e.mac, e.port])).toEqual([["52:54:00:88:00:0b", 7]]);
+		expect(t.engine.reads.counters({ switch: lan, port: 7 })).toMatchObject({ rxFrames: 1 });
+		expect(t.capture.tail(3)[0]).toEqual({
+			kind: "cable",
+			seq: expect.any(Number),
+			time: "0.00",
+			ends: cable,
+			up: true,
+			text: "port 8 and port 7 link up",
+			cause: "Cable between them plugged in by you.",
+		});
+	});
+
+	test("are put in once however often they are asked for, and are cut and come out at both their ends", () => {
+		const t = three();
+		const [vm1, vm2] = t.vms;
+		t.run(...up(cable), ...up(cable));
+		vm1.sink.frame(vm1.ref, 0, arpRequest(1, 2));
+		vm2.sink.frame(vm2.ref, 0, arpRequest(2, 1));
+		expect([vm1.sent.length, vm2.sent.length]).toEqual([1, 1]);
+
+		t.at(1500);
+		t.run({ type: "cable/link", ends: cable, up: false, cause: "agent" });
+		expect(t.capture.tail(1)).toMatchObject([
+			{ kind: "cable", time: "1.50", up: false, cause: "Cable between them cut by the agent." },
+		]);
+		expect(t.engine.reads.macTable("switch0").find((e) => e.port === 8)).toMatchObject({ flushed: true });
+		expect(t.engine.reads.macTable(lan).find((e) => e.port === 7)).toMatchObject({ flushed: true });
+		vm1.sink.frame(vm1.ref, 0, arpRequest(1, 2));
+		expect(vm2.sent).toHaveLength(1);
+
+		t.run(
+			{ type: "cable/link", ends: cable, up: false, cause: "bar", plug: true, cut: true },
+			{ type: "cable/detach", ends: cable },
+			{ type: "cable/detach", ends: cable },
+		);
+		expect(t.capture.tail(1)).toMatchObject([{ cause: "Cut cable between them unplugged by you." }]);
+		expect(t.engine.reads.counters({ switch: "switch0", port: 8 })).toBeUndefined();
+		expect(t.engine.reads.counters({ switch: lan, port: 7 })).toBeUndefined();
+		expect(t.engine.reads.macTable(lan).map((e) => e.port)).toEqual([1]);
+		// Its ports are free for a machine's cable.
+		t.run({ type: "port/attach", port: { switch: lan, port: 7 }, machine: "node3", nic: 1 });
+		expect(t.engine.reads.counters({ switch: lan, port: 7 })).toMatchObject({ rxFrames: 0 });
+	});
+
+	test("go with a switch that is removed, out of the switch at their other end too", () => {
+		const t = three();
+		const [vm1, vm2] = t.vms;
+		t.run(...up(cable));
+		t.run({ type: "switch/remove", switch: lan });
+		vm1.sink.frame(vm1.ref, 0, arpRequest(1, 2));
+		expect(vm2.sent).toEqual([]);
+		expect(t.engine.reads.counters({ switch: "switch0", port: 8 })).toBeUndefined();
+	});
+
+	test("that make a loop storm: the store is told when it begins, its numbers on each tick, and when a cut has ended it", () => {
+		const t = three();
+		const [vm1, vm2] = t.vms;
+		const loop = [
+			cable,
+			[
+				{ switch: lan, port: 8 },
+				{ switch: wan, port: 7 },
+			],
+			[
+				{ switch: wan, port: 8 },
+				{ switch: "switch0", port: 7 },
+			],
+		] as const;
+		for (const ends of loop) t.run(...up(ends));
+		t.run({ type: "clock", hz: 1 });
+		t.take();
+
+		vm1.sink.frame(vm1.ref, 0, arpRequest(1, 9));
+		t.clock.pass(1200);
+		const began = t.take().filter((e) => e.type === "switch/storm");
+		expect(began.map((e) => e.switch).sort()).toEqual(["lan", "switch0", "wan"]);
+		for (const e of began) expect(e.storm).toMatchObject({ rate: 0, dropped: 0 });
+		expect(vm2.sent.length).toBeGreaterThan(700);
+		expect(t.capture.tail(10_000).filter((row) => row.kind === "storm")).toMatchObject([
+			{ switch: "switch0", over: false, text: "switch0 is storming" },
+			{ switch: "lan", over: false },
+			{ switch: "wan", over: false },
+		]);
+		expect(t.capture.tail(1)).toMatchObject([
+			{ kind: "frame", looped: true, note: expect.stringMatching(/^looped · /) },
+		]);
+
+		t.intervals[0].fn();
+		const read = t.take().filter((e) => e.type === "switch/storm");
+		expect(read.map((e) => e.switch)).toEqual(["switch0", "lan", "wan"]);
+		// One copy goes each way round, so each switch takes two in every three milliseconds.
+		for (const e of read) expect(e.storm?.rate).toBeGreaterThan(600);
+
+		t.run({ type: "cable/link", ends: loop[1], up: false, cause: "bar" });
+		t.clock.pass(150);
+		const over = t.take().filter((e) => e.type === "switch/storm");
+		expect(over.map((e) => [e.switch, e.storm]).sort()).toEqual([
+			["lan", null],
+			["switch0", null],
+			["wan", null],
+		]);
+		expect(t.capture.tail(3)).toMatchObject([
+			{ kind: "storm", over: true },
+			{ kind: "storm", over: true },
+			{
+				kind: "storm",
+				over: true,
+				cause: expect.stringMatching(/^It took \d+ looped frames in 1\.[23] s\. It has forgotten/),
+			},
+		]);
+		expect(t.engine.reads.macTable("switch0")).toEqual([]);
+		const sent = vm2.sent.length;
+		t.clock.pass(500);
+		expect(vm2.sent.length).toBe(sent);
+		t.intervals[0].fn();
+		expect(t.take().filter((e) => e.type === "switch/storm")).toEqual([]);
+	});
+
+	test("end with a switch that is removed while it storms: the capture says so of it, and of the others once they are quiet", () => {
+		const t = three();
+		const [vm1] = t.vms;
+		const loop: readonly [PortRef, PortRef] = [
+			{ switch: lan, port: 5 },
+			{ switch: lan, port: 6 },
+		];
+		t.run(...up(cable), ...up(loop));
+		vm1.sink.frame(vm1.ref, 0, arpRequest(1, 9));
+		t.clock.pass(300);
+		t.take();
+		t.run({ type: "switch/remove", switch: lan });
+		expect(t.capture.tail(10_000).filter((row) => row.kind === "storm")).toMatchObject([
+			{ switch: "lan", over: false },
+			{ switch: "switch0", over: false },
+			{ switch: "lan", over: true, text: "lan storm over" },
+		]);
+		t.clock.pass(300);
+		expect(t.capture.tail(10_000).filter((row) => row.kind === "storm")).toMatchObject([
+			{ switch: "lan", over: false },
+			{ switch: "switch0", over: false },
+			{ switch: "lan", over: true },
+			{ switch: "switch0", over: true },
 		]);
 	});
 });

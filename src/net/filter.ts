@@ -9,7 +9,10 @@
 // port of every switch.
 //
 // A cable is watched at the port that the term names, so each frame that
-// crosses it is matched once, whatever is at its other end.
+// crosses it is matched once, whatever is at its other end. A cable between
+// two switches has a port at each end, and either names it: the frames are the
+// same ones, each as the switch at that end carried it. Only a frame that was
+// lost in the cable, by a cut, is at the end that sent it and not at the other.
 //
 // It compiles to predicates over raw bytes and port numbers, because capture
 // tests every frame the switches carry: no decoding and no strings made per frame.
@@ -46,6 +49,12 @@ export interface PortChange {
 	readonly names: NameBook;
 }
 
+/** A switch, or with a port one of its ports. */
+export interface FilterPlace {
+	readonly switch: string;
+	readonly port: number | null;
+}
+
 /** Where in the lab a filter looks. */
 export type FilterScope =
 	/** It names no switch and no cable. */
@@ -66,6 +75,12 @@ export interface CaptureFilter {
 	 * switch, port, machine or NIC.
 	 */
 	matchesLink(change: PortChange): boolean;
+	/**
+	 * An event row about switches and their ports alone: a cable between two of
+	 * them, or one that storms. A term that names one of the places keeps it,
+	 * and one that names a machine, a NIC or an address does not.
+	 */
+	matchesPlaces(places: readonly FilterPlace[]): boolean;
 }
 
 export interface FilterError {
@@ -82,10 +97,13 @@ export type FilterResult =
 
 type FramePredicate = (f: CarriedFrame) => boolean;
 type LinkPredicate = (c: PortChange) => boolean;
+type PlacePredicate = (p: FilterPlace) => boolean;
 interface Term {
 	readonly frame: FramePredicate;
 	readonly link: LinkPredicate;
-	readonly place?: { readonly switch: string; readonly port: number | null };
+	/** Whether it keeps an event row about that place. Left out, it keeps none: the term names a machine. */
+	readonly at?: PlacePredicate;
+	readonly place?: FilterPlace;
 }
 
 const ethertype = (f: Uint8Array): number => (f.length < ETH_HDR ? -1 : (f[12] << 8) | f[13]);
@@ -125,7 +143,7 @@ function someNic(f: Uint8Array, test: (at: NodeNic) => boolean): boolean {
 	return from !== null && test(from);
 }
 
-const always: LinkPredicate = () => true;
+const always = (): boolean => true;
 
 const PROTOCOLS: ReadonlyMap<string, (f: Uint8Array) => boolean> = new Map([
 	["arp", (f) => ethertype(f) === ETH_ARP],
@@ -164,6 +182,7 @@ function switchTerm(on: string): Term {
 	return {
 		frame: (f) => f.switch === on,
 		link: (c) => c.port.switch === on,
+		at: (p) => p.switch === on,
 		place: { switch: on, port: null },
 	};
 }
@@ -172,6 +191,7 @@ function cableTerm(on: string, port: number): Term {
 	return {
 		frame: (f) => f.switch === on && crosses(f, port),
 		link: (c) => c.port.port === port && c.port.switch === on,
+		at: (p) => p.port === port && p.switch === on,
 		place: { switch: on, port },
 	};
 }
@@ -194,7 +214,7 @@ function nicTerm(name: string, nic: NicNo): Term {
 }
 
 function portTerm(port: number): Term {
-	return { frame: (f) => crosses(f, port), link: (c) => c.port.port === port };
+	return { frame: (f) => crosses(f, port), link: (c) => c.port.port === port, at: (p) => p.port === port };
 }
 
 function addressTerm(ip: number): Term {
@@ -218,7 +238,7 @@ function macTerm(mac: Uint8Array): Term {
 /** The term, or why the word is none. */
 function parseTerm(word: string, token: string, known: NameBook): Term | string {
 	const protocol = PROTOCOLS.get(word);
-	if (protocol) return { frame: (f) => protocol(f.bytes), link: always };
+	if (protocol) return { frame: (f) => protocol(f.bytes), link: always, at: always };
 
 	const colon = word.indexOf(":");
 	const name = colon < 0 ? word : word.slice(0, colon);
@@ -310,6 +330,10 @@ function filterOf(source: string, groups: readonly (readonly Term[])[]): Capture
 		matchesLink(c) {
 			if (links.length === 0) return true;
 			return links.some((group) => group.every((test) => test(c)));
+		},
+		matchesPlaces(places) {
+			if (groups.length === 0) return true;
+			return groups.some((group) => group.every(({ at }) => at !== undefined && places.some(at)));
 		},
 	};
 }

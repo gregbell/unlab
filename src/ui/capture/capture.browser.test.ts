@@ -509,3 +509,66 @@ describe("a machine with a long name", () => {
 		]);
 	});
 });
+
+describe("cables between switches, and storms", () => {
+	const wan = parseSwitchName("wan") as SwitchName;
+	const cabled = lab(addSwitch(lan), addSwitch(wan), spawn(1), ready());
+	const ends = [
+		{ switch: lan, port: 8 },
+		{ switch: wan, port: 7 },
+	] as const;
+
+	it("writes what happened to a cable and to a switch as event rows, red for a cut and for a storm, green for what mends them", async () => {
+		const { element } = await mountCapture(
+			"full",
+			(c) => {
+				c.log.appendCable({ ends, up: true, cause: "bar", plug: true });
+				c.log.appendStorm({ switch: lan, over: false, looped: 0, dropped: 0, ms: 0 });
+				c.log.appendCable({ ends, up: false, cause: "agent" });
+				c.log.appendStorm({ switch: lan, over: true, looped: 4100, dropped: 12, ms: 2050 });
+			},
+			cabled,
+		);
+		const rows = [...element.querySelectorAll<HTMLElement>(".row.event")];
+		expect(rows.map((row) => row.querySelector(".text")?.textContent)).toEqual([
+			"lan port 8 and wan port 7 link up. Cable between them plugged in by you.",
+			"lan is storming. Frames that go round a loop of cables keep coming into it, until a cable of the loop is cut.",
+			"lan port 8 and wan port 7 link down. Cable between them cut by the agent.",
+			"lan storm over. It took 4100 looped frames in 2.0 s, and did not send on 12 more that the lab had no room for. It has forgotten its MAC table.",
+		]);
+		expect(rows.map((row) => row.dataset.up)).toEqual(["true", "false", "false", "true"]);
+		expect(rows.map((row) => getComputedStyle(row.querySelector(".text") as Element).color)).toEqual(
+			["ok", "down", "down", "ok"].map(tokenColor),
+		);
+	});
+
+	it("says of a frame that it has looped, in its row", async () => {
+		const { element } = await mountCapture(
+			"full",
+			(c) =>
+				c.log.appendFrame({ switch: lan, from: 8, to: 0b1, flood: "group", frame: arpRequest(1, 9), looped: true }),
+			cabled,
+		);
+		expect(element.querySelector(".row.frame .info")?.textContent).toBe(
+			"who has 10.88.0.19? tell 10.88.0.11 · looped · flooded to lan port 1",
+		);
+	});
+});
+
+describe("a list that thousands of rows go through", () => {
+	it.each(["dock", "full"] as const)("has no more nodes in its %s list after them than before", async (mode) => {
+		const { element, capture, settle } = await mountCapture(mode, twelvePings);
+		await settle();
+		const track = element.querySelector(".track") as HTMLElement;
+		const before = track.childNodes.length;
+		for (let turn = 0; turn < 300; turn++) {
+			for (let i = 0; i < 5; i++) capture.frame(arpRequest(1, 2), 1, [2, 3], "group");
+			if (turn % 7 === 0) capture.link(2, "node2", turn % 2 === 0);
+			element.requestUpdate();
+			await element.updateComplete;
+		}
+		expect(track.querySelectorAll(".row.frame").length).toBeGreaterThan(5);
+		// A row or two more can be in view, and none of those that left has anything of it still there.
+		expect(track.childNodes.length).toBeLessThan(before + 30);
+	});
+});

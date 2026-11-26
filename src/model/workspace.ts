@@ -8,6 +8,7 @@ import {
 	parseAddress,
 	parseDefaultName,
 } from "../net/index.ts";
+import { cableEffects } from "./cables.ts";
 import { FIRST_SETS, MAX_EXTRA_DISKS, parseGiB } from "./disks.ts";
 import { identity, isNameFault, parseCheckpointName, parseMachineName, parseSwitchName } from "./identity.ts";
 import { type BootNode, bootMachines, machineList, plugsOf, samePort } from "./machines.ts";
@@ -29,6 +30,7 @@ import {
 	PORTS,
 	type PortRef,
 	type Step,
+	type SwitchCable,
 	type SwitchName,
 } from "./types.ts";
 
@@ -64,6 +66,7 @@ export function saveWorkspace(state: LabState): string {
 		nextN: state.nextN,
 		switches: state.switches,
 		shown: state.shownSwitch,
+		cables: state.switchCables.map(({ ends, link }) => ({ ends, cut: link === "cut" })),
 		nodes,
 		panels: state.panels.open,
 		order: state.panes.order,
@@ -102,6 +105,18 @@ function readPort(saved: unknown, switches: LabState["switches"]): PortRef | nul
 	if (saved === null) return null;
 	if (!record(saved)) return invalid();
 	return { switch: readSwitch(saved.switch, switches), port: PORTS.find((port) => port === saved.port) ?? invalid() };
+}
+
+function readCable(saved: unknown, switches: LabState["switches"]): SwitchCable {
+	if (!record(saved) || typeof saved.cut !== "boolean" || !Array.isArray(saved.ends) || saved.ends.length !== 2) {
+		return invalid();
+	}
+	const [a, b] = saved.ends.map((end: unknown) => readPort(end, switches) ?? invalid());
+	return { ends: [a, b], link: saved.cut ? "cut" : "up" };
+}
+
+function readCables(saved: unknown, switches: LabState["switches"]): readonly SwitchCable[] {
+	return Array.isArray(saved) ? saved.map((cable: unknown) => readCable(cable, switches)) : invalid();
 }
 
 function readNic(saved: unknown, switches: LabState["switches"]): SavedNic {
@@ -207,6 +222,8 @@ const UPGRADES: readonly ((lab: SavedLab) => SavedLab)[] = [
 	eachNode(() => ({ sets: FIRST_SETS })),
 	// A port was a number on the only switch.
 	(lab) => ({ ...withPortRefs(lab), switches: [DEFAULT_SWITCH] }),
+	// No cable went from one switch to another.
+	(lab) => ({ ...lab, cables: [] }),
 ];
 const VERSION = UPGRADES.length + 1;
 
@@ -240,8 +257,10 @@ export function restoreWorkspace(base: LabState, raw: string | null): Step {
 	if (raw === null) return { state: base, effects: [] };
 	const saved = readLab(raw);
 	const switches = readSwitches(saved.switches);
+	const switchCables = readCables(saved.cables, switches);
 	const nodes: BootNode[] = [];
-	const taken: PortRef[] = [];
+	const taken: PortRef[] = switchCables.flatMap(({ ends }) => ends);
+	if (taken.some((port, i) => taken.findIndex((other) => samePort(other, port)) !== i)) return invalid();
 	for (const m of saved.nodes) {
 		const id = readIdentity(m.n, m.name);
 		const cpus = m.cpus ?? 1;
@@ -292,7 +311,11 @@ export function restoreWorkspace(base: LabState, raw: string | null): Step {
 	)
 		return invalid();
 	const shownSwitch = switches.find((name) => name === saved.shown) ?? DEFAULT_SWITCH;
-	const { state, effects } = bootMachines({ ...base, switches, shownSwitch }, nodes, saved.nextN, 0);
+	const wired: LabState = { ...base, switches, shownSwitch, switchCables };
+	const booted = bootMachines(wired, nodes, saved.nextN, 0);
+	const { state } = booted;
+	// The cables first, so a machine's first frame crosses them.
+	const effects = [...cableEffects(wired), ...booted.effects];
 	const order = Array.isArray(saved.order) ? saved.order : [];
 	const sorted = [...state.rail].sort((a, b) => order.indexOf(a) - order.indexOf(b));
 	let panes = addPanes(base.panes, sorted);

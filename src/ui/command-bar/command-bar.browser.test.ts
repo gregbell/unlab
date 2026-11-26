@@ -189,6 +189,8 @@ describe("<unlab-command-bar> CmdOpen: just opened", () => {
 			"unplug",
 			"mkswitch",
 			"rmswitch",
+			"cable",
+			"uncable",
 			"topology",
 			"capture",
 			"focus",

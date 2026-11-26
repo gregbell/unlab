@@ -281,6 +281,7 @@ test("a switch asks before it goes, unplugs what is in it, and leaves the machin
 				{ machine: "node1", nic: "eth0" },
 				{ machine: "node2", nic: "eth0" },
 			],
+			cables: [],
 		},
 	});
 	await expect(waiting).toHaveCount(0);

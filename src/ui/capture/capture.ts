@@ -3,8 +3,7 @@ import "./frame-detail.ts";
 import { html, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { live } from "lit/directives/live.js";
 import { createRef, type Ref, ref } from "lit/directives/ref.js";
-import { repeat } from "lit/directives/repeat.js";
-import type { CaptureRow, CaptureView, FrameRow, LinkRow, RouteEnd } from "../../capture/index.ts";
+import type { CaptureRow, CaptureView, EventRow, FrameRow, RouteEnd } from "../../capture/index.ts";
 import { andList, type SwitchName, selectNames, type UiEvent } from "../../model/index.ts";
 import { compileFilter, EVERYONE, type PcapFrame, toPcap } from "../../net/index.ts";
 import { clearIcon, pauseIcon, resumeIcon, Select, UnlabElement, windowButtons } from "../base/index.ts";
@@ -71,6 +70,11 @@ function viaTitle(row: FrameRow): string {
  * It reads frames from the capture while it renders and never copies them
  * into state; `capture.revision` decides when to render. The list is not a
  * live region: it would never stop talking.
+ *
+ * Rows are drawn by their place in the list and not keyed by their frame. A
+ * storm goes through hundreds of rows a second, and lit's `repeat` leaves a
+ * marker node behind for each keyed row that goes, which slows every later
+ * change to the list.
  */
 export class UnlabCapture extends UnlabElement {
 	static override properties = {
@@ -181,11 +185,7 @@ export class UnlabCapture extends UnlabElement {
 		const via = this.#showsVia(rows);
 		return html`<div class="rows" data-via=${via} ${this.onSwitch ? ref(this.#scroller) : nothing}>
 			<div class="track" role="list" aria-label="Newest frames">
-				${repeat(
-					rows,
-					(row) => row.seq,
-					(row) => this.#row(row, { role: "listitem" }, via),
-				)}
+				${rows.map((row) => this.#row(row, { role: "listitem" }, via))}
 			</div>
 		</div>`;
 	}
@@ -213,21 +213,18 @@ export class UnlabCapture extends UnlabElement {
 				<div class="row heading" aria-hidden="true">
 					<span>time</span><span>proto</span>${via ? html`<span>switch</span>` : nothing}<span>route</span><span>len</span><span>info</span>
 				</div>
-				${repeat(
-					rows,
-					(row) => row.seq,
-					(row, i) =>
-						this.#row(
-							row,
-							{
-								role: "option",
-								top: (first + i + 1) * ROW,
-								position: first + i + 1,
-								size: total,
-								selected: row.seq === selected,
-							},
-							via,
-						),
+				${rows.map((row, i) =>
+					this.#row(
+						row,
+						{
+							role: "option",
+							top: (first + i + 1) * ROW,
+							position: first + i + 1,
+							size: total,
+							selected: row.seq === selected,
+						},
+						via,
+					),
 				)}
 			</div>
 		</div>`;
@@ -260,7 +257,7 @@ export class UnlabCapture extends UnlabElement {
 		const style = at.top === undefined ? nothing : `top: ${at.top}px`;
 		const position = at.position ?? nothing;
 		const size = at.size ?? nothing;
-		if (row.kind === "link") return this.#eventRow(row, at.role, style, position, size);
+		if (row.kind !== "frame") return this.#eventRow(row, at.role, style, position, size);
 		const full = this.mode === "full";
 		const selectable = at.role === "option";
 		return html`<div
@@ -286,7 +283,7 @@ export class UnlabCapture extends UnlabElement {
 	}
 
 	#eventRow(
-		row: LinkRow,
+		row: EventRow,
 		role: "listitem" | "option",
 		style: string | typeof nothing,
 		position: number | typeof nothing,
@@ -299,7 +296,7 @@ export class UnlabCapture extends UnlabElement {
 			aria-posinset=${position}
 			aria-setsize=${size}
 			aria-disabled=${role === "option" ? "true" : nothing}
-			data-up=${row.up}
+			data-up=${row.kind === "storm" ? row.over : row.up}
 		>
 			<span class="time">${row.time}</span>
 			<span class="text" title=${`${row.text}. ${row.cause}`}>${row.text}. ${row.cause}</span>

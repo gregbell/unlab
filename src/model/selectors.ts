@@ -11,6 +11,7 @@ import {
 	addressOf,
 	type HeldPort,
 	heldPorts,
+	holdsNic,
 	machineList,
 	nameBook,
 	nicPortsOf,
@@ -19,7 +20,7 @@ import {
 	savingOf,
 } from "./machines.ts";
 import { keyboardHolder, parkedPanes, visiblePanes } from "./panes.ts";
-import { portLabel, switchLabel } from "./switches.ts";
+import { portLabel, portName, switchLabel } from "./switches.ts";
 import { type Tiling, tile } from "./tiling.ts";
 import {
 	AGENT_IDLE_MS,
@@ -36,6 +37,7 @@ import {
 	PORTS,
 	type PortNo,
 	type PortRef,
+	type Storm,
 	type SwitchName,
 } from "./types.ts";
 import { clockHz } from "./update.ts";
@@ -351,11 +353,20 @@ export interface PortHolder {
 	readonly nic: NicName | null;
 }
 
+/** The other end of a cable between switches, and what commands call the cable from this end. */
+export interface PortCable {
+	readonly to: PortRef;
+	/** `lan:3`, which `link` and `uncable` take. */
+	readonly label: string;
+}
+
 export interface PortView {
 	readonly port: PortNo;
 	/** In `off` the cable is in and the link is down. In `removing` it is down too and the port frees when the machine is gone. */
 	readonly state: "empty" | "booting" | "up" | "cut" | "stopping" | "off" | "removing";
 	readonly machine: PortHolder | null;
+	/** There when the port's cable goes to another port of a switch. */
+	readonly cable?: PortCable;
 	/** The word under the socket, one of `boot`, `up`, `cut`, `stop`, `off`, `down`. An empty port shows only its number. */
 	readonly word: string | null;
 	/** What a click will do, for the button's accessible name. Null when a click does nothing. */
@@ -365,6 +376,12 @@ export interface PortView {
 function portView(lab: Pick<LabState, "switches">, ref: PortRef, held: HeldPort | undefined): PortView {
 	const { port } = ref;
 	if (!held) return { port, state: "empty", machine: null, word: null, actionLabel: null };
+	if (!holdsNic(held)) {
+		const between = `the cable from ${portLabel(lab, ref)} to ${portLabel(lab, held.far)}`;
+		const actionLabel = held.link === "up" ? `Cut ${between}` : `Reconnect ${between}`;
+		const cable: PortCable = { to: held.far, label: portName(ref) };
+		return { port, state: held.link, machine: null, cable, word: held.link, actionLabel };
+	}
 	const { machine, nic } = held;
 	const { n, name, hue, life } = machine;
 	const label = nicLabel(machine, nic);
@@ -386,9 +403,9 @@ function portView(lab: Pick<LabState, "switches">, ref: PortRef, held: HeldPort 
 /** A switch's eight ports, lowest first. */
 export const selectPorts = perSwitch((on) =>
 	memo(
-		(s) => [s.machines, s.rail, s.switches],
-		(machines, rail, switches): readonly PortView[] => {
-			const held = heldPorts({ machines, rail }, on);
+		(s) => [s.machines, s.rail, s.switches, s.switchCables],
+		(machines, rail, switches, switchCables): readonly PortView[] => {
+			const held = heldPorts({ machines, rail, switchCables }, on);
 			return PORTS.map((port) =>
 				portView(
 					{ switches },
@@ -410,13 +427,18 @@ export interface LinkCount {
 /** The numbers in `2 of 3 links up`, for a switch's header and the panel bar. */
 export const selectLinks = perSwitch((on) =>
 	memo(
-		(s) => [s.machines, s.rail],
-		(machines, rail): LinkCount => {
-			const plugged = machineList({ machines, rail }).flatMap(({ life }) =>
+		(s) => [s.machines, s.rail, s.switchCables],
+		(machines, rail, switchCables): LinkCount => {
+			const nics = machineList({ machines, rail }).flatMap(({ life }) =>
 				plugsOf(life).flatMap((plug) =>
 					plug.kind === "port" && plug.port.switch === on ? [{ ready: life.phase === "ready", link: plug.link }] : [],
 				),
 			);
+			// A cable between switches is a link at each port it is in, and no machine keeps it down.
+			const between = switchCables.flatMap(({ ends, link }) =>
+				ends.flatMap((end) => (end.switch === on ? [{ ready: true, link }] : [])),
+			);
+			const plugged = [...nics, ...between];
 			return {
 				up: plugged.filter((cable) => cable.ready && cable.link === "up").length,
 				total: plugged.length,
@@ -434,6 +456,13 @@ export const selectAllLinks: (state: LabState) => LinkCount = memo(
 		total: links.reduce((n, { total }) => n + total, 0),
 		cut: links.reduce((n, { cut }) => n + cut, 0),
 	}),
+);
+
+/** The switch's storm, or null while no frame comes back to it. */
+export const selectStorm = perSwitch(
+	(on) =>
+		(state: LabState): Storm | null =>
+			state.storms[on] ?? null,
 );
 
 /** Unchanged by a focus, because focusing never moves a pane. */

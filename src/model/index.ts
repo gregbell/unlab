@@ -4,6 +4,7 @@
 // dispatchers. The pane functions that `update` calls are not exported, so
 // nothing else can rearrange panes.
 
+export { cableAt, cablesOf, cableText, endsFrom, isCablePlanError, joined, planCable } from "./cables.ts";
 export { type Device, type Disk, disksOf, MAX_EXTRA_DISKS, MAX_EXTRA_GIB, parseGiB, sizeText } from "./disks.ts";
 export {
 	identity,
@@ -29,11 +30,14 @@ export {
 	firstFreeHues,
 	type HeldPort,
 	heldPorts,
+	holdsNic,
 	hostsFor,
 	isPlanError,
 	lowestFreePorts,
 	machineList,
+	type NicPort,
 	nameBook,
+	nicPorts,
 	nicPortsOf,
 	nicsOf,
 	planBoot,

@@ -58,6 +58,7 @@ import {
 	type SpawnRequest,
 	type Step,
 	type StopHow,
+	type SwitchCable,
 	type SwitchName,
 } from "./types.ts";
 
@@ -126,22 +127,52 @@ export function nameHolder(state: LabState, name: MachineName | SwitchName): "ma
 }
 
 /** A port and the NIC whose cable is in it, or was when its machine began to go. */
-export interface HeldPort {
+export interface NicPort {
 	readonly port: PortNo;
 	readonly machine: Machine;
 	readonly nic: NicNo;
 }
 
+/** A port and where the cable in it goes: another port of a switch. */
+export interface CablePort {
+	readonly port: PortNo;
+	readonly far: PortRef;
+	readonly link: SwitchCable["link"];
+}
+
+export type HeldPort = NicPort | CablePort;
+
+export function holdsNic(held: HeldPort): held is NicPort {
+	return "machine" in held;
+}
+
+/** What says which ports are taken. */
+export type Wiring = Pick<LabState, "machines" | "rail" | "switchCables">;
+
 /** The ports of the switch that are taken, lowest first. */
-export function heldPorts(state: Pick<LabState, "machines" | "rail">, on: SwitchName): readonly HeldPort[] {
-	const held = machineList(state).flatMap((machine) => {
+export function heldPorts(state: Wiring, on: SwitchName): readonly HeldPort[] {
+	const nics = machineList(state).flatMap((machine) => {
 		const ports = nicPortsOf(machine.life);
-		return NICS.flatMap((nic): HeldPort[] => {
+		return NICS.flatMap((nic): NicPort[] => {
 			const ref = ports[nic];
 			return ref?.switch === on ? [{ port: ref.port, machine, nic }] : [];
 		});
 	});
-	return held.sort((a, b) => a.port - b.port);
+	const cables = state.switchCables.flatMap(({ ends: [a, b], link }): CablePort[] => [
+		...(a.switch === on ? [{ port: a.port, far: b, link }] : []),
+		...(b.switch === on ? [{ port: b.port, far: a, link }] : []),
+	]);
+	return [...nics, ...cables].sort((a, b) => a.port - b.port);
+}
+
+/** Those of them that NICs are in. */
+export function nicPorts(state: Wiring, on: SwitchName): readonly NicPort[] {
+	return heldPorts(state, on).filter(holdsNic);
+}
+
+/** Whose cable is in the port: a NIC's, or that from another port of a switch. */
+export function holderOf(held: HeldPort): NicRef | PortRef {
+	return holdsNic(held) ? { machine: held.machine.name, nic: held.nic } : held.far;
 }
 
 /** Up to `count` of the switch's free ports, lowest first. A switch that is not there has none. */
@@ -342,12 +373,12 @@ export function planPlug(
 	const noPorts: PlugPlanError = { kind: "no-ports", switch: on, free: 0, wanted: 1 };
 	if (!state.switches.includes(on)) return noPorts;
 	const held = heldPorts(state, on);
-	const own = held.find((other) => other.machine.name === machine && other.nic === nic);
+	const own = held.find((other) => holdsNic(other) && other.machine.name === machine && other.nic === nic);
 	const to = port ?? own?.port ?? lowestFreePorts(state, on, 1)[0];
 	if (to === undefined) return noPorts;
 	const by = held.find((other) => other.port === to);
 	return by && by !== own
-		? { kind: "port-taken", port: { switch: on, port: to }, by: { machine: by.machine.name, nic: by.nic } }
+		? { kind: "port-taken", port: { switch: on, port: to }, by: holderOf(by) }
 		: { machine, nic, to: { switch: on, port: to } };
 }
 

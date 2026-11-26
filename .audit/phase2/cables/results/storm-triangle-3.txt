@@ -1,0 +1,32 @@
+run 0 triangle 60 s: 1495 frames/s; each 5 s: 1483 1475 1520 1510 1518 1527 1484 1500 1474 1521 1476 1494
+   main thread: worst gap 11.2 ms, p99 4.3 (n=2975), 60 paints/s; threads: chromium MAIN 0.25, ThreadPoolForeg 0.09, ThreadPoolForeg 0.09
+   renderers MB: 761 before, then each 5 s 796 817 832 854 877 859 827 812 818 833 854 875
+   lab command and guest echo ms, each 5 s: 5/34 2/29 6/29 3/34 2/27 2/30 2/30 2/35 3/35 7/41 5/28 3/39
+   switch0 488/s dropped 0; lan 488/s dropped 0; wan 488/s dropped 0
+   after the cut: last looped frame 5.3 ms, storm over 131 ms, ping answered by 168 ms, 0 frames in the next 0.5 s
+run 1 triangle 60 s: 1410 frames/s; each 5 s: 1366 1111 1490 1482 1091 1475 1510 1487 1472 1485 1485 1471
+   main thread: worst gap 38.4 ms, p99 13.4 (n=2922), 60 paints/s; threads: chromium MAIN 0.25, ThreadPoolForeg 0.10, ThreadPoolForeg 0.08, Compositor 0.05
+   renderers MB: 754 before, then each 5 s 795 812 828 851 866 824 810 810 822 843 865 888
+   lab command and guest echo ms, each 5 s: 45/53 2/35 3/30 2/30 5/44 2/33 2/32 5/36 2/29 2/44 3/41 2/35
+   switch0 475/s dropped 0; lan 477/s dropped 0; wan 477/s dropped 0
+   after the cut: last looped frame 6.0 ms, storm over 113 ms, ping answered by 151 ms, 0 frames in the next 0.5 s
+run 2 triangle 60 s: 1465 frames/s; each 5 s: 1416 1442 1502 1503 1445 1478 1432 1466 1459 1492 1478 1491
+   main thread: worst gap 11.8 ms, p99 5.0 (n=2970), 60 paints/s; threads: chromium MAIN 0.21, ThreadPoolForeg 0.09, ThreadPoolForeg 0.06, DedicatedWorker 0.06, DedicatedWorker 0.05
+   renderers MB: 754 before, then each 5 s 796 816 828 851 871 846 837 832 847 860 874 891
+   lab command and guest echo ms, each 5 s: 3/43 3/33 2/29 2/30 2/27 2/33 2/31 2/30 2/28 2/44 3/29 2/27
+   switch0 500/s dropped 0; lan 501/s dropped 0; wan 501/s dropped 0
+   after the cut: last looped frame 8.3 ms, storm over 117 ms, ping answered by 167 ms, 0 frames in the next 0.5 s
+triangle frames/s over the run: 1465 [1410-1495] n=3
+triangle frames/s in the last 5 s: 1491 [1471-1494] n=3
+triangle worst main-thread gap ms: 11.8 [11.2-38.4] n=3
+triangle main-thread gap p99 ms: 5.0 [4.3-13.4] n=3
+triangle paints/s: 60 [60-60] n=3
+triangle renderers MB before: 754 [754-761] n=3
+triangle renderers MB at 5 s: 796 [795-796] n=3
+triangle renderers MB at the end: 888 [875-891] n=3
+triangle slowest lab command ms: 7 [3-45] n=3
+triangle slowest guest echo ms: 44 [41-53] n=3
+triangle last looped frame after the cut ms: 6.0 [5.3-8.3] n=3
+triangle storm over after the cut ms: 117.0 [113.0-131.0] n=3
+triangle ping answered after the cut ms: 167.0 [151.0-168.0] n=3
+exit 0

@@ -181,6 +181,8 @@ describe("the artboards, replayed", () => {
 			"unplug",
 			"mkswitch",
 			"rmswitch",
+			"cable",
+			"uncable",
 			"topology",
 			"capture",
 			"focus",

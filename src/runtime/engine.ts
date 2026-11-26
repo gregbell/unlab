@@ -4,7 +4,7 @@
 // timeouts are the model's.
 //
 // Bytes and frames never reach the store. Per chunk: vm → screen (which scans
-// it for the shell's marks) → at most a phase event. Per frame: vm → switch →
+// it for the shell's marks) → at most a phase event. Per frame: vm → fabric →
 // the neighbours' vms, and the tap → capture log.
 //
 // The engine may dispatch from inside run(), so the store must queue an event
@@ -27,11 +27,13 @@ import {
 	type StopHow,
 	type SwitchName,
 } from "../model/index.ts";
+import type { Clock } from "./clock.ts";
+import type { Fabric, FabricEvents, MacEntry, PortCounters, SwitchCounters } from "./fabric.ts";
 import type { LinkTarget } from "./machine-link.ts";
 import type { CopyJob, CopyReport } from "./protocol.ts";
+import { createPump } from "./pump.ts";
 import type { LineMark, Screen, Screens } from "./screens.ts";
 import type { ShellEvent } from "./shell-tracker.ts";
-import type { LabSwitch, MacEntry, PortCounters, SwitchCounters } from "./switch.ts";
 import { DEFAULT_TTY_SIZE, type StartVm, type Tty, type Vm, type VmRef, type VmSink } from "./vm.ts";
 
 export type { ExecOutcome, ExecPort };
@@ -69,7 +71,10 @@ export interface Engine {
 
 export interface EngineDeps {
 	readonly store: RuntimeStore;
-	readonly newSwitch: (name: SwitchName) => LabSwitch;
+	/** ms since the lab started: the capture log's clock and the model's. Its timers carry frames between switches. */
+	readonly clock: Clock;
+	/** Every switch of the lab and the cables between them, made once. */
+	readonly newFabric: (events: FabricEvents) => Fabric;
 	readonly capture: CaptureLog;
 	readonly screens: Screens;
 	readonly startVm: StartVm;
@@ -83,8 +88,6 @@ export interface EngineDeps {
 	readonly announce: (text: string) => void;
 	/** Run fn every ms until the returned function is called. */
 	readonly every: (ms: number, fn: () => void) => () => void;
-	/** ms since the lab started: the capture log's clock and the model's. */
-	readonly now: () => number;
 	/** A fresh secret per boot for the guest prompt's marks. Hex. */
 	readonly promptToken: () => string;
 }
@@ -119,16 +122,18 @@ interface Write {
 
 /** One port of a switch that there is. */
 interface Socket {
-	readonly sw: LabSwitch;
+	readonly slot: number;
 	readonly port: PortNo;
 }
 
 interface SwitchEntry {
-	readonly sw: LabSwitch;
-	/** Whose cable is in each port. */
+	/** Where it is in the fabric. */
+	readonly slot: number;
+	/** Whose cable is in each port that a NIC's is in. */
 	readonly cables: Map<PortNo, NicRef>;
-	readonly untap: () => void;
 }
+
+const NOTHING_CARRIED: SwitchCounters = { in: 0, delivered: 0, flooded: 0, dropped: 0 };
 
 /** A copy of disks that no guest has open, or that waits until none has. */
 interface Job {
@@ -182,6 +187,7 @@ const lastLineOf = (output: string): string => output.split("\n").findLast((line
 
 export function createEngine(deps: EngineDeps): Engine {
 	const { capture, screens } = deps;
+	const now = () => deps.clock.now();
 	const dispatch = (event: RuntimeEvent) => deps.store.dispatchRuntime(event);
 
 	const vms = new Map<MachineName, VmEntry>();
@@ -194,34 +200,69 @@ export function createEngine(deps: EngineDeps): Engine {
 	let writes = 0;
 	let clock: { readonly hz: 1 | 10; readonly stop: () => void } | null = null;
 
+	/** The name of the switch in each slot of the fabric. */
+	const slots: (SwitchName | undefined)[] = [];
+	const fabric = deps.newFabric({
+		tap(slot, e) {
+			const name = slots[slot];
+			if (name) capture.appendFrame({ switch: name, ...e });
+		},
+		storm(slot, { since, rate, looped, dropped }, over) {
+			const name = slots[slot];
+			if (!name) return;
+			capture.appendStorm({ switch: name, over, looped, dropped, ms: now() - since });
+			dispatch({ type: "switch/storm", switch: name, storm: over ? null : { since, rate, dropped } });
+		},
+	});
+	const pump = createPump(fabric, deps.clock);
+
 	/** Made the first time a port of it is named. */
 	const switchOf = (name: SwitchName): SwitchEntry => {
 		const known = switches.get(name);
 		if (known) return known;
-		const sw = deps.newSwitch(name);
-		const untap = sw.onTap((e) => capture.appendFrame({ switch: name, ...e }));
-		const entry: SwitchEntry = { sw, cables: new Map(), untap };
+		const entry: SwitchEntry = { slot: fabric.addSwitch(), cables: new Map() };
+		slots[entry.slot] = name;
 		switches.set(name, entry);
 		return entry;
 	};
 
+	/** Whatever is in the port comes out. A cable to another switch comes out of that one too. */
 	const unplug = ({ switch: on, port }: PortRef): void => {
 		const entry = switches.get(on);
-		const held = entry?.cables.get(port);
-		if (!entry || !held) return;
+		if (!entry) return;
+		fabric.detach(entry.slot, port);
+		const held = entry.cables.get(port);
+		if (!held) return;
 		entry.cables.delete(port);
-		entry.sw.detach(port);
 		const nics = plugged.get(held.machine);
 		const at = nics?.get(held.nic);
-		if (at?.sw === entry.sw && at.port === port) nics?.delete(held.nic);
+		if (at?.slot === entry.slot && at.port === port) nics?.delete(held.nic);
 	};
 
 	const dropSwitch = (name: SwitchName): void => {
 		const entry = switches.get(name);
 		if (!entry) return;
 		for (const port of entry.cables.keys()) unplug({ switch: name, port });
-		entry.untap();
+		fabric.removeSwitch(entry.slot, now());
+		slots[entry.slot] = undefined;
 		switches.delete(name);
+	};
+
+	/** Whether the cable that goes from the first port to the second is in. */
+	const cabled = ([a, b]: readonly [PortRef, PortRef]): boolean => {
+		const from = switches.get(a.switch);
+		const far = from && fabric.farEnd(from.slot, a.port);
+		return far !== null && far !== undefined && far.slot === switches.get(b.switch)?.slot && far.port === b.port;
+	};
+
+	/** While a switch storms, the model has its numbers once a tick. */
+	const readStorms = () => {
+		for (const [name, { slot }] of switches) {
+			const reading = fabric.storm(slot, now());
+			if (!reading) continue;
+			const { since, rate, dropped } = reading;
+			dispatch({ type: "switch/storm", switch: name, storm: { since, rate, dropped } });
+		}
 	};
 
 	/** The vm a report came from, if it is still the one being listened to. */
@@ -350,7 +391,7 @@ export function createEngine(deps: EngineDeps): Engine {
 		frame(ref, nic, frame) {
 			if (!heard(ref)) return;
 			const at = plugged.get(ref.machine)?.get(nic);
-			at?.sw.receive(at.port, frame);
+			if (at) pump.receive(at.slot, at.port, frame);
 		},
 		consoleBytes(ref, bytes) {
 			if (heard(ref)) output(`${ref.machine}:console`, bytes);
@@ -399,7 +440,7 @@ export function createEngine(deps: EngineDeps): Engine {
 				dispatch({ type: "checkpoint/progress", machine, attempt, set, percent: report.percent });
 				return;
 			case "done":
-				dispatch({ type: "checkpoint/restored", machine, attempt, set, at: deps.now() });
+				dispatch({ type: "checkpoint/restored", machine, attempt, set, at: now() });
 				return;
 			case "failed":
 				dispatch({ type: "vm/failed", machine, attempt, reason: report.reason });
@@ -480,10 +521,11 @@ export function createEngine(deps: EngineDeps): Engine {
 	let linkTarget: LinkTarget | null = null;
 
 	const tick = () => {
-		const now = deps.now();
-		capture.sweep(now);
-		settleQuiet(now);
-		dispatch({ type: "tick", now });
+		const at = now();
+		capture.sweep(at);
+		settleQuiet(at);
+		readStorms();
+		dispatch({ type: "tick", now: at });
 	};
 
 	function run(effect: Effect): void {
@@ -527,7 +569,7 @@ export function createEngine(deps: EngineDeps): Engine {
 				jobs.get(machine)?.drop();
 				const entry = vms.get(machine);
 				if (!entry) {
-					dispatch({ type: "vm/stopped", machine, attempt, clean: true, at: deps.now() });
+					dispatch({ type: "vm/stopped", machine, attempt, clean: true, at: now() });
 					return;
 				}
 				if (attempt < entry.attempt || entry.phase === "dropped") return;
@@ -538,7 +580,7 @@ export function createEngine(deps: EngineDeps): Engine {
 				entry.stopped ??= stopped.then((clean) => {
 					if (vms.get(machine) === entry) vms.delete(machine);
 					if (entry.saving) deps.deleteDisks(entry.saving.n, [entry.saving.to]);
-					dispatch({ type: "vm/stopped", machine, attempt, clean, at: deps.now() });
+					dispatch({ type: "vm/stopped", machine, attempt, clean, at: now() });
 				});
 				return;
 			}
@@ -567,21 +609,41 @@ export function createEngine(deps: EngineDeps): Engine {
 			case "port/attach": {
 				const { machine, nic } = effect;
 				const { port } = effect.port;
-				const { sw, cables } = switchOf(effect.port.switch);
+				const { slot, cables } = switchOf(effect.port.switch);
 				const held = cables.get(port);
 				if (held?.machine === machine && held.nic === nic) return;
 				unplug(effect.port);
 				cables.set(port, { machine, nic });
 				const nics = plugged.get(machine) ?? new Map<NicNo, Socket>();
-				plugged.set(machine, nics.set(nic, { sw, port }));
-				sw.attach(port, {
+				plugged.set(machine, nics.set(nic, { slot, port }));
+				fabric.attach(slot, port, {
 					deliver(frame) {
 						const entry = vms.get(machine);
 						if (entry && entry.phase !== "dropped") entry.vm.deliver(nic, frame);
 					},
 				});
 				// Reserved, not live: the model raises the link when the machine is ready.
-				sw.setLink(port, false);
+				fabric.setLink(slot, port, false);
+				return;
+			}
+			case "cable/attach": {
+				if (cabled(effect.ends)) return;
+				const [a, b] = effect.ends;
+				unplug(a);
+				unplug(b);
+				const from = { slot: switchOf(a.switch).slot, port: a.port };
+				fabric.cable(from, { slot: switchOf(b.switch).slot, port: b.port });
+				// As a NIC's: the link is the model's to raise.
+				fabric.setLink(from.slot, from.port, false);
+				return;
+			}
+			case "cable/detach":
+				if (cabled(effect.ends)) unplug(effect.ends[0]);
+				return;
+			case "cable/link": {
+				const { ends, up, cause, plug, cut } = effect;
+				if (cabled(ends) && !cut) fabric.setLink(switchOf(ends[0].switch).slot, ends[0].port, up);
+				capture.appendCable({ ends, up, cause, plug, cut });
 				return;
 			}
 			case "port/detach":
@@ -593,7 +655,7 @@ export function createEngine(deps: EngineDeps): Engine {
 				return;
 			case "link/set": {
 				const { port, machine, nic, up, cause, plug } = effect;
-				switchOf(port.switch).sw.setLink(port.port, up);
+				fabric.setLink(switchOf(port.switch).slot, port.port, up);
 				capture.appendLink({ port, machine, nic, up, cause, plug });
 				return;
 			}
@@ -674,7 +736,7 @@ export function createEngine(deps: EngineDeps): Engine {
 					return;
 				}
 
-				const startedAt = deps.now();
+				const startedAt = now();
 				/** Set when the line is typed. */
 				let mark: LineMark | null = null;
 
@@ -689,7 +751,7 @@ export function createEngine(deps: EngineDeps): Engine {
 						if (!typed) return;
 						over();
 						const { text: output, truncated } = typed.output();
-						const ms = Math.round(deps.now() - startedAt);
+						const ms = Math.round(now() - startedAt);
 						resolve({ exitCode, output, truncated, lastLine: lastLineOf(output), ms });
 					},
 					fail(reason) {
@@ -766,9 +828,18 @@ export function createEngine(deps: EngineDeps): Engine {
 		screens,
 		capture,
 		reads: {
-			macTable: (of) => switches.get(of)?.sw.macTable() ?? [],
-			counters: ({ switch: of, port }) => switches.get(of)?.sw.counters(port),
-			totals: (of) => switches.get(of)?.sw.total ?? { in: 0, delivered: 0, flooded: 0 },
+			macTable(of) {
+				const entry = switches.get(of);
+				return entry ? fabric.macTable(entry.slot, now()) : [];
+			},
+			counters({ switch: of, port }) {
+				const entry = switches.get(of);
+				return entry && fabric.counters(entry.slot, port);
+			},
+			totals(of) {
+				const entry = switches.get(of);
+				return entry ? fabric.totals(entry.slot) : NOTHING_CARRIED;
+			},
 		},
 		link(target) {
 			linkTarget = target;
@@ -777,6 +848,7 @@ export function createEngine(deps: EngineDeps): Engine {
 		dispose() {
 			clock?.stop();
 			clock = null;
+			pump.stop();
 			for (const name of switches.keys()) dropSwitch(name);
 			for (const job of jobs.values()) job.drop();
 			for (const [machine, entry] of vms) {

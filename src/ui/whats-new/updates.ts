@@ -14,6 +14,13 @@ export interface Update {
 export const UPDATES: readonly Update[] = [
 	{
 		date: "2026-11-26",
+		title: "Cable switches together, and make a loop",
+		detail:
+			"Join two switches with a cable, cut it, or take it out. Close a loop, as a cable from a switch to itself does, to watch a broadcast storm: each switch says how fast it runs, and the lab still answers.",
+		example: "cable switch0 switch0",
+	},
+	{
+		date: "2026-11-26",
 		title: "Your lab has a desktop",
 		detail:
 			"Boot your first guests from Welcome. Open a machine or switch in Rack manager, follow its cables in Topology, and arrange terminals and captures in their own windows.",

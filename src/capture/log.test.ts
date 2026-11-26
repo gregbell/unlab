@@ -196,7 +196,9 @@ describe("several switches", () => {
 		made.appendLink({ port: { switch: lan, port: 3 }, machine: "node2", nic: 0, up: false, cause: "bar" });
 		return made
 			.tail(4)
-			.map((row) => (row.kind === "frame" ? [row.switch, row.in, row.out, row.note] : [row.switch, row.text]));
+			.map((row) =>
+				row.kind === "frame" ? [row.switch, row.in, row.out, row.note] : [row.kind === "link" && row.switch, row.text],
+			);
 	};
 
 	test("are named by their rows, with the port that a frame came in by and those it went out of", () => {
@@ -213,7 +215,9 @@ describe("several switches", () => {
 		const carried = [lan, "switch0", lan, lan, "switch0"] as const;
 		for (const on of carried) made.appendFrame({ switch: on, from: 1, to: 2, flood: null, frame: ping(1, 2) });
 		for (const rows of [made.tail(5), made.window(0, 5)]) {
-			expect(rows.map((row) => [row.seq, row.time, row.switch])).toEqual(carried.map((on, i) => [i + 1, "0.00", on]));
+			expect(rows.map((row) => [row.seq, row.time, row.kind === "frame" && row.switch])).toEqual(
+				carried.map((on, i) => [i + 1, "0.00", on]),
+			);
 		}
 	});
 });
