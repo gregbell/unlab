@@ -40,6 +40,8 @@ test("an agent lists, asks to remove node2, and node2 goes once the person click
 		"machines_reboot",
 		"machines_remove",
 		"machines_spawn",
+		"port_trunk",
+		"port_vlan",
 		"shell_exec",
 		"shell_read",
 		"switch_add",

@@ -277,6 +277,8 @@ test("the bar completes and previews each verb and option as it does spawn", asy
 			"rmswitch",
 			"cable",
 			"uncable",
+			"vlan",
+			"trunk",
 			"topology",
 		].map((verb) => [verb.slice(0, -1), verb] as const),
 		["spawn 1 la", "lab"],
