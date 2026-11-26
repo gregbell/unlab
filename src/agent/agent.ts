@@ -35,7 +35,7 @@ export interface Agent {
 	readonly tools: readonly ToolRow[];
 	/** The tools an agent may call now: none while paused, and none that are off. */
 	offered(): readonly OfferedTool[];
-	/** Runs a call as WebMCP would. Resolves with what the agent reads; rejects only when `signal` aborts. */
+	/** Runs a call that came through the CLI as WebMCP would one. Resolves with what the agent reads; rejects only when `signal` aborts. */
 	call(name: string, input: unknown, signal: AbortSignal): Promise<unknown>;
 	/** The person's answer to a waiting call. Anything else is ignored. */
 	answer(call: number, allow: boolean): void;
@@ -87,11 +87,16 @@ export function startAgent(deps: AgentDeps): Agent {
 			signal?.addEventListener("abort", onAbort, { once: true });
 		});
 
-	async function call(tool: AgentTool, input: unknown, signal: AbortSignal | undefined): Promise<unknown> {
+	async function call(
+		tool: AgentTool,
+		input: unknown,
+		signal: AbortSignal | undefined,
+		via: AgentCall["via"],
+	): Promise<unknown> {
 		signal?.throwIfAborted();
 		const lab = store.state;
 		const id = nextId(lab);
-		const fields = { id, tool: tool.name, preview: null, actionLabel: null, result: null, at: lab.now };
+		const fields = { id, tool: tool.name, preview: null, actionLabel: null, result: null, at: lab.now, via };
 		const prepared = tool.prepare(input, lab);
 		const refused = (error: string): Failure => {
 			store.dispatchAgent({
@@ -154,7 +159,7 @@ export function startAgent(deps: AgentDeps): Agent {
 				description: tool.description,
 				inputSchema: tool.inputSchema,
 				annotations: tool.annotations,
-				execute: (input, options) => call(tool, input, options?.signal),
+				execute: (input, options) => call(tool, input, options?.signal, "webmcp"),
 			},
 		]),
 	);
@@ -239,7 +244,7 @@ export function startAgent(deps: AgentDeps): Agent {
 		call(name, input, signal) {
 			const tool = table.find((one) => one.name === name);
 			if (!tool) return Promise.resolve({ error: `There is no tool called ${name}.` } satisfies Failure);
-			return call(tool, input, signal);
+			return call(tool, input, signal, "cli");
 		},
 		answer(id, allow) {
 			const resume = waiting.get(id);

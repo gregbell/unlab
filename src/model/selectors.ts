@@ -522,10 +522,14 @@ function webmcpSegment(agent: LabState["agent"], indicator: AgentIndicator): Sta
 	return { key: "webmcp", text, tone: "quiet" };
 }
 
-/** The link with the CLI, which the status line shows beside WebMCP. */
-export function selectCliSegment({ cli }: LabState): StatusSegment {
-	return CLI_SEGMENTS[cli.kind];
+/** The link with the CLI, which the status line shows beside WebMCP, and an agent that uses the lab through it. */
+export function selectCliSegment(state: LabState): StatusSegment {
+	const { cli, agent } = state;
+	const throughCli = agent.calls.at(-1)?.via === "cli" && selectAgentIndicator(state) === "agent active";
+	return cli.kind === "linked" && throughCli ? CLI_AGENT_ACTIVE : CLI_SEGMENTS[cli.kind];
 }
+
+const CLI_AGENT_ACTIVE: StatusSegment = { key: "cli", text: "cli: linked, agent active", tone: "quiet" };
 
 const CLI_SEGMENTS: Readonly<Record<LabState["cli"]["kind"], StatusSegment>> = {
 	off: { key: "cli", text: "cli: off", tone: "quiet" },

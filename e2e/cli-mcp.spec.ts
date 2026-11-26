@@ -71,8 +71,9 @@ test("an agent that started before the lab linked gets its tools, and calls them
 		"node2",
 	]);
 
+	await expect(page.locator('unlab-cli-link [data-key="cli"]')).toHaveText("cli: linked, agent active");
 	const panel = await openPanel(page);
-	await expect(panel.locator(".call").last()).toContainText("ls");
+	await expect(panel.locator(".call").last()).toContainText("ls via cli");
 	const block = panel.locator("unlab-confirm");
 
 	const denying = mcp.ask("tools/call", { name: "machines_remove", arguments: { names: "node2" } });
@@ -114,8 +115,7 @@ test("an agent that started before the lab linked gets its tools, and calls them
 test("a tab that closes takes the tools away, and the call that ran is told so", async ({ page }) => {
 	const mcp = await linked(page);
 	const waiting = mcp.ask("tools/call", { name: "machines_remove", arguments: { names: "node1" } });
-	const panel = await openPanel(page);
-	await expect(panel.locator("unlab-confirm")).toContainText("rm node1");
+	await expect(page.locator("unlab-agent-panel unlab-confirm")).toContainText("rm node1");
 	const changes = mcp.count("notifications/tools/list_changed");
 	await page.close();
 	expect(text(await mcp.answer(waiting))).toBe("The lab closed while this ran. Whether it finished is not known.");

@@ -375,6 +375,7 @@ describe("a tool set to run", () => {
 			line: "ls",
 			status: "done",
 			result: "2 machines · 2 ready",
+			via: "webmcp",
 		});
 		expect(selectRecent(store.state)[0]).toMatchObject({ line: "ls", source: "agent", outcome: "ok" });
 		expect(store.state.agent.firstCallAt).not.toBeNull();
@@ -773,6 +774,7 @@ describe("an agent outside the browser", () => {
 		agent.answer(waiting()[0]?.id ?? -1, false);
 		await expect(removing).resolves.toEqual({ error: "Denied by the user." });
 		expect(store.state.machines.node2).toBeDefined();
+		expect(store.state.agent.calls.map((c) => c.via)).toEqual(["cli", "cli"]);
 	});
 
 	it("withdraws a waiting call when the agent gives up", async () => {

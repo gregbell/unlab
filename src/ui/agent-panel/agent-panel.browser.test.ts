@@ -11,7 +11,10 @@ afterEach(() => {
 });
 
 function called(id: number, fields: Partial<AgentCall> & Pick<AgentCall, "tool" | "line" | "status">): AgentEvent {
-	return { type: "agent/call", call: { id, preview: null, actionLabel: null, result: null, at: 0, ...fields } };
+	return {
+		type: "agent/call",
+		call: { id, preview: null, actionLabel: null, result: null, at: 0, via: "webmcp", ...fields },
+	};
 }
 
 const ACTIVE: readonly LabEvent[] = [
@@ -96,6 +99,27 @@ describe("<unlab-agent-panel>", () => {
 		expect(node2 && getComputedStyle(node2).color).toBe(tokenColor("hue-2"));
 		const result = element.querySelector(".call .result");
 		expect(result && getComputedStyle(result).color).toBe(tokenColor("text-2"));
+	});
+
+	it("marks a call that came through the CLI, in the log and while it waits", async () => {
+		const { element } = await mount("unlab-agent-panel", {
+			state: lab(
+				spawn(3),
+				ready(),
+				called(1, { tool: "machines_list", line: "ls", status: "done", result: "3 machines", via: "cli" }),
+				called(2, { tool: "machines_list", line: "ls", status: "done", result: "3 machines" }),
+				called(3, {
+					tool: "machines_remove",
+					line: "rm node3",
+					status: "waiting",
+					actionLabel: "Remove node3",
+					via: "cli",
+				}),
+			),
+		});
+		const lines = [...element.querySelectorAll(".call .line")].map((line) => text(line));
+		expect(lines).toEqual(["ls via cli", "ls"]);
+		expect(element.querySelector("unlab-confirm")?.getAttribute("note")).toBe("3 · via cli · waiting for you");
 	});
 
 	it("changes a policy through the store, and an off tool's row turns --text-3", async () => {
@@ -210,7 +234,7 @@ describe("<unlab-agent-panel>", () => {
 			tryCall: async () => {},
 		});
 		expect(text(element.querySelector(".about"))).toBe(
-			"This tab has no WebMCP, so no agent can call these yet. In Chrome or Edge 150 or later, open chrome://flags/#enable-webmcp-testing, choose Enabled and relaunch. Or let an agent open the lab in its own Chrome: connect an agent.",
+			"This tab has no WebMCP, but an agent can call these through the CLI: connect an agent. For an agent in this browser, open chrome://flags/#enable-webmcp-testing in Chrome or Edge 150 or later, choose Enabled and relaunch.",
 		);
 		expect(element.querySelectorAll(".tool")).toHaveLength(22);
 		expect(page.getByRole("button", { name: "try a call" }).elements()).toEqual([]);

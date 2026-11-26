@@ -339,6 +339,8 @@ export interface AgentCall {
 	readonly actionLabel: string | null;
 	readonly result: string | null;
 	readonly at: number;
+	/** How the agent reached the lab: the browser's WebMCP, or `npx unlab.run mcp` through the CLI. */
+	readonly via: "webmcp" | "cli";
 }
 
 /** What the browser makes of the tools. Nothing can call in unless it took them. */

@@ -5,6 +5,7 @@ import {
 	selectAgentIndicator,
 	selectAllLinks,
 	selectBarHistory,
+	selectCliSegment,
 	selectDetails,
 	selectFocused,
 	selectLinks,
@@ -546,6 +547,18 @@ describe("the status line", () => {
 		expect(tone(s, "webmcp")).toBe("warn");
 		s = run(s, { type: "agent/call", call: agentCall(2, 0, { status: "waiting" }) });
 		expect(texts(s).right[0]).toBe("webmcp: 1 call waiting for you");
+	});
+
+	test("an agent that calls through the CLI is said on the CLI's segment while it is active", () => {
+		let s = run(busy(), { type: "cli/link", cli: { kind: "linked" } });
+		expect(selectCliSegment(s).text).toBe("cli: linked");
+		s = run(s, { type: "agent/call", call: agentCall(9, s.now, { via: "cli" }) });
+		expect(selectCliSegment(s).text).toBe("cli: linked, agent active");
+		expect(selectCliSegment(s)).toBe(selectCliSegment(s));
+		s = run(s, tick(s.now + AGENT_IDLE_MS));
+		expect(selectCliSegment(s).text).toBe("cli: linked");
+		s = run(s, { type: "agent/call", call: agentCall(10, s.now, { via: "webmcp" }) });
+		expect(selectCliSegment(s).text).toBe("cli: linked");
 	});
 
 	test("a tool switched off is not counted, and an idle agent is called idle", () => {
