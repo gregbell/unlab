@@ -36,13 +36,19 @@ interface VlanPlan {
 	readonly held: HeldPort;
 	readonly vlan: PortVlan;
 	readonly already: boolean;
+	/** What it does that someone may not expect, said before it runs and in what it returns. */
+	readonly notes: readonly string[];
 }
 
 function planned(lab: LabState, port: PortRef, held: HeldPort, vlan: PortVlan): VlanPlan {
-	return { port, held, vlan, already: sameVlan(vlanOf(lab, port), vlan) };
+	const notes =
+		vlan.mode === "trunk" && !carries(vlan, vlan.native)
+			? [`native ${vlan.native} is not allowed, so nothing crosses it untagged`]
+			: [];
+	return { port, held, vlan, already: sameVlan(vlanOf(lab, port), vlan), notes };
 }
 
-function described({ port, held, vlan, already }: VlanPlan, lab: LabState, notes: readonly string[] = []): string {
+function described({ port, held, vlan, already, notes }: VlanPlan, lab: LabState): string {
 	const where = portLabel(lab, port);
 	const what = already
 		? `change nothing: ${where} is already ${vlanText(vlan)}`
@@ -52,13 +58,17 @@ function described({ port, held, vlan, already }: VlanPlan, lab: LabState, notes
 	return [what, inIt(lab, held), ...notes].join(" · ");
 }
 
-async function applied({ port, vlan, already }: VlanPlan, signal: AbortSignal, deps: CommandDeps): Promise<Result> {
+async function applied(
+	{ port, vlan, already, notes }: VlanPlan,
+	signal: AbortSignal,
+	deps: CommandDeps,
+): Promise<Result> {
 	if (!already) {
 		deps.dispatch({ type: "cmd/vlan", port, vlan });
 		await deps.until((s) => sameVlan(vlanOf(s, port), vlan), signal);
 	}
 	const data: PortVlanState = { ...port, ...vlan };
-	const text = `${portName(port)} ${already ? "already " : ""}${vlanText(vlan)}`;
+	const text = [`${portName(port)} ${already ? "already " : ""}${vlanText(vlan)}`, ...notes].join(" · ");
 	return { kind: "visible", text, data };
 }
 
@@ -111,14 +121,7 @@ export const trunk = defineVerb({
 		}
 		return planned(lab, ref, held, { mode: "trunk", allowed: a.allow, native: a.native });
 	},
-	describe(plan, lab) {
-		const { vlan } = plan;
-		const untagged =
-			vlan.mode === "trunk" && !carries(vlan, vlan.native)
-				? [`native ${vlan.native} is not allowed, so nothing crosses it untagged`]
-				: [];
-		return described(plan, lab, untagged);
-	},
+	describe: (plan, lab) => described(plan, lab),
 	execute: (plan, ctx, deps) => applied(plan, ctx.signal, deps),
 	tool: { name: "port_trunk", title: "Make a switch port a trunk", policy: "run" },
 });

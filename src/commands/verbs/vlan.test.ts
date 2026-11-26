@@ -110,11 +110,18 @@ describe("trunk", () => {
 		});
 	});
 
-	it("says before it runs when its native VLAN is not allowed, so nothing crosses it untagged", async () => {
+	it("says before it runs, and in what it returns, when its native VLAN is not allowed, so nothing crosses it untagged", async () => {
 		const lab = await wired();
 		expect(will(lab, "trunk lan:1 --allow 10,20")).toBe(
 			"make lan port 1 a trunk of 10 and 20, native 1 · its cable goes to switch0 port 8 · native 1 is not allowed, so nothing crosses it untagged",
 		);
+		expect(await lab.run("trunk lan:1 --allow 10,20 --native 30", "agent")).toMatchObject({
+			text: "lan:1 trunk of 10 and 20, native 30 · native 30 is not allowed, so nothing crosses it untagged",
+			data: { mode: "trunk", allowed: [10, 20], native: 30 },
+		});
+		expect(await lab.run("trunk lan:1 --allow 10,20 --native 30", "agent")).toMatchObject({
+			text: "lan:1 already trunk of 10 and 20, native 30 · native 30 is not allowed, so nothing crosses it untagged",
+		});
 	});
 
 	it("refuses the port of a machine's NIC, whose kernel cannot read tags, and names what would do", async () => {

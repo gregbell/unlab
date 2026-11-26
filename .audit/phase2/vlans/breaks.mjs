@@ -188,6 +188,13 @@ export const BREAKS = [
 		tests: [savedUnit],
 	},
 	{
+		name: "a trunk's result says nothing of a native VLAN it does not allow",
+		file: "src/commands/verbs/vlan.ts",
+		from: "${vlanText(vlan)}`, ...notes]",
+		to: "${vlanText(vlan)}`]",
+		tests: [verbUnit],
+	},
+	{
 		name: "e2e: every port carries every VLAN",
 		file: FABRIC,
 		from: "const carries = (mode: Mode, vlan: number): boolean => (mode.trunk ? allows(mode, vlan) : mode.vlan === vlan);",
