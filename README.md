@@ -73,11 +73,11 @@ on, such as the ready ones for `exec` and the ones that are off or failed for `b
 
 ### Inspect the lab and get help
 
-| Command bar example                          | What it does                                                                                                                           |
-| -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `ls`                                         | List machines and their disks, and each network interface's MAC, address, port, and link.                                              |
-| `topology`                                   | List every switch, every port, what is in it, whether its link is up, and which switches are storming.                                 |
-| `help reboot`                                | Explain a command. `help` alone lists them all.                                                                                        |
+| Command bar example | What it does                                                                                           |
+| ------------------- | ------------------------------------------------------------------------------------------------------ |
+| `ls`                | List machines and their disks, and each network interface's MAC, address, port, and link.              |
+| `topology`          | List every switch, every port, what is in it, whether its link is up, and which switches are storming. |
+| `help reboot`       | Explain a command. `help` alone lists them all.                                                        |
 
 ### Create machines
 
@@ -94,49 +94,49 @@ on, such as the ready ones for `exec` and the ones that are off or failed for `b
 
 ### Wire machines and switches
 
-| Command bar example                          | What it does                                                                                                                           |
-| -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `mkswitch lan`                               | Add a switch called `lan`. Without a name, it is the next free `switch1`. Frames pass from one switch to another only over a cable.    |
-| `rmswitch lan`                               | Remove a switch, after a confirmation that lists what is plugged in and its cables to other switches. The machines run on.             |
-| `cable lan wan:8`                            | Put a cable between two switches, so that their machines share a segment. `lan` alone is its lowest free port.                         |
-| `uncable lan:3`                              | Take out the cable between switches that is in port 3 of `lan`. Either of its two ports names it.                                      |
-| `plug node2 lan:3`                           | Move node2's cable to port 3 of `lan`, or plug it in. `lan` alone is its lowest free port. Name one of several with `node2:eth1`.      |
-| `unplug node2:eth1`                          | Take the interface's cable out and free its port, also for later boots.                                                                |
-| `link down node2`                            | Cut node2's cables, whether it is on or off. Reconnect them with `link up node2`. Name one of several with `node2:eth1`.               |
-| `link down lan:3`                            | Cut the cable in that port, also one between switches. Both switches forget what they learned over it. `link up lan:3` reconnects it.  |
+| Command bar example | What it does                                                                                                                          |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `mkswitch lan`      | Add a switch called `lan`. Without a name, it is the next free `switch1`. Frames pass from one switch to another only over a cable.   |
+| `rmswitch lan`      | Remove a switch, after a confirmation that lists what is plugged in and its cables to other switches. The machines run on.            |
+| `cable lan wan:8`   | Put a cable between two switches, so that their machines share a segment. `lan` alone is its lowest free port.                        |
+| `uncable lan:3`     | Take out the cable between switches that is in port 3 of `lan`. Either of its two ports names it.                                     |
+| `plug node2 lan:3`  | Move node2's cable to port 3 of `lan`, or plug it in. `lan` alone is its lowest free port. Name one of several with `node2:eth1`.     |
+| `unplug node2:eth1` | Take the interface's cable out and free its port, also for later boots.                                                               |
+| `link down node2`   | Cut node2's cables, whether it is on or off. Reconnect them with `link up node2`. Name one of several with `node2:eth1`.              |
+| `link down lan:3`   | Cut the cable in that port, also one between switches. Both switches forget what they learned over it. `link up lan:3` reconnects it. |
 
 ### Run commands and open consoles
 
-| Command bar example                          | What it does                                                                                                                           |
-| -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `exec node1 -- ping -c 1 10.88.0.12`         | Send one ping from node1 and read the exit code from its shell.                                                                        |
-| `write node1 /etc/motd --mode 644 -- hello`  | Put a text in a file on the machine, as root, with the directories it needs. `--owner user:group` sets whose it is.                    |
-| `sh node2`                                   | Open another shell on node2.                                                                                                           |
-| `focus node2 --max`                          | Maximise or restore its pane. Use `--main` to promote it to the main pane.                                                             |
+| Command bar example                         | What it does                                                                                                        |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `exec node1 -- ping -c 1 10.88.0.12`        | Send one ping from node1 and read the exit code from its shell.                                                     |
+| `write node1 /etc/motd --mode 644 -- hello` | Put a text in a file on the machine, as root, with the directories it needs. `--owner user:group` sets whose it is. |
+| `sh node2`                                  | Open another shell on node2.                                                                                        |
+| `focus node2 --max`                         | Maximise or restore its pane. Use `--main` to promote it to the main pane.                                          |
 
 ### Start, stop, or remove machines
 
-| Command bar example                          | What it does                                                                                                                           |
-| -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `reboot node2`                               | Shut the machine down and boot it again, with its disks, name, addresses, and cables. `reboot` typed in the guest does the same.       |
-| `poweroff node2`                             | Shut the machine down and leave it off. It keeps its disks and its ports, and uses no memory.                                          |
-| `boot node2`                                 | Boot a machine that is off, or retry a failed boot.                                                                                    |
-| `rm node2`                                   | Remove the machine and delete its disks and its checkpoints, after a confirmation that lists them.                                     |
+| Command bar example | What it does                                                                                                                     |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `reboot node2`      | Shut the machine down and boot it again, with its disks, name, addresses, and cables. `reboot` typed in the guest does the same. |
+| `poweroff node2`    | Shut the machine down and leave it off. It keeps its disks and its ports, and uses no memory.                                    |
+| `boot node2`        | Boot a machine that is off, or retry a failed boot.                                                                              |
+| `rm node2`          | Remove the machine and delete its disks and its checkpoints, after a confirmation that lists them.                               |
 
 ### Save and restore checkpoints
 
-| Command bar example                          | What it does                                                                                                                           |
-| -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `checkpoint node2 before`                    | Save all of the machine's disks as they are now, under a name. The machine runs on, or is off.                                         |
-| `restore node2 before`                       | Put the disks back as they were at the checkpoint and boot, after a confirmation.                                                      |
-| `forget node2 before`                        | Delete the checkpoint and free its storage, after a confirmation.                                                                      |
+| Command bar example       | What it does                                                                                   |
+| ------------------------- | ---------------------------------------------------------------------------------------------- |
+| `checkpoint node2 before` | Save all of the machine's disks as they are now, under a name. The machine runs on, or is off. |
+| `restore node2 before`    | Put the disks back as they were at the checkpoint and boot, after a confirmation.              |
+| `forget node2 before`     | Delete the checkpoint and free its storage, after a confirmation.                              |
 
 ### Capture traffic
 
-| Command bar example                          | What it does                                                                                                                           |
-| -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `capture arp or node2`                       | Maximise the capture with a filter for ARP or traffic involving node2. `node2:eth1` keeps one interface's frames.                      |
-| `capture lan:3 icmp`                         | Show the pings that crossed one cable, the one in port 3 of `lan`. `lan` alone is all that the switch carried.                         |
+| Command bar example    | What it does                                                                                                      |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `capture arp or node2` | Maximise the capture with a filter for ARP or traffic involving node2. `node2:eth1` keeps one interface's frames. |
+| `capture lan:3 icmp`   | Show the pings that crossed one cable, the one in port 3 of `lan`. `lan` alone is all that the switch carried.    |
 
 In a capture filter, terms that follow one another must all match, and `or`
 starts an alternative. A term is a protocol, a machine, an interface, an address,
