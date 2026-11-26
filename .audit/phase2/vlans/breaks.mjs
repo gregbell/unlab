@@ -6,6 +6,8 @@ const modelUnit = { kind: "unit", files: ["src/model/vlans.test.ts"] };
 const savedUnit = { kind: "unit", files: ["src/commands/saved-labs.test.ts"] };
 const verbUnit = { kind: "unit", files: ["src/commands/verbs/vlan.test.ts"] };
 const kernels = { kind: "integration", files: ["test/integration/vlans.test.ts"] };
+const captureUnit = { kind: "unit", files: ["src/capture/cables.test.ts", "src/net/filter.test.ts"], grep: "VLAN" };
+const detailUnit = { kind: "unit", files: ["src/ui/capture/frame-detail-model.test.ts"], grep: "VLAN" };
 const topologyUnit = { kind: "unit", files: ["src/commands/verbs/switches.test.ts"], grep: "topology" };
 
 export const BREAKS = [
@@ -120,5 +122,33 @@ export const BREAKS = [
 		from: "cable: holder ? cable(holder) : null, vlan: vlanOf(lab, { switch: name, port })",
 		to: "cable: holder ? cable(holder) : null, vlan: vlanOf({ portVlans: [] }, { switch: name, port })",
 		tests: [topologyUnit],
+	},
+	{
+		name: "a row says nothing of its tag",
+		file: "src/capture/rows.ts",
+		from: "\tif (e.tagged === 0) return `vlan ${e.vlan}`;",
+		to: "\treturn `vlan ${e.vlan}`;",
+		tests: [captureUnit],
+	},
+	{
+		name: "the VLAN term keeps every frame",
+		file: "src/net/filter.ts",
+		from: "frame: (f) => (f.vlan ?? 1) === id,",
+		to: "frame: () => true,",
+		tests: [captureUnit],
+	},
+	{
+		name: "the frame detail has no 802.1Q group",
+		file: "src/ui/capture/frame-detail-model.ts",
+		from: "\tif (e.tagged !== 0) {",
+		to: "\tif (false) {",
+		tests: [detailUnit],
+	},
+	{
+		name: "a port of another VLAN was down",
+		file: "src/ui/capture/frame-detail-model.ts",
+		from: "apart: !names.carries({ switch: e.switch, port: p }, e.vlan)",
+		to: "apart: false",
+		tests: [detailUnit],
 	},
 ];

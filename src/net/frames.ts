@@ -78,6 +78,14 @@ export function withTag(f: Uint8Array, vlan: number): Uint8Array {
 	return out;
 }
 
+/**
+ * A frame as it was on the wire at a port: with a tag for its VLAN when
+ * `tagged`, a mask with bit p-1 for port p, says it had one there.
+ */
+export function onWire(f: Uint8Array, vlan: number, tagged: number, port: number): Uint8Array {
+	return tagged & (1 << (port - 1)) ? withTag(f, vlan) : f;
+}
+
 /** The frame without the 802.1Q tag that `vlanTag` found. */
 export function withoutTag(f: Uint8Array): Uint8Array {
 	const out = new Uint8Array(f.length - TAG);

@@ -1,6 +1,6 @@
 import "./frame-detail.css";
 import { html, nothing, type TemplateResult } from "lit";
-import { selectPorts, severalNics, switchLabel } from "../../model/index.ts";
+import { carries, selectPorts, severalNics, switchLabel, type VlanId, vlanOf } from "../../model/index.ts";
 import { EVERYONE } from "../../net/index.ts";
 import { Select, UnlabElement } from "../base/index.ts";
 import { FollowCapture } from "./follow.ts";
@@ -38,6 +38,7 @@ export class UnlabFrameDetail extends UnlabElement {
 				const machine = selectPorts(on)(this.app.store.state)[port - 1]?.machine;
 				return machine ? { n: machine.n, label: machine.label } : null;
 			},
+			carries: (port, vlan) => carries(vlanOf(this.app.store.state, port), vlan as VlanId),
 			severalNics: (name) => severalNics({ machines }, name),
 			switchLabel: (on) => switchLabel({ switches: this.#switches.value }, on),
 		});

@@ -3,9 +3,9 @@ import "./frame-detail.ts";
 import { html, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { live } from "lit/directives/live.js";
 import { createRef, type Ref, ref } from "lit/directives/ref.js";
-import type { CaptureRow, CaptureView, EventRow, FrameRow, RouteEnd } from "../../capture/index.ts";
+import type { CaptureRow, CaptureView, EventRow, FrameEntry, FrameRow, RouteEnd } from "../../capture/index.ts";
 import { andList, type SwitchName, selectNames, type UiEvent } from "../../model/index.ts";
-import { compileFilter, EVERYONE, type PcapFrame, toPcap } from "../../net/index.ts";
+import { compileFilter, EVERYONE, onWire, type PcapFrame, toPcap } from "../../net/index.ts";
 import { clearIcon, pauseIcon, resumeIcon, Select, UnlabElement, windowButtons } from "../base/index.ts";
 import { FollowCapture } from "./follow.ts";
 
@@ -38,6 +38,14 @@ interface Saved {
 	readonly title: string | null;
 }
 
+/** Each as it was on the wire: at the cable's port, or else as it came into the switch, with its tag if it had one there. */
+function* wired(frames: Iterable<FrameEntry>, cable: { readonly switch: string; readonly port: number } | null) {
+	for (const e of frames) {
+		const port = cable?.switch === e.switch ? cable.port : e.from;
+		yield { t: e.t, bytes: onWire(e.bytes, e.vlan, e.tagged, port) };
+	}
+}
+
 /**
  * A filter that names a switch or a cable says where to look, so what is saved
  * is what it shows, and one cable's file has each frame once. Any other filter
@@ -48,10 +56,11 @@ function saved(capture: CaptureView, switches: readonly SwitchName[]): Saved {
 	if (scope.kind === "everywhere") {
 		const [first, ...others] = switches;
 		const name = others.length === 0 ? `unlab-${first}.pcap` : "unlab.pcap";
-		return { frames: capture.frames(), name, title: null };
+		return { frames: wired(capture.frames(), null), name, title: null };
 	}
 	const what = scope.kind === "places" ? "filtered" : scope.switch + (scope.port === null ? "" : `-port${scope.port}`);
-	return { frames: capture.matched(), name: `unlab-${what}.pcap`, title: "Save the frames shown" };
+	const cable = scope.kind === "place" && scope.port !== null ? { switch: scope.switch, port: scope.port } : null;
+	return { frames: wired(capture.matched(), cable), name: `unlab-${what}.pcap`, title: "Save the frames shown" };
 }
 
 /** `On lan, in by port 3 and out of ports 4 and 5.` */

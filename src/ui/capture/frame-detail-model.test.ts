@@ -30,6 +30,8 @@ function entry(bytes: Uint8Array, fields: Partial<Omit<FrameEntry, "kind" | "byt
 		looped: false,
 		names: NAMES,
 		noReply: false,
+		vlan: 1,
+		tagged: 0,
 		...fields,
 		bytes,
 	};
@@ -40,6 +42,7 @@ const only = (n: number): Named => ({ n, label: `node${n}` });
 /** Machines with one NIC, each holding the port of its own number. */
 const machinesTo = (last: number): LabNames => ({
 	holder: ({ port }) => (port <= last ? only(port) : null),
+	carries: () => true,
 	severalNics: () => false,
 	switchLabel: () => null,
 });
@@ -110,6 +113,7 @@ describe("frameDetail", () => {
 	it("names the NIC of a machine that has several", () => {
 		const names: LabNames = {
 			holder: ({ port }) => (port === 3 ? { n: 2, label: "node2:eth1" } : port === 1 ? only(1) : only(2)),
+			carries: () => true,
 			severalNics: (machine) => machine === "node2",
 			switchLabel: () => null,
 		};
@@ -145,6 +149,7 @@ describe("frameDetail", () => {
 		const lan = parseSwitchName("lan") as SwitchName;
 		const names: LabNames = {
 			holder: ({ switch: on, port }) => (on === lan && port >= 2 && port <= 3 ? only(port) : null),
+			carries: () => true,
 			severalNics: () => false,
 			switchLabel: (on) => on,
 		};
@@ -251,6 +256,49 @@ describe("frameDetail", () => {
 			"node1 0a 58 00 0b",
 			"node2 0a 58",
 			"node2 00 0c",
+		]);
+	});
+});
+
+describe("frameDetail of a frame in a VLAN", () => {
+	const lan = parseSwitchName("lan") as SwitchName;
+	const vlan10: LabNames = {
+		holder: ({ port }) => (port <= 4 ? only(port) : null),
+		carries: ({ port }, vlan) => (port <= 2 ? vlan === 10 : port === 8 || vlan === 20),
+		severalNics: () => false,
+		switchLabel: (on) => on,
+	};
+
+	it("says its VLAN in the summary, and has its 802.1Q tag where it had one", () => {
+		const tagged = frameDetail(
+			entry(arpRequest(1, 9), { switch: lan, to: ports([8]), vlan: 10, tagged: ports([8]) }),
+			vlan10,
+		);
+		expect(tagged.summary).toBe("42 bytes · 1618.52 s · in on lan port 1 · vlan 10");
+		expect(tagged.groups[1]).toEqual({
+			title: "802.1Q",
+			fields: [
+				{ label: "vlan", value: "10", who: null },
+				{ label: "tagged on", value: "lan port 8", who: null },
+			],
+		});
+		const plain = frameDetail(entry(arpRequest(1, 9), { switch: lan, vlan: 20 }), vlan10);
+		expect(plain.summary).toMatch(/ · vlan 20$/);
+		expect(plain.groups.map((g) => g.title)).not.toContain("802.1Q");
+		expect(frameDetail(entry(arpRequest(1, 3)), holder).groups.map((g) => g.title)).toEqual([
+			"ethernet II",
+			"arp request",
+		]);
+	});
+
+	it("says that the machines of other VLANs never saw a broadcast, apart from those whose port was down", () => {
+		const d = frameDetail(
+			entry(arpRequest(1, 9), { switch: lan, flood: "group", to: ports([8]), vlan: 10, tagged: ports([8]) }),
+			vlan10,
+		);
+		expect(d.did.slice(1)).toEqual([
+			["lan port 2 was down, so ", only(2), " never saw it."],
+			["lan ports 3 and 4 are not in vlan 10, so ", only(3), " and ", only(4), " never saw it."],
 		]);
 	});
 });

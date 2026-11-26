@@ -3,7 +3,8 @@
 //
 // Some terms say what a frame is or whose: a protocol, a machine name (either
 // end, by any of its MACs or the addresses the lab set), one of its NICs
-// (`node2:eth1`, by its MAC alone), an IPv4 address, or a MAC address. They
+// (`node2:eth1`, by its MAC alone), an IPv4 address, a MAC address, or the
+// VLAN that a switch carried it in (`vlan 10`, two words). They
 // match the frame on every switch that carries it. The others say where it was:
 // a switch (`lan`), the cable in one of its ports (`lan:3`), or `port:N`, that
 // port of every switch.
@@ -39,6 +40,8 @@ export interface CarriedFrame {
 	readonly bytes: Uint8Array;
 	/** Who was who when it was captured. */
 	readonly names: NameBook;
+	/** The VLAN the switch carried it in. Left out, 1. */
+	readonly vlan?: number;
 }
 
 /** A change to what is in a port, or to its link. */
@@ -158,6 +161,10 @@ const PROTOCOLS: ReadonlyMap<string, (f: Uint8Array) => boolean> = new Map([
 ]);
 
 const OR = "or";
+/** Before a VLAN's ID, as its own word. */
+export const VLAN_WORD = "vlan";
+const VLAN_ID = /^\d{1,4}$/;
+const MAX_VLAN = 4094;
 /** Before a port's number, for that port of every switch. */
 export const PORT_WORD = "port";
 const MAC = /^[0-9a-f]{2}([:-][0-9a-f]{2}){5}$/;
@@ -167,7 +174,7 @@ const ANY_PORT = /^([a-z][a-z0-9-]*):\d+$/;
 
 export const FILTER_PROTOCOLS: readonly string[] = [...PROTOCOLS.keys()];
 /** The words a filter reads as something other than a machine or a switch. */
-export const FILTER_WORDS: readonly string[] = [...FILTER_PROTOCOLS, OR, PORT_WORD];
+export const FILTER_WORDS: readonly string[] = [...FILTER_PROTOCOLS, OR, PORT_WORD, VLAN_WORD];
 
 /** `node<n>` is the lab's whether or not machine n has been there. */
 function isMachine(word: string, { names }: NameBook): boolean {
@@ -215,6 +222,10 @@ function nicTerm(name: string, nic: NicNo): Term {
 
 function portTerm(port: number): Term {
 	return { frame: (f) => crosses(f, port), link: (c) => c.port.port === port, at: (p) => p.port === port };
+}
+
+function vlanTerm(id: number): Term {
+	return { frame: (f) => (f.vlan ?? 1) === id, link: always, at: always };
 }
 
 function addressTerm(ip: number): Term {
@@ -273,7 +284,7 @@ function notATerm(word: string, token: string, name: string, known: NameBook): s
 		return `No switch is called ${name}, so use ${all.slice(0, -1).join(", ")} or ${all.at(-1)}.`;
 	}
 	const places = several ? "a switch (lan), a cable (lan:3), " : "";
-	return `Capture cannot read ${token}, so use a protocol, a machine, a NIC (node2:eth1), ${places}an address, a MAC or port:N.`;
+	return `Capture cannot read ${token}, so use a protocol, a machine, a NIC (node2:eth1), ${places}an address, a MAC, vlan N or port:N.`;
 }
 
 /** `known` is who is who now, so that a word that names no machine or switch is not taken for one. */
@@ -290,11 +301,26 @@ export function compileFilter(source: string, known: NameBook): FilterResult {
 		},
 	});
 
+	let vlanAt: { token: string; start: number } | null = null;
 	for (const m of source.matchAll(/\S+/g)) {
 		const token = m[0];
 		const start = m.index;
 		const word = token.toLowerCase();
 		const group = groups[groups.length - 1];
+		if (vlanAt) {
+			vlanAt = null;
+			const id = VLAN_ID.test(word) ? Number(word) : 0;
+			if (id < 1 || id > MAX_VLAN) {
+				const message = `${token} is no VLAN, so use one from 1 to ${MAX_VLAN}, such as vlan 10.`;
+				return { ok: false, error: { token, start, end: start + token.length, message } };
+			}
+			group.push(vlanTerm(id));
+			continue;
+		}
+		if (word === VLAN_WORD) {
+			vlanAt = { token, start };
+			continue;
+		}
 		if (word === OR) {
 			if (group.length === 0) return orError(token, start);
 			groups.push([]);
@@ -306,6 +332,11 @@ export function compileFilter(source: string, known: NameBook): FilterResult {
 			return { ok: false, error: { token, start, end: start + token.length, message: term } };
 		}
 		group.push(term);
+	}
+	if (vlanAt) {
+		const { token, start } = vlanAt;
+		const message = `Capture needs a VLAN ID after ${VLAN_WORD}, such as vlan 10.`;
+		return { ok: false, error: { token, start, end: start + token.length, message } };
 	}
 	if (lastOr && groups[groups.length - 1].length === 0) return orError(lastOr.token, lastOr.start);
 

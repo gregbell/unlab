@@ -75,6 +75,8 @@ export interface FrameDetail {
 export interface LabNames extends RowNames {
 	/** Which machine holds a port, if any. */
 	holder(port: PortRef): Named | null;
+	/** Whether the port carries the VLAN now. */
+	carries(port: PortRef, vlan: number): boolean;
 }
 
 const ICMP_TYPES: Readonly<Record<number, string>> = {
@@ -186,6 +188,17 @@ function groups(e: FrameEntry, names: LabNames): DetailGroup[] {
 			],
 		},
 	];
+
+	if (e.tagged !== 0) {
+		const on = PORTS.filter((p) => e.tagged & (1 << (p - 1))).map((p) => portWord(e, p, names));
+		out.push({
+			title: "802.1Q",
+			fields: [
+				field("vlan", e.vlan),
+				field("tagged on", on.length === 1 ? on[0] : `${on.slice(0, -1).join(", ")} and ${on.at(-1)}`),
+			],
+		});
+	}
 
 	const arp = arpAddrs(f);
 	if (arp) {
@@ -314,28 +327,48 @@ function did(e: FrameEntry, names: LabNames): Words[] {
 					...(delivered.length ? [": delivered to ", ...reached, "."] : [", but no other port was up."]),
 				);
 
-	const missed = PORTS.filter((p) => p !== e.from && !delivered.includes(p)).flatMap((p) => {
+	const others = PORTS.filter((p) => p !== e.from && !delivered.includes(p)).flatMap((p) => {
 		const holder = names.holder({ switch: e.switch, port: p });
-		return holder ? [{ port: p, holder }] : [];
+		return holder ? [{ port: p, holder, apart: !names.carries({ switch: e.switch, port: p }, e.vlan) }] : [];
 	});
-	if (missed.length === 0) return [first];
 	const label = names.switchLabel(e.switch);
 	const on = label === null ? "Port" : `${label} port`;
-	const portWords = missed.map((m) => [String(m.port)]);
-	const second = sentence(
-		missed.length === 1 ? `${on} ` : `${on}s `,
-		...list(portWords),
-		missed.length === 1 ? " was down, so " : " were down, so ",
-		...list(missed.map((m) => [m.holder])),
-		" never saw it.",
-	);
-	return [first, second];
+	const why = (missed: typeof others, was: string, were: string): Words[] => {
+		if (missed.length === 0) return [];
+		return [
+			sentence(
+				missed.length === 1 ? `${on} ` : `${on}s `,
+				...list(missed.map((m) => [String(m.port)])),
+				missed.length === 1 ? was : were,
+				...list(missed.map((m) => [m.holder])),
+				" never saw it.",
+			),
+		];
+	};
+	return [
+		first,
+		...why(
+			others.filter((m) => !m.apart),
+			" was down, so ",
+			" were down, so ",
+		),
+		...why(
+			others.filter((m) => m.apart),
+			` is not in vlan ${e.vlan}, so `,
+			` are not in vlan ${e.vlan}, so `,
+		),
+	];
 }
 
 export function frameDetail(e: FrameEntry, names: LabNames): FrameDetail {
 	return {
 		title: `frame ${e.seq}`,
-		summary: `${e.bytes.length} bytes · ${(e.t / 1000).toFixed(2)} s · in on ${portWord(e, e.from, names)}`,
+		summary: [
+			`${e.bytes.length} bytes`,
+			`${(e.t / 1000).toFixed(2)} s`,
+			`in on ${portWord(e, e.from, names)}`,
+			...(e.vlan !== 1 || e.tagged !== 0 ? [`vlan ${e.vlan}`] : []),
+		].join(" · "),
 		groups: groups(e, names),
 		did: did(e, names),
 		dump: dump(e),
