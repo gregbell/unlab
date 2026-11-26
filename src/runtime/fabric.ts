@@ -110,6 +110,8 @@ export const PACE_MS = 1;
 export const STORM_QUIET_MS = 100;
 const RATE_BUCKETS = 10;
 const RATE_BUCKET_MS = 1000 / RATE_BUCKETS;
+/** The tenths of the second before the one that `now` is in, and that one. */
+const RATE_SLOTS = RATE_BUCKETS + 1;
 /** A storm moves every address with every frame, so a table is aged no more often than this. */
 const AGE_EVERY_MS = 1000;
 
@@ -187,7 +189,7 @@ interface Storm {
 	readonly since: number;
 	looped: number;
 	dropped: number;
-	/** Looped frames in each of the last tenths of a second, and the tenth that the newest are in. */
+	/** Looped frames in the tenth of a second that the newest are in, and in each of the ten before it. */
 	readonly recent: Uint32Array;
 	tenth: number;
 }
@@ -206,22 +208,30 @@ function newCounters(): PortCounters {
 	return { rxFrames: 0, rxBytes: 0, txFrames: 0, txBytes: 0, dropped: 0, flooded: 0 };
 }
 
-/** Leaves only the tenths of a second that are within a second of `now`. */
+/** Leaves only the tenth of a second that `now` is in, and the whole tenths of the second before it. */
 function roll(storm: Storm, now: number): void {
 	const tenth = Math.floor(now / RATE_BUCKET_MS);
-	const passed = Math.min(RATE_BUCKETS, tenth - storm.tenth);
-	for (let i = 1; i <= passed; i++) storm.recent[(storm.tenth + i) % RATE_BUCKETS] = 0;
+	const passed = Math.min(RATE_SLOTS, tenth - storm.tenth);
+	for (let i = 1; i <= passed; i++) storm.recent[(storm.tenth + i) % RATE_SLOTS] = 0;
 	if (passed > 0) storm.tenth = tenth;
 }
 
+/**
+ * The rate is of the whole tenths of the last second that the storm has had. A
+ * tenth holds the frames that were due in it, wherever the page got to carry
+ * them, so a paced stream reads as its pace and no more. A storm younger than
+ * a whole tenth has its frames so far, over a tenth.
+ */
 function readingOf(storm: Storm, now: number): StormReading {
 	roll(storm, now);
-	let recent = 0;
-	for (let i = 0; i < RATE_BUCKETS; i++) recent += storm.recent[i];
-	// The newest tenth has only begun, and a storm can be younger than a second.
-	const counted = (RATE_BUCKETS - 1) * RATE_BUCKET_MS + (now - storm.tenth * RATE_BUCKET_MS);
-	const over = Math.max(RATE_BUCKET_MS, Math.min(counted, now - storm.since));
-	const rate = Math.round((recent * 1000) / over);
+	const tenths = Math.min(RATE_BUCKETS, storm.tenth - Math.floor(storm.since / RATE_BUCKET_MS));
+	const newest = storm.recent[storm.tenth % RATE_SLOTS];
+	let counted = newest;
+	if (tenths > 0) {
+		counted = -newest;
+		for (const frames of storm.recent) counted += frames;
+	}
+	const rate = Math.round((counted * 1000) / (Math.max(1, tenths) * RATE_BUCKET_MS));
 	return { since: storm.since, rate, looped: storm.looped, dropped: storm.dropped };
 }
 
@@ -570,27 +580,29 @@ export class Fabric {
 		const sw = this.#switches[slot];
 		if (!sw) return;
 		const looped = item.looped || (item.visited & (1 << slot)) !== 0;
-		if (looped) this.#stormed(sw, slot, now);
+		// A frame that had looped waited for its turn, and is counted at it: that is what the pace holds to.
+		if (looped) this.#stormed(sw, slot, now, item.looped ? item.due : now);
 		this.#forward(slot, port, item.frame, now, item.visited, looped);
 	}
 
-	/** A looped frame has come into the switch. Its storm begins with the first. */
-	#stormed(sw: Switch, slot: number, now: number): void {
+	/** A looped frame that was due at `due` has come into the switch. Its storm begins with the first. */
+	#stormed(sw: Switch, slot: number, now: number, due: number): void {
 		sw.loopedAt = now;
 		if (!sw.storm) {
 			this.#storming++;
 			sw.storm = {
-				since: now,
+				since: due,
 				looped: 0,
 				dropped: 0,
-				recent: new Uint32Array(RATE_BUCKETS),
+				recent: new Uint32Array(RATE_SLOTS),
 				tenth: Math.floor(now / RATE_BUCKET_MS),
 			};
 			this.#events.storm?.(slot, readingOf(sw.storm, now), false);
 		}
 		const { storm } = sw;
 		roll(storm, now);
-		storm.recent[storm.tenth % RATE_BUCKETS]++;
+		const tenth = Math.floor(due / RATE_BUCKET_MS);
+		if (due >= storm.since && storm.tenth - tenth < RATE_SLOTS) storm.recent[tenth % RATE_SLOTS]++;
 		storm.looped++;
 	}
 

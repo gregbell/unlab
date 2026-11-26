@@ -559,7 +559,7 @@ test("a mesh of four switches storms until every loop is cut, and what the lab d
 		.toBeGreaterThan(1000);
 	for (const storm of Object.values(await storms(page))) {
 		expect(storm.rate).toBeGreaterThan(1000);
-		expect(storm.rate).toBeLessThanOrEqual(3050);
+		expect(storm.rate).toBeLessThanOrEqual(3000);
 	}
 	const shown = async () =>
 		Number(/(\d+) dropped/.exec((await panel(page).locator(".storm").textContent()) ?? "")?.[1]);
