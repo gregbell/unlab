@@ -15,10 +15,13 @@
 // first VLAN is a loop. Looped frames wait their turn at a pace, and nothing
 // else is slowed.
 //
-// A frame is classified into a VLAN at the port it comes in by, and goes out
-// only of ports that carry that VLAN, so each VLAN floods within itself and
-// has a table of its own. On a cable between switches it is as it would be on
-// the wire: tagged, but for a trunk's native VLAN.
+// A frame is classified into a VLAN at the port it comes in by: the VLAN of its
+// tag, or the port's own when it has none. A port drops a frame of a VLAN that
+// it does not carry. The frame goes out only of ports that carry its VLAN, so
+// each VLAN floods within itself and has a table of its own. On a cable between
+// switches it is as it would be on the wire: tagged, but for a trunk's native
+// VLAN. A tag that a trunk puts on comes off at the next port or the frame is
+// dropped there, so no wiring makes a frame longer.
 //
 // Addresses are numbers here. They are text only where someone reads a table.
 
@@ -498,11 +501,11 @@ export class Fabric {
 			return;
 		}
 
-		// An access port carries whatever comes in as its VLAN's, tag and all, as a switch that knows no VLANs would.
+		// An access port reads a tag as a trunk does, so it takes a frame tagged with its own VLAN and no other.
 		const mode = sw.modes[from];
-		const tag = mode.trunk ? vlanTag(frame) : null;
+		const tag = vlanTag(frame);
 		const vlan = tag === null || tag === PRIORITY_ONLY ? mode.vlan : tag;
-		if (mode.trunk && (vlan === RESERVED_VLAN || !allows(mode, vlan))) {
+		if (vlan === RESERVED_VLAN || !carries(mode, vlan)) {
 			src.counters.dropped++;
 			return;
 		}

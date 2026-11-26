@@ -151,3 +151,42 @@ test("a cable from a port in VLAN 10 to a port in VLAN 20 of one switch joins th
 		await lab.stop();
 	}
 });
+
+test("a broadcast that loops from a trunk into an access port of one switch stays as long as it was sent, its storm ends at a cut, and pings work after it", async () => {
+	const lab = await bootLab(
+		[
+			{ n: 1, ports: [1] },
+			{ n: 2, ports: [2] },
+		],
+		{ cables: [[0, 7, 0, 8]] },
+	);
+	try {
+		lab.sw.setVlan(7, trunk("all"));
+		lab.sw.setVlan(8, access(10));
+		lab.sw.setVlan(1, access(10));
+		lab.sw.setVlan(2, access(10));
+		await lab.machines[0].exec("ping -c 1 -W 1 10.88.0.99");
+		await new Promise((resolve) => setTimeout(resolve, 2000));
+		assert.ok(
+			lab.sw.storm(),
+			"the switch storms: what leaves by the trunk tagged 10 comes back in by the port of VLAN 10",
+		);
+		const looped = lab.frames.filter((e) => e.looped);
+		const sent = lab.frames.filter((e) => !e.looped && e.from <= 2);
+		assert.ok(looped.length > 1000, `the broadcast went round for two seconds: ${looped.length} looped frames`);
+		assert.ok(
+			Math.max(...looped.map((e) => e.frame.length)) <= Math.max(...sent.map((e) => e.frame.length)),
+			"no frame that went round is longer than a machine sent it",
+		);
+
+		lab.sw.setLink(7, false);
+		const cutAt = lab.now();
+		while (lab.sw.storm() && lab.now() - cutAt < 2000) await new Promise((resolve) => setTimeout(resolve, 10));
+		assert.equal(lab.sw.storm(), null, "the storm is over once the cable is cut");
+		assert.equal(lab.storms.at(-1)?.over, true, "and the switch said so");
+		assert.ok(await pings(lab, 1, 2), "node1 reaches node2 again");
+		assert.ok(await pings(lab, 2, 1), "and node2 reaches node1");
+	} finally {
+		await lab.stop();
+	}
+});

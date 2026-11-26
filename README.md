@@ -414,10 +414,14 @@ a separate window opens when you wanted your own browser, reconnect `unlab` in
   joins the two, and a frame crosses it once: it has looped only when it comes back to a
   switch in a VLAN that it was in there. A trunk tags each frame with its VLAN, but for its
   native VLAN, which goes untagged. Ends with different native VLANs move untagged frames
-  from one VLAN to the other, as real switches do. The guest kernels have no 802.1Q, so a
-  machine's port cannot be a trunk: a router takes one interface for each VLAN. A frame's
-  capture row says its VLAN, and the ports it had its tag on, and `capture vlan 10` keeps
-  those of VLAN 10. A cable's `.pcap` has each frame as it was on that cable, tagged or not.
+  from one VLAN to the other, as real switches do. An access port takes a frame that has a
+  tag only when the tag is of its own VLAN, and takes the tag off. It drops a frame tagged
+  with any other VLAN, as most switches do. So a trunk cabled to an access port carries that
+  port's VLAN alone, and no wiring makes a frame longer. The guest kernels have no 802.1Q,
+  so a machine's port cannot be a trunk: a router takes one interface for each VLAN. A
+  frame's capture row says its VLAN, and the ports it had its tag on, and `capture vlan 10`
+  keeps those of VLAN 10. A cable's `.pcap` has each frame as it was on that cable, tagged
+  or not.
 - The capture keeps its newest 10,000 rows. In a storm that is the last seven seconds of
   one loop of three switches, and less than a second of a mesh of four. A frame that has
   looped says so in its row. Pause the capture to read it. The counters and each storm's

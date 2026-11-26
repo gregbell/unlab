@@ -209,6 +209,13 @@ export const BREAKS = [
 		tests: [fabricUnit],
 	},
 	{
+		name: "an access port takes a tagged frame as its VLAN's, tag and all",
+		file: FABRIC,
+		from: "\t\tconst tag = vlanTag(frame);\n",
+		to: "\t\tconst tag = mode.trunk ? vlanTag(frame) : null;\n",
+		tests: [fabricUnit, kernels],
+	},
+	{
 		name: "the frame detail dumps a frame without the tag it came in with",
 		file: "src/ui/capture/frame-detail-model.ts",
 		from: "const wire = onWire(e.bytes, e.vlan, e.tagged, e.from);",

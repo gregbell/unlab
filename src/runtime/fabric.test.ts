@@ -816,6 +816,54 @@ describe("VLANs", () => {
 		expect(t.fabric.counters(slot, 8)).toMatchObject({ rxFrames: 2, dropped: 1 });
 	});
 
+	test("an access port takes a frame tagged with its own VLAN, or with VLAN 0, without the tag, and drops one tagged with another, as real switches do", () => {
+		const t = vlanNet(["a1:10", "a2:10", "a3:20"]);
+		const sent = arpRequest(1, 9);
+		t.send(1, withTag(sent, 10));
+		expect(t.reached()).toEqual({ 2: 1 });
+		expect(t.last(2)).toEqual(sent);
+		expect(t.taps.map(({ e }) => [e.vlan, e.tagged, e.frame.length])).toEqual([[10, bit(1), sent.length]]);
+		t.send(1, withTag(sent, 0));
+		expect(t.reached()).toEqual({ 2: 2 });
+		expect(t.last(2)).toEqual(sent);
+		t.clear();
+		t.send(1, withTag(sent, 20));
+		expect([t.reached(), t.taps]).toEqual([{}, []]);
+		expect(t.fabric.counters(t.at("a1").slot, 1)).toMatchObject({ rxFrames: 3, dropped: 1 });
+	});
+
+	test.each([
+		["of one switch", ["a1:10", "a2:10", "a3:20"], [["a7-a8", trunk("all"), access(10)]]],
+		[
+			"of another switch, beside a cable in that VLAN",
+			["a1:10", "a2:10", "a3:20"],
+			[
+				["a7-b7", trunk("all"), access(10)],
+				["a8-b8", access(10)],
+			],
+		],
+	] as const)(
+		"a cable from a trunk to an access port %s loops the port's VLAN with every frame as long as it was sent, and drops the others at the access port",
+		(_, machines, cables) => {
+			const t = vlanNet(machines, cables);
+			const far = t.at(cables[0][0].slice(3));
+			t.send(3, arpRequest(3, 9));
+			expect(t.taps.map(({ on, e }) => `${on}${e.from} vlan ${e.vlan}`)).toEqual(["a3 vlan 20"]);
+			expect(t.fabric.counters(far.slot, far.port)).toMatchObject({ rxFrames: 1, dropped: 1 });
+
+			const sent = arpRequest(1, 9);
+			t.send(1, sent);
+			t.run(1000);
+			expect(t.taps.filter(({ e }) => e.looped).length).toBeGreaterThan(900);
+			expect(Math.max(...t.taps.map(({ e }) => e.frame.length))).toBe(sent.length);
+			expect(t.last(2)).toEqual(sent);
+			expect(t.storming("a")).toBe(true);
+			t.cut("a7");
+			t.run(STORM_QUIET_MS * 2);
+			expect(t.storming("a")).toBe(false);
+		},
+	);
+
 	test("a native VLAN that the trunk does not allow does not cross it untagged", () => {
 		const t = vlanNet(["a1", "b1"], [["a8-b8", trunk([10, 20])]]);
 		t.send(1, arpRequest(1, 9));
