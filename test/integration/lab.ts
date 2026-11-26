@@ -1,11 +1,13 @@
-// Machines on a switch, each in its own thread, for tests on real kernels in Node.
+// Machines on switches, each in its own thread, for tests on real kernels in Node.
 
 import { Worker } from "node:worker_threads";
 import { address } from "../../src/model/testkit.ts";
 import type { PortNo } from "../../src/model/types.ts";
 import { addressStr, defaultAddress, ip4str, macStr, NICS, type NicNo, nodeMac } from "../../src/net/index.ts";
+import { nodeClock } from "../../src/runtime/clock.ts";
+import { Fabric, type MacEntry, type StormReading, type TapEvent } from "../../src/runtime/fabric.ts";
 import type { LinkTarget } from "../../src/runtime/machine-link.ts";
-import { LabSwitch, type TapEvent } from "../../src/runtime/switch.ts";
+import { createPump } from "../../src/runtime/pump.ts";
 import { imagePath } from "../support/images.ts";
 import type { ExecDone, FromMachine, MachineData, ToMachine } from "./vm-worker.ts";
 
@@ -15,6 +17,8 @@ export interface MachineSetup {
 	readonly name?: string;
 	/** The port each NIC is plugged into, eth0 first. Null leaves it unplugged. */
 	readonly ports: readonly (PortNo | null)[];
+	/** The switch that those ports are of, by its number. Left out, the first. */
+	readonly on?: number;
 	/** Each NIC's address, or null for none. Left out, the lab's own choice. */
 	readonly addr?: readonly (string | null)[];
 	readonly distro?: "alpine" | "debian" | "lab";
@@ -43,20 +47,75 @@ export interface TestMachine {
 	deliver(nic: NicNo, frame: Uint8Array): void;
 }
 
+/** One switch of the lab's, by its ports. */
+export interface TestSwitch {
+	setLink(port: PortNo, up: boolean): void;
+	macTable(): readonly MacEntry[];
+	/** What it has dropped at its cables to other switches, which were full. */
+	readonly dropped: number;
+	/** Its storm now, or null. */
+	storm(): StormReading | null;
+}
+
+/** A frame as one of the switches carried it. */
+export interface SwitchedTap extends TapEvent {
+	/** The number of the switch. */
+	readonly switch: number;
+	/** ms since the lab was made. */
+	readonly at: number;
+}
+
 export interface TestLab {
-	readonly sw: LabSwitch;
-	/** Every frame the switch accepted, in order. */
-	readonly frames: TapEvent[];
+	/** The first switch. */
+	readonly sw: TestSwitch;
+	readonly switches: readonly TestSwitch[];
+	/** Every frame that a switch accepted, in order. */
+	readonly frames: SwitchedTap[];
+	/** Each storm that began or ended, in order. */
+	readonly storms: { readonly switch: number; readonly over: boolean; readonly at: number }[];
 	readonly machines: readonly TestMachine[];
+	/** ms since the lab was made, on the clock that its frames are stamped with. */
+	now(): number;
 	stop(): Promise<void>;
 }
 
-export async function bootLab(setups: readonly MachineSetup[]): Promise<TestLab> {
-	const sw = new LabSwitch();
-	const frames: TapEvent[] = [];
-	sw.onTap((e) => frames.push(e));
+/** A cable between two switches: the number and the port of each. One that is cut is there, and carries nothing. */
+export type TestCable = readonly [number, PortNo, number, PortNo, "cut"?];
+
+export interface Wiring {
+	/** How many switches. Left out, one. */
+	readonly switches?: number;
+	readonly cables?: readonly TestCable[];
+}
+
+export async function bootLab(setups: readonly MachineSetup[], wiring: Wiring = {}): Promise<TestLab> {
+	const clock = nodeClock();
+	const frames: SwitchedTap[] = [];
+	const storms: TestLab["storms"] = [];
+	const fabric = new Fabric({
+		tap: (slot, e) => frames.push({ ...e, switch: slot, at: clock.now() }),
+		storm: (slot, _reading, over) => storms.push({ switch: slot, over, at: clock.now() }),
+	});
+	const pump = createPump(fabric, clock);
+	const switches = Array.from({ length: wiring.switches ?? 1 }, (): TestSwitch => {
+		const slot = fabric.addSwitch();
+		return {
+			setLink: (port, up) => fabric.setLink(slot, port, up),
+			macTable: () => fabric.macTable(slot, clock.now()),
+			get dropped() {
+				return fabric.totals(slot).dropped;
+			},
+			storm: () => fabric.storm(slot, clock.now()),
+		};
+	});
+	for (const [a, portA, b, portB, cut] of wiring.cables ?? []) {
+		fabric.cable({ slot: a, port: portA }, { slot: b, port: portB });
+		if (cut) fabric.setLink(a, portA, false);
+	}
 	const workers: Worker[] = [];
 	const stop = async () => {
+		pump.stop();
+		clock.stop();
 		await Promise.all(workers.map((worker) => worker.terminate()));
 	};
 	const addressesOf = ({ n, ports, addr }: MachineSetup) =>
@@ -88,9 +147,10 @@ export async function bootLab(setups: readonly MachineSetup[]): Promise<TestLab>
 			const copy = new Uint8Array(frame);
 			post({ type: "frame", nic, frame: copy }, [copy.buffer]);
 		};
+		const slot = setup.on ?? 0;
 		for (const nic of NICS) {
 			const port = setup.ports[nic];
-			if (port) sw.attach(port, { deliver: (frame) => deliver(nic, frame) });
+			if (port) fabric.attach(slot, port, { deliver: (frame) => deliver(nic, frame) });
 		}
 
 		const startedAt = performance.now();
@@ -119,7 +179,7 @@ export async function bootLab(setups: readonly MachineSetup[]): Promise<TestLab>
 						return;
 					case "frame": {
 						const port = setup.ports[m.nic];
-						if (port) sw.receive(port, m.frame);
+						if (port) pump.receive(slot, port, m.frame);
 						return;
 					}
 				}
@@ -156,7 +216,8 @@ export async function bootLab(setups: readonly MachineSetup[]): Promise<TestLab>
 	};
 
 	try {
-		return { sw, frames, machines: await Promise.all(setups.map(boot)), stop };
+		const machines = await Promise.all(setups.map(boot));
+		return { sw: switches[0], switches, frames, storms, machines, now: () => clock.now(), stop };
 	} catch (error) {
 		await stop();
 		throw error;

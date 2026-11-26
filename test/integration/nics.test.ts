@@ -2,7 +2,7 @@
 // routing between them, and what happens when one of them misbehaves.
 import { afterEach, describe, expect, test } from "vitest";
 import { arpAddrs, dstMac, IP_ICMP, IP_TCP, ip4, ipAddrs, srcMac } from "../../src/net/index.ts";
-import type { TapEvent } from "../../src/runtime/switch.ts";
+import type { TapEvent } from "../../src/runtime/fabric.ts";
 import { bootLab, type MachineSetup, type TestLab, type TestMachine } from "./lab.ts";
 
 const ETHERNET_MAX = 1514;

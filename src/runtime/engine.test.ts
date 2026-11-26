@@ -1,4 +1,5 @@
 import { describe, expect, test, vi } from "vitest";
+import { testClock } from "../../test/support/clock.ts";
 import { arpRequest, mac, ping, routedPing } from "../../test/support/frames.ts";
 import { port0 } from "../../test/support/ports.ts";
 import { createCaptureLog } from "../capture/index.ts";
@@ -10,6 +11,7 @@ import {
 	type HostEntry,
 	identity,
 	type MachineName,
+	type PortNo,
 	parseCheckpointName,
 	parseMachineName,
 	parseSwitchName,
@@ -21,10 +23,10 @@ import {
 
 import { defaultAddress } from "../net/index.ts";
 import { createEngine, ExecRefused } from "./engine.ts";
+import { Fabric } from "./fabric.ts";
 import type { CopyJob, CopyReport } from "./protocol.ts";
 import type { LineMark, MarkSource, Screen, ScreenIo, Screens } from "./screens.ts";
 import { createShellTracker } from "./shell-tracker.ts";
-import { LabSwitch } from "./switch.ts";
 import type { StartVm, Tty, Vm, VmBoot, VmRef, VmSink } from "./vm.ts";
 
 const ESC = "\x1b";
@@ -204,25 +206,30 @@ function fakeVms() {
 }
 
 function setup() {
-	let clock = 0;
+	const clock = testClock();
 	const events: RuntimeEvent[] = [];
 	const announced: string[] = [];
 	const deleted: [n: number, ...sets: number[]][] = [];
 	const copies: { job: CopyJob; report: (report: CopyReport) => void; dropped: boolean }[] = [];
 	const imagesAsked: string[] = [];
 	const intervals: { ms: number; fn: () => void; cancelled: boolean }[] = [];
-	const sw = new LabSwitch({ now: () => clock });
-	const switches = new Map<SwitchName, LabSwitch>();
-	const capture = createCaptureLog({ now: () => clock, schedule: () => {} });
+	const made: Fabric[] = [];
+	const fabric = (): Fabric => made[0];
+	/** The first switch that a test names, which is switch0 in each. */
+	const sw = {
+		setLink: (port: PortNo, up: boolean) => fabric().setLink(0, port, up),
+		isUp: (port: PortNo) => fabric().isUp(0, port),
+	};
+	const capture = createCaptureLog({ now: () => clock.now(), schedule: () => {} });
 	const vms = fakeVms();
 	const screens = fakeScreens();
 
 	const engine = createEngine({
 		store: { dispatchRuntime: (e) => events.push(e) },
-		newSwitch(name) {
-			const made = name === "switch0" ? sw : new LabSwitch({ now: () => clock });
-			switches.set(name, made);
-			return made;
+		clock,
+		newFabric(events) {
+			made.push(new Fabric(events));
+			return fabric();
 		},
 		capture,
 		screens: screens.screens,
@@ -247,7 +254,6 @@ function setup() {
 				interval.cancelled = true;
 			};
 		},
-		now: () => clock,
 		promptToken: () => TOKEN,
 	});
 
@@ -289,14 +295,13 @@ function setup() {
 		copies,
 		imagesAsked,
 		intervals,
-		switches,
+		fabric,
+		clock,
 		sw,
 		capture,
 		vms,
 		screens,
-		at: (ms: number) => {
-			clock = ms;
-		},
+		at: (ms: number) => clock.at(ms),
 		take: () => events.splice(0),
 	};
 }
@@ -772,33 +777,35 @@ describe("several switches", () => {
 		vm2.sink.frame(vm2.ref, 0, arpRequest(2, 3));
 		vm2.sink.frame(vm2.ref, 0, ping(2, 2));
 		run({ type: "port/detach", port: { switch: lan, port: 1 } });
-		expect(engine.reads.totals("switch0")).toEqual({ in: 1, delivered: 1, flooded: 1 });
-		expect(engine.reads.totals(lan)).toEqual({ in: 2, delivered: 1, flooded: 1 });
-		expect(engine.reads.totals(parseSwitchName("wan") as SwitchName)).toEqual({ in: 0, delivered: 0, flooded: 0 });
+		expect(engine.reads.totals("switch0")).toEqual({ in: 1, delivered: 1, flooded: 1, dropped: 0 });
+		expect(engine.reads.totals(lan)).toEqual({ in: 2, delivered: 1, flooded: 1, dropped: 0 });
+		expect(engine.reads.totals(parseSwitchName("wan") as SwitchName)).toEqual({
+			in: 0,
+			delivered: 0,
+			flooded: 0,
+			dropped: 0,
+		});
 	});
 
 	test("one that is removed lets go of its ports and its tap, and starts empty when it is added again", () => {
-		const { vms, engine, run, capture, switches } = plugged();
+		const { vms, engine, run, capture } = plugged();
 		const [, vm2, vm3] = vms;
 		vm2.sink.frame(vm2.ref, 0, arpRequest(2, 3));
 		run({ type: "switch/remove", switch: lan });
 		expect(engine.reads.macTable(lan)).toEqual([]);
-		expect(engine.reads.totals(lan)).toEqual({ in: 0, delivered: 0, flooded: 0 });
+		expect(engine.reads.totals(lan)).toEqual({ in: 0, delivered: 0, flooded: 0, dropped: 0 });
 		expect(engine.reads.counters({ switch: lan, port: 1 })).toBeUndefined();
 
 		const before = capture.frameCount;
 		vm3.sent.length = 0;
 		vm2.sink.frame(vm2.ref, 0, arpRequest(2, 3));
-		switches.get(lan)?.receive(1, arpRequest(2, 3));
 		expect([capture.frameCount, vm3.sent]).toEqual([before, []]);
 
-		const old = switches.get(lan);
 		const cable = { port: { switch: lan, port: 1 }, machine: "node2", nic: 0 } as const;
 		run({ type: "port/attach", ...cable }, { type: "link/set", ...cable, up: true, cause: "runtime" });
-		expect(switches.get(lan)).not.toBe(old);
 		expect(engine.reads.macTable(lan)).toEqual([]);
 		vm2.sink.frame(vm2.ref, 0, arpRequest(2, 3));
-		expect(engine.reads.totals(lan)).toEqual({ in: 1, delivered: 0, flooded: 1 });
+		expect(engine.reads.totals(lan)).toEqual({ in: 1, delivered: 0, flooded: 1, dropped: 0 });
 		expect(capture.frameCount).toBe(before + 1);
 		expect(vm3.sent).toEqual([]);
 	});
@@ -837,7 +844,7 @@ describe("link/set", () => {
 			{ type: "port/attach", port: port0(1), machine: "node1", nic: 0 },
 			{ type: "port/attach", port: port0(2), machine: "node2", nic: 0 },
 		);
-		const setLink = vi.spyOn(t.sw, "setLink");
+		const setLink = vi.spyOn(t.fabric(), "setLink");
 		const appendLink = vi.spyOn(t.capture, "appendLink");
 		t.at(2500);
 
@@ -1108,8 +1115,10 @@ describe("dispose", () => {
 		expect(t.intervals[0].cancelled).toBe(true);
 		expect(t.screens.disposed).toEqual(["node1:console", "node2:console"]);
 
-		t.sw.attach(1, { deliver() {} });
-		t.sw.receive(1, arpRequest(1, 2));
+		// A switch that the fabric is given behind the engine's back has no name, so nothing of it is captured.
+		const slot = t.fabric().addSwitch();
+		t.fabric().attach(slot, 1, { deliver() {} });
+		t.fabric().receive(slot, 1, arpRequest(1, 2), 0);
 		expect(t.capture.size).toBe(0);
 		expect(t.events).toEqual([]);
 	});

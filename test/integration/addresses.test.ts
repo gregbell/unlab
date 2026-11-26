@@ -13,7 +13,7 @@ import {
 	isDhcpRequest,
 	subnetStr,
 } from "../../src/net/index.ts";
-import type { TapEvent } from "../../src/runtime/switch.ts";
+import type { TapEvent } from "../../src/runtime/fabric.ts";
 import { bootLab, type MachineSetup, type TestLab } from "./lab.ts";
 
 const DISTROS = ["alpine", "debian"] as const;

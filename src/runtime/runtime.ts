@@ -3,11 +3,12 @@
 
 import type { CaptureLog } from "../capture/index.ts";
 import { MAX_EXTRA_DISKS } from "../model/index.ts";
+import { browserClock } from "./clock.ts";
 import { deleteDisks } from "./disk-stores.ts";
 import { createEngine, type Engine, type RuntimeStore } from "./engine.ts";
+import { Fabric } from "./fabric.ts";
 import { type DistroManifest, imageSource } from "./image.ts";
 import { createScreens } from "./screens.ts";
-import { LabSwitch } from "./switch.ts";
 import { startVm } from "./vm.ts";
 import { spawnVmWorker, startCopy } from "./worker.ts";
 
@@ -24,10 +25,12 @@ export interface RuntimeOptions {
 
 export function createRuntime(options: RuntimeOptions): Engine {
 	const { now } = options;
-	return createEngine({
+	const clock = browserClock(now);
+	const engine = createEngine({
 		store: options.store,
 		capture: options.capture,
-		newSwitch: () => new LabSwitch({ now }),
+		clock,
+		newFabric: (events) => new Fabric(events),
 		screens: createScreens(),
 		startVm: (boot, sink) =>
 			startVm(boot, sink, {
@@ -45,8 +48,14 @@ export function createRuntime(options: RuntimeOptions): Engine {
 			const id = setInterval(fn, ms);
 			return () => clearInterval(id);
 		},
-		now,
 		promptToken: () =>
 			Array.from(crypto.getRandomValues(new Uint8Array(8)), (b) => b.toString(16).padStart(2, "0")).join(""),
 	});
+	return {
+		...engine,
+		dispose() {
+			engine.dispose();
+			clock.stop();
+		},
+	};
 }
