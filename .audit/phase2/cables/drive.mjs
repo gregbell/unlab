@@ -3,9 +3,12 @@
 //   vite build --outDir <dir>           in each checkout to compare
 //   node drive.mjs tcp <runs> <label>=<dir> [<label>=<dir>]   TCP between two guests, sides alternating
 //                                                              ONLY=one keeps to the lab of one switch
+//                                                              ONLY="one join" is one switch, with node1 in VLAN 10,
+//                                                              node2 in VLAN 20, and a cable from VLAN 10 to VLAN 20
 //   node drive.mjs storm <runs> <dir> triangle|mesh [seconds]  one broadcast round a loop, and its cut
 //
-// A side that cannot add switches runs only the lab of one. Each line that starts with `run` is one run.
+// Without ONLY the first side of two runs only the lab of one switch: it may not have more. Each line that starts
+// with `run` is one run.
 
 import { readdirSync, readFileSync } from "node:fs";
 import { createServer } from "node:http";
@@ -129,6 +132,7 @@ async function busy(browser) {
 
 const LABS = {
 	one: ["spawn 2 alpine"],
+	"one join": ["spawn 2 alpine", "cable switch0:7 switch0:8", "vlan switch0:7 10", "vlan switch0:8 20", "vlan node1 10", "vlan node2 20"],
 	"one cable": ["mkswitch lan", "spawn 1 alpine", "spawn 1 alpine --net lan", "cable switch0 lan"],
 	"two cables": ["mkswitch lan", "mkswitch wan", "spawn 1 alpine", "spawn 1 alpine --net wan", "cable switch0 lan", "cable lan wan"],
 };
@@ -149,8 +153,8 @@ async function transfer(lab, mib) {
 
 if (what === "tcp") {
 	const sides = rest.map((arg) => arg.split("="));
-	const topologies = process.env.ONLY ? process.env.ONLY.split(",") : Object.keys(LABS);
-	const variants = sides.flatMap(([label, dir], i) => (i === 0 && sides.length > 1 ? ["one"] : topologies).map((topology) => ({ label, dir, topology })));
+	const topologies = process.env.ONLY ? process.env.ONLY.split(",") : Object.keys(LABS).filter((name) => name !== "one join");
+	const variants = sides.flatMap(([label, dir], i) => (i === 0 && sides.length > 1 && !process.env.ONLY ? ["one"] : topologies).map((topology) => ({ label, dir, topology })));
 	const got = variants.map(() => ({ mbit: [], ping: [] }));
 	for (let i = 0; i < runs; i++)
 		for (const [v, { label, dir, topology }] of variants.entries())

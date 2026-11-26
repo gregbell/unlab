@@ -1,0 +1,60 @@
+One broadcast on a cable from a trunk to an access port of one switch, on the page: node .audit/phase2/vlans/tagged-loop.mjs <dist> 120.
+longest is the longest frame that the capture holds, in bytes.
+
+== cfd20a2
+before the broadcast: ping node2 across switch0:6 to lan:8 answered; storms: none; renderers 669 MB
+5 s: {"longest":14890,"looped":7423,"carried":7444}; renderers 805 MB; page errors 0
+10 s: {"longest":29098,"looped":9991,"carried":14551}; renderers 1062 MB; page errors 0
+15 s: {"longest":43218,"looped":10000,"carried":21611}; renderers 1178 MB; page errors 0
+20 s: {"longest":57358,"looped":10000,"carried":28681}; renderers 1349 MB; page errors 0
+25 s: {"longest":71118,"looped":10000,"carried":35561}; renderers 1559 MB; page errors 0
+30 s: {"longest":84498,"looped":10000,"carried":42251}; renderers 1640 MB; page errors 0
+35 s: {"longest":97870,"looped":10000,"carried":48937}; renderers 1878 MB; page errors 0
+40 s: {"longest":110970,"looped":10000,"carried":55487}; renderers 2040 MB; page errors 0
+45 s: {"longest":124314,"looped":10000,"carried":62159}; renderers 2292 MB; page errors 0
+50 s: {"longest":137470,"looped":10000,"carried":68737}; renderers 2498 MB; page errors 0
+55 s: {"longest":150622,"looped":10000,"carried":75313}; renderers 2562 MB; page errors 0
+60 s: {"longest":163374,"looped":10000,"carried":81689}; renderers 3158 MB; page errors 0
+65 s: {"longest":176062,"looped":10000,"carried":88033}; renderers 3245 MB; page errors 0
+70 s: {"longest":189334,"looped":10000,"carried":94669}; renderers 3235 MB; page errors 0
+75 s: {"longest":202494,"looped":10000,"carried":101249}; renderers 3380 MB; page errors 0
+80 s: {"longest":214998,"looped":10000,"carried":107501}; renderers 3338 MB; page errors 0
+85 s: {"longest":219714,"looped":10000,"carried":109860}; renderers 2724 MB; page errors 1: RangeError: Array buffer allocation failed
+90 s: {"longest":219714,"looped":10000,"carried":109860}; renderers 2714 MB; page errors 1: RangeError: Array buffer allocation failed
+95 s: {"longest":219714,"looped":10000,"carried":109860}; renderers 2669 MB; page errors 1: RangeError: Array buffer allocation failed
+100 s: {"longest":219714,"looped":10000,"carried":109860}; renderers 2673 MB; page errors 1: RangeError: Array buffer allocation failed
+105 s: {"longest":219714,"looped":10000,"carried":109860}; renderers 2673 MB; page errors 1: RangeError: Array buffer allocation failed
+110 s: {"longest":219714,"looped":10000,"carried":109860}; renderers 2673 MB; page errors 1: RangeError: Array buffer allocation failed
+115 s: {"longest":219714,"looped":10000,"carried":109860}; renderers 2673 MB; page errors 1: RangeError: Array buffer allocation failed
+120 s: {"longest":219714,"looped":10000,"carried":109860}; renderers 2673 MB; page errors 1: RangeError: Array buffer allocation failed
+storms before the cut: switch0 0/s, lan 0/s
+after the cut: storm STILL ON after 5 s; ping node2 across the cable LOST; longest frame held 219714; 0 frames in the next 0.5 s; page errors 1: RangeError: Array buffer allocation failed
+
+== 0cdf8d5, which has the access port's rule, the longest frame and the pump's fix
+before the broadcast: ping node2 across switch0:6 to lan:8 answered; storms: none; renderers 670 MB
+5 s: {"longest":98,"looped":8003,"carried":8024}; renderers 702 MB; page errors 0
+10 s: {"longest":42,"looped":9994,"carried":15979}; renderers 727 MB; page errors 0
+15 s: {"longest":42,"looped":10000,"carried":23753}; renderers 747 MB; page errors 0
+20 s: {"longest":42,"looped":10000,"carried":31405}; renderers 780 MB; page errors 0
+25 s: {"longest":42,"looped":10000,"carried":39137}; renderers 796 MB; page errors 0
+30 s: {"longest":42,"looped":10000,"carried":46905}; renderers 811 MB; page errors 0
+35 s: {"longest":42,"looped":10000,"carried":54709}; renderers 753 MB; page errors 0
+40 s: {"longest":42,"looped":10000,"carried":62395}; renderers 733 MB; page errors 0
+45 s: {"longest":42,"looped":10000,"carried":70173}; renderers 715 MB; page errors 0
+50 s: {"longest":42,"looped":10000,"carried":77935}; renderers 734 MB; page errors 0
+55 s: {"longest":42,"looped":10000,"carried":85703}; renderers 756 MB; page errors 0
+60 s: {"longest":42,"looped":10000,"carried":93311}; renderers 771 MB; page errors 0
+65 s: {"longest":42,"looped":10000,"carried":101151}; renderers 773 MB; page errors 0
+70 s: {"longest":42,"looped":10000,"carried":108939}; renderers 776 MB; page errors 0
+75 s: {"longest":42,"looped":10000,"carried":116795}; renderers 777 MB; page errors 0
+80 s: {"longest":42,"looped":10000,"carried":124561}; renderers 786 MB; page errors 0
+85 s: {"longest":42,"looped":10000,"carried":132289}; renderers 796 MB; page errors 0
+90 s: {"longest":42,"looped":10000,"carried":140041}; renderers 799 MB; page errors 0
+95 s: {"longest":42,"looped":10000,"carried":147649}; renderers 787 MB; page errors 0
+100 s: {"longest":42,"looped":10000,"carried":155413}; renderers 801 MB; page errors 0
+105 s: {"longest":42,"looped":10000,"carried":163237}; renderers 820 MB; page errors 0
+110 s: {"longest":42,"looped":10000,"carried":170917}; renderers 824 MB; page errors 0
+115 s: {"longest":42,"looped":10000,"carried":178683}; renderers 834 MB; page errors 0
+120 s: {"longest":42,"looped":10000,"carried":186487}; renderers 816 MB; page errors 0
+storms before the cut: switch0 808/s, lan 808/s
+after the cut: storm over in 124 ms; ping node2 across the cable answered; longest frame held 98; 0 frames in the next 0.5 s; page errors 0

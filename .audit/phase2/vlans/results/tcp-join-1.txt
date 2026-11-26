@@ -1,0 +1,17 @@
+TCP between two guests on one switch, node1 in VLAN 10 and node2 in VLAN 20, over a cable from VLAN 10 to VLAN 20, sides alternating:
+ONLY="one join" node .audit/phase2/cables/drive.mjs tcp 6 cfd20a2=<dist> a56a98e=<dist>.
+
+run 0 cfd20a2 one join: 625 Mbit/s, ping avg 1.245 ms, receiver took 280671204 bytes threads in a second transfer: chromium MAIN 0.94, DedicatedWorker 0.92, DedicatedWorker 0.64, ThreadPoolForeg 0.30, ThreadPoolForeg 0.16, ThreadPoolForeg 0.13
+run 0 a56a98e one join: 618 Mbit/s, ping avg 1.581 ms, receiver took 280671864 bytes threads in a second transfer: chromium MAIN 0.93, DedicatedWorker 0.89, DedicatedWorker 0.67, ThreadPoolForeg 0.35, ThreadPoolForeg 0.20, DedicatedWorker 0.17
+run 1 cfd20a2 one join: 630 Mbit/s, ping avg 1.428 ms, receiver took 280672986 bytes
+run 1 a56a98e one join: 628 Mbit/s, ping avg 1.288 ms, receiver took 280672392 bytes
+run 2 cfd20a2 one join: 675 Mbit/s, ping avg 1.369 ms, receiver took 280673910 bytes
+run 2 a56a98e one join: 653 Mbit/s, ping avg 1.491 ms, receiver took 280675098 bytes
+run 3 cfd20a2 one join: 624 Mbit/s, ping avg 1.444 ms, receiver took 280674768 bytes
+run 3 a56a98e one join: 637 Mbit/s, ping avg 1.419 ms, receiver took 280672722 bytes
+run 4 cfd20a2 one join: 616 Mbit/s, ping avg 1.47 ms, receiver took 280673316 bytes
+run 4 a56a98e one join: 667 Mbit/s, ping avg 1.299 ms, receiver took 280678728 bytes
+run 5 cfd20a2 one join: 643 Mbit/s, ping avg 1.369 ms, receiver took 280674900 bytes
+run 5 a56a98e one join: 654 Mbit/s, ping avg 1.365 ms, receiver took 280673778 bytes
+cfd20a2 one join: TCP Mbit/s 630 [616-675], ping avg ms 1.43 [1.25-1.47], n=6
+a56a98e one join: TCP Mbit/s 653 [618-667], ping avg ms 1.42 [1.29-1.58], n=6
