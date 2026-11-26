@@ -10,3 +10,9 @@ playwright-report/
 coverage/
 .claude/worktrees/
 .vitest/
+
+# Built from the pinned Tailcat module and Go toolchain.
+public/tailcat/tailcat.wasm
+public/tailcat/tailcat.wasm.gz
+public/tailcat/wasm_exec.js
+public/tailcat/licenses.txt

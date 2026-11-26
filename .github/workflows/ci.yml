@@ -22,13 +22,29 @@ jobs:
         with:
           node-version: 24
           cache: npm
+      - uses: actions/setup-go@v5
+        with:
+          go-version: 1.27.4
+          cache-dependency-path: tailcat/go.sum
       - run: npm ci
+      - run: npm run tailcat
       - run: npm run distros alpine debian lab
       - run: npx playwright install --with-deps chromium
       - run: npm run check
       - run: npm run test:integration
       - run: npm run test:browser
+      - name: Prepare the loopback Tailcat relay and the released SSH client
+        working-directory: tailcat
+        run: |
+          go build -mod=readonly -o "$RUNNER_TEMP/unlab-test-relay" ./testrelay
+          cd "$RUNNER_TEMP"
+          curl -fsSLO https://github.com/tailscale/tailcat/releases/download/v0.8.0/tailcat_0.8.0_linux_amd64.tar.gz
+          echo '46a243659c28249f42702ecad4af136a388d5c8f7a77a7eaaa77f98495d5ba61  tailcat_0.8.0_linux_amd64.tar.gz' | sha256sum -c -
+          tar xzf tailcat_0.8.0_linux_amd64.tar.gz
       - run: npm run test:e2e
+        env:
+          TAILCAT_BIN: ${{ runner.temp }}/tailcat
+          TAILCAT_TEST_RELAY: ${{ runner.temp }}/unlab-test-relay
       - uses: actions/upload-artifact@v4
         if: failure()
         with:

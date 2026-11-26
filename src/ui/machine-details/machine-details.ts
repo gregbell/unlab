@@ -11,6 +11,7 @@ import {
 	selectRail,
 } from "../../model/index.ts";
 import { Select, UnlabElement } from "../base/index.ts";
+import "../share-ssh/share-ssh.ts";
 import { peerPing } from "./peer-ping.ts";
 
 interface CableAction {
@@ -125,7 +126,8 @@ export class UnlabMachineDetails extends UnlabElement {
 				>
 					remove
 				</button>
-			</div>`;
+			</div>
+			<unlab-share-ssh .machine=${name}></unlab-share-ssh>`;
 	}
 
 	#facts(details: MachineDetails): readonly Fact[] {

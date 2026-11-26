@@ -65,6 +65,7 @@ export interface Vm {
 	closePty(pty: number): void;
 	/** Give the guest a new host table. */
 	reconfigure(hosts: readonly HostEntry[]): void;
+	shareSsh(port: MessagePort): void;
 	/** Link the machine with a CLI, or unlink it. */
 	link(target: LinkTarget | null): void;
 	/** A frame from the switch, into one of the guest's NICs. */
@@ -243,6 +244,9 @@ export function startVm(boot: VmBoot, sink: VmSink, deps: VmDeps): Vm {
 		},
 		reconfigure(hosts) {
 			post({ type: "reconfigure", name: identity.name, hosts });
+		},
+		shareSsh(port) {
+			post({ type: "share-ssh", port }, [port]);
 		},
 		link(target) {
 			post({ type: "link", target });

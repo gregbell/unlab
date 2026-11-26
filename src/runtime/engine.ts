@@ -66,6 +66,7 @@ export interface Engine {
 	readonly screens: Screens;
 	readonly capture: CaptureLog;
 	readonly reads: RuntimeReads;
+	shareSsh(machine: MachineName, port: MessagePort): boolean;
 	/** Link every machine with a CLI, those that boot later too, or unlink them. */
 	link(target: LinkTarget | null): void;
 	/** Stop every machine and the clock. Reports nothing. */
@@ -853,6 +854,12 @@ export function createEngine(deps: EngineDeps): Engine {
 				const entry = switches.get(of);
 				return entry ? fabric.totals(entry.slot) : NOTHING_CARRIED;
 			},
+		},
+		shareSsh(machine, port) {
+			const vm = readyVm(machine);
+			if (!vm) return false;
+			vm.shareSsh(port);
+			return true;
 		},
 		link(target) {
 			linkTarget = target;

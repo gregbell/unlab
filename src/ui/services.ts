@@ -2,6 +2,7 @@ import type { CaptureView } from "../capture/index.ts";
 import type { CommandService } from "../commands/index.ts";
 import type {
 	CableCounters,
+	MachineName,
 	PortNo,
 	PortRef,
 	ReadStore,
@@ -27,6 +28,20 @@ export interface AppServices {
 	readonly terminals: TerminalService;
 	readonly agent: AgentService;
 	readonly link: LinkService;
+	readonly share: ShareService;
+}
+
+export type ShareState =
+	| { readonly kind: "idle" }
+	| { readonly kind: "starting" }
+	| { readonly kind: "ready"; readonly command: string }
+	| { readonly kind: "failed"; readonly reason: string };
+
+export interface ShareService {
+	state(machine: MachineName): ShareState;
+	subscribe(machine: MachineName, listener: () => void): () => void;
+	start(machine: MachineName, key: string): void;
+	stop(machine: MachineName): void;
 }
 
 /** The link with the CLI. The store says how it goes. */

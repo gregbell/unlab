@@ -23,6 +23,7 @@ import { alpinePackageSetup, packageBackend } from "./package-repositories.ts";
 import { PingingGateway } from "./ping.ts";
 import { nextOf, saveDisks, shutDown, syncGuest } from "./power.ts";
 import type { FromVm, PtySpec, ToVm, VmConfig } from "./protocol.ts";
+import { shareGuestSsh } from "./shared-ssh.ts";
 import { createShellTracker } from "./shell-tracker.ts";
 import { copyFailure, memoryShortage, storageFailure } from "./shortage.ts";
 import { fetchSshPrograms } from "./ssh-server.ts";
@@ -42,6 +43,7 @@ type Queued = Exclude<ToVm, { type: "boot" | "frame" | "link" | "release" }>;
 const GOING_DOWN_MS = 5000;
 
 let vm: KernelInstance | undefined;
+let stopSharing: (() => void) | undefined;
 /** Every disk the guest writes, the root's first. */
 let disks: readonly LiveDisk[] = [];
 let copying: LiveCopy | undefined;
@@ -89,6 +91,7 @@ self.addEventListener("message", (ev: MessageEvent<ToVm>) => {
 });
 
 async function release(how: Extract<ToVm, { type: "release" }>["how"]): Promise<void> {
+	stopSharing?.();
 	let clean = true;
 	if (vm) {
 		if (how !== "save") clean = await shutDown(vm, how, SHUTDOWN_MS);
@@ -102,6 +105,10 @@ async function release(how: Extract<ToVm, { type: "release" }>["how"]): Promise<
 function handle(m: Queued): void {
 	if (!vm) return;
 	switch (m.type) {
+		case "share-ssh":
+			stopSharing?.();
+			stopSharing = shareGuestSsh(vm, m.port);
+			return;
 		case "input":
 			vm.write(m.data);
 			return;
@@ -144,6 +151,7 @@ function handle(m: Queued): void {
 			void checkpoint(m.copy);
 			return;
 		case "stop":
+			stopSharing?.();
 			for (const p of ptys.values()) void p.kill();
 			ptys.clear();
 			vm.stop({ code: 0, reason: "powered off" });
@@ -298,6 +306,7 @@ async function boot(c: VmConfig): Promise<void> {
 	disks = kept.map((disk) => ({ disk, store: watchable(disk) }));
 	saved = vm.exited.then((exit) => {
 		over = true;
+		stopSharing?.();
 		link?.link(null);
 		const next = nextOf(exit);
 		if (next) post({ type: "halted", next });
