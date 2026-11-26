@@ -140,7 +140,7 @@ export function uncableAll(state: LabState, on: SwitchName, cause: Cause): Step 
 function linkCable(state: LabState, { port, up }: CableChange, cause: Cause): Step {
 	const held = cableAt(state, port);
 	if (!held || (held.link === "up") === up) return step(state);
-	const changed: SwitchCable = { ends: held.ends, link: up ? "up" : "cut" };
+	const changed: SwitchCable = { ...held, link: up ? "up" : "cut" };
 	return step({ ...state, switchCables: state.switchCables.map((other) => (other === held ? changed : other)) }, [
 		{ type: "cable/link", ends: held.ends, up, cause },
 		{ type: "announce", text: `cable from ${cableText(held.ends)} ${up ? "reconnected" : "cut"}` },

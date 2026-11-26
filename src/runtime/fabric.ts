@@ -30,10 +30,30 @@
 // dropped there, so no wiring makes a frame longer. A port also drops a frame
 // that is longer than Ethernet carries, wherever it came from.
 //
+// A cable can have conditions, the same in both directions: a delay, a share
+// of frames that it loses, a share that skips the delay and so overtakes, a
+// rate, and an MTU. They are kept at the port the cable is in, as what a port
+// carries is, and a frame meets them once on its way along the cable: where it
+// leaves a switch, and, from a machine, before it comes into one. Delay, rate
+// and reordering only choose when a frame is due. Loss, the MTU and a rate
+// with no room left drop it, which the cable counts and the tap says. So a
+// NIC's cable with conditions is a queue in each direction too, and is a call
+// again once it has none and nothing waits in it.
+//
 // Addresses are numbers here. They are text only where someone reads a table.
 
-import type { PortNo, PortVlan } from "../model/index.ts";
 import {
+	type CableCounters,
+	type CableDrop,
+	type Conditions,
+	type DropReason,
+	ETH_MTU,
+	hasConditions,
+	type PortNo,
+	type PortVlan,
+} from "../model/index.ts";
+import {
+	ETH_HDR,
 	ETH_MAX,
 	type Flood,
 	PRIORITY_ONLY,
@@ -60,7 +80,7 @@ export interface SwitchCounters {
 	/** Copies handed to ports: a flood to two ports counts two. */
 	readonly delivered: number;
 	readonly flooded: number;
-	/** Frames it did not put on a cable to another switch, because as many as the lab lets wait there were waiting. */
+	/** Frames it did not put on a cable, because as many as the lab lets wait there were waiting. */
 	readonly dropped: number;
 }
 
@@ -73,7 +93,7 @@ export interface SwitchPort {
 	deliver(frame: Uint8Array): void;
 }
 
-/** One frame a switch accepted, for capture. */
+/** One frame a switch accepted, or one from a machine that its cable dropped on the way, for capture. */
 export interface TapEvent {
 	readonly from: PortNo;
 	/** The ports it was handed to, as a mask: bit p-1 for port p. */
@@ -88,6 +108,11 @@ export interface TapEvent {
 	readonly vlan: number;
 	/** The ports it had an 802.1Q tag on, as a mask: the one it came in by, those it went out of, or none. */
 	readonly tagged: number;
+	/**
+	 * The cables that dropped it, each by the port it is in. One of a port in `to` dropped it after the switch
+	 * sent it. One at `from` dropped it before the switch had it, so the switch took nothing in and `to` is none.
+	 */
+	readonly dropped: readonly CableDrop[];
 }
 
 export interface MacEntry {
@@ -121,6 +146,12 @@ export interface FabricEvents {
 export interface FabricOptions {
 	/** Age out MAC table entries after this long. Default 5 minutes. Flushed entries never age. */
 	readonly macAgeMs?: number;
+	/**
+	 * Makes a stream of numbers from 0 up to 1. Each direction of a cable has one for the frames it loses and one
+	 * for those it reorders, and draws once a frame, so which frames those are depends only on their place in that
+	 * direction. Default `Math.random`.
+	 */
+	readonly random?: () => () => number;
 }
 
 /** One port of one switch, by the switch's slot. */
@@ -136,6 +167,10 @@ const PORTS = 8;
 export const QUEUE_LIMIT = 256;
 /** Frames that wait their turn on one direction. More are dropped, which is what keeps a storm from growing. */
 export const PACED_LIMIT = 64;
+/** Frames that wait on one direction of a cable with conditions, for their delay or for its rate. More are dropped. */
+export const HELD_LIMIT = 8192;
+/** Bytes that wait for a cable's rate in one direction. A frame that would make them more is dropped. */
+export const RATE_QUEUE_BYTES = 64 * 1024;
 /** One frame that waits its turn a millisecond in each direction: 1,000 a second. */
 export const PACE_MS = 1;
 /** A storm is over when no looped frame has come in for this long. */
@@ -199,13 +234,66 @@ interface Sent {
 
 /** What every copy of a frame that has looped is given. */
 const LOOPED: Sent = { trail: null, looped: true, paced: true, reached: null };
+/** What a frame from a machine has: it has been nowhere. */
+const FRESH: Sent = { trail: null, looped: false, paced: false, reached: null };
 
 interface Waiting extends Sent {
-	readonly due: number;
+	due: number;
 	readonly frame: Uint8Array;
 }
 
-/** One way along a cable between two switches. */
+/** A cable's conditions, ready for the frames. */
+interface Wear {
+	readonly delay: number;
+	/** From 0 to 1. */
+	readonly loss: number;
+	readonly reorder: number;
+	/** How long a byte takes at its rate, in ms, or 0 with none. */
+	readonly msPerByte: number;
+	/** The longest frame it carries, before any tag. */
+	readonly longest: number;
+}
+
+function wearOf(conditions: Conditions): Wear | null {
+	if (!hasConditions(conditions)) return null;
+	const { delay = 0, loss = 0, reorder = 0, rate, mtu = ETH_MTU } = conditions;
+	return {
+		delay,
+		loss: loss / 100,
+		reorder: reorder / 100,
+		msPerByte: rate === undefined ? 0 : 8000 / rate,
+		longest: ETH_HDR + mtu,
+	};
+}
+
+/** What a cable has carried. The two ports of one between switches share it. */
+interface Tally {
+	delivered: number;
+	loss: number;
+	rate: number;
+	mtu: number;
+}
+
+const newTally = (): Tally => ({ delivered: 0, loss: 0, rate: 0, mtu: 0 });
+
+/** What became of a frame that was to go along a cable: it went, there was no link or no room, or the cable dropped it. */
+type Outcome = "sent" | "unsent" | DropReason;
+
+const NO_DROPS: readonly CableDrop[] = [];
+
+interface Way {
+	readonly fromSlot: number;
+	readonly toSlot: number;
+	readonly toPort: number;
+	/** The port of the machine at its end, or null for one that ends at a switch. */
+	readonly machine: Port | null;
+	/** It runs from one switch to another, so what it carries has been somewhere, and can loop. */
+	readonly between: boolean;
+	readonly tally: Tally;
+	readonly random: () => () => number;
+}
+
+/** One way along a cable: between two switches, or to or from a machine whose cable has conditions. */
 class Direction {
 	q: Waiting[] = [];
 	head = 0;
@@ -219,22 +307,48 @@ class Direction {
 	paced = 0;
 	/** Its cable is whole. */
 	up = true;
+	/** When the frame before has gone, at its cable's rate. */
+	free = 0;
 	readonly fromSlot: number;
 	readonly toSlot: number;
 	readonly toPort: number;
-	constructor(fromSlot: number, toSlot: number, toPort: number) {
+	readonly machine: Port | null;
+	readonly between: boolean;
+	readonly tally: Tally;
+	/** A number for each frame: under the cable's loss, the frame is lost. */
+	readonly lost: () => number;
+	/** A number for each frame: under the cable's reordering, the frame skips the delay. */
+	readonly skips: () => number;
+	constructor({ fromSlot, toSlot, toPort, machine, between, tally, random }: Way) {
 		this.fromSlot = fromSlot;
 		this.toSlot = toSlot;
 		this.toPort = toPort;
+		this.machine = machine;
+		this.between = between;
+		this.tally = tally;
+		this.lost = random();
+		this.skips = random();
+	}
+	get waiting(): number {
+		return this.q.length - this.head;
 	}
 	/** Loses what waits in it, and says how many frames that was. */
 	empty(): number {
-		const lost = this.q.length - this.head;
+		const lost = this.waiting;
 		this.q = [];
 		this.head = 0;
 		this.waitingPaced = 0;
 		this.paced = 0;
+		this.free = 0;
 		return lost;
+	}
+	/** What waits for a delay or a rate is due at once, in the order it was to come. What waits its turn in a storm keeps it. */
+	release(): void {
+		const waiting = this.q.slice(this.head);
+		for (const item of waiting) if (!item.paced) item.due = 0;
+		this.q = [...waiting.filter((item) => !item.paced), ...waiting.filter((item) => item.paced)];
+		this.head = 0;
+		this.free = 0;
 	}
 }
 
@@ -267,9 +381,12 @@ interface Port {
 	up: boolean;
 	/** Where a machine's port hands its frames. */
 	readonly sink: SwitchPort | null;
-	/** The way out of a port that a cable to another switch is in. */
-	readonly out: Direction | null;
+	/** The way out along its cable: to another switch, or to its machine once the cable has had conditions. */
+	out: Direction | null;
+	/** The way in from its machine, once the cable has had conditions. */
+	in: Direction | null;
 	readonly counters: PortCounters;
+	readonly tally: Tally;
 }
 
 interface Storm {
@@ -287,6 +404,8 @@ class Switch {
 	readonly ports: (Port | undefined)[] = new Array<Port | undefined>(PORTS + 1).fill(undefined);
 	/** What each port carries, whether or not something is in it. */
 	readonly modes: Mode[] = new Array<Mode>(PORTS + 1).fill(ACCESS_1);
+	/** The conditions of the cable in each port, or null for none. Kept while nothing is in it, as a mode is. */
+	readonly wear: (Wear | null)[] = new Array<Wear | null>(PORTS + 1).fill(null);
 	/** A table for each VLAN that has had a frame. */
 	readonly tables = new Map<number, Map<number, Learned>>();
 	readonly totals = { in: 0, delivered: 0, flooded: 0, dropped: 0 };
@@ -344,6 +463,7 @@ function readingOf(storm: Storm, now: number): StormReading {
 export class Fabric {
 	readonly #events: FabricEvents;
 	readonly #macAgeMs: number;
+	readonly #random: () => () => number;
 	readonly #switches: (Switch | undefined)[] = new Array<Switch | undefined>(SLOTS).fill(undefined);
 	#dirs: Direction[] = [];
 	/** The directions with a frame that is due, in the order they are served. */
@@ -358,6 +478,7 @@ export class Fabric {
 	constructor(events: FabricEvents = {}, options: FabricOptions = {}) {
 		this.#events = events;
 		this.#macAgeMs = options.macAgeMs ?? 5 * 60_000;
+		this.#random = options.random ?? (() => Math.random);
 	}
 
 	/**
@@ -386,7 +507,21 @@ export class Fabric {
 
 	/** Plug a machine into a port, link up. */
 	attach(slot: number, port: PortNo, sink: SwitchPort): void {
-		this.#free(slot, port)[port] = { up: true, sink, out: null, counters: newCounters() };
+		this.#free(slot, port)[port] = { up: true, sink, out: null, in: null, counters: newCounters(), tally: newTally() };
+		this.#fit(slot, port);
+	}
+
+	/** A NIC's cable that has conditions is a queue in each direction, from then on. */
+	#fit(slot: number, port: number): void {
+		const sw = this.#switches[slot];
+		const held = sw?.ports[port];
+		if (!sw || !held?.sink || held.out || sw.wear[port] === null) return;
+		const way = { fromSlot: slot, toSlot: slot, toPort: port, between: false, tally: held.tally, random: this.#random };
+		held.in = new Direction({ ...way, machine: null });
+		held.out = new Direction({ ...way, machine: held });
+		held.in.up = held.up;
+		held.out.up = held.up;
+		this.#dirs.push(held.in, held.out);
 	}
 
 	/** Put a cable between two ports, link up. Both can be of one switch. */
@@ -394,10 +529,12 @@ export class Fabric {
 		if (a.slot === b.slot && a.port === b.port) throw new Error("a cable has two ends");
 		const portsA = this.#free(a.slot, a.port);
 		const portsB = this.#free(b.slot, b.port);
-		const ab = new Direction(a.slot, b.slot, b.port);
-		const ba = new Direction(b.slot, a.slot, a.port);
-		portsA[a.port] = { up: true, sink: null, out: ab, counters: newCounters() };
-		portsB[b.port] = { up: true, sink: null, out: ba, counters: newCounters() };
+		const way = { machine: null, between: true, tally: newTally(), random: this.#random };
+		const ab = new Direction({ ...way, fromSlot: a.slot, toSlot: b.slot, toPort: b.port });
+		const ba = new Direction({ ...way, fromSlot: b.slot, toSlot: a.slot, toPort: a.port });
+		const end = { up: true, sink: null, in: null, tally: way.tally };
+		portsA[a.port] = { ...end, out: ab, counters: newCounters() };
+		portsB[b.port] = { ...end, out: ba, counters: newCounters() };
 		this.#dirs.push(ab, ba);
 	}
 
@@ -411,7 +548,7 @@ export class Fabric {
 	/** Where the cable in a port goes, or null for a port that has none to another switch. */
 	farEnd(slot: number, port: PortNo): SlotPort | null {
 		const out = this.#switches[slot]?.ports[port]?.out;
-		return out ? { slot: out.toSlot, port: out.toPort as PortNo } : null;
+		return out?.between ? { slot: out.toSlot, port: out.toPort as PortNo } : null;
 	}
 
 	/** Unplug the port and forget every address learned on it. A cable to another switch comes out of both its ports. */
@@ -420,11 +557,11 @@ export class Fabric {
 		const held = sw?.ports[port];
 		if (!sw || !held) return;
 		this.#unplug(sw, port);
-		if (!held.out) return;
-		const far = this.#switches[held.out.toSlot];
-		const back = far?.ports[held.out.toPort]?.out;
-		if (far) this.#unplug(far, held.out.toPort);
-		for (const dir of [held.out, back]) {
+		const { out } = held;
+		const far = out?.between ? this.#switches[out.toSlot] : undefined;
+		const back = out && far ? far.ports[out.toPort]?.out : held.in;
+		if (out && far) this.#unplug(far, out.toPort);
+		for (const dir of [out, back]) {
 			if (!dir) continue;
 			dir.gone = true;
 			this.#lose(dir);
@@ -446,6 +583,22 @@ export class Fabric {
 	}
 
 	/**
+	 * How the cable in the port treats frames from now on, and the next cable in it until this says otherwise. One
+	 * between switches is told at each of its ports, for the frames that leave by that one. What was on its way
+	 * arrives at once, in order, so nothing that is sent after a change overtakes what was sent before it.
+	 */
+	setConditions(slot: number, port: PortNo, conditions: Conditions): void {
+		const sw = this.#switches[slot];
+		if (!sw) return;
+		sw.wear[port] = wearOf(conditions);
+		const held = sw.ports[port];
+		if (!held) return;
+		this.#fit(slot, port);
+		held.out?.release();
+		held.in?.release();
+	}
+
+	/**
 	 * Cut or reconnect the cable. A cut flushes the addresses learned over it,
 	 * at both its ends when it goes to another switch, and what waited in it is
 	 * lost. Relearning waits for the next frame.
@@ -455,7 +608,7 @@ export class Fabric {
 		const held = sw?.ports[port];
 		if (!sw || !held) return;
 		this.#setEnd(sw, port, held, up);
-		if (!held.out) return;
+		if (!held.out?.between) return;
 		const far = this.#switches[held.out.toSlot];
 		const farPort = far?.ports[held.out.toPort];
 		if (far && farPort) this.#setEnd(far, held.out.toPort, farPort, up);
@@ -463,9 +616,12 @@ export class Fabric {
 
 	#setEnd(sw: Switch, port: number, held: Port, up: boolean): void {
 		held.up = up;
-		if (held.out) held.out.up = up;
+		for (const dir of [held.out, held.in]) {
+			if (!dir) continue;
+			dir.up = up;
+			if (!up) this.#lose(dir);
+		}
 		if (up) return;
-		if (held.out) this.#lose(held.out);
 		for (const table of sw.tables.values()) for (const e of table.values()) if (e.port === port) e.flushed = true;
 	}
 
@@ -481,6 +637,14 @@ export class Fabric {
 
 	counters(slot: number, port: PortNo): PortCounters | undefined {
 		return this.#switches[slot]?.ports[port]?.counters;
+	}
+
+	/** What the cable in the port has carried, both ways, since it was put in. */
+	carried(slot: number, port: PortNo): CableCounters | undefined {
+		const tally = this.#switches[slot]?.ports[port]?.tally;
+		if (!tally) return undefined;
+		const { delivered, loss, rate, mtu } = tally;
+		return { delivered, dropped: { loss, rate, mtu } };
 	}
 
 	/** Every port's, those that are unplugged by now too. */
@@ -509,7 +673,7 @@ export class Fabric {
 		return storm ? readingOf(storm, now) : null;
 	}
 
-	/** Frames that wait in cables between switches. */
+	/** Frames that wait in cables. */
 	get waiting(): number {
 		return this.#waiting;
 	}
@@ -521,7 +685,32 @@ export class Fabric {
 
 	/** A machine put a frame on the wire. */
 	receive(slot: number, from: PortNo, frame: Uint8Array, now: number): void {
-		this.#forward(slot, from, frame, now, null);
+		const sw = this.#switches[slot];
+		const src = sw?.ports[from];
+		const dir = src?.in;
+		if (!sw || !src?.up || !dir || (sw.wear[from] === null && dir.waiting === 0)) {
+			this.#forward(slot, from, frame, now, null);
+			return;
+		}
+		const how = this.#enqueue(dir, sw.wear[from], frame, now, FRESH);
+		if (how === "unsent") src.counters.dropped++;
+		else if (how !== "sent") this.#lost(sw, slot, from, frame, how);
+	}
+
+	/** Tells the tap of a frame from a machine that its cable dropped, as the port would have taken it in. */
+	#lost(sw: Switch, slot: number, from: PortNo, frame: Uint8Array, reason: DropReason): void {
+		const tap = this.#events.tap;
+		if (!tap) return;
+		const tag = vlanTag(frame);
+		const vlan = tag === null || tag === PRIORITY_ONLY ? sw.modes[from].vlan : tag;
+		const tagged = tag === vlan ? 1 << (from - 1) : 0;
+		const plain = tag === null ? frame : withoutTag(frame);
+		const dropped = [{ port: from, reason }];
+		try {
+			tap(slot, { from, to: 0, flood: null, frame: plain, looped: false, vlan, tagged, dropped });
+		} catch {
+			// A broken inspector must never break the wire.
+		}
 	}
 
 	/** `came` is what waited on the cable that brought it, or null for a frame from a machine. */
@@ -535,6 +724,7 @@ export class Fabric {
 			src.counters.dropped++;
 			return;
 		}
+		src.tally.delivered++;
 
 		// An access port reads a tag as a trunk does, so it takes a frame tagged with its own VLAN and no other.
 		const mode = sw.modes[from];
@@ -567,6 +757,7 @@ export class Fabric {
 		let tags = tag === vlan ? 1 << (from - 1) : 0;
 		/** Made for the first copy, when the switch knows whether it floods. */
 		let sent: Sent | null = null;
+		let dropped = NO_DROPS;
 		const out = (p: number, port: Port): boolean => {
 			const egress = sw.modes[p];
 			if (!carries(egress, vlan)) return false;
@@ -578,10 +769,12 @@ export class Fabric {
 						paced: second,
 						reached: came?.reached ?? (flood ? new Set() : null),
 					};
-			if (!egress.trunk || egress.vlan === vlan) return this.#send(sw, port, plain, now, sent);
-			tagged ??= withTag(plain, vlan);
-			if (!this.#send(sw, port, tagged, now, sent)) return false;
-			tags |= 1 << (p - 1);
+			const untagged = !egress.trunk || egress.vlan === vlan;
+			if (!untagged) tagged ??= withTag(plain, vlan);
+			const how = this.#send(sw, p, port, untagged ? plain : (tagged ?? plain), now, sent);
+			if (how === "unsent") return false;
+			if (!untagged) tags |= 1 << (p - 1);
+			if (how !== "sent") dropped = [...dropped, { port: p as PortNo, reason: how }];
 			return true;
 		};
 		if (plain[0] & 1) {
@@ -606,7 +799,7 @@ export class Fabric {
 
 		if (!tap) return;
 		try {
-			tap(slot, { from: from as PortNo, to, flood, frame: snapshot, looped, vlan, tagged: tags });
+			tap(slot, { from: from as PortNo, to, flood, frame: snapshot, looped, vlan, tagged: tags, dropped });
 		} catch {
 			// A broken inspector must never break the wire.
 		}
@@ -638,65 +831,109 @@ export class Fabric {
 		}
 	}
 
-	#send(sw: Switch, port: Port, frame: Uint8Array, now: number, sent: Sent): boolean {
+	/** A frame that its cable dropped was sent all the same: the switch put it on the cable. */
+	#send(sw: Switch, p: number, port: Port, frame: Uint8Array, now: number, sent: Sent): Outcome {
 		const c = port.counters;
 		if (!port.up) {
 			c.dropped++;
+			return "unsent";
+		}
+		const wear = sw.wear[p];
+		const dir = port.out;
+		// A NIC's cable is a call while it has no conditions and nothing still waits in it.
+		if (!dir || (!dir.between && wear === null && dir.waiting === 0)) {
+			c.txFrames++;
+			c.txBytes += frame.length;
+			if (!this.#hand(port, frame)) return "unsent";
+			sw.totals.delivered++;
+			return "sent";
+		}
+		const how = this.#enqueue(dir, wear, frame, now, sent);
+		if (how === "unsent") {
+			c.dropped++;
+			sw.totals.dropped++;
+			if (sw.storm) sw.storm.dropped++;
+			return how;
+		}
+		c.txFrames++;
+		c.txBytes += frame.length;
+		sw.totals.delivered++;
+		return how;
+	}
+
+	/** Gives a machine a frame at the end of its cable. */
+	#hand(port: Port, frame: Uint8Array): boolean {
+		try {
+			port.sink?.deliver(frame);
+		} catch {
+			port.counters.dropped++;
 			return false;
 		}
-		if (port.out) {
-			if (!this.#enqueue(port.out, frame, now, sent)) {
-				c.dropped++;
-				sw.totals.dropped++;
-				if (sw.storm) sw.storm.dropped++;
-				return false;
-			}
-			c.txFrames++;
-			c.txBytes += frame.length;
-		} else {
-			c.txFrames++;
-			c.txBytes += frame.length;
-			try {
-				port.sink?.deliver(frame);
-			} catch {
-				c.dropped++;
-				return false;
-			}
-		}
-		sw.totals.delivered++;
+		port.tally.delivered++;
 		return true;
 	}
 
-	/** False when as many as may wait there are waiting. */
-	#enqueue(dir: Direction, frame: Uint8Array, now: number, sent: Sent): boolean {
-		const { q } = dir;
+	/**
+	 * Puts a frame on its way along a cable. The cable's conditions say whether it goes and when it is due, and a
+	 * frame that waits its turn in a storm is due no sooner than that. Unsent when as many as may wait there are
+	 * waiting.
+	 */
+	#enqueue(dir: Direction, wear: Wear | null, frame: Uint8Array, now: number, sent: Sent): Outcome {
+		const { q, tally } = dir;
+		// What a switch hands a machine has waited its turn already, on the cable that brought it.
+		const paced = sent.paced && dir.between;
+		const room = paced
+			? dir.waitingPaced < PACED_LIMIT
+			: dir.waiting - dir.waitingPaced < (wear ? HELD_LIMIT : QUEUE_LIMIT);
+		if (!room) return "unsent";
 		let due = 0;
-		if (sent.paced) {
-			if (dir.waitingPaced >= PACED_LIMIT) return false;
+		if (wear) {
+			// The MTU is of what a frame holds, so a tag is not counted in it.
+			if (frame.length > wear.longest + (vlanTag(frame) === null ? 0 : TAG_BYTES)) {
+				tally.mtu++;
+				return "mtu";
+			}
+			if (wear.loss > 0 && dir.lost() < wear.loss) {
+				tally.loss++;
+				return "loss";
+			}
+			due = now;
+			if (wear.msPerByte > 0) {
+				// One frame at a time, each as long on its way out as its bytes take at the rate.
+				const start = Math.max(now, dir.free);
+				if ((start - now) / wear.msPerByte + frame.length > RATE_QUEUE_BYTES) {
+					tally.rate++;
+					return "rate";
+				}
+				dir.free = start + frame.length * wear.msPerByte;
+				due = dir.free;
+			}
+			if (wear.delay > 0 && !(wear.reorder > 0 && dir.skips() < wear.reorder)) due += wear.delay;
+		}
+		if (paced) {
 			dir.waitingPaced++;
 			this.#pacedWaiting++;
 			// From when the one before it is due, not from now, so the pace holds however late a turn comes.
 			dir.paced = Math.max(now, dir.paced) + PACE_MS;
-			due = dir.paced;
-		} else if (q.length - dir.head - dir.waitingPaced >= QUEUE_LIMIT) {
-			return false;
+			due = Math.max(due, dir.paced);
 		}
-		const item: Waiting = {
-			due,
-			frame,
-			trail: sent.trail,
-			looped: sent.looped,
-			paced: sent.paced,
-			reached: sent.reached,
-		};
+		const item: Waiting = { due, frame, trail: sent.trail, looped: sent.looped, paced, reached: sent.reached };
 		this.#waiting++;
-		q.push(item);
-		for (let i = q.length - 1; i > dir.head && q[i - 1].due > due; i--) {
-			q[i] = q[i - 1];
-			q[i - 1] = item;
+		if (dir.waiting === 0 || q[q.length - 1].due <= due) {
+			q.push(item);
+		} else {
+			// After the last that is due no later, so a frame that skips the delay is ahead of those that take it.
+			let lo = dir.head;
+			let hi = q.length;
+			while (lo < hi) {
+				const mid = (lo + hi) >>> 1;
+				if (q[mid].due <= due) lo = mid + 1;
+				else hi = mid;
+			}
+			q.splice(lo, 0, item);
 		}
 		this.#arm(dir, now);
-		return true;
+		return "sent";
 	}
 
 	#arm(dir: Direction, now: number): void {
@@ -741,7 +978,8 @@ export class Fabric {
 			}
 			this.#waiting--;
 			this.#arm(dir, now);
-			this.#forward(dir.toSlot, dir.toPort, item.frame, now, item);
+			if (dir.machine) this.#hand(dir.machine, item.frame);
+			else this.#forward(dir.toSlot, dir.toPort, item.frame, now, dir.between ? item : null);
 		}
 		return turns;
 	}

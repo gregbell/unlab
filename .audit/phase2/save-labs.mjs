@@ -1,7 +1,8 @@
-// Writes one saved lab for each version of the workspace before 9, with the code that wrote that version:
+// Writes one saved lab for each version of the workspace before 10, with the code that wrote that version:
 // the same lab as each version could hold it. A machine could be called switch1 from version 4 on, and
 // version 7 has two more switches, with a cable moved to one and a NIC plugged into the other. Version 8 has
-// a cable from switch0 to lan, and one from lan to wan that is cut.
+// a cable from switch0 to lan, and one from lan to wan that is cut. Version 9 has node1's port in VLAN 10, and
+// the cable from switch0 to lan as a trunk of VLANs 10 and 20.
 //
 //   node .audit/phase2/save-labs.mjs <empty dir for checkouts> test/fixtures/saved-labs
 
@@ -10,7 +11,7 @@ import { mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 const [checkouts, out] = process.argv.slice(2).map((path) => resolve(path));
-const COMMITS = { 1: "5fb6f93", 2: "25759b5", 3: "582cb30", 4: "1243028", 5: "443b378", 6: "24c38d9", 7: "961d670", 8: "a7ed190" };
+const COMMITS = { 1: "5fb6f93", 2: "25759b5", 3: "582cb30", 4: "1243028", 5: "443b378", 6: "24c38d9", 7: "961d670", 8: "a7ed190", 9: "af0af43" };
 
 function checkout(commit) {
 	const dir = join(checkouts, commit);
@@ -76,6 +77,14 @@ async function savedLab(version, dir) {
 		s = cable({ switch: "switch0", port: 8 }, { switch: lan, port: 7 });
 		s = cable({ switch: lan, port: 8 }, { switch: wan, port: 8 });
 		s = run(s, { type: "cmd/cable-link", changes: [{ port: { switch: lan, port: 8 }, up: false }], cause: "bar" });
+	}
+	if (version >= 9) {
+		const lan = kit.switchNamed("lan");
+		const vlan = (port, vlan) => run(s, { type: "cmd/vlan", port, vlan });
+		s = vlan({ switch: lan, port: 3 }, { mode: "access", vlan: 10 });
+		for (const port of [{ switch: "switch0", port: 8 }, { switch: lan, port: 7 }]) {
+			s = vlan(port, { mode: "trunk", allowed: [10, 20], native: 1 });
+		}
 	}
 	return saveWorkspace(s);
 }

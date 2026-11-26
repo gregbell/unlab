@@ -21,6 +21,7 @@ import {
 	type Cause,
 	type Checkpoint,
 	type CheckpointName,
+	type Conditions,
 	DEFAULT_SWITCH,
 	type DeadCable,
 	type DiskCopy,
@@ -40,6 +41,7 @@ import {
 	type NicPorts,
 	type NicRef,
 	type NicSpec,
+	NO_CONDITIONS,
 	type Phase,
 	type Place,
 	type PlanError,
@@ -131,6 +133,8 @@ export interface NicPort {
 	readonly port: PortNo;
 	readonly machine: Machine;
 	readonly nic: NicNo;
+	/** The cable's. */
+	readonly conditions: Conditions;
 }
 
 /** A port and where the cable in it goes: another port of a switch. */
@@ -138,6 +142,7 @@ export interface CablePort {
 	readonly port: PortNo;
 	readonly far: PortRef;
 	readonly link: SwitchCable["link"];
+	readonly conditions: Conditions;
 }
 
 export type HeldPort = NicPort | CablePort;
@@ -153,14 +158,17 @@ export type Wiring = Pick<LabState, "machines" | "rail" | "switchCables">;
 export function heldPorts(state: Wiring, on: SwitchName): readonly HeldPort[] {
 	const nics = machineList(state).flatMap((machine) => {
 		const ports = nicPortsOf(machine.life);
+		const plugs = plugsOf(machine.life);
 		return NICS.flatMap((nic): NicPort[] => {
 			const ref = ports[nic];
-			return ref?.switch === on ? [{ port: ref.port, machine, nic }] : [];
+			const plug = plugs[nic];
+			const conditions = (plug?.kind === "port" && plug.conditions) || NO_CONDITIONS;
+			return ref?.switch === on ? [{ port: ref.port, machine, nic, conditions }] : [];
 		});
 	});
-	const cables = state.switchCables.flatMap(({ ends: [a, b], link }): CablePort[] => [
-		...(a.switch === on ? [{ port: a.port, far: b, link }] : []),
-		...(b.switch === on ? [{ port: b.port, far: a, link }] : []),
+	const cables = state.switchCables.flatMap(({ ends: [a, b], link, conditions = NO_CONDITIONS }): CablePort[] => [
+		...(a.switch === on ? [{ port: a.port, far: b, link, conditions }] : []),
+		...(b.switch === on ? [{ port: b.port, far: a, link, conditions }] : []),
 	]);
 	return [...nics, ...cables].sort((a, b) => a.port - b.port);
 }
@@ -1008,7 +1016,9 @@ function linkOne(state: LabState, change: LinkChange, cause: Cause): Step {
 		: plug.kind === "port" && samePort(plug.port, port) && (plug.link === "up") !== up;
 	if (!fits) return step(state);
 
-	const changed = rewired(machine, nic, { kind: "port", port, link: up ? "up" : "cut" });
+	// A cable that is cut or reconnected is the one that was there, with its conditions. One that is plugged in is new.
+	const cable = plug.kind === "port" ? plug : { kind: "port" as const, port };
+	const changed = rewired(machine, nic, { ...cable, link: up ? "up" : "cut" });
 	if (!changed) return step(state);
 	const next = put(state, changed);
 	const label = nicLabel(machine, nic);
@@ -1027,7 +1037,7 @@ function linkOne(state: LabState, change: LinkChange, cause: Cause): Step {
 
 /**
  * Puts one NIC's cable where the plan says, or takes it out. What runs goes on.
- * A cable that moves is as it was, cut or not, and a new one is whole. Ignored
+ * A cable that moves is as it was, cut or not and with its conditions, and a new one is whole. Ignored
  * unless that is still the plan, or when the cable is there already.
  */
 export function plug(state: LabState, plan: PlugPlan, cause: Cause): Step {
@@ -1037,7 +1047,8 @@ export function plug(state: LabState, plan: PlugPlan, cause: Cause): Step {
 	if (!machine || !old || (to !== null && isPlanError(planPlug(state, plan, to)))) return step(state);
 	const from = old.kind === "port" ? old.port : null;
 	if (to === null ? from === null : from !== null && samePort(from, to)) return step(state);
-	const set: Plug = to === null ? UNPLUGGED : { kind: "port", port: to, link: old.kind === "port" ? old.link : "up" };
+	const set: Plug =
+		to === null ? UNPLUGGED : old.kind === "port" ? { ...old, port: to } : { kind: "port", port: to, link: "up" };
 	const changed = rewired(machine, nic, set);
 	if (!changed) return step(state);
 
