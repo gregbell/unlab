@@ -1,0 +1,347 @@
+One broadcast in a mesh of four switches for 20 s, and its cuts, sides in turn: node .audit/phase2/cables/drive.mjs storm 1 <dist> mesh 20.
+x is the build of d1a4ead's source, made before it was committed: its scripts are the same bytes as a build of d1a4ead.
+a56a98e has the same src as 0b603f2. The worst main-thread gap and its 99th percentile, by side, over every run below:
+
+cfd20a2: worst gap ms median 6.70 [5.6-9.6], p99 median 4.05, n=18: 5.9 5.8 5.6 7.8 7.8 6.2 6.1 5.8 7.6 6.3 7.3 7.1 7.1 6 7.4 5.8 9.6 7.5
+a56a98e: worst gap ms median 7.65 [6-11.6], p99 median 4.10, n=18: 10.5 8.6 7.2 8.3 11.6 6.2 7.8 9.3 7.5 7 7.8 6 7.3 8 7.3 8.4 6.1 6.1
+x: worst gap ms median 6.25 [4.6-8.8], p99 median 3.85, n=12: 6.3 5.9 8.8 4.6 8.1 6.2 6.9 5 5.4 7.4 5.3 6.7
+a56a98e above cfd20a2: U 235.5 of 324, z 2.33
+x above cfd20a2: U 85 of 216, z -0.97
+x above a56a98e: U 50.5 of 216, z -2.43
+
+== cfd20a2 1
+run 0 mesh 20 s: 11971 frames/s; each 5 s: 12004 11998 12000 11998
+   main thread: worst gap 5.9 ms, p99 4.2 (n=1020), 60 paints/s; threads: chromium MAIN 0.29, DedicatedWorker 0.08, ThreadPoolForeg 0.07, DedicatedWorker 0.07, DedicatedWorker 0.07, DedicatedWorker 0.07
+   renderers MB: 841 before, then each 5 s 965 1074 1091 1157
+   lab command and guest echo ms, each 5 s: 4/43 3/30 9/32 3/30
+   switch0 3000/s dropped 61981; b 3000/s dropped 62005; c 3000/s dropped 62005; d 3000/s dropped 62005
+   after the cut: last looped frame 126.9 ms, storm over 253 ms, ping answered by 297 ms, 0 frames in the next 0.5 s
+== a56a98e 1
+run 0 mesh 20 s: 11963 frames/s; each 5 s: 12004 12000 11998 12002
+   main thread: worst gap 10.5 ms, p99 4.1 (n=1023), 60 paints/s; threads: chromium MAIN 0.27, DedicatedWorker 0.10, ThreadPoolForeg 0.08, DedicatedWorker 0.08, DedicatedWorker 0.07, ThreadPoolForeg 0.06
+   renderers MB: 843 before, then each 5 s 982 1061 1090 1158
+   lab command and guest echo ms, each 5 s: 8/36 4/36 6/33 4/38
+   switch0 3000/s dropped 61894; b 3000/s dropped 61894; c 3000/s dropped 61894; d 3000/s dropped 61894
+   after the cut: last looped frame 126.8 ms, storm over 239 ms, ping answered by 277 ms, 0 frames in the next 0.5 s
+== cfd20a2 2
+run 0 mesh 20 s: 11969 frames/s; each 5 s: 12004 12000 12000 12000
+   main thread: worst gap 5.8 ms, p99 3.9 (n=1029), 60 paints/s; threads: chromium MAIN 0.26, DedicatedWorker 0.08, DedicatedWorker 0.08, DedicatedWorker 0.08, DedicatedWorker 0.07, ThreadPoolForeg 0.06
+   renderers MB: 846 before, then each 5 s 982 1057 1075 1145
+   lab command and guest echo ms, each 5 s: 5/38 3/31 4/32 11/31
+   switch0 3000/s dropped 61777; b 3000/s dropped 61785; c 3000/s dropped 61785; d 3000/s dropped 61785
+   after the cut: last looped frame 129.3 ms, storm over 258 ms, ping answered by 295 ms, 0 frames in the next 0.5 s
+== a56a98e 2
+run 0 mesh 20 s: 11960 frames/s; each 5 s: 12004 11998 12002 11998
+   main thread: worst gap 8.6 ms, p99 4.1 (n=1024), 60 paints/s; threads: chromium MAIN 0.27, DedicatedWorker 0.09, DedicatedWorker 0.09, DedicatedWorker 0.08, ThreadPoolForeg 0.07, ThreadPoolForeg 0.06
+   renderers MB: 844 before, then each 5 s 984 1072 1091 1159
+   lab command and guest echo ms, each 5 s: 4/38 4/33 7/33 3/29
+   switch0 3000/s dropped 61738; b 3000/s dropped 61750; c 3000/s dropped 61750; d 3000/s dropped 61750
+   after the cut: last looped frame 126.2 ms, storm over 254 ms, ping answered by 298 ms, 0 frames in the next 0.5 s
+== cfd20a2 3
+run 0 mesh 20 s: 11965 frames/s; each 5 s: 12001 12003 12000 11998
+   main thread: worst gap 5.6 ms, p99 3.7 (n=1024), 60 paints/s; threads: chromium MAIN 0.26, DedicatedWorker 0.08, DedicatedWorker 0.08, ThreadPoolForeg 0.07, DedicatedWorker 0.07, DedicatedWorker 0.07
+   renderers MB: 843 before, then each 5 s 981 1086 1106 1173
+   lab command and guest echo ms, each 5 s: 3/44 2/34 3/31 3/31
+   switch0 3000/s dropped 61774; b 3000/s dropped 61782; c 3000/s dropped 61782; d 3000/s dropped 61782
+   after the cut: last looped frame 126.3 ms, storm over 253 ms, ping answered by 297 ms, 0 frames in the next 0.5 s
+== a56a98e 3
+run 0 mesh 20 s: 11962 frames/s; each 5 s: 12004 12000 12002 12000
+   main thread: worst gap 7.2 ms, p99 4.5 (n=1016), 60 paints/s; threads: chromium MAIN 0.29, ThreadPoolForeg 0.09, DedicatedWorker 0.08, DedicatedWorker 0.07, ThreadPoolForeg 0.06, DedicatedWorker 0.06
+   renderers MB: 841 before, then each 5 s 985 1085 1109 1177
+   lab command and guest echo ms, each 5 s: 10/38 3/33 9/33 9/33
+   switch0 3000/s dropped 61711; b 3000/s dropped 61701; c 3000/s dropped 61701; d 3000/s dropped 61701
+   after the cut: last looped frame 126.3 ms, storm over 234 ms, ping answered by 270 ms, 0 frames in the next 0.5 s
+== cfd20a2 4
+run 0 mesh 20 s: 11969 frames/s; each 5 s: 11998 12003 12000 12000
+   main thread: worst gap 7.8 ms, p99 4.1 (n=1024), 60 paints/s; threads: chromium MAIN 0.26, DedicatedWorker 0.09, ThreadPoolForeg 0.07, DedicatedWorker 0.07, DedicatedWorker 0.07, ThreadPoolForeg 0.06
+   renderers MB: 847 before, then each 5 s 979 1078 1105 1176
+   lab command and guest echo ms, each 5 s: 4/37 3/32 4/29 3/33
+   switch0 3000/s dropped 61810; b 3000/s dropped 61818; c 3000/s dropped 61818; d 3000/s dropped 61818
+   after the cut: last looped frame 126.6 ms, storm over 233 ms, ping answered by 279 ms, 0 frames in the next 0.5 s
+== a56a98e 4
+run 0 mesh 20 s: 11959 frames/s; each 5 s: 11998 12000 12007 11995
+   main thread: worst gap 8.3 ms, p99 4.3 (n=1021), 60 paints/s; threads: chromium MAIN 0.29, ThreadPoolForeg 0.08, DedicatedWorker 0.08, ThreadPoolForeg 0.07, DedicatedWorker 0.07, DedicatedWorker 0.07
+   renderers MB: 844 before, then each 5 s 981 1074 1099 1172
+   lab command and guest echo ms, each 5 s: 4/40 3/33 4/33 10/33
+   switch0 3000/s dropped 61744; b 3000/s dropped 61751; c 3000/s dropped 61751; d 3000/s dropped 61751
+   after the cut: last looped frame 128.8 ms, storm over 238 ms, ping answered by 273 ms, 0 frames in the next 0.5 s
+== cfd20a2 5
+run 0 mesh 20 s: 11970 frames/s; each 5 s: 12000 12002 11998 12002
+   main thread: worst gap 7.8 ms, p99 4.5 (n=1020), 60 paints/s; threads: chromium MAIN 0.29, ThreadPoolForeg 0.08, DedicatedWorker 0.08, DedicatedWorker 0.08, DedicatedWorker 0.08, ThreadPoolForeg 0.07
+   renderers MB: 843 before, then each 5 s 972 1062 1115 1165
+   lab command and guest echo ms, each 5 s: 3/47 8/34 9/34 4/32
+   switch0 3000/s dropped 61798; b 3000/s dropped 61824; c 3000/s dropped 61824; d 3000/s dropped 61824
+   after the cut: last looped frame 120.6 ms, storm over 246 ms, ping answered by 285 ms, 0 frames in the next 0.5 s
+== a56a98e 5
+run 0 mesh 20 s: 11964 frames/s; each 5 s: 12004 12000 11998 12005
+   main thread: worst gap 11.6 ms, p99 4.7 (n=1019), 60 paints/s; threads: chromium MAIN 0.31, DedicatedWorker 0.09, ThreadPoolForeg 0.07, ThreadPoolForeg 0.07, DedicatedWorker 0.07, DedicatedWorker 0.07
+   renderers MB: 841 before, then each 5 s 976 1065 1094 1172
+   lab command and guest echo ms, each 5 s: 4/35 6/35 11/31 4/39
+   switch0 3000/s dropped 61804; b 3000/s dropped 61796; c 3000/s dropped 61796; d 3000/s dropped 61796
+   after the cut: last looped frame 128.3 ms, storm over 257 ms, ping answered by 290 ms, 0 frames in the next 0.5 s
+== cfd20a2 6
+run 0 mesh 20 s: 11966 frames/s; each 5 s: 12004 12005 11993 12005
+   main thread: worst gap 6.2 ms, p99 4.1 (n=1024), 60 paints/s; threads: chromium MAIN 0.28, DedicatedWorker 0.08, DedicatedWorker 0.08, ThreadPoolForeg 0.07, DedicatedWorker 0.07, Compositor 0.06
+   renderers MB: 842 before, then each 5 s 976 1057 1081 1146
+   lab command and guest echo ms, each 5 s: 11/39 3/31 4/33 4/31
+   switch0 3000/s dropped 61843; b 3000/s dropped 61851; c 3000/s dropped 61851; d 3000/s dropped 61851
+   after the cut: last looped frame 126.8 ms, storm over 250 ms, ping answered by 295 ms, 0 frames in the next 0.5 s
+== a56a98e 6
+run 0 mesh 20 s: 11960 frames/s; each 5 s: 12001 12000 12000 12000
+   main thread: worst gap 6.2 ms, p99 3.7 (n=1025), 60 paints/s; threads: chromium MAIN 0.28, DedicatedWorker 0.10, ThreadPoolForeg 0.09, DedicatedWorker 0.08, DedicatedWorker 0.08, DedicatedWorker 0.07
+   renderers MB: 839 before, then each 5 s 978 1056 1089 1159
+   lab command and guest echo ms, each 5 s: 5/45 9/33 9/33 3/28
+   switch0 3000/s dropped 61753; b 3000/s dropped 61765; c 3000/s dropped 61765; d 3000/s dropped 61765
+   after the cut: last looped frame 125.3 ms, storm over 251 ms, ping answered by 298 ms, 0 frames in the next 0.5 s
+== cfd20a2 1
+run 0 mesh 20 s: 11972 frames/s; each 5 s: 12004 11997 12001 12001
+   main thread: worst gap 6.1 ms, p99 4.7 (n=1016), 60 paints/s; threads: chromium MAIN 0.30, ThreadPoolForeg 0.10, DedicatedWorker 0.08, DedicatedWorker 0.08, DedicatedWorker 0.08, DedicatedWorker 0.07
+   renderers MB: 843 before, then each 5 s 972 1064 1093 1158
+   lab command and guest echo ms, each 5 s: 3/45 3/34 4/28 4/35
+   switch0 3000/s dropped 61525; b 3000/s dropped 61542; c 3000/s dropped 61542; d 3000/s dropped 61542
+   after the cut: last looped frame 126.3 ms, storm over 250 ms, ping answered by 294 ms, 0 frames in the next 0.5 s
+== a56a98e 1
+run 0 mesh 20 s: 11963 frames/s; each 5 s: 12007 11996 12002 12002
+   main thread: worst gap 7.8 ms, p99 3.9 (n=1024), 60 paints/s; threads: chromium MAIN 0.27, DedicatedWorker 0.09, DedicatedWorker 0.08, DedicatedWorker 0.08, ThreadPoolForeg 0.07, DedicatedWorker 0.07
+   renderers MB: 842 before, then each 5 s 981 1061 1092 1148
+   lab command and guest echo ms, each 5 s: 12/40 2/30 4/32 3/30
+   switch0 3000/s dropped 61771; b 3000/s dropped 61783; c 3000/s dropped 61783; d 3000/s dropped 61783
+   after the cut: last looped frame 125.1 ms, storm over 253 ms, ping answered by 300 ms, 0 frames in the next 0.5 s
+== x 1
+run 0 mesh 20 s: 11963 frames/s; each 5 s: 12005 12007 11993 12000
+   main thread: worst gap 6.3 ms, p99 3.8 (n=1026), 60 paints/s; threads: chromium MAIN 0.26, DedicatedWorker 0.08, DedicatedWorker 0.08, ThreadPoolForeg 0.07, ThreadPoolForeg 0.07, DedicatedWorker 0.07
+   renderers MB: 845 before, then each 5 s 979 1070 1099 1166
+   lab command and guest echo ms, each 5 s: 5/37 4/33 8/33 3/32
+   switch0 3000/s dropped 61876; b 3000/s dropped 61876; c 3000/s dropped 61876; d 3000/s dropped 61876
+   after the cut: last looped frame 127.3 ms, storm over 251 ms, ping answered by 300 ms, 0 frames in the next 0.5 s
+== cfd20a2 2
+run 0 mesh 20 s: 11969 frames/s; each 5 s: 11998 12003 11998 12002
+   main thread: worst gap 5.8 ms, p99 3.8 (n=1022), 60 paints/s; threads: chromium MAIN 0.28, DedicatedWorker 0.08, ThreadPoolForeg 0.07, DedicatedWorker 0.07, ThreadPoolForeg 0.06, Compositor 0.06
+   renderers MB: 844 before, then each 5 s 985 1064 1086 1164
+   lab command and guest echo ms, each 5 s: 4/44 3/33 3/28 4/29
+   switch0 3000/s dropped 61504; b 3000/s dropped 61512; c 3000/s dropped 61512; d 3000/s dropped 61512
+   after the cut: last looped frame 125.7 ms, storm over 234 ms, ping answered by 280 ms, 0 frames in the next 0.5 s
+== a56a98e 2
+run 0 mesh 20 s: 11964 frames/s; each 5 s: 12001 12008 11993 12000
+   main thread: worst gap 9.3 ms, p99 3.9 (n=1033), 60 paints/s; threads: chromium MAIN 0.22, DedicatedWorker 0.07, DedicatedWorker 0.07, DedicatedWorker 0.07, ThreadPoolForeg 0.06, ThreadPoolForeg 0.05
+   renderers MB: 843 before, then each 5 s 978 1060 1083 1157
+   lab command and guest echo ms, each 5 s: 9/39 2/33 2/29 2/29
+   switch0 3000/s dropped 61726; b 3000/s dropped 61738; c 3000/s dropped 61738; d 3000/s dropped 61738
+   after the cut: last looped frame 125.9 ms, storm over 243 ms, ping answered by 285 ms, 0 frames in the next 0.5 s
+== x 2
+run 0 mesh 20 s: 11963 frames/s; each 5 s: 12001 12002 11999 12002
+   main thread: worst gap 5.9 ms, p99 4.5 (n=1016), 60 paints/s; threads: chromium MAIN 0.29, DedicatedWorker 0.09, DedicatedWorker 0.08, DedicatedWorker 0.08, ThreadPoolForeg 0.07, ThreadPoolForeg 0.07
+   renderers MB: 844 before, then each 5 s 978 1068 1092 1161
+   lab command and guest echo ms, each 5 s: 3/44 3/29 10/32 3/35
+   switch0 3000/s dropped 61912; b 3000/s dropped 61904; c 3000/s dropped 61904; d 3000/s dropped 61904
+   after the cut: last looped frame 126.5 ms, storm over 248 ms, ping answered by 293 ms, 0 frames in the next 0.5 s
+== cfd20a2 3
+run 0 mesh 20 s: 11967 frames/s; each 5 s: 12001 12000 12005 11998
+   main thread: worst gap 7.6 ms, p99 4.0 (n=1030), 60 paints/s; threads: chromium MAIN 0.27, DedicatedWorker 0.09, ThreadPoolForeg 0.08, DedicatedWorker 0.08, DedicatedWorker 0.08, DedicatedWorker 0.07
+   renderers MB: 846 before, then each 5 s 981 1051 1081 1149
+   lab command and guest echo ms, each 5 s: 3/43 2/34 4/32 4/29
+   switch0 3000/s dropped 61846; b 3000/s dropped 61854; c 3000/s dropped 61854; d 3000/s dropped 61854
+   after the cut: last looped frame 126.2 ms, storm over 253 ms, ping answered by 298 ms, 0 frames in the next 0.5 s
+== a56a98e 3
+run 0 mesh 20 s: 11962 frames/s; each 5 s: 12001 12005 11998 11999
+   main thread: worst gap 7.5 ms, p99 4.4 (n=1019), 60 paints/s; threads: chromium MAIN 0.27, ThreadPoolForeg 0.09, DedicatedWorker 0.09, DedicatedWorker 0.08, DedicatedWorker 0.07, DedicatedWorker 0.07
+   renderers MB: 841 before, then each 5 s 964 1063 1092 1160
+   lab command and guest echo ms, each 5 s: 11/40 3/32 3/30 5/35
+   switch0 3000/s dropped 61714; b 3000/s dropped 61704; c 3000/s dropped 61704; d 3000/s dropped 61704
+   after the cut: last looped frame 126.7 ms, storm over 255 ms, ping answered by 303 ms, 0 frames in the next 0.5 s
+== x 3
+run 0 mesh 20 s: 11965 frames/s; each 5 s: 11989 12000 12000 12000
+   main thread: worst gap 8.8 ms, p99 4.1 (n=1023), 60 paints/s; threads: chromium MAIN 0.29, DedicatedWorker 0.09, DedicatedWorker 0.08, ThreadPoolForeg 0.07, ThreadPoolForeg 0.07, DedicatedWorker 0.07
+   renderers MB: 843 before, then each 5 s 983 1061 1084 1161
+   lab command and guest echo ms, each 5 s: 4/45 9/33 3/32 4/29
+   switch0 3000/s dropped 61885; b 3000/s dropped 61897; c 3000/s dropped 61897; d 3000/s dropped 61897
+   after the cut: last looped frame 127.3 ms, storm over 257 ms, ping answered by 302 ms, 0 frames in the next 0.5 s
+== cfd20a2 4
+run 0 mesh 20 s: 11964 frames/s; each 5 s: 12001 12000 12000 11998
+   main thread: worst gap 6.3 ms, p99 3.7 (n=1028), 60 paints/s; threads: chromium MAIN 0.26, ThreadPoolForeg 0.08, DedicatedWorker 0.08, DedicatedWorker 0.08, DedicatedWorker 0.08, DedicatedWorker 0.07
+   renderers MB: 848 before, then each 5 s 982 1066 1084 1151
+   lab command and guest echo ms, each 5 s: 3/37 4/34 4/34 3/33
+   switch0 3000/s dropped 61819; b 3000/s dropped 61827; c 3000/s dropped 61827; d 3000/s dropped 61827
+   after the cut: last looped frame 125.7 ms, storm over 252 ms, ping answered by 296 ms, 0 frames in the next 0.5 s
+== a56a98e 4
+run 0 mesh 20 s: 11964 frames/s; each 5 s: 12002 12001 12000 11999
+   main thread: worst gap 7.0 ms, p99 4.7 (n=1018), 60 paints/s; threads: chromium MAIN 0.29, ThreadPoolForeg 0.08, DedicatedWorker 0.08, DedicatedWorker 0.08, ThreadPoolForeg 0.07, DedicatedWorker 0.07
+   renderers MB: 842 before, then each 5 s 967 1069 1089 1160
+   lab command and guest echo ms, each 5 s: 10/37 3/34 3/32 3/42
+   switch0 3000/s dropped 61776; b 3000/s dropped 61779; c 3000/s dropped 61779; d 3000/s dropped 61779
+   after the cut: last looped frame 127.0 ms, storm over 253 ms, ping answered by 297 ms, 0 frames in the next 0.5 s
+== x 4
+run 0 mesh 20 s: 11963 frames/s; each 5 s: 12001 11998 12002 12002
+   main thread: worst gap 4.6 ms, p99 3.7 (n=1026), 60 paints/s; threads: chromium MAIN 0.27, DedicatedWorker 0.10, DedicatedWorker 0.10, DedicatedWorker 0.08, ThreadPoolForeg 0.07, DedicatedWorker 0.07
+   renderers MB: 848 before, then each 5 s 983 1075 1096 1166
+   lab command and guest echo ms, each 5 s: 4/35 5/34 4/34 3/32
+   switch0 3000/s dropped 61699; b 3000/s dropped 61699; c 3000/s dropped 61699; d 3000/s dropped 61699
+   after the cut: last looped frame 125.4 ms, storm over 253 ms, ping answered by 296 ms, 0 frames in the next 0.5 s
+== cfd20a2 5
+run 0 mesh 20 s: 11971 frames/s; each 5 s: 11998 12003 12002 11995
+   main thread: worst gap 7.3 ms, p99 4.0 (n=1025), 60 paints/s; threads: chromium MAIN 0.29, DedicatedWorker 0.09, DedicatedWorker 0.08, DedicatedWorker 0.08, ThreadPoolForeg 0.07, DedicatedWorker 0.07
+   renderers MB: 842 before, then each 5 s 984 1071 1098 1164
+   lab command and guest echo ms, each 5 s: 5/39 3/33 3/32 3/33
+   switch0 3000/s dropped 61789; b 3000/s dropped 61797; c 3000/s dropped 61797; d 3000/s dropped 61797
+   after the cut: last looped frame 126.7 ms, storm over 247 ms, ping answered by 294 ms, 0 frames in the next 0.5 s
+== a56a98e 5
+run 0 mesh 20 s: 11965 frames/s; each 5 s: 12004 11998 12000 12000
+   main thread: worst gap 7.8 ms, p99 4.0 (n=1025), 60 paints/s; threads: chromium MAIN 0.29, DedicatedWorker 0.08, DedicatedWorker 0.08, ThreadPoolForeg 0.07, ThreadPoolForeg 0.07, DedicatedWorker 0.07
+   renderers MB: 847 before, then each 5 s 990 1065 1098 1171
+   lab command and guest echo ms, each 5 s: 5/43 3/33 3/31 4/32
+   switch0 3000/s dropped 61816; b 3000/s dropped 61808; c 3000/s dropped 61808; d 3000/s dropped 61808
+   after the cut: last looped frame 126.5 ms, storm over 250 ms, ping answered by 294 ms, 0 frames in the next 0.5 s
+== x 5
+run 0 mesh 20 s: 11962 frames/s; each 5 s: 12007 12003 11998 12007
+   main thread: worst gap 8.1 ms, p99 3.6 (n=1030), 60 paints/s; threads: chromium MAIN 0.27, DedicatedWorker 0.08, DedicatedWorker 0.08, DedicatedWorker 0.08, ThreadPoolForeg 0.07, DedicatedWorker 0.07
+   renderers MB: 845 before, then each 5 s 979 1068 1095 1165
+   lab command and guest echo ms, each 5 s: 10/38 8/34 3/33 5/32
+   switch0 3000/s dropped 61750; b 3000/s dropped 61762; c 3000/s dropped 61762; d 3000/s dropped 61762
+   after the cut: last looped frame 129.0 ms, storm over 259 ms, ping answered by 303 ms, 0 frames in the next 0.5 s
+== cfd20a2 6
+run 0 mesh 20 s: 11961 frames/s; each 5 s: 12004 11998 11998 12005
+   main thread: worst gap 7.1 ms, p99 4.1 (n=1022), 60 paints/s; threads: chromium MAIN 0.26, DedicatedWorker 0.08, DedicatedWorker 0.08, DedicatedWorker 0.07, ThreadPoolForeg 0.06, DedicatedWorker 0.06
+   renderers MB: 841 before, then each 5 s 984 1067 1088 1154
+   lab command and guest echo ms, each 5 s: 4/47 10/32 4/33 3/32
+   switch0 3000/s dropped 61795; b 3000/s dropped 61815; c 3000/s dropped 61815; d 3000/s dropped 61815
+   after the cut: last looped frame 125.8 ms, storm over 245 ms, ping answered by 292 ms, 0 frames in the next 0.5 s
+== a56a98e 6
+run 0 mesh 20 s: 11964 frames/s; each 5 s: 12004 11998 12000 12000
+   main thread: worst gap 6.0 ms, p99 4.4 (n=1020), 60 paints/s; threads: chromium MAIN 0.29, DedicatedWorker 0.09, ThreadPoolForeg 0.08, DedicatedWorker 0.07, DedicatedWorker 0.07, DedicatedWorker 0.07
+   renderers MB: 849 before, then each 5 s 972 1087 1098 1162
+   lab command and guest echo ms, each 5 s: 5/43 3/30 6/34 3/28
+   switch0 3000/s dropped 61738; b 3000/s dropped 61728; c 3000/s dropped 61728; d 3000/s dropped 61728
+   after the cut: last looped frame 125.8 ms, storm over 254 ms, ping answered by 300 ms, 0 frames in the next 0.5 s
+== x 6
+run 0 mesh 20 s: 11961 frames/s; each 5 s: 12002 12001 12002 11998
+   main thread: worst gap 6.2 ms, p99 4.2 (n=1023), 60 paints/s; threads: chromium MAIN 0.28, DedicatedWorker 0.09, ThreadPoolForeg 0.08, DedicatedWorker 0.07, DedicatedWorker 0.07, DedicatedWorker 0.07
+   renderers MB: 847 before, then each 5 s 969 1059 1082 1153
+   lab command and guest echo ms, each 5 s: 4/44 3/32 3/31 3/31
+   switch0 3000/s dropped 61840; b 3000/s dropped 61847; c 3000/s dropped 61847; d 3000/s dropped 61847
+   after the cut: last looped frame 126.6 ms, storm over 251 ms, ping answered by 296 ms, 0 frames in the next 0.5 s
+== cfd20a2 7
+run 0 mesh 20 s: 11964 frames/s; each 5 s: 11998 12003 12000 12000
+   main thread: worst gap 7.1 ms, p99 3.8 (n=1023), 60 paints/s; threads: chromium MAIN 0.26, DedicatedWorker 0.08, ThreadPoolForeg 0.07, DedicatedWorker 0.07, DedicatedWorker 0.07, DedicatedWorker 0.07
+   renderers MB: 846 before, then each 5 s 988 1064 1085 1153
+   lab command and guest echo ms, each 5 s: 4/42 3/33 4/31 4/32
+   switch0 3000/s dropped 61666; b 3000/s dropped 61674; c 3000/s dropped 61674; d 3000/s dropped 61674
+   after the cut: last looped frame 126.2 ms, storm over 251 ms, ping answered by 296 ms, 0 frames in the next 0.5 s
+== a56a98e 7
+run 0 mesh 20 s: 11964 frames/s; each 5 s: 12004 12000 12002 11998
+   main thread: worst gap 7.3 ms, p99 4.0 (n=1025), 60 paints/s; threads: chromium MAIN 0.27, DedicatedWorker 0.09, DedicatedWorker 0.08, ThreadPoolForeg 0.07, DedicatedWorker 0.07, ThreadPoolForeg 0.06
+   renderers MB: 838 before, then each 5 s 977 1054 1090 1156
+   lab command and guest echo ms, each 5 s: 7/41 3/32 10/36 10/32
+   switch0 3000/s dropped 61828; b 3000/s dropped 61828; c 3000/s dropped 61828; d 3000/s dropped 61828
+   after the cut: last looped frame 127.3 ms, storm over 257 ms, ping answered by 300 ms, 0 frames in the next 0.5 s
+== x 7
+run 0 mesh 20 s: 11965 frames/s; each 5 s: 12001 12000 12000 12000
+   main thread: worst gap 6.9 ms, p99 4.3 (n=1019), 60 paints/s; threads: chromium MAIN 0.29, ThreadPoolForeg 0.08, DedicatedWorker 0.08, DedicatedWorker 0.08, DedicatedWorker 0.07, ThreadPoolForeg 0.06
+   renderers MB: 840 before, then each 5 s 974 1070 1094 1161
+   lab command and guest echo ms, each 5 s: 3/43 2/29 11/29 2/29
+   switch0 3000/s dropped 61879; b 3000/s dropped 61869; c 3000/s dropped 61869; d 3000/s dropped 61869
+   after the cut: last looped frame 128.5 ms, storm over 237 ms, ping answered by 272 ms, 0 frames in the next 0.5 s
+== cfd20a2 8
+run 0 mesh 20 s: 11970 frames/s; each 5 s: 12004 12003 11998 12002
+   main thread: worst gap 6.0 ms, p99 4.0 (n=1025), 60 paints/s; threads: chromium MAIN 0.28, ThreadPoolForeg 0.10, DedicatedWorker 0.10, DedicatedWorker 0.08, DedicatedWorker 0.07, DedicatedWorker 0.07
+   renderers MB: 847 before, then each 5 s 982 1069 1092 1165
+   lab command and guest echo ms, each 5 s: 4/45 3/40 3/33 3/32
+   switch0 3000/s dropped 61750; b 3000/s dropped 61776; c 3000/s dropped 61776; d 3000/s dropped 61776
+   after the cut: last looped frame 127.0 ms, storm over 237 ms, ping answered by 275 ms, 0 frames in the next 0.5 s
+== a56a98e 8
+run 0 mesh 20 s: 11962 frames/s; each 5 s: 12004 12000 12000 12000
+   main thread: worst gap 8.0 ms, p99 4.0 (n=1026), 60 paints/s; threads: chromium MAIN 0.25, DedicatedWorker 0.08, ThreadPoolForeg 0.07, DedicatedWorker 0.07, DedicatedWorker 0.07, ThreadPoolForeg 0.06
+   renderers MB: 840 before, then each 5 s 980 1064 1084 1152
+   lab command and guest echo ms, each 5 s: 9/40 3/31 3/29 6/35
+   switch0 3000/s dropped 61558; b 3000/s dropped 61570; c 3000/s dropped 61570; d 3000/s dropped 61570
+   after the cut: last looped frame 130.4 ms, storm over 242 ms, ping answered by 282 ms, 0 frames in the next 0.5 s
+== x 8
+run 0 mesh 20 s: 11963 frames/s; each 5 s: 12004 12010 11993 12000
+   main thread: worst gap 5.0 ms, p99 3.7 (n=1027), 60 paints/s; threads: chromium MAIN 0.26, DedicatedWorker 0.09, DedicatedWorker 0.08, DedicatedWorker 0.08, DedicatedWorker 0.08, ThreadPoolForeg 0.07
+   renderers MB: 846 before, then each 5 s 985 1074 1099 1168
+   lab command and guest echo ms, each 5 s: 5/39 3/32 4/40 3/33
+   switch0 3000/s dropped 61861; b 3000/s dropped 61873; c 3000/s dropped 61873; d 3000/s dropped 61873
+   after the cut: last looped frame 126.4 ms, storm over 249 ms, ping answered by 293 ms, 0 frames in the next 0.5 s
+== cfd20a2 9
+run 0 mesh 20 s: 11967 frames/s; each 5 s: 11986 12001 12000 12005
+   main thread: worst gap 7.4 ms, p99 4.9 (n=1019), 60 paints/s; threads: chromium MAIN 0.30, DedicatedWorker 0.08, DedicatedWorker 0.08, ThreadPoolForeg 0.07, ThreadPoolForeg 0.07, DedicatedWorker 0.07
+   renderers MB: 844 before, then each 5 s 970 1064 1094 1161
+   lab command and guest echo ms, each 5 s: 4/36 5/35 3/33 3/31
+   switch0 3000/s dropped 61819; b 3000/s dropped 61845; c 3000/s dropped 61845; d 3000/s dropped 61845
+   after the cut: last looped frame 128.8 ms, storm over 236 ms, ping answered by 273 ms, 0 frames in the next 0.5 s
+== a56a98e 9
+run 0 mesh 20 s: 11963 frames/s; each 5 s: 12004 12008 11993 12005
+   main thread: worst gap 7.3 ms, p99 4.4 (n=1016), 60 paints/s; threads: chromium MAIN 0.29, DedicatedWorker 0.09, ThreadPoolForeg 0.08, ThreadPoolForeg 0.07, DedicatedWorker 0.07, DedicatedWorker 0.07
+   renderers MB: 842 before, then each 5 s 971 1070 1100 1155
+   lab command and guest echo ms, each 5 s: 3/37 4/29 4/32 4/29
+   switch0 3000/s dropped 61765; b 3000/s dropped 61767; c 3000/s dropped 61767; d 3000/s dropped 61767
+   after the cut: last looped frame 125.5 ms, storm over 256 ms, ping answered by 301 ms, 0 frames in the next 0.5 s
+== x 9
+run 0 mesh 20 s: 11959 frames/s; each 5 s: 12004 11998 12000 12000
+   main thread: worst gap 5.4 ms, p99 3.9 (n=1022), 60 paints/s; threads: chromium MAIN 0.27, DedicatedWorker 0.09, ThreadPoolForeg 0.08, DedicatedWorker 0.08, DedicatedWorker 0.08, ThreadPoolForeg 0.06
+   renderers MB: 848 before, then each 5 s 980 1082 1106 1164
+   lab command and guest echo ms, each 5 s: 7/38 4/35 9/34 3/29
+   switch0 3000/s dropped 61738; b 3000/s dropped 61738; c 3000/s dropped 61738; d 3000/s dropped 61738
+   after the cut: last looped frame 127.3 ms, storm over 258 ms, ping answered by 302 ms, 0 frames in the next 0.5 s
+== cfd20a2 10
+run 0 mesh 20 s: 11970 frames/s; each 5 s: 12001 12000 11999 12001
+   main thread: worst gap 5.8 ms, p99 4.3 (n=1022), 60 paints/s; threads: chromium MAIN 0.30, DedicatedWorker 0.08, DedicatedWorker 0.08, DedicatedWorker 0.07, DedicatedWorker 0.07, ThreadPoolForeg 0.06
+   renderers MB: 839 before, then each 5 s 977 1064 1085 1150
+   lab command and guest echo ms, each 5 s: 4/43 2/41 4/31 4/34
+   switch0 3000/s dropped 61783; b 3000/s dropped 61809; c 3000/s dropped 61809; d 3000/s dropped 61809
+   after the cut: last looped frame 126.4 ms, storm over 246 ms, ping answered by 285 ms, 0 frames in the next 0.5 s
+== a56a98e 10
+run 0 mesh 20 s: 11963 frames/s; each 5 s: 12003 11998 12002 11998
+   main thread: worst gap 8.4 ms, p99 4.2 (n=1019), 60 paints/s; threads: chromium MAIN 0.30, DedicatedWorker 0.08, DedicatedWorker 0.08, DedicatedWorker 0.08, DedicatedWorker 0.08, ThreadPoolForeg 0.07
+   renderers MB: 846 before, then each 5 s 975 1067 1089 1150
+   lab command and guest echo ms, each 5 s: 4/45 4/43 4/39 3/28
+   switch0 3000/s dropped 61648; b 3000/s dropped 61638; c 3000/s dropped 61638; d 3000/s dropped 61638
+   after the cut: last looped frame 127.0 ms, storm over 238 ms, ping answered by 275 ms, 0 frames in the next 0.5 s
+== x 10
+run 0 mesh 20 s: 11962 frames/s; each 5 s: 12001 12000 12000 12000
+   main thread: worst gap 7.4 ms, p99 3.8 (n=1024), 60 paints/s; threads: chromium MAIN 0.27, DedicatedWorker 0.09, DedicatedWorker 0.08, DedicatedWorker 0.07, DedicatedWorker 0.07, ThreadPoolForeg 0.06
+   renderers MB: 842 before, then each 5 s 980 1060 1083 1149
+   lab command and guest echo ms, each 5 s: 9/41 3/31 6/34 4/32
+   switch0 3000/s dropped 61873; b 3000/s dropped 61873; c 3000/s dropped 61873; d 3000/s dropped 61873
+   after the cut: last looped frame 125.0 ms, storm over 249 ms, ping answered by 295 ms, 0 frames in the next 0.5 s
+== cfd20a2 11
+run 0 mesh 20 s: 11969 frames/s; each 5 s: 11996 12003 12000 12008
+   main thread: worst gap 9.6 ms, p99 4.5 (n=1017), 60 paints/s; threads: chromium MAIN 0.29, DedicatedWorker 0.09, DedicatedWorker 0.08, ThreadPoolForeg 0.07, DedicatedWorker 0.07, DedicatedWorker 0.07
+   renderers MB: 844 before, then each 5 s 980 1077 1100 1160
+   lab command and guest echo ms, each 5 s: 4/47 11/34 8/38 3/33
+   switch0 3000/s dropped 61846; b 3000/s dropped 61872; c 3000/s dropped 61872; d 3000/s dropped 61872
+   after the cut: last looped frame 126.8 ms, storm over 256 ms, ping answered by 300 ms, 0 frames in the next 0.5 s
+== a56a98e 11
+run 0 mesh 20 s: 11963 frames/s; each 5 s: 12007 11998 12000 12000
+   main thread: worst gap 6.1 ms, p99 4.0 (n=1026), 60 paints/s; threads: chromium MAIN 0.24, DedicatedWorker 0.08, ThreadPoolForeg 0.07, DedicatedWorker 0.07, DedicatedWorker 0.06, DedicatedWorker 0.06
+   renderers MB: 841 before, then each 5 s 979 1065 1090 1159
+   lab command and guest echo ms, each 5 s: 3/43 3/30 9/33 4/30
+   switch0 3000/s dropped 61681; b 3000/s dropped 61678; c 3000/s dropped 61678; d 3000/s dropped 61678
+   after the cut: last looped frame 127.6 ms, storm over 258 ms, ping answered by 301 ms, 0 frames in the next 0.5 s
+== x 11
+run 0 mesh 20 s: 11959 frames/s; each 5 s: 12004 11998 12000 12002
+   main thread: worst gap 5.3 ms, p99 3.8 (n=1026), 60 paints/s; threads: chromium MAIN 0.27, DedicatedWorker 0.08, DedicatedWorker 0.08, ThreadPoolForeg 0.07, DedicatedWorker 0.07, DedicatedWorker 0.07
+   renderers MB: 852 before, then each 5 s 981 1079 1100 1168
+   lab command and guest echo ms, each 5 s: 4/44 3/30 6/33 3/29
+   switch0 3000/s dropped 61852; b 3000/s dropped 61852; c 3000/s dropped 61852; d 3000/s dropped 61852
+   after the cut: last looped frame 127.1 ms, storm over 254 ms, ping answered by 299 ms, 0 frames in the next 0.5 s
+== cfd20a2 12
+run 0 mesh 20 s: 11962 frames/s; each 5 s: 11998 12003 12000 12007
+   main thread: worst gap 7.5 ms, p99 3.9 (n=1022), 60 paints/s; threads: chromium MAIN 0.24, DedicatedWorker 0.08, DedicatedWorker 0.08, DedicatedWorker 0.08, ThreadPoolForeg 0.07, DedicatedWorker 0.06
+   renderers MB: 844 before, then each 5 s 981 1062 1087 1155
+   lab command and guest echo ms, each 5 s: 4/45 3/41 4/43 3/31
+   switch0 3000/s dropped 61783; b 3000/s dropped 61791; c 3000/s dropped 61791; d 3000/s dropped 61791
+   after the cut: last looped frame 127.4 ms, storm over 258 ms, ping answered by 302 ms, 0 frames in the next 0.5 s
+== a56a98e 12
+run 0 mesh 20 s: 11962 frames/s; each 5 s: 12001 12000 12000 11998
+   main thread: worst gap 6.1 ms, p99 3.6 (n=1030), 60 paints/s; threads: chromium MAIN 0.25, ThreadPoolForeg 0.08, DedicatedWorker 0.08, DedicatedWorker 0.08, DedicatedWorker 0.07, ThreadPoolForeg 0.06
+   renderers MB: 837 before, then each 5 s 979 1059 1083 1152
+   lab command and guest echo ms, each 5 s: 3/43 4/39 3/31 8/35
+   switch0 3000/s dropped 61891; b 3000/s dropped 61903; c 3000/s dropped 61903; d 3000/s dropped 61903
+   after the cut: last looped frame 126.6 ms, storm over 254 ms, ping answered by 300 ms, 0 frames in the next 0.5 s
+== x 12
+run 0 mesh 20 s: 11966 frames/s; each 5 s: 12003 12002 11998 12000
+   main thread: worst gap 6.7 ms, p99 4.3 (n=1018), 60 paints/s; threads: chromium MAIN 0.32, DedicatedWorker 0.09, ThreadPoolForeg 0.08, ThreadPoolForeg 0.07, DedicatedWorker 0.07, DedicatedWorker 0.07
+   renderers MB: 839 before, then each 5 s 965 1055 1089 1159
+   lab command and guest echo ms, each 5 s: 9/37 5/36 8/34 3/33
+   switch0 3000/s dropped 61882; b 3000/s dropped 61872; c 3000/s dropped 61872; d 3000/s dropped 61872
+   after the cut: last looped frame 126.3 ms, storm over 249 ms, ping answered by 285 ms, 0 frames in the next 0.5 s

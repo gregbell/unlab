@@ -1,4 +1,49 @@
-One broadcast round a triangle of switches for 20 s, and its cut, sides alternating: node .audit/phase2/cables/drive.mjs storm 1 <dist> triangle 20.
+One broadcast round a triangle of switches for 20 s, and its cut, sides in turn: node .audit/phase2/cables/drive.mjs storm 1 <dist> triangle 20.
+
+== cfd20a2 1
+run 0 triangle 20 s: 1479 frames/s; each 5 s: 1465 1480 1502 1496
+   main thread: worst gap 6.5 ms, p99 4.3 (n=1025), 60 paints/s; threads: chromium MAIN 0.24, ThreadPoolForeg 0.09, ThreadPoolForeg 0.09, ThreadPoolForeg 0.07, Compositor 0.06, ThreadPoolForeg 0.05
+   renderers MB: 757 before, then each 5 s 794 810 826 849
+   lab command and guest echo ms, each 5 s: 3/33 4/35 9/32 9/33
+   switch0 492/s dropped 0; lan 492/s dropped 0; wan 492/s dropped 0
+   after the cut: last looped frame 1.4 ms, storm over 117 ms, ping answered by 165 ms, 0 frames in the next 0.5 s
+== d1a4ead 1
+run 0 triangle 20 s: 1481 frames/s; each 5 s: 1493 1499 1468 1487
+   main thread: worst gap 5.3 ms, p99 4.1 (n=1024), 60 paints/s; threads: chromium MAIN 0.23, ThreadPoolForeg 0.11, ThreadPoolForeg 0.10, Compositor 0.05
+   renderers MB: 754 before, then each 5 s 793 818 840 855
+   lab command and guest echo ms, each 5 s: 3/32 3/28 12/29 5/34
+   switch0 490/s dropped 0; lan 491/s dropped 0; wan 491/s dropped 0
+   after the cut: last looped frame 0.3 ms, storm over 111 ms, ping answered by 147 ms, 0 frames in the next 0.5 s
+== cfd20a2 2
+run 0 triangle 20 s: 1471 frames/s; each 5 s: 1494 1458 1481 1482
+   main thread: worst gap 5.4 ms, p99 4.2 (n=1023), 60 paints/s; threads: chromium MAIN 0.26, ThreadPoolForeg 0.11, ThreadPoolForeg 0.09, Compositor 0.05
+   renderers MB: 752 before, then each 5 s 788 808 827 850
+   lab command and guest echo ms, each 5 s: 3/33 3/40 5/30 3/29
+   switch0 482/s dropped 0; lan 482/s dropped 0; wan 482/s dropped 0
+   after the cut: last looped frame 1.5 ms, storm over 119 ms, ping answered by 166 ms, 0 frames in the next 0.5 s
+== d1a4ead 2
+run 0 triangle 20 s: 1476 frames/s; each 5 s: 1482 1478 1480 1488
+   main thread: worst gap 8.1 ms, p99 4.2 (n=1025), 60 paints/s; threads: chromium MAIN 0.23, ThreadPoolForeg 0.10, ThreadPoolForeg 0.09, Compositor 0.05, DedicatedWorker 0.05
+   renderers MB: 754 before, then each 5 s 791 819 840 857
+   lab command and guest echo ms, each 5 s: 3/35 4/31 5/31 7/35
+   switch0 496/s dropped 0; lan 496/s dropped 0; wan 496/s dropped 0
+   after the cut: last looped frame 1.6 ms, storm over 122 ms, ping answered by 165 ms, 0 frames in the next 0.5 s
+== cfd20a2 3
+run 0 triangle 20 s: 1477 frames/s; each 5 s: 1502 1489 1489 1461
+   main thread: worst gap 5.7 ms, p99 4.2 (n=1025), 60 paints/s; threads: chromium MAIN 0.26, ThreadPoolForeg 0.09, ThreadPoolForeg 0.09, Compositor 0.06, ThreadPoolForeg 0.05, ThreadPoolForeg 0.05
+   renderers MB: 752 before, then each 5 s 790 816 833 856
+   lab command and guest echo ms, each 5 s: 6/35 6/34 7/29 3/31
+   switch0 480/s dropped 0; lan 480/s dropped 0; wan 480/s dropped 0
+   after the cut: last looped frame 1.5 ms, storm over 119 ms, ping answered by 167 ms, 0 frames in the next 0.5 s
+== d1a4ead 3
+run 0 triangle 20 s: 1477 frames/s; each 5 s: 1480 1470 1498 1491
+   main thread: worst gap 5.7 ms, p99 4.1 (n=1025), 60 paints/s; threads: chromium MAIN 0.25, ThreadPoolForeg 0.12, ThreadPoolForeg 0.07, Compositor 0.05
+   renderers MB: 755 before, then each 5 s 790 810 835 862
+   lab command and guest echo ms, each 5 s: 9/33 2/32 7/33 3/33
+   switch0 490/s dropped 0; lan 490/s dropped 0; wan 490/s dropped 0
+   after the cut: last looped frame 6.0 ms, storm over 129 ms, ping answered by 167 ms, 0 frames in the next 0.5 s
+
+The same against a56a98e, before every looped frame shared one record:
 
 == cfd20a2 1
 run 0 triangle 20 s: 1467 frames/s; each 5 s: 1450 1473 1483 1488

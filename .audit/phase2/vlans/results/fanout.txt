@@ -22,7 +22,7 @@ mesh of 8 switches, 1 join(s): 61023 unlooped, 138264 turns, 82.5 ms
 300 dense labs, seed 1: unlooped p50 2, p90 31256, p99 82748, max 106086; turns p50 1, p90 55268, p99 158561, max 184514
 worst {"turns":184514,"unlooped":106086,"ms":271,"caseSeed":4217005310,"cables":28,"accessOnly":false}; churn left 0 inconsistent; 0 threw
 
-== this commit
+== 0d91ca9, and d1a4ead has the same counts
 mesh of 4 switches, 0 join(s): 10 unlooped, 9 turns, 0.2 ms
 mesh of 4 switches, 1 join(s): 20 unlooped, 19 turns, 0.1 ms
 mesh of 4 switches, 2 join(s): 30 unlooped, 29 turns, 0.1 ms
@@ -33,6 +33,6 @@ mesh of 8 switches, 1 join(s): 96 unlooped, 95 turns, 0.2 ms
 300 dense labs, seed 1: unlooped p50 2, p90 35, p99 87, max 104; turns p50 1, p90 71, p99 161, max 180
 worst {"turns":180,"unlooped":104,"ms":0,"caseSeed":1111145947,"cables":30,"accessOnly":false}; churn left 0 inconsistent; 0 threw
 
-== this commit, 3,000 labs, seed 5
+== 0d91ca9, 3,000 labs, seed 5
 3000 dense labs, seed 5: unlooped p50 2, p90 33, p99 92, max 123; turns p50 1, p90 67, p99 169, max 219
 worst {"turns":219,"unlooped":121,"ms":0,"caseSeed":2562057197,"cables":30,"accessOnly":false}; churn left 0 inconsistent; 0 threw
