@@ -156,7 +156,7 @@ export class UnlabCommandBar extends UnlabElement {
 					aria-activedescendant=${chosen === null ? nothing : optionId(chosen)}
 					autocomplete="off"
 					spellcheck="false"
-					placeholder=${bar.open ? "type a verb, or pick one below" : (this.#lastLine.value ?? PLACEHOLDER)}
+					placeholder=${bar.open ? "type a verb, or pick one below" : (this.getAttribute("idle-placeholder") ?? this.#lastLine.value ?? PLACEHOLDER)}
 					.value=${live(bar.open ? bar.text : "")}
 					@input=${this.#onInput}
 					@keydown=${this.#onKeydown}

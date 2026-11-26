@@ -13,6 +13,12 @@ export interface Update {
 /** Newest first, and only what people notice in the lab. */
 export const UPDATES: readonly Update[] = [
 	{
+		date: "2026-11-26",
+		title: "Your lab has a desktop",
+		detail:
+			"Boot your first guests from Welcome. Open a machine or switch in Rack manager, follow its cables in Topology, and arrange terminals and captures in their own windows.",
+	},
+	{
 		date: "2026-11-25",
 		title: "Follow a packet from switch to switch",
 		detail:

@@ -25,22 +25,19 @@ for (const image of ["alpine", "debian"]) {
 		await form.getByRole("button", { name: "Boot 2 machines" }).click();
 
 		await expect(form).toHaveCount(0);
-		const rail = page.getByRole("complementary", { name: "Machines" });
-		for (const name of ["node1", "node2"]) {
-			await expect(rail.getByRole("button", { name: new RegExp(`^${name}\\b`) })).toContainText("up", {
-				timeout: 60_000,
-			});
-		}
-		await expect(page.getByText("2 of 2 ready")).toBeVisible();
-		await expect(page.getByText("2 of 2 links up")).toBeVisible();
+		const rack = page.getByRole("region", { name: "Rack manager" });
+		await expect(rack.getByText("2 links up")).toBeVisible({ timeout: 60000 });
+		await rack.getByRole("button", { name: "Configure node1" }).click();
 		await page.getByRole("button", { name: "Ping node2", exact: true }).click();
-		await expect(page.locator("#panel-node1-console")).toContainText(/(?:^|[ ,])0% packet loss/);
+		const terminal = page.getByRole("region", { name: "node1 · terminal", exact: true });
+		await expect(terminal.locator(".wterm")).toContainText(/(?:^|[ ,])0% packet loss/);
+		await rack.getByRole("button", { name: "Open capture" }).click();
 		await expect(
-			page.locator("unlab-capture[mode=dock]").getByRole("listitem").filter({ hasText: "echo reply" }).first(),
+			page.locator("unlab-capture[on-switch=switch0]").getByRole("listitem").filter({ hasText: "echo reply" }).first(),
 		).toBeVisible();
 		await page.reload();
 		await expect(form).toHaveCount(0);
-		await expect(page.getByText("2 of 2 ready")).toBeVisible({ timeout: 60000 });
+		await expect(rack.getByText("2 links up")).toBeVisible({ timeout: 60000 });
 		expect(errors).toEqual([]);
 	});
 }

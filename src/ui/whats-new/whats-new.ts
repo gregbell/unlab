@@ -46,7 +46,21 @@ export class UnlabWhatsNew extends UnlabElement {
 		if (event.target === this.#dialog) this.#dialog?.close();
 	};
 
+	#list() {
+		return byDate(UPDATES).map(
+			([date, updates]) => html`<section>
+								<h3><time datetime=${date}>${day.format(new Date(date))}</time></h3>
+								<ul role="list">${updates.map((update) => this.#row(update))}</ul>
+							</section>`,
+		);
+	}
 	override render(): TemplateResult {
+		if (this.hasAttribute("inline"))
+			return html`<details @toggle=${(e: Event) => {
+				if (e.currentTarget instanceof HTMLDetailsElement && e.currentTarget.open) this.#open();
+			}}>
+			<summary>What’s new${this.#dot ? html` <span class="dot"></span>` : nothing}</summary>${this.#list()}
+			<a href="${REPO_URL}/commits/main" target="_blank" rel="noopener noreferrer">Every change on GitHub</a></details>`;
 		return html`<button type="button" class="opener" aria-haspopup="dialog" @click=${() => this.#open()}>
 				What’s new${this.#dot ? html`<span class="dot"></span><span class="visually-hidden">, not seen yet</span>` : nothing}
 			</button>
@@ -59,12 +73,7 @@ export class UnlabWhatsNew extends UnlabElement {
 						</button>
 					</div>
 					<div class="scroll">
-						${byDate(UPDATES).map(
-							([date, updates]) => html`<section>
-								<h3><time datetime=${date}>${day.format(new Date(date))}</time></h3>
-								<ul role="list">${updates.map((update) => this.#row(update))}</ul>
-							</section>`,
-						)}
+						${this.#list()}
 					</div>
 					<p class="foot">
 						<a href="${REPO_URL}/commits/main" target="_blank" rel="noopener noreferrer">Every change on GitHub</a>

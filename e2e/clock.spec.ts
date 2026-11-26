@@ -10,6 +10,9 @@ test("a machine spawned after the page has sat open for minutes still boots", as
 	await page.keyboard.press("Control+/");
 	await page.keyboard.type("spawn 1 alpine");
 	await page.keyboard.press("Enter");
-	await expect(page.getByText("1 of 1 ready")).toBeVisible({ timeout: 60_000 });
+	await expect(page.getByRole("region", { name: "node1 · terminal", exact: true }).locator(".wterm")).toContainText(
+		"Welcome to Alpine Linux",
+		{ timeout: 60_000 },
+	);
 	await expect(page.getByText("did not boot")).toHaveCount(0);
 });

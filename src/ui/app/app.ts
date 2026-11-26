@@ -102,6 +102,8 @@ export class UnlabApp extends LitElement {
 	}
 
 	override render(): TemplateResult {
+		if (this.hasAttribute("desktop"))
+			return html`<unlab-desktop></unlab-desktop><div id=${ANNOUNCER} class="visually-hidden" role="status"></div>`;
 		const view = this.#view.value;
 		const agentPanel = this.#agentPanel.value;
 		const empty = this.#empty.value;
@@ -148,6 +150,7 @@ export class UnlabApp extends LitElement {
 
 	/** Esc leaves another view, then restores a maximised panel, then closes the agent panel. A terminal keeps its own Esc. */
 	readonly #onKeydown = (event: KeyboardEvent): void => {
+		if (this.hasAttribute("desktop")) return;
 		if (event.key !== "Escape" || event.defaultPrevented || modalOpen()) return;
 		if (event.target instanceof Node && this.querySelector("unlab-pane-area")?.contains(event.target)) return;
 		const { view, agentPanel, panels } = this.app.store.state;

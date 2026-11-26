@@ -87,6 +87,10 @@ async function main(): Promise<void> {
 	const schedule = frameScheduler();
 
 	const app = document.createElement("unlab-app");
+	if (new URLSearchParams(location.search).get("layout") !== "classic") {
+		await import("./ui/desktop/desktop.ts");
+		app.setAttribute("desktop", "");
+	}
 	const capture = createCaptureLog({
 		schedule,
 		now,

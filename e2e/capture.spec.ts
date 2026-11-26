@@ -42,7 +42,7 @@ async function read(page: Page, filter: string): Promise<readonly Row[]> {
 
 /** node1 and node4 in different subnets, with two routers and a switch of their own between them. */
 async function routed(page: Page): Promise<void> {
-	await page.goto("/");
+	await page.goto("/?layout=classic");
 	await expect(page.getByRole("heading", { name: "Your Linux lab in a tab." })).toBeVisible();
 	await typed(page, "mkswitch mid");
 	await typed(page, "mkswitch far");
@@ -292,7 +292,7 @@ test("a capture narrowed to one cable saves each of its frames once, and any oth
 });
 
 test("the capture says when a cable that is down is moved or unplugged, and why it is down", async ({ page }) => {
-	await page.goto("/");
+	await page.goto("/?layout=classic");
 	await expect(page.getByRole("heading", { name: "Your Linux lab in a tab." })).toBeVisible();
 	await typed(page, "spawn 2 alpine --no-gateway");
 	await status(page, "2 of 2 ready");
