@@ -138,6 +138,8 @@ export function startLink(deps: LinkDeps): Link {
 	let offering = false;
 	let toolsSaid = "";
 	const running = new Map<number, AbortController>();
+	/** Agents' calls, whose agent is gone with the CLI: nobody would read what they answer. */
+	const calls = new Map<number, AbortController>();
 	const answers = new Map<number, (yes: boolean) => void>();
 
 	const show = (cli: CliLink) => store.dispatchLink({ type: "cli/link", cli });
@@ -231,13 +233,13 @@ export function startLink(deps: LinkDeps): Link {
 			case "call": {
 				const { id, name, input } = message;
 				const abort = new AbortController();
-				running.set(id, abort);
+				calls.set(id, abort);
 				const asking = socket;
 				deps.tools
 					.call(name, input, abort.signal)
 					.catch((error: unknown) => ({ error: error instanceof Error ? error.message : String(error) }))
 					.then((reply) => {
-						if (running.get(id) === abort) running.delete(id);
+						if (calls.get(id) === abort) calls.delete(id);
 						if (socket !== asking) return;
 						say({ type: "reply", id, reply });
 					});
@@ -247,7 +249,7 @@ export function startLink(deps: LinkDeps): Link {
 				answers.get(message.id)?.(message.yes);
 				return;
 			case "abort":
-				running.get(message.id)?.abort(new Error("Stopped from the CLI."));
+				(running.get(message.id) ?? calls.get(message.id))?.abort(new Error("Stopped from the CLI."));
 				return;
 			case "complete": {
 				const { id, line, caret } = message;
@@ -267,9 +269,11 @@ export function startLink(deps: LinkDeps): Link {
 
 	function left(): void {
 		socket = undefined;
-		// What runs, runs on. What was not yet said yes to does not.
+		// What runs, runs on. What was not yet said yes to does not, and an agent's call is withdrawn.
 		for (const answer of [...answers.values()]) answer(false);
 		running.clear();
+		for (const call of calls.values()) call.abort(new Error("The CLI left."));
+		calls.clear();
 		if (linked) {
 			linked = false;
 			deps.machines(null);

@@ -370,3 +370,14 @@ describe("the agent's tools", () => {
 		expect(sockets.flatMap((s) => s.said).some((m) => m.type === "reply")).toBe(false);
 	});
 });
+
+test("an agent's call is withdrawn when the CLI goes, so a yes given later runs nothing", async () => {
+	const { link, linked, tools } = rig();
+	link.set(true);
+	const socket = await linked(["tools"]);
+	socket.hears({ type: "call", id: 3, name: "machines_remove", input: {} });
+	expect(tools.calls[0].signal.aborted).toBe(false);
+	socket.onclose?.();
+	expect(tools.calls[0].signal.aborted).toBe(true);
+	expect(tools.calls[0].signal.reason).toEqual(new Error("The CLI left."));
+});
