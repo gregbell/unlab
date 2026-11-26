@@ -22,7 +22,8 @@ function serve(dir) {
 	const server = createServer((req, res) => {
 		res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
 		res.setHeader("Cross-Origin-Embedder-Policy", "require-corp");
-		const path = req.url === "/" ? "/index.html" : req.url.split("?")[0];
+		const { pathname } = new URL(req.url, "http://localhost");
+		const path = pathname === "/" ? "/index.html" : pathname;
 		res.setHeader("content-type", TYPES[extname(path)] ?? "application/octet-stream");
 		try {
 			res.end(readFileSync(join(dir, path)));
@@ -46,7 +47,7 @@ async function withLab(dir, fn) {
 		const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
 		page.on("crash", () => errors.push("page crashed"));
 		page.on("pageerror", (e) => errors.push(String(e)));
-		await page.goto(`http://127.0.0.1:${server.address().port}/`);
+		await page.goto(`http://127.0.0.1:${server.address().port}/?layout=classic`);
 		await page.getByRole("heading", { name: "Your Linux lab in a tab." }).waitFor();
 		const lab = {
 			page,

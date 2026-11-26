@@ -11,14 +11,15 @@ const TYPES = { ".html": "text/html", ".js": "text/javascript", ".css": "text/cs
 const server = createServer((req, res) => {
 	res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
 	res.setHeader("Cross-Origin-Embedder-Policy", "require-corp");
-	const path = req.url === "/" ? "/index.html" : req.url.split("?")[0];
+	const { pathname } = new URL(req.url, "http://localhost");
+	const path = pathname === "/" ? "/index.html" : pathname;
 	res.setHeader("content-type", TYPES[extname(path)] ?? "application/octet-stream");
 	try { res.end(readFileSync(join(dir, path))); } catch { res.statusCode = 404; res.end(); }
 }).listen(0, "127.0.0.1");
 await new Promise((r) => server.once("listening", r));
 const browser = await chromium.launch({ executablePath: chromiumExecutable(), args: ["--enable-features=WebMCP"] });
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
-await page.goto(`http://127.0.0.1:${server.address().port}/`);
+await page.goto(`http://127.0.0.1:${server.address().port}/?layout=classic`);
 await page.getByRole("heading", { name: "Your Linux lab in a tab." }).waitFor();
 const typed = async (line) => { await page.keyboard.press("Control+/"); await page.getByRole("combobox", { name: "Command" }).waitFor(); await page.keyboard.type(line); await page.keyboard.press("Enter"); await wait(150); };
 const call = (name, input) => page.evaluate(async ([name, input]) => { const tool = (await document.modelContext.getTools()).find((t) => t.name === name); return JSON.parse(await document.modelContext.executeTool(tool, input)); }, [name, input]);
