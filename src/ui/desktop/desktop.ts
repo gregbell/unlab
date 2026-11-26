@@ -8,6 +8,8 @@ import {
 	disksOf,
 	type Machine,
 	nicPortsOf,
+	type PortCable,
+	type PortView,
 	parseSessionId,
 	type SessionId,
 	type SwitchName,
@@ -15,6 +17,7 @@ import {
 	selectFocused,
 	selectPorts,
 	selectRail,
+	selectStorm,
 	selectSubnets,
 } from "../../model/index.ts";
 import { addressStr } from "../../net/index.ts";
@@ -106,6 +109,8 @@ const mark = (w: Win): Icon =>
 const rect = (b: Box) => `left:${b.x}px;top:${b.y}px;width:${b.w}px;height:${b.h}px`;
 const edges = ["n", "ne", "e", "se", "s", "sw", "w", "nw"];
 const cap = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(n, hi));
+const farEnd = ({ to }: PortCable) => `${to.switch} port ${to.port}`;
+const taken = (ports: readonly PortView[]) => ports.filter((p) => p.state !== "empty").length;
 class Desktop extends UnlabElement {
 	private layout = loadLayout(storage, firstDesktop);
 	private utilities: Utility[] = [];
@@ -238,6 +243,8 @@ class Desktop extends UnlabElement {
 				before.machines !== next.machines ||
 				before.rail !== next.rail ||
 				before.switches !== next.switches ||
+				before.switchCables !== next.switchCables ||
+				before.storms !== next.storms ||
 				before.sessions !== next.sessions ||
 				before.keyboard !== next.keyboard ||
 				before.view !== next.view ||
@@ -729,7 +736,7 @@ class Desktop extends UnlabElement {
 				if (!this.lab.switches.includes(target.name)) return nothing;
 				title = target.name;
 				glyph = target.kind;
-				const free = selectPorts(target.name)(this.lab).find((p) => !p.machine);
+				const free = selectPorts(target.name)(this.lab).find((p) => p.state === "empty");
 				entries = [
 					...(this.context.anchor.hasAttribute("data-device-actions")
 						? []
@@ -982,12 +989,21 @@ class Desktop extends UnlabElement {
 			lab = this.lab;
 		const machine = device.kind === "machine" ? lab.machines[device.name] : undefined;
 		const ports = device.kind === "switch" ? selectPorts(device.name)(lab) : [];
+		const storm = device.kind === "switch" && selectStorm(device.name)(lab);
 
 		const detail = machine
 			? `${machine.spec.image} · ${machine.spec.cpus ?? 1} vCPU · ${machine.spec.memMiB} MiB`
-			: `${ports.filter((p) => p.machine).length} / ${ports.length} ports · ${device.kind === "switch" ? selectSubnets(device.name)(lab) : ""}`;
-		const summary = machine && machine.life.phase !== "ready" ? `${detail} · ${machine.life.phase}` : detail;
-		const portLabels = ports.map((p) => `Port ${p.port} · ${p.machine ? `${p.machine.label} · ${p.state}` : "Empty"}`);
+			: `${taken(ports)} / ${ports.length} ports · ${device.kind === "switch" ? selectSubnets(device.name)(lab) : ""}`;
+		const summary =
+			machine && machine.life.phase !== "ready"
+				? `${detail} · ${machine.life.phase}`
+				: storm
+					? `${detail} · storming`
+					: detail;
+		const portLabels = ports.map((p) => {
+			const held = p.machine?.label ?? (p.cable && `to ${farEnd(p.cable)}`);
+			return `Port ${p.port} · ${held ? `${held} · ${p.state}` : "Empty"}`;
+		});
 		const portStrip = ports.length
 			? html`<span class="dt-port-strip" aria-hidden="true">${ports.map(
 					(p, i) => html`<span class="dt-port-block" data-state=${p.state} title=${portLabels[i]}></span>`,
@@ -1070,19 +1086,23 @@ class Desktop extends UnlabElement {
 		})}</div>`;
 	}
 	private switchDetails(name: SwitchName) {
-		const ports = selectPorts(name)(this.lab);
-		return html`<div class="dt-config"><div class="dt-config-tools"><strong>${ports.filter((p) => p.machine).length} / ${ports.length} ports connected</strong>
+		const ports = selectPorts(name)(this.lab),
+			storm = selectStorm(name)(this.lab);
+		return html`<div class="dt-config"><div class="dt-config-tools"><strong>${taken(ports)} / ${ports.length} ports connected${storm ? " · storming" : ""}</strong>
 			<button class="dt-primary dt-terminal-icon" aria-label=${`Open capture for ${name}`} title="Open capture" @click=${() => this.capture(name)}>${icon("capture")}</button>
 			${this.deviceActionsButton({ kind: "switch", name })}</div>
 			<h3>Network</h3><dl><div><dt>Subnets</dt><dd>${selectSubnets(name)(this.lab)}</dd></div>
-			<div><dt>Links up</dt><dd>${ports.filter((p) => p.state === "up").length}</dd></div></dl>
+			<div><dt>Links up</dt><dd>${ports.filter((p) => p.state === "up").length}</dd></div>
+			${storm ? html`<div><dt>Storm</dt><dd>${storm.rate} looped frames a second · ${storm.dropped} dropped</dd></div>` : nothing}</dl>
 			<h3>Ports</h3><table class="dt-ports" aria-label=${`Ports on ${name}`}><thead><tr><th>Port</th><th>Machine</th><th>Link</th><th aria-label="Cable action"></th></tr></thead>
 			<tbody>${ports.map((p) => {
-				const m = p.machine;
+				const m = p.machine,
+					cable = p.cable,
+					line = m?.label ?? cable?.label;
 				return html`<tr><th scope="row">${p.port}</th>
-				<td>${m ? html`<button data-hue=${m.hue} class="dt-peer" title=${`Configure ${m.name}`} @click=${() => this.inspect({ kind: "machine", name: m.name })}>${m.label}</button>` : "Available"}</td>
-				<td data-state=${p.state}>${m ? p.state : "—"}</td>
-				<td>${m ? html`<button class="dt-primary" ?disabled=${!p.actionLabel} title=${p.actionLabel ?? nothing} @click=${() => this.run(`link ${p.state === "cut" ? "up" : "down"} ${m.label}`)}>${p.state === "cut" ? "Reconnect" : "Cut cable"}</button>` : html`<button class="dt-primary" @click=${() => this.patchInterface("", `${name}:${p.port}`)}>Patch</button>`}</td></tr>`;
+				<td>${m ? html`<button data-hue=${m.hue} class="dt-peer" title=${`Configure ${m.name}`} @click=${() => this.inspect({ kind: "machine", name: m.name })}>${m.label}</button>` : cable ? html`<button class="dt-peer" title=${`Inspect ${cable.to.switch}`} @click=${() => this.inspect({ kind: "switch", name: cable.to.switch })}>${farEnd(cable)}</button>` : "Available"}</td>
+				<td data-state=${p.state}>${line ? p.state : "—"}</td>
+				<td>${line ? html`<button class="dt-primary" ?disabled=${!p.actionLabel} title=${p.actionLabel ?? nothing} @click=${() => this.run(`link ${p.state === "cut" ? "up" : "down"} ${line}`)}>${p.state === "cut" ? "Reconnect" : "Cut cable"}</button>${cable ? html` <button class="dt-primary" title=${`Remove the cable to ${farEnd(cable)}`} @click=${() => this.run(`uncable ${cable.label}`)}>Remove</button>` : nothing}` : html`<button class="dt-primary" @click=${() => this.patchInterface("", `${name}:${p.port}`)}>Patch</button>`}</td></tr>`;
 			})}</tbody></table></div>`;
 	}
 	private topologyBody() {
@@ -1094,7 +1114,7 @@ class Desktop extends UnlabElement {
 		const nics = this.lab.rail.flatMap((n) => this.lab.machines[n]?.spec.nics.map((_, i) => `${n}:eth${i}`) ?? []);
 		const dest = this.lab.switches.flatMap((s) =>
 			selectPorts(s)(this.lab)
-				.filter((p) => !p.machine)
+				.filter((p) => p.state === "empty")
 				.map((p) => `${s}:${p.port}`),
 		);
 		const source = nics.includes(this.source) ? this.source : nics[0],
