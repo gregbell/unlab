@@ -32,6 +32,7 @@ function entry(bytes: Uint8Array, fields: Partial<Omit<FrameEntry, "kind" | "byt
 		noReply: false,
 		vlan: 1,
 		tagged: 0,
+		dropped: [],
 		...fields,
 		bytes,
 	};
@@ -337,6 +338,28 @@ describe("frameDetail of a frame in a VLAN", () => {
 		expect(d.did.slice(1)).toEqual([
 			["lan port 2 was down, so ", only(2), " never saw it."],
 			["lan ports 3 and 4 are not in vlan 10, so ", only(3), " and ", only(4), " never saw it."],
+		]);
+	});
+});
+
+describe("frameDetail of a frame that a cable dropped", () => {
+	it("says after what the switch did which cable dropped it and why, and who never saw it", () => {
+		const d = frameDetail(entry(ping(1, 2), { to: ports([2]), dropped: [{ port: 2, reason: "loss" }] }), machinesTo(3));
+		expect(d.did).toEqual([
+			["switch0 had learned ", only(2), " on port 2, so it forwarded the frame there only."],
+			["The cable out of port 2 lost it, so ", only(2), " never saw it."],
+		]);
+		const between = frameDetail(
+			entry(ping(1, 2), { to: ports([8]), dropped: [{ port: 8, reason: "rate" }] }),
+			machinesTo(3),
+		);
+		expect(between.did[1]).toEqual(["The cable out of port 8 had no room for it at its rate."]);
+	});
+
+	it("says of one that its cable dropped on the way from its machine that the switch never had it", () => {
+		const d = frameDetail(entry(ping(1, 2), { dropped: [{ port: 1, reason: "mtu" }] }), machinesTo(3));
+		expect(d.did).toEqual([
+			["The cable into port 1 carries no frame that long, by its MTU, so switch0 never had the frame."],
 		]);
 	});
 });

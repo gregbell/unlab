@@ -192,3 +192,102 @@ describe("the rows of frames in VLANs", () => {
 		expect(filtered("vlan 20 or vlan 1")).toEqual(["frame wan", "frame wan"]);
 	});
 });
+
+describe("the rows of frames that a cable dropped", () => {
+	const bit = (p: number) => 1 << (p - 1);
+
+	test("say which cable dropped each, by its port, and why: loss, rate or MTU", () => {
+		const { made } = log();
+		made.appendFrame({
+			switch: lan,
+			from: 1,
+			to: bit(2) | bit(8),
+			flood: "group",
+			frame: arpRequest(1, 2),
+			dropped: [
+				{ port: 2, reason: "loss" },
+				{ port: 8, reason: "rate" },
+			],
+		});
+		made.appendFrame({
+			switch: lan,
+			from: 1,
+			to: 0,
+			flood: null,
+			frame: ping(1, 2),
+			dropped: [{ port: 1, reason: "mtu" }],
+		});
+		made.appendFrame({ switch: lan, from: 1, to: bit(2), flood: null, frame: ping(1, 2) });
+		expect(made.tail(3).map((row) => (row.kind === "frame" ? [row.dropped, row.note] : null))).toEqual([
+			[
+				[
+					{ port: 2, reason: "loss" },
+					{ port: 8, reason: "rate" },
+				],
+				"flooded to lan ports 2 and 8 · dropped by the cable out of lan port 2: loss · dropped by the cable out of lan port 8: rate",
+			],
+			[[{ port: 1, reason: "mtu" }], "dropped by the cable into lan port 1: MTU"],
+			[undefined, null],
+		]);
+		expect(made.tail(1)[0]).not.toHaveProperty("dropped");
+	});
+
+	test("name no switch in a lab of one", () => {
+		const { made } = log(false);
+		made.appendFrame({
+			switch: lan,
+			from: 1,
+			to: bit(3),
+			flood: null,
+			frame: ping(1, 2),
+			dropped: [{ port: 3, reason: "loss" }],
+		});
+		expect(made.tail(1)).toMatchObject([{ note: "dropped by the cable out of port 3: loss" }]);
+	});
+
+	test("are kept by the terms that keep any frame: the cable's port, a protocol, a machine", () => {
+		const { made, filtered } = log();
+		made.appendFrame({
+			switch: lan,
+			from: 1,
+			to: bit(8),
+			flood: null,
+			frame: ping(1, 2),
+			dropped: [{ port: 8, reason: "loss" }],
+		});
+		made.appendFrame({
+			switch: wan,
+			from: 2,
+			to: 0,
+			flood: null,
+			frame: ping(3, 4),
+			dropped: [{ port: 2, reason: "loss" }],
+		});
+		expect(filtered("lan:8")).toEqual(["frame lan"]);
+		expect(filtered("wan:2 icmp")).toEqual(["frame wan"]);
+		expect(filtered("node3")).toEqual(["frame wan"]);
+		expect(filtered("arp")).toEqual([]);
+	});
+
+	test("count as taken in by a switch only when they reached it", () => {
+		const { made } = log();
+		made.appendFrame({
+			switch: lan,
+			from: 1,
+			to: bit(8),
+			flood: null,
+			frame: ping(1, 2),
+			dropped: [{ port: 8, reason: "loss" }],
+		});
+		made.appendFrame({
+			switch: lan,
+			from: 1,
+			to: 0,
+			flood: null,
+			frame: ping(1, 2),
+			dropped: [{ port: 1, reason: "loss" }],
+		});
+		expect(made.counters).toEqual({ in: 1, delivered: 1, flooded: 0 });
+		expect(made.frameCount).toBe(2);
+	});
+});

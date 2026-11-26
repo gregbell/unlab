@@ -3,7 +3,7 @@
 // bytes that name a machine marked by machine.
 
 import type { FrameEntry, RowNames } from "../../capture/index.ts";
-import { PORTS, type PortNo, type PortRef, portText } from "../../model/index.ts";
+import { type DropReason, PORTS, type PortNo, type PortRef, portText } from "../../model/index.ts";
 import {
 	arpAddrs,
 	BROADCAST_MAC,
@@ -292,7 +292,33 @@ function destination(e: FrameEntry, names: LabNames): Words {
 	return [macNamed(e, 0, names) ?? (byIp ? named(byIp.n, e) : macStr(f, 0))];
 }
 
+const DROPPED: Readonly<Record<DropReason, string>> = {
+	loss: "lost it",
+	rate: "had no room for it at its rate",
+	mtu: "carries no frame that long, by its MTU",
+};
+
+/** A sentence for each cable that dropped it, after what the switch did. */
+function dropped(e: FrameEntry, names: LabNames): Words[] {
+	return e.dropped.map(({ port, reason }) => {
+		const holder = names.holder({ switch: e.switch, port });
+		return sentence(
+			`The cable out of ${portWord(e, port, names)} ${DROPPED[reason]}`,
+			...(holder ? [", so ", holder, " never saw it."] : ["."]),
+		);
+	});
+}
+
 function did(e: FrameEntry, names: LabNames): Words[] {
+	const lost = e.dropped.find(({ port }) => port === e.from);
+	if (lost) {
+		const cable = `The cable into ${portWord(e, e.from, names)} ${DROPPED[lost.reason]}`;
+		return [sentence(`${cable}, so ${e.switch} never had the frame.`)];
+	}
+	return [...switched(e, names), ...dropped(e, names)];
+}
+
+function switched(e: FrameEntry, names: LabNames): Words[] {
 	const delivered = PORTS.filter((p) => e.to & (1 << (p - 1)));
 	const reached = list(delivered.map((p) => atPort(e, p, names)));
 	const f = e.bytes;
