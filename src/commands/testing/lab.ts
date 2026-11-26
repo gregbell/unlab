@@ -131,6 +131,8 @@ export function labWith(fixtures: readonly MachineFixture[], images: readonly Im
 		departedSwitches: [],
 		switches: [DEFAULT_SWITCH],
 		shownSwitch: DEFAULT_SWITCH,
+		switchCables: [],
+		storms: {},
 		sessions,
 		panes: { order: rail, parked: {}, focusStamp: {}, focusClock: 0, maximised: null, grid: { cols: 2, rows: 2 } },
 		keyboard: { kind: "none" },

@@ -91,6 +91,8 @@ describe("initialState", () => {
 				machines_remove: "ask",
 				switch_add: "run",
 				switch_remove: "ask",
+				switch_cable: "run",
+				switch_uncable: "run",
 				checkpoint_save: "run",
 				checkpoint_restore: "ask",
 				checkpoint_remove: "ask",

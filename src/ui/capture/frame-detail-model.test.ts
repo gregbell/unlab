@@ -27,6 +27,7 @@ function entry(bytes: Uint8Array, fields: Partial<Omit<FrameEntry, "kind" | "byt
 		from: 1,
 		to: 0,
 		flood: null,
+		looped: false,
 		names: NAMES,
 		noReply: false,
 		...fields,

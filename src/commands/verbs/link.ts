@@ -1,7 +1,11 @@
 import {
 	ACCEPTS,
+	type CableChange,
+	cableAt,
 	DEFAULT_SWITCH,
+	endsFrom,
 	isPlanError,
+	joined,
 	type LabState,
 	type Lifecycle,
 	type LinkChange,
@@ -12,14 +16,17 @@ import {
 	nicLabel,
 	nicPortsOf,
 	type PortNo,
+	type PortRef,
 	planLink,
 	plugsOf,
+	portName,
 	type SwitchName,
 	samePort,
 } from "../../model/index.ts";
 import { nicName } from "../../net/index.ts";
 import { defineVerb, machineNow, Refusal, refuse } from "../define.ts";
 import * as slots from "../grammar/slots.ts";
+import { cableLabel, LOOP } from "./cable.ts";
 import { andList, planErrorSentence, portOf, portsOn, skippedPart } from "./words.ts";
 
 /** `off` for a cable that is in, on a machine that is off: its link comes up when the machine boots. */
@@ -33,6 +40,12 @@ export interface CableState {
 	readonly switch?: SwitchName;
 	readonly port: PortNo | null;
 	readonly link: CableLink;
+}
+
+/** A cable between two switches as `link_set` reports it, from the port that named it. */
+export interface SwitchCableState extends PortRef {
+	readonly to: PortRef;
+	readonly link: "up" | "cut";
 }
 
 /** Null while the machine takes no change to its cables. */
@@ -61,6 +74,12 @@ function applied(lab: LabState, change: LinkChange): boolean {
 	return plug?.kind === "port" && samePort(plug.port, change.port) && (plug.link === "up") === change.up;
 }
 
+/** The cable between switches that the port names, as it is now. Null once it is gone. */
+function between(lab: LabState, port: PortRef): SwitchCableState | null {
+	const held = cableAt(lab, port);
+	return held ? { ...port, to: endsFrom(held, port)[1], link: held.link } : null;
+}
+
 const same = (a: NicRef, b: NicRef): boolean => a.machine === b.machine && a.nic === b.nic;
 
 type Kind = "cut" | "reconnect" | "plug";
@@ -81,7 +100,7 @@ function kindOf(change: LinkChange): Kind {
 export const link = defineVerb({
 	name: "link",
 	about: "plug or cut cables",
-	description: `Plug in (up) or cut (down) the switch cables of machines or of single NICs. Returns the port and link state per NIC, with the port's switch when the lab has several. A cable already as asked is left alone. A NIC that is unplugged goes into the lowest free port of ${DEFAULT_SWITCH}, and plug puts it in any. The cables of a machine that is off can be cut or plugged in; their links come up when it boots.`,
+	description: `Plug in (up) or cut (down) the switch cables of machines or of single NICs. Returns the port and link state per NIC, with the port's switch when the lab has several. A cable already as asked is left alone. A NIC that is unplugged goes into the lowest free port of ${DEFAULT_SWITCH}, and plug puts it in any. The cables of a machine that is off can be cut or plugged in; their links come up when it boots. A port names the cable in it (lan:3), also one between switches.`,
 	danger: false,
 	phases: ["ready", "off"],
 	grammar: { link: slots.choice("up plugs the cables in, down cuts them.", ["up", "down"]), machines: slots.cables() },
@@ -95,7 +114,10 @@ export const link = defineVerb({
 		const changes = planLink(lab, a.machines.nics, up);
 		if (isPlanError(changes)) return refuse(planErrorSentence(changes), "machines");
 		const unchanged = a.machines.nics.filter((ref) => !changes.some((c) => same(c, ref)) && cable(lab, ref) !== null);
-		return { up, changes, unchanged, skipped: a.machines.skipped };
+		// One that has gone since the line was read is left out, as a NIC that takes no change is.
+		const cables = a.machines.between.flatMap((port) => between(lab, port) ?? []);
+		const turned = cables.filter((now) => (now.link === "up") !== up);
+		return { up, changes, unchanged, cables, turned, skipped: a.machines.skipped };
 	},
 	describe(plan, lab) {
 		const names = (refs: readonly NicRef[]) => andList(refs.map((ref) => label(lab, ref)));
@@ -113,10 +135,18 @@ export const link = defineVerb({
 				),
 			];
 		});
+		for (const { to, ...port } of plan.turned) {
+			const loop = plan.up && joined(lab, port.switch, to.switch) ? [LOOP] : [];
+			parts.push(`${plan.up ? "reconnect" : "cut"} the cable from ${cableLabel(lab, [port, to])}`, ...loop);
+		}
+		const nothing = parts.length === 0 ? "change nothing: " : "";
+		const as = plan.up ? "up" : "cut";
 		if (plan.unchanged.length > 0) {
 			const are = plan.unchanged.length === 1 ? "is" : "are";
-			const lead = parts.length === 0 ? "change nothing: " : "";
-			parts.push(`${lead}${names(plan.unchanged)} ${are} already ${plan.up ? "up" : "cut"}`);
+			parts.push(`${nothing}${names(plan.unchanged)} ${are} already ${as}`);
+		}
+		for (const { to, ...port } of plan.cables.filter((now) => !plan.turned.includes(now))) {
+			parts.push(`${nothing}the cable from ${cableLabel(lab, [port, to])} is already ${as}`);
 		}
 		const off = [...new Set(plan.changes.map((c) => c.machine))].filter(
 			(name) => lab.machines[name]?.life.phase === "off",
@@ -125,14 +155,29 @@ export const link = defineVerb({
 		return [...parts, ...skippedPart(plan.skipped)].join(" · ");
 	},
 	async execute(plan, ctx, deps) {
+		const turned: readonly CableChange[] = plan.turned.map(({ switch: on, port }) => ({
+			port: { switch: on, port },
+			up: plan.up,
+		}));
 		deps.dispatch({ type: "cmd/link", changes: plan.changes, cause: ctx.source });
-		const settled = await deps.until((s) => plan.changes.every((c) => applied(s, c)), ctx.signal);
+		if (turned.length > 0) deps.dispatch({ type: "cmd/cable-link", changes: turned, cause: ctx.source });
+		const settled = await deps.until(
+			(s) =>
+				plan.changes.every((c) => applied(s, c)) &&
+				turned.every(({ port }) => (cableAt(s, port)?.link === "up") === plan.up),
+			ctx.signal,
+		);
 		const cables = [...plan.changes, ...plan.unchanged].flatMap((ref) => {
 			const now = cable(settled, ref);
 			return now ? [{ now, text: `${label(settled, ref)} ${now.link === "off" ? "plugged in" : now.link}` }] : [];
 		});
-		const text = cables.map((c) => c.text).join(", ");
-		return { kind: "visible", text: [text, ...skippedPart(plan.skipped)].join(" · "), data: cables.map((c) => c.now) };
+		const switched = plan.cables.flatMap((port) => {
+			const now = between(settled, port);
+			return now ? [{ now, text: `${portName(port)} ${now.link}` }] : [];
+		});
+		const all = [...cables, ...switched];
+		const text = all.map((c) => c.text).join(", ");
+		return { kind: "visible", text: [text, ...skippedPart(plan.skipped)].join(" · "), data: all.map((c) => c.now) };
 	},
 	tool: {
 		name: "link_set",

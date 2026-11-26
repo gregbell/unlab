@@ -85,3 +85,27 @@ describe("a lab saved by an earlier version", () => {
 		},
 	);
 });
+
+describe("a lab saved before there were cables between switches", () => {
+	test("version 7 opens with its switches and what was plugged into each, and has no such cable", async () => {
+		const { state, cables, booted } = await open(savedBy(7));
+		expect(state.switches).toEqual(["switch0", "lan", "wan"]);
+		expect(state.shownSwitch).toBe("lan");
+		expect(state.switchCables).toEqual([]);
+		expect(cables).toEqual([
+			["node1", "eth0 10.88.0.11/24 up on port 3"],
+			OFF[1],
+			cut("switch1"),
+			["node5", "eth0 10.1.0.1/24 up on port 4", "eth1 no address up on port 1", "eth2 10.2.0.1/24 cut on port 5"],
+			LOOSE,
+		]);
+		const on = (name: string) => machineList(state).find((machine) => machine.name === name)?.life;
+		expect(portsOf(on("node1") as never)).toEqual([{ switch: "lan", port: 3 }]);
+		expect(portsOf(on("node5") as never).map((port) => port.switch)).toEqual(["switch0", "wan", "switch0"]);
+
+		const saved = JSON.parse(saveWorkspace(state));
+		expect(saved).toMatchObject({ version: 8, switches: ["switch0", "lan", "wan"], cables: [] });
+		const again = await open(JSON.stringify(saved));
+		expect([again.cables, again.booted]).toEqual([cables, booted]);
+	});
+});

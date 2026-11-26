@@ -151,6 +151,7 @@ describe("rmswitch", () => {
 					{ machine: "node2", nic: "eth0" },
 					{ machine: "node3", nic: "eth0" },
 				],
+				cables: [],
 			},
 		});
 		expect(lab.store.state.switches).toEqual(["switch0"]);

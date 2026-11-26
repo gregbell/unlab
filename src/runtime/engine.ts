@@ -207,6 +207,12 @@ export function createEngine(deps: EngineDeps): Engine {
 			const name = slots[slot];
 			if (name) capture.appendFrame({ switch: name, ...e });
 		},
+		storm(slot, { since, rate, looped, dropped }, over) {
+			const name = slots[slot];
+			if (!name) return;
+			capture.appendStorm({ switch: name, over, looped, dropped, ms: now() - since });
+			dispatch({ type: "switch/storm", switch: name, storm: over ? null : { since, rate, dropped } });
+		},
 	});
 	const pump = createPump(fabric, deps.clock);
 
@@ -240,6 +246,23 @@ export function createEngine(deps: EngineDeps): Engine {
 		fabric.removeSwitch(entry.slot);
 		slots[entry.slot] = undefined;
 		switches.delete(name);
+	};
+
+	/** Whether the cable that goes from the first port to the second is in. */
+	const cabled = ([a, b]: readonly [PortRef, PortRef]): boolean => {
+		const from = switches.get(a.switch);
+		const far = from && fabric.farEnd(from.slot, a.port);
+		return far !== null && far !== undefined && far.slot === switches.get(b.switch)?.slot && far.port === b.port;
+	};
+
+	/** While a switch storms, the model has its numbers once a tick. */
+	const readStorms = () => {
+		for (const [name, { slot }] of switches) {
+			const reading = fabric.storm(slot, now());
+			if (!reading) continue;
+			const { since, rate, dropped } = reading;
+			dispatch({ type: "switch/storm", switch: name, storm: { since, rate, dropped } });
+		}
 	};
 
 	/** The vm a report came from, if it is still the one being listened to. */
@@ -501,6 +524,7 @@ export function createEngine(deps: EngineDeps): Engine {
 		const at = now();
 		capture.sweep(at);
 		settleQuiet(at);
+		readStorms();
 		dispatch({ type: "tick", now: at });
 	};
 
@@ -600,6 +624,26 @@ export function createEngine(deps: EngineDeps): Engine {
 				});
 				// Reserved, not live: the model raises the link when the machine is ready.
 				fabric.setLink(slot, port, false);
+				return;
+			}
+			case "cable/attach": {
+				if (cabled(effect.ends)) return;
+				const [a, b] = effect.ends;
+				unplug(a);
+				unplug(b);
+				const from = { slot: switchOf(a.switch).slot, port: a.port };
+				fabric.cable(from, { slot: switchOf(b.switch).slot, port: b.port });
+				// As a NIC's: the link is the model's to raise.
+				fabric.setLink(from.slot, from.port, false);
+				return;
+			}
+			case "cable/detach":
+				if (cabled(effect.ends)) unplug(effect.ends[0]);
+				return;
+			case "cable/link": {
+				const { ends, up, cause, plug, cut } = effect;
+				if (cabled(ends) && !cut) fabric.setLink(switchOf(ends[0].switch).slot, ends[0].port, up);
+				capture.appendCable({ ends, up, cause, plug, cut });
 				return;
 			}
 			case "port/detach":

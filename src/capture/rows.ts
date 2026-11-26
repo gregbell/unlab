@@ -7,6 +7,7 @@ import {
 	type MachineName,
 	PORTS,
 	type PortNo,
+	type PortRef,
 	portText,
 	type SwitchName,
 } from "../model/index.ts";
@@ -21,7 +22,7 @@ import {
 	nicName,
 	nicOfMac,
 } from "../net/index.ts";
-import type { CaptureCounters, CaptureEntry, FrameEntry, LinkEntry } from "./log.ts";
+import type { CableEntry, CaptureCounters, CaptureEntry, FrameEntry, LinkEntry, StormEntry } from "./log.ts";
 
 /** What a row has to name for the lab that it is read in. */
 export interface RowNames {
@@ -60,6 +61,8 @@ export interface FrameRow {
 	readonly info: string;
 	/** The lab's commentary after the info, or null. */
 	readonly note: string | null;
+	/** There when it had come back to a switch that it had left. */
+	readonly looped?: true;
 }
 
 export interface LinkRow {
@@ -76,10 +79,47 @@ export interface LinkRow {
 	readonly cause: string;
 }
 
-export type CaptureRow = FrameRow | LinkRow;
+/** A cable between two ports of switches was put in, cut, reconnected or taken out. */
+export interface CableRow {
+	readonly kind: "cable";
+	readonly seq: number;
+	readonly time: string;
+	readonly ends: readonly [PortRef, PortRef];
+	readonly up: boolean;
+	/** `lan port 3 and wan port 1 link down`. */
+	readonly text: string;
+	/** `Cable between them cut by you.` */
+	readonly cause: string;
+}
+
+/** Looped frames began to come into a switch, or have stopped. */
+export interface StormRow {
+	readonly kind: "storm";
+	readonly seq: number;
+	readonly time: string;
+	readonly switch: SwitchName;
+	readonly over: boolean;
+	/** `lan is storming`, `lan storm over`. */
+	readonly text: string;
+	readonly cause: string;
+}
+
+/** A row that says what happened to the lab, among the frames. */
+export type EventRow = LinkRow | CableRow | StormRow;
+
+export type CaptureRow = FrameRow | EventRow;
 
 export function captureRow(e: CaptureEntry, names: RowNames = PLAIN_NAMES): CaptureRow {
-	return e.kind === "frame" ? frameRow(e, names) : linkRow(e, names);
+	switch (e.kind) {
+		case "frame":
+			return frameRow(e, names);
+		case "link":
+			return linkRow(e, names);
+		case "cable":
+			return cableRow(e, names);
+		case "storm":
+			return stormRow(e);
+	}
 }
 
 const seconds = (ms: number): string => (ms / 1000).toFixed(2);
@@ -98,6 +138,7 @@ function frameRow(e: FrameEntry, names: RowNames): FrameRow {
 		len: e.bytes.length,
 		info: d.info,
 		note: note(e, on),
+		...(e.looped ? { looped: true } : {}),
 	};
 }
 
@@ -134,6 +175,7 @@ function portList(mask: number, on: SwitchName | null): string {
 
 function note(e: FrameEntry, on: SwitchName | null): string | null {
 	const parts: string[] = [];
+	if (e.looped) parts.push("looped");
 	if (e.flood === "group") parts.push(portList(e.to, on));
 	if (e.flood === "unknown") parts.push(`unknown destination, ${portList(e.to, on)}`);
 	if (e.noReply) parts.push("no reply");
@@ -185,6 +227,36 @@ function linkRow(e: LinkEntry, names: RowNames): LinkRow {
 				? `${e.machine} ${e.up ? "booted" : "stopped"}.`
 				: `${cableText(e, cable)} ${linkVerb(e)} by ${WHO[e.cause]}.`,
 	};
+}
+
+function cableVerb(e: CableEntry): string {
+	if (e.plug) return e.up ? "plugged in" : "unplugged";
+	return e.up ? "reconnected" : "cut";
+}
+
+function cableRow(e: CableEntry, names: RowNames): CableRow {
+	const [a, b] = e.ends.map(({ switch: on, port }) => portText(names.switchLabel(on), port));
+	const who = e.cause === "power" ? WHO.runtime : WHO[e.cause];
+	return {
+		kind: "cable",
+		seq: e.seq,
+		time: seconds(e.t),
+		ends: e.ends,
+		up: e.up,
+		text: `${a} and ${b} link ${e.up ? "up" : "down"}`,
+		cause: `${e.cut ? "Cut cable" : "Cable"} between them ${cableVerb(e)} by ${who}.`,
+	};
+}
+
+function stormRow(e: StormEntry): StormRow {
+	const row = { kind: "storm", seq: e.seq, time: seconds(e.t), switch: e.switch, over: e.over } as const;
+	if (!e.over) {
+		const cause = "Frames that go round a loop of cables keep coming into it, until a cable of the loop is cut.";
+		return { ...row, text: `${e.switch} is storming`, cause };
+	}
+	const took = `It took ${e.looped} looped frames in ${(e.ms / 1000).toFixed(1)} s`;
+	const dropped = e.dropped === 0 ? "" : `, and did not send on ${e.dropped} more that the lab had no room for`;
+	return { ...row, text: `${e.switch} storm over`, cause: `${took}${dropped}. It has forgotten its MAC table.` };
 }
 
 /** The footer, in the prototype's wording: `182 in · 183 delivered · 1 flooded`. */

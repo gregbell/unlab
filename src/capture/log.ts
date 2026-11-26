@@ -35,6 +35,8 @@ export interface FrameEntry {
 	readonly names: NameBook;
 	/** An ARP request that went a second unanswered. */
 	readonly noReply: boolean;
+	/** It had come back to a switch that it had left, round a loop of cables. */
+	readonly looped: boolean;
 }
 
 export interface LinkEntry extends LinkEvent {
@@ -44,7 +46,19 @@ export interface LinkEntry extends LinkEvent {
 	readonly names: NameBook;
 }
 
-export type CaptureEntry = FrameEntry | LinkEntry;
+export interface CableEntry extends CableEvent {
+	readonly kind: "cable";
+	readonly seq: number;
+	readonly t: number;
+}
+
+export interface StormEntry extends StormEvent {
+	readonly kind: "storm";
+	readonly seq: number;
+	readonly t: number;
+}
+
+export type CaptureEntry = FrameEntry | LinkEntry | CableEntry | StormEntry;
 
 /** One frame as a switch's tap reports it. */
 export interface SwitchedFrame {
@@ -53,6 +67,28 @@ export interface SwitchedFrame {
 	readonly to: number;
 	readonly flood: Flood | null;
 	readonly frame: Uint8Array;
+	readonly looped?: boolean;
+}
+
+/** A change to a cable between two ports of switches, or to its link. */
+export interface CableEvent {
+	readonly ends: readonly [PortRef, PortRef];
+	readonly up: boolean;
+	readonly cause: Cause;
+	/** The cable was put in or taken out, and not cut or reconnected. */
+	readonly plug?: true;
+	/** It was cut when it was taken out. */
+	readonly cut?: true;
+}
+
+/** Looped frames began to come into a switch, which is its storm, or the storm is over. */
+export interface StormEvent {
+	readonly switch: SwitchName;
+	readonly over: boolean;
+	/** What the storm has come to: the looped frames the switch took, those it did not send on, and how long it has lasted. */
+	readonly looped: number;
+	readonly dropped: number;
+	readonly ms: number;
 }
 
 export interface LinkEvent {
@@ -109,6 +145,8 @@ export interface CaptureView {
 export interface CaptureLog extends CaptureView {
 	appendFrame(f: SwitchedFrame): void;
 	appendLink(e: LinkEvent): void;
+	appendCable(e: CableEvent): void;
+	appendStorm(e: StormEvent): void;
 	setFilter(filter: CaptureFilter): void;
 	/** While paused, the switch keeps forwarding and the counters keep running, but no rows are added. */
 	setPaused(paused: boolean): void;
@@ -134,7 +172,7 @@ export interface CaptureOptions {
 export const NO_REPLY_MS = 1000;
 
 type StoredFrame = Omit<FrameEntry, "noReply"> & { noReply: boolean };
-type Stored = StoredFrame | LinkEntry;
+type Stored = StoredFrame | Exclude<CaptureEntry, FrameEntry>;
 /** What a machine asked of an address, however often. */
 interface Question {
 	readonly key: string;
@@ -212,7 +250,18 @@ export function createCaptureLog(opts: CaptureOptions): CaptureLog {
 
 	const at = (seq: number): Stored | undefined => (seq >= first && seq < next ? ring[seq % limit] : undefined);
 	const matchAt = (i: number): number => matches[(matchHead + i) % limit];
-	const passes = (e: Stored): boolean => (e.kind === "frame" ? filter.matchesFrame(e) : filter.matchesLink(e));
+	const passes = (e: Stored): boolean => {
+		switch (e.kind) {
+			case "frame":
+				return filter.matchesFrame(e);
+			case "link":
+				return filter.matchesLink(e);
+			case "cable":
+				return filter.matchesPlaces(e.ends);
+			case "storm":
+				return filter.matchesPlaces([{ switch: e.switch, port: null }]);
+		}
+	};
 	const index = (e: Stored) => {
 		if (!passes(e)) return;
 		matches[(matchHead + matchLen) % limit] = e.seq;
@@ -312,7 +361,7 @@ export function createCaptureLog(opts: CaptureOptions): CaptureLog {
 			return () => listeners.delete(fn);
 		},
 
-		appendFrame({ switch: on, from, to, flood, frame }) {
+		appendFrame({ switch: on, from, to, flood, frame, looped = false }) {
 			counters.in++;
 			for (let m = to; m; m &= m - 1) counters.delivered++;
 			if (flood) counters.flooded++;
@@ -340,6 +389,7 @@ export function createCaptureLog(opts: CaptureOptions): CaptureLog {
 				bytes: frame,
 				names: names(),
 				noReply: false,
+				looped,
 			};
 			push(e);
 			if (addrs?.op === 1 && addrs.spa !== addrs.tpa) ask(e, arpKey(addrs.spa, addrs.tpa));
@@ -349,6 +399,18 @@ export function createCaptureLog(opts: CaptureOptions): CaptureLog {
 		appendLink({ port, machine, nic, up, cause, plug, dead }) {
 			if (paused) return;
 			push({ kind: "link", seq: next, t: now(), port, machine, nic, up, cause, plug, dead, names: names() });
+			changed();
+		},
+
+		appendCable(e) {
+			if (paused) return;
+			push({ kind: "cable", seq: next, t: now(), ...e });
+			changed();
+		},
+
+		appendStorm(e) {
+			if (paused) return;
+			push({ kind: "storm", seq: next, t: now(), ...e });
 			changed();
 		},
 

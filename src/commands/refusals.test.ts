@@ -75,11 +75,28 @@ const lab = withCheckpoint(plain, "node2");
 
 const switched = withSwitch(plain, "lan");
 
+const wan = withSwitch(plain, "wan").switches[1];
+const two: LabState = { ...switched, switches: [...switched.switches, wan] };
+const cabled: LabState = {
+	...two,
+	switchCables: [
+		{
+			ends: [
+				{ switch: switched.switches[1], port: 3 },
+				{ switch: wan, port: 8 },
+			],
+			link: "up",
+		},
+	],
+};
+
 const LABS: Readonly<Record<string, LabState>> = {
 	checkpoint: plain,
 	boot: labWith([{ n: 1 }, { n: 2, phase: "off" }], images),
 	rmswitch: switched,
 	plug: switched,
+	cable: two,
+	uncable: cabled,
 };
 
 /** The labs that the examples make sense in: `boot` wants node2 off, and `checkpoint` a name that is free. */

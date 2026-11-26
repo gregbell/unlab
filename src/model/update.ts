@@ -1,3 +1,4 @@
+import { cable, linkCables, storm, uncable } from "./cables.ts";
 import { parseSessionId } from "./identity.ts";
 import {
 	bootStopped,
@@ -84,6 +85,8 @@ export const DEFAULT_POLICIES: Readonly<Record<ToolName, Policy>> = {
 	machines_remove: "ask",
 	switch_add: "run",
 	switch_remove: "ask",
+	switch_cable: "run",
+	switch_uncable: "run",
 	checkpoint_save: "run",
 	checkpoint_restore: "ask",
 	checkpoint_remove: "ask",
@@ -111,6 +114,8 @@ export function initialState(
 		departedSwitches: [],
 		switches: [DEFAULT_SWITCH],
 		shownSwitch: DEFAULT_SWITCH,
+		switchCables: [],
+		storms: {},
 		sessions: {},
 		panes: emptyPanes(gridFor(area.width, area.height)),
 		keyboard: NOWHERE,
@@ -173,6 +178,8 @@ function reduce(state: LabState, event: LabEvent): Step {
 			return checkpointUnsaved(state, event.machine, event.attempt, event.set, event.reason);
 		case "checkpoint/restored":
 			return restored(state, event.machine, event.attempt, event.set, event.at);
+		case "switch/storm":
+			return storm(state, event.switch, event.storm);
 		case "session/opened":
 			return sessionOpened(state, event.session);
 		case "session/ended":
@@ -209,6 +216,12 @@ function reduce(state: LabState, event: LabEvent): Step {
 			return link(state, event.changes, event.cause);
 		case "cmd/plug":
 			return plug(state, event.plan, event.cause);
+		case "cmd/cable":
+			return cable(state, event.plan, event.cause);
+		case "cmd/uncable":
+			return uncable(state, event.port, event.cause);
+		case "cmd/cable-link":
+			return linkCables(state, event.changes, event.cause);
 		case "cmd/shell":
 			return shell(state, event.machine);
 		case "cmd/focus":

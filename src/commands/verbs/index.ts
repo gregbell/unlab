@@ -1,5 +1,6 @@
 import type { AnyVerb } from "../define.ts";
 import { boot } from "./boot.ts";
+import { cable, uncable } from "./cable.ts";
 import { capture } from "./capture.ts";
 import { checkpoint } from "./checkpoint.ts";
 import { exec } from "./exec.ts";
@@ -20,10 +21,11 @@ import { spawn } from "./spawn.ts";
 import { topology } from "./topology.ts";
 import { write } from "./write.ts";
 
+export type { CabledSwitches, NewCable } from "./cable.ts";
 export type { CheckpointData } from "./checkpoint.ts";
 export type { ExecData, ExecRun } from "./exec.ts";
 export type { ForgetData } from "./forget.ts";
-export type { CableState } from "./link.ts";
+export type { CableState, SwitchCableState } from "./link.ts";
 export type { ListedMachine } from "./ls.ts";
 export type { SwitchData } from "./mkswitch.ts";
 export type { PluggedCable } from "./plug.ts";
@@ -35,6 +37,7 @@ export type { Topology } from "./topology.ts";
 export { MAX_TEXT_BYTES, type WriteData } from "./write.ts";
 export {
 	boot,
+	cable,
 	capture,
 	checkpoint,
 	exec,
@@ -52,6 +55,7 @@ export {
 	sh,
 	spawn,
 	topology,
+	uncable,
 	unplug,
 	write,
 };
@@ -71,6 +75,8 @@ export const VERBS: readonly AnyVerb[] = [
 	unplug,
 	mkswitch,
 	rmswitch,
+	cable,
+	uncable,
 	topology,
 	capture,
 	focus,

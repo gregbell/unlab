@@ -1,5 +1,8 @@
 import {
+	andList,
+	type HeldPort,
 	heldPorts,
+	holdsNic,
 	type LabState,
 	type Machine,
 	type MachineName,
@@ -10,6 +13,7 @@ import {
 	PORTS,
 	type PortNo,
 	plugsOf,
+	portName,
 	type SwitchName,
 } from "../../model/index.ts";
 import { NICS, type NicName, type NicNo, nicName } from "../../net/index.ts";
@@ -26,13 +30,28 @@ export interface NicEnd {
 	readonly state: Phase;
 }
 
+/** One port of a switch, where a cable from another port of a switch ends. */
+export interface PortEnd {
+	readonly kind: "port";
+	readonly switch: SwitchName;
+	readonly port: PortNo;
+}
+
 /** What is at the other end of a cable. */
-export type CableEnd = NicEnd;
+export type CableEnd = NicEnd | PortEnd;
 
 export interface ListedCable {
 	readonly to: CableEnd;
 	/** `down` for a cable that is whole, to a machine that is not ready. */
 	readonly link: "up" | "down" | "cut";
+}
+
+/** A switch that looped frames come into: one on a loop of cables, or one that such a loop reaches. */
+export interface ListedStorm {
+	/** Looped frames a second, as they came into it over the last second. */
+	readonly rate: number;
+	/** The frames it did not send on since the storm began, which is how the lab stays responsive. */
+	readonly dropped: number;
 }
 
 export interface ListedPort {
@@ -45,6 +64,8 @@ export interface ListedSwitch {
 	readonly name: SwitchName;
 	/** All eight. */
 	readonly ports: readonly ListedPort[];
+	/** There while it storms. */
+	readonly storm?: ListedStorm;
 }
 
 /** The lab's wiring as `topology_read` returns it. */
@@ -61,7 +82,9 @@ const end = ({ name, life }: Machine, nic: NicNo): NicEnd => ({
 	state: life.phase,
 });
 
-function cable(machine: Machine, nic: NicNo): ListedCable {
+function cable(held: HeldPort): ListedCable {
+	if (!holdsNic(held)) return { to: { kind: "port", ...held.far }, link: held.link };
+	const { machine, nic } = held;
 	const { life } = machine;
 	const plug = plugsOf(life)[nic];
 	const cut = plug?.kind === "port" && plug.link === "cut";
@@ -72,12 +95,14 @@ function topologyOf(lab: LabState): Topology {
 	return {
 		switches: lab.switches.map((name): ListedSwitch => {
 			const held = heldPorts(lab, name);
+			const storm = lab.storms[name];
 			return {
 				name,
 				ports: PORTS.map((port): ListedPort => {
 					const holder = held.find((other) => other.port === port);
-					return { port, cable: holder ? cable(holder.machine, holder.nic) : null };
+					return { port, cable: holder ? cable(holder) : null };
 				}),
+				...(storm ? { storm: { rate: storm.rate, dropped: storm.dropped } } : {}),
 			};
 		}),
 		unplugged: machineList(lab).flatMap((machine) => {
@@ -87,24 +112,34 @@ function topologyOf(lab: LabState): Topology {
 	};
 }
 
-function endText(lab: LabState, { machine, nic }: NicEnd): string {
+function endText(lab: LabState, to: CableEnd): string {
+	if (to.kind === "port") return portName(to);
+	const { machine, nic } = to;
 	const record = lab.machines[machine];
 	const no = NICS.find((k) => nicName(k) === nic);
 	return record && no !== undefined ? nicLabel(record, no) : `${machine}:${nic}`;
 }
 
 /** `node3 · down · booting`. A ready machine's state goes without saying. */
-function endLine(lab: LabState, to: NicEnd, link: string): string {
-	return [endText(lab, to), link, ...(to.state === "ready" ? [] : [to.state])].join(" · ");
+function endLine(lab: LabState, to: CableEnd, link: string): string {
+	return [endText(lab, to), link, ...(to.kind === "port" || to.state === "ready" ? [] : [to.state])].join(" · ");
 }
 
+const stormLine = ({ rate, dropped }: ListedStorm): string =>
+	`storming · ${rate} looped frames a second · ${dropped} dropped`;
+
 function rows(lab: LabState, { switches, unplugged }: Topology): readonly ReportRow[] {
-	const listed = switches.map(({ name, ports: all }): ReportRow => {
+	const listed = switches.map(({ name, ports: all, storm }): ReportRow => {
 		const taken = all.flatMap(({ port, cable }) =>
 			cable ? [`port ${port} · ${endLine(lab, cable.to, cable.link)}`] : [],
 		);
 		const free = all.flatMap(({ port, cable }) => (cable ? [] : [port]));
-		return { term: name, text: [...taken, ...(free.length === 0 ? [] : [`${ports(free)} · free`])].join("\n") };
+		const lines = [
+			...(storm ? [stormLine(storm)] : []),
+			...taken,
+			...(free.length === 0 ? [] : [`${ports(free)} · free`]),
+		];
+		return { term: name, text: lines.join("\n") };
 	});
 	if (unplugged.length === 0) return listed;
 	const loose = unplugged.map((nic) => endLine(lab, nic, "no cable"));
@@ -115,7 +150,7 @@ export const topology = defineVerb({
 	name: "topology",
 	about: "list switches, their ports and what is plugged in",
 	description:
-		"List the lab's wiring: every switch with its eight ports, what each port's cable goes to, and the cable's link: up, cut, or down when the machine at its end is not ready. Then the NICs that are plugged into no switch. Port 3 of lan is lan:3 to plug.",
+		"List the lab's wiring: every switch with its eight ports, what each port's cable goes to, and the cable's link: up, cut, or down when the machine at its end is not ready. A cable between switches is at both its ports. A switch that looped frames come into has storm: how many came in the last second, and how many it dropped. Then the NICs that are plugged into no switch. Port 3 of lan is lan:3 to plug, cable, uncable and link.",
 	danger: false,
 	grammar: {},
 	example: {},
@@ -125,7 +160,12 @@ export const topology = defineVerb({
 		const data = topologyOf(lab);
 		const all = data.switches.flatMap(({ ports }) => ports);
 		const taken = all.filter(({ cable }) => cable !== null).length;
-		const header = `${count(data.switches.length, "switch", "switches")} · ${taken} of ${all.length} ports taken`;
+		const storming = data.switches.flatMap(({ name, storm }) => (storm ? [name] : []));
+		const header = [
+			count(data.switches.length, "switch", "switches"),
+			`${taken} of ${all.length} ports taken`,
+			...(storming.length === 0 ? [] : [`${andList(storming)} storming`]),
+		].join(" · ");
 		return { kind: "report", header, blocks: [], rows: rows(lab, data), data };
 	},
 	tool: {

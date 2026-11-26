@@ -1,6 +1,8 @@
+import { uncableAll } from "./cables.ts";
 import { parseSwitchName } from "./identity.ts";
 import { nameHolder, unplugAll } from "./machines.ts";
-import { patch, step } from "./step.ts";
+import { without } from "./record.ts";
+import { andThen, patch, step } from "./step.ts";
 import {
 	type Cause,
 	DEFAULT_SWITCH,
@@ -61,12 +63,13 @@ export function addSwitch(state: LabState, { name }: SwitchPlan): Step {
 /** The links go down first, so the capture says which cables were in. */
 export function removeSwitch(state: LabState, name: SwitchName, cause: Cause): Step {
 	if (name === DEFAULT_SWITCH || !state.switches.includes(name)) return step(state);
-	const { state: alone, effects } = unplugAll(state, name, cause);
+	const { state: alone, effects } = andThen(unplugAll(state, name, cause), (s) => uncableAll(s, name, cause));
 	const [first, ...others] = alone.switches;
 	const next: LabState = {
 		...alone,
 		switches: [first, ...others.filter((other) => other !== name)],
 		departedSwitches: [...state.departedSwitches, name],
+		storms: without(alone.storms, name),
 	};
 	return step(showSwitch(next, next.shownSwitch), [
 		...effects,

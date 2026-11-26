@@ -3,7 +3,7 @@ import "./frame-detail.ts";
 import { html, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { live } from "lit/directives/live.js";
 import { createRef, type Ref, ref } from "lit/directives/ref.js";
-import type { CaptureRow, CaptureView, FrameRow, LinkRow, RouteEnd } from "../../capture/index.ts";
+import type { CaptureRow, CaptureView, EventRow, FrameRow, RouteEnd } from "../../capture/index.ts";
 import { andList, type SwitchName, selectNames, type UiEvent } from "../../model/index.ts";
 import { compileFilter, EVERYONE, type PcapFrame, toPcap } from "../../net/index.ts";
 import { clearIcon, pauseIcon, resumeIcon, Select, UnlabElement, windowButtons } from "../base/index.ts";
@@ -251,7 +251,7 @@ export class UnlabCapture extends UnlabElement {
 		const style = at.top === undefined ? nothing : `top: ${at.top}px`;
 		const position = at.position ?? nothing;
 		const size = at.size ?? nothing;
-		if (row.kind === "link") return this.#eventRow(row, at.role, style, position, size);
+		if (row.kind !== "frame") return this.#eventRow(row, at.role, style, position, size);
 		const full = this.mode === "full";
 		const selectable = at.role === "option";
 		return html`<div
@@ -277,7 +277,7 @@ export class UnlabCapture extends UnlabElement {
 	}
 
 	#eventRow(
-		row: LinkRow,
+		row: EventRow,
 		role: "listitem" | "option",
 		style: string | typeof nothing,
 		position: number | typeof nothing,
@@ -290,7 +290,7 @@ export class UnlabCapture extends UnlabElement {
 			aria-posinset=${position}
 			aria-setsize=${size}
 			aria-disabled=${role === "option" ? "true" : nothing}
-			data-up=${row.up}
+			data-up=${row.kind === "storm" ? row.over : row.up}
 		>
 			<span class="time">${row.time}</span>
 			<span class="text" title=${`${row.text}. ${row.cause}`}>${row.text}. ${row.cause}</span>
