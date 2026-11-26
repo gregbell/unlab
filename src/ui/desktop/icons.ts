@@ -16,6 +16,7 @@ const paths = {
 	patch: "M4 4v3c0 9 16-1 16 9v4 M2 3h4m12 18h4",
 	agent: "M5 6h14v13H5z M12 3v3M8 11h1m6 0h1m-7 5h6",
 	cpu: "M6 6h12v12H6z M9 2v4m6-4v4m-6 12v4m6-4v4M2 9h4m-4 6h4m12-6h4m-4 6h4",
+	memory: "M2 7h20v9H2z M6 10v3m4-3v3m4-3v3m4-3v3M5 16v3m4-3v3m6-3v3m4-3v3",
 	network: "M3 9h6v6H3z M15 3h6v6h-6z M15 15h6v6h-6z M9 12h3m3-6h-3v12h3",
 	chevron: "m8 10 4 4 4-4",
 	plus: "M12 5v14m-7-7h14",

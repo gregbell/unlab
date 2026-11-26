@@ -77,7 +77,7 @@ on, such as the ready ones for `exec` and the ones that are off or failed for `b
 
 | Command bar example | What it does                                                                                                     |
 | ------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `ls`                | List machines and their disks, and each network interface's MAC, address, port, and link.                        |
+| `ls`                | List machines with their memory and disks, and each network interface's MAC, address, port, and link.            |
 | `topology`          | List every switch and port, what is in it, its link and VLAN, its cable's conditions and drops, and what storms. |
 | `help reboot`       | Explain a command. `help` alone lists them all.                                                                  |
 
@@ -366,8 +366,9 @@ text that tries to instruct the agent, so unlab marks it as untrusted.
 
 ## Network and storage
 
-- A lab has up to eight machines and eight switches. It starts with `switch0`, which
-  stays. A switch has eight ports. A machine has one to four network interfaces, and
+- A lab has up to sixteen machines and eight switches. It starts with `switch0`, which
+  stays. A switch has eight ports, so more than eight plugged-in interfaces need a second
+  switch. A machine has one to four network interfaces, and
   each takes a port on a switch or is left unplugged. `link up` plugs one that is
   unplugged into `switch0`, and `plug` into any. A switch carries IPv4 traffic between its
   guests. A separate gateway on `eth0` provides access to package repositories, whichever
@@ -476,8 +477,12 @@ text that tries to instruct the agent, so unlab marks it as untrusted.
   those that are off, which stay off. Switches, ports and cable connections survive a
   reload. Shell processes and packet captures start fresh. One tab at a time owns the
   lab.
+- The machine list's heading, the desktop's status bar and `ls` say how much memory the
+  machines that run were given. One that is off or has failed holds none. Sixteen of
+  256 MiB are given 4 GiB.
 - A machine that the browser has no memory or storage left for fails with a sentence
-  that says which. Remove a machine or free some space, then use `boot`.
+  that says which, and the others run on. Remove a machine or free some space, then use
+  `boot`.
 
 ## Install packages
 

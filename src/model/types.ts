@@ -13,8 +13,9 @@ export type PortNo = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
 export type HueNo = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
 
 export const PORTS: readonly PortNo[] = [1, 2, 3, 4, 5, 6, 7, 8];
+/** A lab of more than eight machines has some that share one. */
 export const HUES: readonly HueNo[] = [1, 2, 3, 4, 5, 6, 7, 8];
-export const MAX_MACHINES = 8;
+export const MAX_MACHINES = 16;
 export const MAX_SWITCHES = 8;
 /** The switch that every lab has. */
 export const DEFAULT_SWITCH = "switch0" as const;
@@ -594,7 +595,8 @@ export interface CableChange {
 
 export type PlanError =
 	| NoPorts
-	| { readonly kind: "no-room"; readonly free: number; readonly wanted: number }
+	/** `limit` is what leaves no more room: the machines a lab holds, or the numbers it can give them, which are never used twice. */
+	| { readonly kind: "no-room"; readonly free: number; readonly wanted: number; readonly limit: "machines" | "numbers" }
 	| { readonly kind: "unknown-image"; readonly image: string }
 	| NameTaken<MachineName>
 	| { readonly kind: "address-taken"; readonly address: Address; readonly by: NicRef }

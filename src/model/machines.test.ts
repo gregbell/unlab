@@ -5,11 +5,13 @@ import { nameOf } from "../net/index.ts";
 import { identity } from "./identity.ts";
 import {
 	ACCEPTS,
-	firstFreeHues,
 	hostsFor,
 	isPlanError,
 	lowestFreePorts,
+	machineList,
+	memoryGiven,
 	nameBook,
+	nextHues,
 	planBoot,
 	planLink,
 	planSpawn,
@@ -607,15 +609,15 @@ describe("hues", () => {
 	test("each machine takes the first hue not in use, in order", () => {
 		const s = labWith(3);
 		expect(s.rail.map((name) => machine(s, name).hue)).toEqual([1, 2, 3]);
-		expect(firstFreeHues(s, 2)).toEqual([4, 5]);
+		expect(nextHues(s, 2)).toEqual([4, 5]);
 	});
 
 	test("a hue is held through failure and removal, and freed when the machine is gone", () => {
 		let s = labWith(3);
 		s = run(s, hasFailed("node1"), remove("node2"));
-		expect(firstFreeHues(s, 1)).toEqual([4]);
+		expect(nextHues(s, 1)).toEqual([4]);
 		s = run(s, hasStopped("node2"));
-		expect(firstFreeHues(s, 2)).toEqual([2, 4]);
+		expect(nextHues(s, 2)).toEqual([2, 4]);
 		s = run(s, spawnEvent(s, 2));
 		expect(machine(s, "node4").hue).toBe(2);
 		expect(machine(s, "node5").hue).toBe(4);
@@ -626,6 +628,42 @@ describe("hues", () => {
 		s = run(s, hasFailed("node2"));
 		s = run(s, bootEvent(s, "node2"));
 		expect(machine(s, "node2").hue).toBe(2);
+	});
+
+	test("past eight machines, each takes the hue that the fewest have, so none is on more than two", () => {
+		let s = labWith(8);
+		expect(nextHues(s, 3)).toEqual([1, 2, 3]);
+		s = run(s, spawnEvent(s, 8, { net: "none" }));
+		const hues = () => s.rail.map((name) => machine(s, name).hue);
+		expect(hues()).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8]);
+
+		s = run(s, remove("node3", "node11", "node6"), hasStopped("node3"), hasStopped("node11"), hasStopped("node6"));
+		expect(nextHues(s, 3)).toEqual([3, 3, 6]);
+		s = run(s, spawnEvent(s, 3, { net: "none" }));
+		expect(hues().slice(-3)).toEqual([3, 3, 6]);
+	});
+});
+
+describe("the memory the lab has given", () => {
+	test("is what each machine that runs was given: one that is off, has failed or is being removed holds none", () => {
+		const given = (s: LabState) => memoryGiven(machineList(s));
+		let s = emptyLab();
+		expect(given(s)).toBe(0);
+		s = run(s, spawnEvent(s, 1, { memMiB: 512 }));
+		s = run(s, spawnEvent(s, 3, { net: "none" }));
+		expect(given(s)).toBe(1280);
+		s = run(s, ...s.rail.map((name) => isReady(name)));
+		expect(given(s)).toBe(1280);
+		s = run(s, power("off", "node1"));
+		expect(given(s)).toBe(1280);
+		s = run(s, hasStopped("node1"));
+		expect(given(s)).toBe(768);
+		s = run(s, hasFailed("node2"));
+		expect(given(s)).toBe(512);
+		s = run(s, remove("node3"));
+		expect(given(s)).toBe(256);
+		s = run(s, bootEvent(s, "node1"));
+		expect(given(s)).toBe(768);
 	});
 });
 
@@ -736,20 +774,24 @@ describe("planSpawn", () => {
 	});
 
 	test("asking for more machines than there is room for says how much room there is", () => {
-		const s = labWith(6);
-		expect(planSpawn(s, 3, ALPINE)).toEqual({ kind: "no-room", free: 2, wanted: 3 });
-		expect(planSpawn(s, 3, UNPLUGGED)).toEqual({ kind: "no-room", free: 2, wanted: 3 });
+		let s = labWith(6);
+		s = run(s, spawnEvent(s, 8, { net: "none" }));
+		const short = { kind: "no-room", free: 2, wanted: 3, limit: "machines" };
+		expect(planSpawn(s, 3, ALPINE)).toEqual(short);
+		expect(planSpawn(s, 3, UNPLUGGED)).toEqual(short);
 		expect(planSpawn(s, 2, ALPINE)).toMatchObject({ machines: [{ ports: [port0(7)] }, { ports: [port0(8)] }] });
 	});
 
-	test("a lab holds eight machines, counting ones still being removed", () => {
+	test("a lab holds sixteen machines, counting ones still being removed", () => {
 		let s = labWith(8);
-		expect(planSpawn(s, 1, UNPLUGGED)).toEqual({ kind: "no-room", free: 0, wanted: 1 });
+		s = run(s, spawnEvent(s, 8, { net: "none" }));
+		const full = { kind: "no-room", free: 0, wanted: 1, limit: "machines" };
+		expect(planSpawn(s, 1, UNPLUGGED)).toEqual(full);
 		s = run(s, remove("node3"));
-		expect(planSpawn(s, 1, UNPLUGGED)).toEqual({ kind: "no-room", free: 0, wanted: 1 });
+		expect(planSpawn(s, 1, UNPLUGGED)).toEqual(full);
 		s = run(s, hasStopped("node3"));
 		expect(planSpawn(s, 1, ALPINE)).toEqual({
-			machines: [{ identity: identity(9), hue: 3, ports: [port0(3)], spec: alpineAt("10.88.0.19/24") }],
+			machines: [{ identity: identity(17), hue: 3, ports: [port0(3)], spec: alpineAt("10.88.0.27/24") }],
 			request: ALPINE,
 		});
 	});
@@ -765,11 +807,11 @@ describe("planSpawn", () => {
 			s = run(s, remove(...s.rail), ...s.rail.map((name) => hasStopped(name)));
 		}
 		expect(s.nextN).toBe(241);
-		expect(planSpawn(s, 5, ALPINE)).toEqual({ kind: "no-room", free: 4, wanted: 5 });
+		expect(planSpawn(s, 5, ALPINE)).toEqual({ kind: "no-room", free: 4, wanted: 5, limit: "numbers" });
 		s = run(s, spawnEvent(s, 4));
 		expect(s.rail).toEqual(["node241", "node242", "node243", "node244"]);
 		expect(addressText(machine(s, "node244"))).toBe("10.88.0.254");
-		expect(planSpawn(s, 1, ALPINE)).toEqual({ kind: "no-room", free: 0, wanted: 1 });
+		expect(planSpawn(s, 1, ALPINE)).toEqual({ kind: "no-room", free: 0, wanted: 1, limit: "numbers" });
 	});
 
 	test("isPlanError tells a plan from an error", () => {

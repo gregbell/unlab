@@ -4,6 +4,7 @@ import {
 	type Disk,
 	type LabState,
 	lowestFreePorts,
+	MAX_MACHINES,
 	type NicRef,
 	nicLabel,
 	type PlanError,
@@ -15,7 +16,7 @@ import {
 	type SwitchPlanError,
 	switchLabel,
 } from "../../model/index.ts";
-import { addressStr, ip4str, nicName, subnetStr } from "../../net/index.ts";
+import { addressStr, defaultName, ip4str, MAX_NODE, nicName, subnetStr } from "../../net/index.ts";
 import { list, type Selection } from "../grammar/slots.ts";
 
 export { andList };
@@ -86,15 +87,26 @@ export function nameTaken(
 	return `A ${by} is already called ${name}, so give another name${how}.`;
 }
 
+/** A machine's number is never used twice, so a lab that has given out the last can boot no more, however few it has. */
+function noRoom({ free, wanted, limit }: Extract<PlanError, { kind: "no-room" }>): string {
+	if (limit === "numbers") {
+		const last = defaultName(MAX_NODE);
+		return free === 0
+			? `The lab has numbered its machines up to ${last}, the last it can, so it can boot no more.`
+			: `The lab has room for ${count(free, "more machine")}, not ${wanted}, because ${last} is the last it can number.`;
+	}
+	return free === 0
+		? `The lab has all ${MAX_MACHINES} machines that it can, so remove one with rm first.`
+		: `The lab holds ${MAX_MACHINES} machines and has room for ${free} more, not ${wanted}.`;
+}
+
 /** A plan error from the model, as the verb says it. `ports` is what would make a switch's ports enough. */
 export function planErrorSentence(error: PlanError, ports = "remove a machine with rm to free its ports"): string {
 	switch (error.kind) {
 		case "no-ports":
 			return `${error.switch} has ${count(error.free, "free port")} and this takes ${error.wanted}, so ${ports}.`;
 		case "no-room":
-			return error.free === 0
-				? "The lab has no room for another machine, so remove one with rm first."
-				: `The lab has room for ${count(error.free, "more machine")}, not ${error.wanted}.`;
+			return noRoom(error);
 		case "unknown-image":
 			return `No image is called ${error.image}, so spawn another machine from an image that the lab has.`;
 		case "name-taken":

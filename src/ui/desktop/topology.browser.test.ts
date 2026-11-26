@@ -4,16 +4,13 @@ import { page, userEvent } from "vitest/browser";
 import { conditions } from "../../../test/support/conditions.ts";
 import {
 	DEFAULT_SWITCH,
-	isPlanError,
 	type LabEvent,
 	type LabState,
 	type MachineName,
 	type PortNo,
 	type PortRef,
-	planSpawn,
 	type Store,
 	type SwitchName,
-	update,
 	type VlanId,
 } from "../../model/index.ts";
 import {
@@ -255,36 +252,19 @@ describe("the Topology window", () => {
 
 /**
  * Eight switches, seven of them cabled to core, and sixteen machines, one of them with a NIC on each of switch0, lan
- * and wan and a fourth on switch0. A lab holds eight machines until story 6.1, so the eight past that are spawned into
- * the lab as if it had none yet, on switches where no machine is, and the two are put together. A cable with
- * conditions and two storms give the nodes their longest notes, and ports in VLANs and a trunk their longest titles.
+ * and wan and a fourth on switch0. A cable with conditions and two storms give the nodes their longest notes, and
+ * ports in VLANs and a trunk their longest titles.
  */
 function crowd(): LabState {
 	const leaves = [DEFAULT_SWITCH, lan, wan, dmz, edge, office, labs];
-	const eight = lab(
+	return lab(
 		...[lan, wan, dmz, core, edge, office, labs].map(addSwitch),
 		...leaves.map((leaf, i) => cable(port(core, i + 1), port(leaf, 8))),
 		spawn(2),
 		spawn(1, DEFAULT_SWITCH, lan, wan, DEFAULT_SWITCH),
 		spawn(2, lan),
 		spawn(3, wan),
-	);
-	const more = [dmz, dmz, edge, edge, office, office, labs, labs].reduce<LabState>(
-		(state, on) => {
-			const plan = planSpawn(state, 1, {
-				image: "alpine",
-				memMiB: 256,
-				disks: { root: "4", extra: [] },
-				gateway: false,
-				nics: [{ net: on, address: null }],
-			});
-			if (isPlanError(plan)) throw new Error(`cannot spawn on ${on}: ${plan.kind}`);
-			return update(state, { type: "cmd/spawn", plan, at: state.now }).state;
-		},
-		{ ...eight, rail: [], machines: {} },
-	);
-	const sixteen = { ...more, rail: [...eight.rail, ...more.rail], machines: { ...eight.machines, ...more.machines } };
-	return [
+		...[dmz, edge, office, labs].map((on) => spawn(2, on)),
 		vlan(port(lan, 1), 10),
 		vlan(port(wan, 1), 20),
 		vlan(port(dmz, 1), 30),
@@ -293,7 +273,7 @@ function crowd(): LabState {
 		{ type: "cmd/conditions", changes: [{ port: port(core, 3), conditions: conditions({ delay: 20 }) }] },
 		storm(core, true),
 		storm(lan, true),
-	].reduce<LabState>((state, event) => update(state, event as LabEvent).state, sixteen);
+	);
 }
 
 /** What makes a name or a note hard to read: another node over it, another node's name or note over a name, or a line across a name. */

@@ -89,6 +89,14 @@ const BOOT_TIMEOUT_REASON = `No prompt after ${BOOT_TIMEOUT_MS / 1000} s.`;
 export const FORCED_STOP = `It did not shut down in ${SHUTDOWN_MS / 1000} s, so it was stopped, and what it had not written to disk may be lost.`;
 const UNPLUGGED: Plug = { kind: "none" };
 
+/** The phases in which a machine has a worker, which is what holds its memory. */
+const RUNS: readonly Phase[] = ["booting", "ready", "stopping"];
+
+/** The memory that the machines hold now, in MiB: what each was given, for those that run. */
+export function memoryGiven(machines: readonly Machine[]): number {
+	return machines.reduce((sum, { life, spec }) => sum + (RUNS.includes(life.phase) ? spec.memMiB : 0), 0);
+}
+
 /** The machines in rail order, which is spawn order. */
 export function machineList(state: Pick<LabState, "machines" | "rail">): readonly Machine[] {
 	return state.rail.flatMap((name) => state.machines[name] ?? []);
@@ -190,10 +198,19 @@ export function lowestFreePorts(state: LabState, on: SwitchName, count: number):
 	return PORTS.filter((port) => !taken.has(port)).slice(0, Math.max(0, count));
 }
 
-/** Up to `count` hues no machine has, in palette order. A machine holds its hue in every phase. */
-export function firstFreeHues(state: LabState, count: number): readonly HueNo[] {
-	const used = new Set(machineList(state).map((machine) => machine.hue));
-	return HUES.filter((hue) => !used.has(hue)).slice(0, Math.max(0, count));
+/**
+ * A hue for each of `count` new machines, in palette order: one that no machine has while there is one, and
+ * then the one that the fewest have. A machine holds its hue in every phase.
+ */
+export function nextHues(state: LabState, count: number): readonly HueNo[] {
+	const held = new Map(HUES.map((hue) => [hue, 0]));
+	const holders = (hue: HueNo): number => held.get(hue) ?? 0;
+	for (const { hue } of machineList(state)) held.set(hue, holders(hue) + 1);
+	return Array.from({ length: Math.max(0, count) }, () => {
+		const hue = HUES.reduce((fewest, other) => (holders(other) < holders(fewest) ? other : fewest));
+		held.set(hue, holders(hue) + 1);
+		return hue;
+	});
 }
 
 /** The address a machine goes by: the first one the lab set on it, or null when it set none. */
@@ -252,8 +269,15 @@ export function planSpawn(state: LabState, count: number, request: SpawnRequest)
 	if (!state.images.some((image) => image.name === request.image))
 		return { kind: "unknown-image", image: request.image };
 	const used = state.rail.length;
-	const room = Math.max(0, Math.min(MAX_MACHINES - used, HUES.length - used, MAX_NODE + 1 - state.nextN));
-	if (count > room) return { kind: "no-room", free: room, wanted: count };
+	const numbers = MAX_NODE + 1 - state.nextN;
+	const room = Math.max(0, Math.min(MAX_MACHINES - used, numbers));
+	if (count > room)
+		return {
+			kind: "no-room",
+			free: room,
+			wanted: count,
+			limit: numbers < MAX_MACHINES - used ? "numbers" : "machines",
+		};
 	const names = Array.from({ length: count }, (_, i) => request.name ?? defaultName(state.nextN + i));
 	for (const [i, name] of names.entries()) {
 		const by = names.indexOf(name) < i ? "machine" : nameHolder(state, name);
@@ -265,7 +289,7 @@ export function planSpawn(state: LabState, count: number, request: SpawnRequest)
 		names.flatMap(() => nets),
 	);
 	if (isPlanError(ports)) return ports;
-	const machines = firstFreeHues(state, count).map((hue, i): SpawnPlan["machines"][number] => ({
+	const machines = nextHues(state, count).map((hue, i): SpawnPlan["machines"][number] => ({
 		identity: identity(state.nextN + i, names[i]),
 		hue,
 		ports: ports.slice(i * nets.length, (i + 1) * nets.length),

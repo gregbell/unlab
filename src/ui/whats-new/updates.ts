@@ -14,6 +14,13 @@ export interface Update {
 export const UPDATES: readonly Update[] = [
 	{
 		date: "2026-11-26",
+		title: "Boot sixteen machines",
+		detail:
+			"A lab now holds sixteen machines. A switch has eight ports, so add a switch for the ninth. The machine list, the desktop's status bar and ls say how much memory the running machines were given. A machine that powers off gives all of its memory back.",
+		example: "mkswitch lan",
+	},
+	{
+		date: "2026-11-26",
 		title: "Read the wiring in Topology",
 		detail:
 			"Hover over a switch or machine in Topology to read each of its cables, or Tab to it with a screen reader to hear them: the port or interface, where it goes, its state (up, cut, off), its VLAN or trunk, and its conditions.",

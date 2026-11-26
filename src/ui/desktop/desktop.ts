@@ -8,6 +8,7 @@ import {
 	DEFAULT_SWITCH,
 	disksOf,
 	type Machine,
+	memoryGiven,
 	NOTHING_CARRIED,
 	nicPortsOf,
 	type PortCable,
@@ -959,7 +960,7 @@ class Desktop extends UnlabElement {
 			cpus = ms.reduce((sum, m) => sum + (m.spec.cpus ?? 1), 0);
 		const peak = Math.max(1, ...this.network),
 			points = this.network.map((n, i) => `${i * 2.4},${17 - (14 * n) / peak}`).join(" ");
-		return html`<div class="dt-status" aria-label="Lab status"><span title=${`${ready} of ${ms.length} machines ready`}><i class="dt-led" data-ready=${ready === ms.length && ready > 0}></i>${ms.length} machines</span><span title="Virtual CPUs configured across all machines">${icon("cpu")}${cpus} vCPU</span><span title="Frames received by lab switches per second">${icon("network")}${this.network.at(-1)} pkt/s<svg class="dt-spark" viewBox="0 0 42 20" aria-hidden="true"><polyline points=${points}></polyline></svg></span></div>`;
+		return html`<div class="dt-status" aria-label="Lab status"><span title=${`${ready} of ${ms.length} machines ready`}><i class="dt-led" data-ready=${ready === ms.length && ready > 0}></i>${ms.length} machines</span><span title="Virtual CPUs configured across all machines">${icon("cpu")}${cpus} vCPU</span><span title="Memory given to the machines that are running">${icon("memory")}${memoryGiven(ms)} MiB</span><span title="Frames received by lab switches per second">${icon("network")}${this.network.at(-1)} pkt/s<svg class="dt-spark" viewBox="0 0 42 20" aria-hidden="true"><polyline points=${points}></polyline></svg></span></div>`;
 	}
 	private inspect(device: Device) {
 		if (device.kind === "machine") {

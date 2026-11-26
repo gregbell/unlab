@@ -25,6 +25,7 @@ import {
 	HUES,
 	type Identity,
 	type LabState,
+	MAX_MACHINES,
 	MAX_SWITCHES,
 	type NicSpec,
 	NO_CONDITIONS,
@@ -303,7 +304,7 @@ const VERSION = UPGRADES.length + 1;
 /** The lab as this version would have saved it. */
 function readLab(raw: string): SavedLab {
 	const saved: unknown = JSON.parse(raw);
-	if (!record(saved) || !Array.isArray(saved.nodes) || saved.nodes.length > HUES.length) return invalid();
+	if (!record(saved) || !Array.isArray(saved.nodes) || saved.nodes.length > MAX_MACHINES) return invalid();
 	const { version } = saved;
 	if (!isCount(version) || version < 1 || version > VERSION) return invalid();
 	const nodes = saved.nodes.map((node: unknown): SavedNode => {
@@ -356,7 +357,7 @@ export function restoreWorkspace(base: LabState, raw: string | null): Step {
 			!Number.isSafeInteger(m.memMiB) ||
 			m.memMiB < 1 ||
 			switches.some((name) => name === id.name) ||
-			nodes.some((node) => node.identity.n === id.n || node.identity.name === id.name || node.hue === hue)
+			nodes.some((node) => node.identity.n === id.n || node.identity.name === id.name)
 		)
 			return invalid();
 		nodes.push({

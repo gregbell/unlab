@@ -63,7 +63,7 @@ test("an agent lists, asks to remove node2, and node2 goes once the person click
 	await expect(panel.getByRole("heading", { name: "webmcp" })).toBeVisible();
 
 	const listed = await call(page, "machines_list", {});
-	expect(listed).toMatchObject({ result: "2 machines · 2 ready" });
+	expect(listed).toMatchObject({ result: "2 machines · 2 ready · 512 MiB of memory" });
 	await expect(panel.locator(".call").first()).toContainText("ls");
 	await expect(panel.locator(".call").first()).toContainText("→ 2 machines · 2 ready");
 	await expect(page.getByRole("contentinfo").getByRole("button", { name: /agent active/ })).toBeVisible();

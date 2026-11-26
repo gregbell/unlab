@@ -11,6 +11,7 @@ import {
 	type Machine,
 	type MachineName,
 	machineList,
+	memoryGiven,
 	type NicName,
 	NO_CONDITIONS,
 	nicMac,
@@ -54,6 +55,8 @@ export interface ListedMachine {
 	readonly state: Phase;
 	/** The first address the lab set on it, or null. */
 	readonly address: string | null;
+	/** What it was given, which it holds while it boots, is ready or stops. */
+	readonly memoryMiB: number;
 	/** Whether eth0 reaches the package gateway. */
 	readonly gateway: boolean;
 	/** That gateway leads to the internet, as it does while a CLI is linked. */
@@ -93,6 +96,7 @@ function listed(lab: LabState, m: Machine): ListedMachine {
 		name: m.name,
 		state: m.life.phase,
 		address: address && ip4str(address.ip),
+		memoryMiB: m.spec.memMiB,
 		gateway: m.spec.gateway,
 		...(gatewayReach(lab, m) === "internet" ? { internet: true } : {}),
 		nics,
@@ -153,21 +157,21 @@ function lines(m: ListedMachine): string {
 	return [...m.nics.map((nic) => `${nic.name} · ${nicLine(nic)}`), rest].join("\n");
 }
 
-function header(rows: readonly ListedMachine[]): string {
+function header(machines: readonly Machine[], rows: readonly ListedMachine[]): string {
 	if (rows.length === 0) return "no machines yet";
 	const phases: readonly Phase[] = ["ready", "booting", "restoring", "stopping", "off", "failed", "removing"];
 	const tally = phases.flatMap((phase) => {
 		const n = rows.filter((r) => r.state === phase).length;
 		return n === 0 ? [] : [`${n} ${phase}`];
 	});
-	return `${count(rows.length, "machine")} · ${tally.join(", ")}`;
+	return `${count(rows.length, "machine")} · ${tally.join(", ")} · ${memoryGiven(machines)} MiB of memory`;
 }
 
 export const ls = defineVerb({
 	name: "ls",
 	about: "list machines, addresses, links and disks",
 	description:
-		"List every machine with its state (booting, ready, stopping, off, restoring, failed or removing), why it failed, and its sessions, disks, checkpoints and NICs. A checkpoint has the bytes of storage it takes. Each NIC has its MAC, the address and prefix the lab set, switch port and link, the port's switch when the lab has several, and its cable's conditions if it has any. Only a ready machine runs commands and takes files.",
+		"List every machine with its state (booting, ready, stopping, off, restoring, failed or removing), why it failed, and its memory, sessions, disks, checkpoints and NICs. A machine holds its memory while it boots, is ready or stops. A checkpoint has the bytes of storage it takes. Each NIC has its MAC, the address and prefix the lab set, switch port and link, the port's switch when the lab has several, and its cable's conditions if it has any. Only a ready machine runs commands and takes files.",
 	danger: false,
 	grammar: {},
 	example: {},
@@ -184,7 +188,7 @@ export const ls = defineVerb({
 				focus: m.life.phase === "removing" ? null : m.activeSession,
 			}),
 		);
-		return { kind: "report", header: header(rows), blocks, data: rows };
+		return { kind: "report", header: header(plan.machines, rows), blocks, data: rows };
 	},
 	tool: {
 		name: "machines_list",

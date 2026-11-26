@@ -374,12 +374,15 @@ describe("a tool set to run", () => {
 	it("runs at once, logs the bar line as the agent's, and settles with a short result", async () => {
 		const { call, lastCall, store } = await setup();
 		const reply = await call("machines_list", {});
-		expect(reply).toMatchObject({ result: "2 machines · 2 ready", data: [{ name: "node1" }, { name: "node2" }] });
+		expect(reply).toMatchObject({
+			result: "2 machines · 2 ready · 512 MiB of memory",
+			data: [{ name: "node1" }, { name: "node2" }],
+		});
 		expect(lastCall()).toMatchObject({
 			tool: "machines_list",
 			line: "ls",
 			status: "done",
-			result: "2 machines · 2 ready",
+			result: "2 machines · 2 ready · 512 MiB of memory",
 			via: "webmcp",
 		});
 		expect(selectRecent(store.state)[0]).toMatchObject({ line: "ls", source: "agent", outcome: "ok" });

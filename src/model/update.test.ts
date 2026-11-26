@@ -30,6 +30,7 @@ import {
 } from "./testkit.ts";
 import {
 	type Effect,
+	HUES,
 	type LabEvent,
 	type LabState,
 	LOG_LIMIT,
@@ -1302,7 +1303,7 @@ function checkLab(s: LabState, world: World): void {
 	expect(new Set(s.rail).size).toBe(s.rail.length);
 	expect(Object.keys(s.machines).sort()).toEqual([...s.rail].sort());
 	expect(machines.length).toBeLessThanOrEqual(MAX_MACHINES);
-	expect(new Set(machines.map((m) => m.hue)).size).toBe(machines.length);
+	for (const hue of HUES) expect(machines.filter((m) => m.hue === hue).length).toBeLessThanOrEqual(2);
 	for (const m of machines) expect(m.n).toBeLessThan(s.nextN);
 
 	const sessionIds = machines.flatMap((m) => m.sessions);

@@ -159,7 +159,12 @@ test("what cannot run is refused in one sentence, the same in the bar and throug
 			{ count: 1, image: "arch" },
 			"No image is called arch, so use alpine, debian or lab.",
 		],
-		["spawn 9 alpine", "machines_spawn", { count: 9, image: "alpine" }, "The lab has room for 6 more machines, not 9."],
+		[
+			"spawn 15 alpine --no-net",
+			"machines_spawn",
+			{ count: 15, image: "alpine", net: "none" },
+			"The lab holds 16 machines and has room for 14 more, not 15.",
+		],
 		[
 			"spawn 1 alpine --mem 9999",
 			"machines_spawn",

@@ -13,7 +13,7 @@ describe("ls", () => {
 			const result = await command.run({}, { source: "agent", signal: new AbortController().signal });
 			expect(result).toMatchObject({
 				kind: "report",
-				header: `1 machine · 1 ${phase}`,
+				header: `1 machine · 1 ${phase} · ${["booting", "ready", "stopping"].includes(phase) ? 256 : 0} MiB of memory`,
 				blocks: [{ status: { kind: "state", text: phase } }],
 				data: [{ name: "node1", state: phase, ...(phase === "failed" ? { reason: "No prompt after 120 s." } : {}) }],
 			});
@@ -31,7 +31,7 @@ describe("ls", () => {
 
 		const result = await lab.run("ls");
 		if (result.kind !== "report") throw new Error("ls reports");
-		expect(result.header).toBe("5 machines · 3 ready, 1 booting, 1 failed");
+		expect(result.header).toBe("5 machines · 3 ready, 1 booting, 1 failed · 1024 MiB of memory");
 		expect(result.blocks.map((b) => [b.machine, b.status, b.lastLine, b.focus])).toEqual([
 			[
 				"node1",
@@ -63,6 +63,7 @@ describe("ls", () => {
 			name: "node2",
 			state: "ready",
 			address: "10.88.0.12",
+			memoryMiB: 256,
 			gateway: true,
 			nics: [{ name: "eth0", mac: "52:54:00:88:00:0c", address: "10.88.0.12", prefix: 24, port: 2, link: "cut" }],
 			disks: [{ device: "/dev/wdb", gib: 4 }],

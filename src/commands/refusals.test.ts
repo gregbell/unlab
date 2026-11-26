@@ -244,7 +244,11 @@ const ROWS: readonly Row[] = [
 		["machines_spawn", { count: "lots", image: "alpine" }],
 	],
 	["spawn 0 alpine", "spawn wants a count such as 2 here, not 0.", ["machines_spawn", { count: 0, image: "alpine" }]],
-	["spawn 9 alpine", "The lab has room for 3 more machines, not 9.", ["machines_spawn", { count: 9, image: "alpine" }]],
+	[
+		"spawn 12 alpine --no-net",
+		"The lab holds 16 machines and has room for 11 more, not 12.",
+		["machines_spawn", { count: 12, image: "alpine", net: "none" }],
+	],
 	[
 		"spawn 1 arch",
 		"No image is called arch, so use alpine, debian or lab.",
@@ -518,10 +522,18 @@ describe("a line that cannot run", () => {
 		expect(sentenceOf(await agent("switch_add", { name: "lan" }, full))).toBe(limit);
 	});
 
-	it("names the room and the ports that a full lab has none of", () => {
-		const full = labWith([1, 2, 3, 4, 5, 6, 7, 8].map((n) => ({ n })));
-		expect(sentenceOf(bar("spawn 1 alpine", full))).toBe(
-			"The lab has no room for another machine, so remove one with rm first.",
+	it("names the limit that a lab with sixteen machines is at, and the ports that a full switch has none of", async () => {
+		const sixteen = Array.from({ length: 16 }, (_, i): MachineFixture => ({ n: i + 1, link: i < 8 ? "up" : "none" }));
+		const full = labWith(sixteen);
+		const limit = "The lab has all 16 machines that it can, so remove one with rm first.";
+		for (const line of ["spawn 1 alpine", "spawn 1 alpine --no-net"]) expect(sentenceOf(bar(line, full))).toBe(limit);
+		expect(sentenceOf(await agent("machines_spawn", { count: 1, image: "alpine" }, full))).toBe(limit);
+		const numbered: LabState = { ...labWith([{ n: 1 }]), nextN: 243 };
+		expect(sentenceOf(bar("spawn 3 alpine", numbered))).toBe(
+			"The lab has room for 2 more machines, not 3, because node244 is the last it can number.",
+		);
+		expect(sentenceOf(bar("spawn 1 alpine", { ...numbered, nextN: 245 }))).toBe(
+			"The lab has numbered its machines up to node244, the last it can, so it can boot no more.",
 		);
 		const failed = labWith([{ n: 1, phase: "failed" }, ...[2, 3, 4, 5, 6, 7].map((n) => ({ n })), { n: 8 }, { n: 9 }]);
 		for (const line of ["boot node1", "restore node1 before"]) {
