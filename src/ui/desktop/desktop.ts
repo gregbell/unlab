@@ -4,9 +4,11 @@ import { isLineError } from "../../commands/index.ts";
 import {
 	ACCEPTS,
 	addressText,
+	carriedWords,
 	DEFAULT_SWITCH,
 	disksOf,
 	type Machine,
+	NOTHING_CARRIED,
 	nicPortsOf,
 	type PortCable,
 	type PortView,
@@ -1003,7 +1005,9 @@ class Desktop extends UnlabElement {
 					: detail;
 		const portLabels = ports.map((p) => {
 			const held = p.machine?.label ?? (p.cable && `to ${farEnd(p.cable)}`);
-			return `Port ${p.port} · ${held ? `${held} · ${p.state}` : "Empty"}`;
+			return [`Port ${p.port}`, ...(held ? [held, p.state, ...(p.conditions ? [p.conditions] : [])] : ["Empty"])].join(
+				" · ",
+			);
 		});
 		const portStrip = ports.length
 			? html`<span class="dt-port-strip" aria-hidden="true">${ports.map(
@@ -1083,20 +1087,29 @@ class Desktop extends UnlabElement {
 		${m.spec.nics.map((nic, i) => {
 			const port = ports[i],
 				held = port && selectPorts(port.switch)(this.lab).find((p) => p.port === port.port);
-			return html`<div class="dt-link"><span>eth${i}<small>${nic.address ? addressStr(nic.address) : "No address"}</small></span><span>${port ? `${port.switch}:${port.port}` : "Unplugged"}<small>${[held?.state, held?.vlan?.text].filter(Boolean).join(" · ")}</small></span><button ?disabled=${!accepts.cables} @click=${() => this.patchInterface(`${m.name}:eth${i}`)}>Patch</button></div>`;
+			return html`<div class="dt-link"><span>eth${i}<small>${nic.address ? addressStr(nic.address) : "No address"}</small></span><span>${port ? `${port.switch}:${port.port}` : "Unplugged"}<small>${[held?.state, held?.vlan?.text, held?.conditions].filter(Boolean).join(" · ")}</small></span><button ?disabled=${!accepts.cables} @click=${() => this.patchInterface(`${m.name}:eth${i}`)}>Patch</button></div>`;
 		})}<unlab-share-ssh .machine=${m.name}></unlab-share-ssh></div>`;
 	}
 	private switchDetails(name: SwitchName) {
 		const ports = selectPorts(name)(this.lab),
 			storm = selectStorm(name)(this.lab),
-			vlans = ports.some((p) => p.vlan);
+			vlans = ports.some((p) => p.vlan),
+			conditions = ports.some((p) => p.conditions),
+			// What the cable does to frames, and what it has carried and dropped since.
+			cableText = (p: (typeof ports)[number]) =>
+				p.conditions
+					? [
+							p.conditions,
+							...carriedWords(this.app.switch.carried({ switch: name, port: p.port }) ?? NOTHING_CARRIED),
+						].join(" · ")
+					: "—";
 		return html`<div class="dt-config"><div class="dt-config-tools"><strong>${taken(ports)} / ${ports.length} ports connected${storm ? " · storming" : ""}</strong>
 			<button class="dt-primary dt-terminal-icon" aria-label=${`Open capture for ${name}`} title="Open capture" @click=${() => this.capture(name)}>${icon("capture")}</button>
 			${this.deviceActionsButton({ kind: "switch", name })}</div>
 			<h3>Network</h3><dl><div><dt>Subnets</dt><dd>${selectSubnets(name)(this.lab)}</dd></div>
 			<div><dt>Links up</dt><dd>${ports.filter((p) => p.state === "up").length}</dd></div>
 			${storm ? html`<div><dt>Storm</dt><dd>${storm.rate} looped frames a second · ${storm.dropped} dropped</dd></div>` : nothing}</dl>
-			<h3>Ports</h3><table class="dt-ports" aria-label=${`Ports on ${name}`}><thead><tr><th>Port</th><th>Machine</th><th>Link</th>${vlans ? html`<th>VLAN</th>` : nothing}<th aria-label="Cable action"></th></tr></thead>
+			<h3>Ports</h3><table class="dt-ports" aria-label=${`Ports on ${name}`}><thead><tr><th>Port</th><th>Machine</th><th>Link</th>${vlans ? html`<th>VLAN</th>` : nothing}${conditions ? html`<th>Conditions</th>` : nothing}<th aria-label="Cable action"></th></tr></thead>
 			<tbody>${ports.map((p) => {
 				const m = p.machine,
 					cable = p.cable,
@@ -1105,6 +1118,7 @@ class Desktop extends UnlabElement {
 				<td>${m ? html`<button data-hue=${m.hue} class="dt-peer" title=${`Configure ${m.name}`} @click=${() => this.inspect({ kind: "machine", name: m.name })}>${m.label}</button>` : cable ? html`<button class="dt-peer" title=${`Inspect ${cable.to.switch}`} @click=${() => this.inspect({ kind: "switch", name: cable.to.switch })}>${farEnd(cable)}</button>` : "Available"}</td>
 				<td data-state=${p.state}>${line ? p.state : "—"}</td>
 				${vlans ? html`<td>${p.vlan?.text ?? (line ? "vlan 1" : "—")}</td>` : nothing}
+				${conditions ? html`<td>${cableText(p)}</td>` : nothing}
 				<td>${line ? html`<button class="dt-primary" ?disabled=${!p.actionLabel} title=${p.actionLabel ?? nothing} @click=${() => this.run(`link ${p.state === "cut" ? "up" : "down"} ${line}`)}>${p.state === "cut" ? "Reconnect" : "Cut cable"}</button>${cable ? html` <button class="dt-primary" title=${`Remove the cable to ${farEnd(cable)}`} @click=${() => this.run(`uncable ${cable.label}`)}>Remove</button>` : nothing}` : html`<button class="dt-primary" @click=${() => this.patchInterface("", `${name}:${p.port}`)}>Patch</button>`}</td></tr>`;
 			})}</tbody></table></div>`;
 	}

@@ -5,6 +5,31 @@
 // nothing else can rearrange panes.
 
 export { cableAt, cablesOf, cableText, endsFrom, isCablePlanError, joined, planCable } from "./cables.ts";
+export {
+	CONDITION_PARTS,
+	type ConditionsFault,
+	type ConditionValues,
+	carriedWords,
+	conditionsAt,
+	conditionsOf,
+	conditionWords,
+	DROP_WORD,
+	droppedWords,
+	ETH_MTU,
+	hasConditions,
+	isConditionsFault,
+	MAX_DELAY_MS,
+	MAX_RATE,
+	MIN_MTU,
+	MIN_RATE,
+	NOTHING_CARRIED,
+	parseCondition,
+	sameConditions,
+	type WrittenConditions,
+	withConditions,
+	writeCondition,
+	writtenConditions,
+} from "./conditions.ts";
 export { type Device, type Disk, disksOf, MAX_EXTRA_DISKS, MAX_EXTRA_GIB, parseGiB, sizeText } from "./disks.ts";
 export {
 	identity,

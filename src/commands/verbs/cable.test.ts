@@ -339,7 +339,12 @@ describe("topology, with cables between switches", () => {
 			result.kind === "report" ? (result.data as { switches: { ports: unknown[]; storm?: unknown }[] }) : null;
 		expect(data?.switches[1].ports[2]).toEqual({
 			port: 3,
-			cable: { to: { kind: "port", switch: "wan", port: 1 }, link: "cut" },
+			cable: {
+				to: { kind: "port", switch: "wan", port: 1 },
+				link: "cut",
+				conditions: {},
+				carried: { delivered: 0, dropped: { loss: 0, rate: 0, mtu: 0 } },
+			},
 			vlan: { mode: "access", vlan: 1 },
 		});
 		expect(data?.switches.map((sw) => "storm" in sw)).toEqual([false, false, false]);

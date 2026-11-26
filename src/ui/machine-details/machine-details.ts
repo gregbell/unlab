@@ -3,6 +3,7 @@ import { html, nothing, type PropertyValues, type TemplateResult } from "lit";
 import {
 	type Cable,
 	type DetailRow,
+	droppedWords,
 	type LinkWord,
 	type MachineDetails,
 	type SwitchName,
@@ -136,12 +137,13 @@ export class UnlabMachineDetails extends UnlabElement {
 		);
 	}
 
-	/** From the machine's side: `in` is what the switch sent down its cables. */
+	/** From the machine's side: `in` is what the switch sent down its cables. Then what those cables dropped, if they did. */
 	#frames({ ports }: MachineDetails): string | null {
 		const counters = ports.flatMap((port) => this.app.switch.counters(port) ?? []);
 		if (counters.length === 0) return null;
 		const sum = (of: "txFrames" | "rxFrames") => counters.reduce((n, port) => n + port[of], 0);
-		return `${sum("txFrames")} in · ${sum("rxFrames")} out`;
+		const dropped = droppedWords(ports.flatMap((port) => this.app.switch.carried(port) ?? []));
+		return [`${sum("txFrames")} in`, `${sum("rxFrames")} out`, ...(dropped === null ? [] : [dropped])].join(" · ");
 	}
 }
 

@@ -1,5 +1,6 @@
 import { html, nothing, svg } from "lit";
 import {
+	IMPAIRED,
 	type LabState,
 	type MachineName,
 	type PortHolder,
@@ -22,6 +23,8 @@ interface Edge {
 	ends: readonly [End, End];
 	hue?: PortHolder["hue"];
 	state: string;
+	/** Its conditions, when it has some. */
+	conditions?: string;
 }
 const far = (edge: Edge, name: string) =>
 	edge.ends[0].name === name ? edge.ends[1].name : edge.ends[1].name === name ? edge.ends[0].name : null;
@@ -42,6 +45,7 @@ export function topologyMap(lab: LabState, selected: Selection | null, pick: (s:
 								ends: [{ name: on, port: p.port }, { name: p.machine.name }] as const,
 								hue: p.machine.hue,
 								state: p.state,
+								conditions: p.conditions,
 							},
 						]
 					: [],
@@ -53,6 +57,7 @@ export function topologyMap(lab: LabState, selected: Selection | null, pick: (s:
 				{ name: b.switch, port: b.port },
 			] as const,
 			state: link,
+			conditions: selectPorts(a.switch)(lab).find((p) => p.port === a.port)?.conditions,
 		})),
 	];
 	const layers = new Map<string, number>();
@@ -109,16 +114,19 @@ export function topologyMap(lab: LabState, selected: Selection | null, pick: (s:
 					edge.ends[0].name === edge.ends[1].name
 						? `M ${a.x - 14} ${a.y} C ${a.x - 34} ${a.y - rise}, ${a.x + 34} ${a.y - rise}, ${a.x + 14} ${a.y}`
 						: `M ${a.x} ${a.y + offset} C ${middle} ${a.y + offset}, ${middle} ${b.y + offset}, ${b.x} ${b.y + offset}`;
-				return svg`<path class="wire" data-state=${edge.state} data-hue=${edge.hue ?? nothing} data-selected=${related} d=${d}/>`;
+				return svg`<path class="wire" data-state=${edge.state} data-conditions=${edge.conditions ?? nothing} data-hue=${edge.hue ?? nothing} data-selected=${related} d=${d}/>`;
 			},
 		)}</svg>
 		${devices.map((d) => {
 			const p = point(d.name),
 				m = d.kind === "machine" ? lab.machines[d.name] : null;
+			// A wire has no words of its own, so each end of a cable with conditions says so.
+			const impaired = edges.some((edge) => edge.conditions && edge.ends.some((end) => end.name === d.name));
+			const marked = impaired ? ` · ${IMPAIRED}` : "";
 			const meta =
 				d.kind === "switch"
-					? `${selectPorts(d.name)(lab).filter((port) => port.state !== "empty").length} / 8 ports${selectStorm(d.name)(lab) ? " · storming" : ""}`
-					: (m?.spec.image ?? "");
+					? `${selectPorts(d.name)(lab).filter((port) => port.state !== "empty").length} / 8 ports${selectStorm(d.name)(lab) ? " · storming" : ""}${marked}`
+					: `${m?.spec.image ?? ""}${marked}`;
 			return html`<button class="n-node" data-machine=${d.kind === "machine" ? d.name : nothing} data-switch=${d.kind === "switch" ? d.name : nothing} data-hue=${m?.hue ?? nothing} aria-pressed=${selected?.name === d.name} data-selected=${selected?.name === d.name} style=${`left:${(100 * p.x) / width}%;top:${p.y}px`} @click=${() => pick(d)}>
 				<span class="visually-hidden">Inspect ${d.kind} </span>${art(d.kind)}<span class="n-node-label"><strong>${d.name}</strong> <small>${meta}</small></span></button>`;
 		})}</div></div>`;

@@ -1,4 +1,5 @@
 import { cable, linkCables, storm, uncable } from "./cables.ts";
+import { setConditions, settleConditions } from "./conditions.ts";
 import { parseSessionId } from "./identity.ts";
 import {
 	bootStopped,
@@ -228,6 +229,8 @@ function reduce(state: LabState, event: LabEvent): Step {
 			return linkCables(state, event.changes, event.cause);
 		case "cmd/vlan":
 			return setVlan(state, event.port, event.vlan);
+		case "cmd/conditions":
+			return setConditions(state, event.changes);
 		case "cmd/shell":
 			return shell(state, event.machine);
 		case "cmd/focus":
@@ -298,13 +301,14 @@ function reduce(state: LabState, event: LabEvent): Step {
  * What must hold after every change, kept in one place. Each machine has a
  * pane and no pane outlives its machine. No panel stays maximised once the
  * last machine is gone, or it would hide the next one. The keyboard is on a
- * visible pane whenever there is one. A port that nothing is in is in VLAN 1.
+ * visible pane whenever there is one. A port that nothing is in is in VLAN 1,
+ * and the switches treat each cable's frames as the lab has its conditions.
  * The clock runs fast only while something boots.
  */
 function settle(before: LabState, reduced: Step): Step {
 	const vlans = settleVlans(before, reduced.state);
 	const state = settleKeyboard(followMachines(vlans.state));
-	const effects = [...reduced.effects, ...vlans.effects];
+	const effects = [...reduced.effects, ...vlans.effects, ...settleConditions(before, state)];
 	const hz = clockHz(state);
 	return hz === clockHz(before) ? step(state, effects) : step(state, [...effects, { type: "clock", hz }]);
 }

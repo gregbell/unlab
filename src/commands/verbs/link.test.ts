@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { conditions } from "../../../test/support/conditions.ts";
 import { port0 } from "../../../test/support/ports.ts";
+import { conditionsAt, type PortRef, parseSwitchName, type SwitchName } from "../../model/index.ts";
 import { completeLine } from "../index.ts";
 import { storeLab } from "../testing/store.ts";
 
@@ -200,5 +202,189 @@ describe("link", () => {
 		const { tool } = storeLab().registry.find("link") ?? {};
 		expect(tool).toMatchObject({ name: "link_set", policy: "run", annotations: {} });
 		expect(tool?.toLine({ link: "down", machines: "node1,node3" })).toBe("link down node1,node3");
+	});
+});
+
+describe("link, with conditions", () => {
+	const lan = parseSwitchName("lan") as SwitchName;
+	const at = (on: SwitchName, port: PortRef["port"]): PortRef => ({ switch: on, port });
+
+	/** node1 and node2 on switch0, and a cable from its port 8 to port 1 of lan. */
+	async function wired() {
+		const lab = storeLab();
+		await lab.lab(2);
+		await lab.run("mkswitch lan");
+		await lab.run("cable switch0:8 lan:1");
+		lab.events.length = 0;
+		lab.effects.length = 0;
+		return lab;
+	}
+	const will = (lab: Awaited<ReturnType<typeof wired>>, line: string) => {
+		const preview = lab.parsed(line).preview(lab.store.state);
+		return "will" in preview ? preview.will : preview.message;
+	};
+
+	it("sets any of them on a NIC's cable in one line, says so before it runs, and returns them as an option takes them", async () => {
+		const lab = await wired();
+		const line = "link up node1 --delay 100ms --loss 20% --reorder 25% --rate 1mbit --mtu 1400";
+		expect(will(lab, line)).toBe(
+			"node1 is already up · give the cable to node1 delay 100 ms, loss 20%, reorder 25%, rate 1 Mbit/s and mtu 1400",
+		);
+		const all = conditions({ delay: 100, loss: 20, reorder: 25, rate: 1_000_000, mtu: 1400 });
+		expect(await lab.run(line)).toEqual({
+			kind: "visible",
+			text: "node1 up with delay 100 ms, loss 20%, reorder 25%, rate 1 Mbit/s and mtu 1400",
+			data: [
+				{
+					machine: "node1",
+					nic: "eth0",
+					switch: "switch0",
+					port: 1,
+					link: "up",
+					conditions: { delay: "100ms", loss: "20%", reorder: "25%", rate: "1mbit", mtu: "1400" },
+				},
+			],
+		});
+		expect(lab.events.slice(0, 2)).toEqual([
+			{ type: "cmd/link", changes: [], cause: "bar" },
+			{ type: "cmd/conditions", changes: [{ port: port0(1), conditions: all }] },
+		]);
+		// Both directions are the switch's to treat, at the port, and no machine is stopped or booted for it.
+		expect(lab.effects).toEqual([{ type: "port/conditions", port: port0(1), conditions: all }]);
+		expect(conditionsAt(lab.store.state, port0(2))).toEqual({});
+	});
+
+	it("sets them on a cable between switches by either of its ports, and on several cables at once", async () => {
+		const lab = await wired();
+		expect(will(lab, "link up lan:1 --loss 100%")).toBe(
+			"the cable from lan port 1 to switch0 port 8 is already up · give the cable from lan port 1 to switch0 port 8 loss 100%",
+		);
+		expect(await lab.run("link up lan:1 --loss 100%")).toMatchObject({
+			text: "lan:1 up with loss 100%",
+			data: [{ switch: "lan", port: 1, to: at("switch0", 8), link: "up", conditions: { loss: "100%" } }],
+		});
+		const lossy = conditions({ loss: 100 });
+		expect(lab.effects).toEqual([
+			{ type: "port/conditions", port: port0(8), conditions: lossy },
+			{ type: "port/conditions", port: at(lan, 1), conditions: lossy },
+		]);
+		expect(will(lab, "link up all,switch0:8 --delay 5ms")).toBe(
+			"node1 and node2 are already up · the cable from switch0 port 8 to lan port 1 is already up · give the cables to node1 and node2 delay 5 ms · give the cable from switch0 port 8 to lan port 1 delay 5 ms and loss 100%",
+		);
+		expect(await lab.run("link up all,switch0:8 --delay 5ms")).toMatchObject({
+			text: "node1 up with delay 5 ms, node2 up with delay 5 ms, switch0:8 up with delay 5 ms and loss 100%",
+		});
+	});
+
+	it("leaves the conditions it is not given as they are, takes one away with 0, and all with --clear", async () => {
+		const lab = await wired();
+		await lab.run("link up node1 --delay 100ms --loss 20% --mtu 1400");
+		await lab.run("link up node1 --loss 5%");
+		expect(conditionsAt(lab.store.state, port0(1))).toEqual({ delay: 100, loss: 5, mtu: 1400 });
+		expect(will(lab, "link up node1 --delay 0 --mtu 1500")).toBe(
+			"node1 is already up · give the cable to node1 loss 5%",
+		);
+		await lab.run("link up node1 --delay 0 --mtu 1500");
+		expect(conditionsAt(lab.store.state, port0(1))).toEqual({ loss: 5 });
+		expect(will(lab, "link up node1 --loss 5%")).toBe(
+			"change nothing: node1 is already up · the cable to node1 already has loss 5%",
+		);
+		expect(will(lab, "link up node1 --clear --rate 500kbit")).toBe(
+			"node1 is already up · give the cable to node1 rate 500 kbit/s",
+		);
+		expect(will(lab, "link up node1 --clear")).toBe("node1 is already up · clear the conditions of the cable to node1");
+		expect(await lab.run("link up node1 --clear")).toMatchObject({
+			text: "node1 up with no conditions",
+			data: [{ machine: "node1", link: "up", conditions: {} }],
+		});
+		expect(conditionsAt(lab.store.state, port0(1))).toEqual({});
+		expect(lab.effects.at(-1)).toEqual({ type: "port/conditions", port: port0(1), conditions: {} });
+	});
+
+	it("cuts or plugs in the cable in the same line, and a cable that it plugs in is new", async () => {
+		const lab = await wired();
+		expect(will(lab, "link down node1 --loss 20%")).toBe(
+			"cut the cable to node1 on switch0 port 1 · give the cable to node1 loss 20%",
+		);
+		expect(await lab.run("link down node1 --loss 20%")).toMatchObject({ text: "node1 cut with loss 20%" });
+		expect(await lab.run("link up node1")).toMatchObject({
+			text: "node1 up",
+			data: [{ machine: "node1", nic: "eth0", switch: "switch0", port: 1, link: "up" }],
+		});
+		expect(conditionsAt(lab.store.state, port0(1))).toEqual({ loss: 20 });
+		await lab.run("unplug node1");
+		expect(will(lab, "link up node1 --delay 10ms")).toBe(
+			"plug node1 into switch0 port 1 · give the cable to node1 delay 10 ms",
+		);
+		await lab.run("link up node1 --delay 10ms");
+		expect(conditionsAt(lab.store.state, port0(1))).toEqual({ delay: 10 });
+	});
+
+	it("says nothing of conditions, and returns none, when the line has no option", async () => {
+		const lab = await wired();
+		await lab.run("link up node1 --loss 20%");
+		const result = await lab.run("link down node1");
+		expect(result).toEqual({
+			kind: "visible",
+			text: "node1 cut",
+			data: [{ machine: "node1", nic: "eth0", switch: "switch0", port: 1, link: "cut" }],
+		});
+		expect(lab.events.filter((event) => event.type === "cmd/conditions")).toHaveLength(1);
+	});
+
+	it("refuses in one sentence what no cable can have, with the option at fault and what would do", async () => {
+		const lab = await wired();
+		const refused = (line: string) => {
+			const parsed = lab.parse(line);
+			const said = "message" in parsed ? parsed.message : (parsed.validate(lab.store.state)?.message ?? null);
+			return said?.replace(/ Nothing was changed\.$/, "") ?? null;
+		};
+		expect(refused("link up node1 --delay fast")).toBe(
+			"fast is no delay, so use one from 1ms to 10s in whole milliseconds, such as 100ms, or 0 for none.",
+		);
+		expect(refused("link up node1 --delay 11s")).toMatch(/^11s is no delay, so use one from 1ms to 10s/);
+		expect(refused("link up node1 --loss 120%")).toBe(
+			"120% is no share of frames, so use one from 0 to 100%, such as 20%.",
+		);
+		expect(refused("link up node1 --rate 1")).toBe(
+			"1 is no rate, so use one from 1kbit to 10gbit, such as 1mbit, or 0 for none.",
+		);
+		expect(refused("link up node1 --mtu 9000")).toBe("9000 is no MTU, so use one from 68 to 1500 bytes, such as 1400.");
+		expect(refused("link up node1 --reorder 25%")).toBe(
+			"Reordering lets frames skip a cable's delay, and node1 has none, so give --delay too, such as --delay 20ms.",
+		);
+		expect(refused("link up node1 --delay 20ms --reorder 25%")).toBeNull();
+		await lab.run("link up node1 --delay 20ms --reorder 25%");
+		expect(refused("link up node1 --delay 0")).toBe(
+			"node1 reorders frames by letting them skip its delay, so keep the delay, or take both away with --delay 0 --reorder 0.",
+		);
+		expect(refused("link up node1 --delay 0 --reorder 0")).toBeNull();
+		await lab.run("unplug node2");
+		expect(refused("link down node2 --loss 5%")).toBe(
+			"node2 has no cable to give conditions, so plug it in with link up node2.",
+		);
+		expect(refused("link up node1 --loss")).toBe("link wants a share of frames such as 20% after --loss.");
+	});
+
+	it("takes the same from the link_set tool, and completes each option with values that would do", async () => {
+		const lab = await wired();
+		const { tool } = lab.registry.find("link") ?? {};
+		const input = { link: "up", machines: "lan:1", delay: "100ms", loss: "20%", mtu: 1400, conditions: "clear" };
+		expect(tool?.toLine(input)).toBe("link up lan:1 --delay 100ms --loss 20% --mtu 1400 --clear");
+		expect(Object.keys(tool?.inputSchema.properties ?? {})).toEqual([
+			"link",
+			"machines",
+			"delay",
+			"loss",
+			"reorder",
+			"rate",
+			"mtu",
+			"conditions",
+		]);
+		expect(tool?.inputSchema.required).toEqual(["link", "machines"]);
+		const offered = (line: string) =>
+			completeLine(lab.registry, line, line.length, lab.store.state).suggestions.map((s) => s.insert);
+		expect(offered("link up node1 --")).toEqual(["--delay", "--loss", "--reorder", "--rate", "--mtu", "--clear"]);
+		expect(offered("link up node1 --rate ")).toEqual(["1mbit", "10mbit", "500kbit", "0"]);
 	});
 });

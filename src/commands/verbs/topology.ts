@@ -1,23 +1,34 @@
 import {
 	andList,
+	type CableCounters,
+	type Conditions,
+	carriedWords,
+	conditionsAt,
+	conditionWords,
+	droppedWords,
 	type HeldPort,
+	hasConditions,
 	heldPorts,
 	holdsNic,
 	type LabState,
 	type Machine,
 	type MachineName,
 	machineList,
+	NOTHING_CARRIED,
 	nicLabel,
 	nicPortsOf,
 	type Phase,
 	PORTS,
 	type PortNo,
+	type PortRef,
 	type PortVlan,
 	plugsOf,
 	portName,
 	type SwitchName,
 	vlanOf,
 	vlanText,
+	type WrittenConditions,
+	writtenConditions,
 } from "../../model/index.ts";
 import { NICS, type NicName, type NicNo, nicName } from "../../net/index.ts";
 import { defineVerb } from "../define.ts";
@@ -47,6 +58,10 @@ export interface ListedCable {
 	readonly to: CableEnd;
 	/** `down` for a cable that is whole, to a machine that is not ready. */
 	readonly link: "up" | "down" | "cut";
+	/** Each as link's options take it: `{ delay: "100ms", loss: "20%" }`. A cable as good as new has none. */
+	readonly conditions: WrittenConditions;
+	/** The frames that reached its far end, either way, and those it dropped, by reason, since it was put in. */
+	readonly carried: CableCounters;
 }
 
 /** A switch that looped frames come into: one on a loop of cables, or one that such a loop reaches. */
@@ -87,16 +102,17 @@ const end = ({ name, life }: Machine, nic: NicNo): NicEnd => ({
 	state: life.phase,
 });
 
-function cable(held: HeldPort): ListedCable {
-	if (!holdsNic(held)) return { to: { kind: "port", ...held.far }, link: held.link };
+function cable(held: HeldPort, carried: CableCounters): ListedCable {
+	const its = { conditions: writtenConditions(held.conditions), carried };
+	if (!holdsNic(held)) return { to: { kind: "port", ...held.far }, link: held.link, ...its };
 	const { machine, nic } = held;
 	const { life } = machine;
 	const plug = plugsOf(life)[nic];
 	const cut = plug?.kind === "port" && plug.link === "cut";
-	return { to: end(machine, nic), link: cut ? "cut" : life.phase === "ready" ? "up" : "down" };
+	return { to: end(machine, nic), link: cut ? "cut" : life.phase === "ready" ? "up" : "down", ...its };
 }
 
-function topologyOf(lab: LabState): Topology {
+function topologyOf(lab: LabState, carried: (port: PortRef) => CableCounters | undefined): Topology {
 	return {
 		switches: lab.switches.map((name): ListedSwitch => {
 			const held = heldPorts(lab, name);
@@ -105,7 +121,9 @@ function topologyOf(lab: LabState): Topology {
 				name,
 				ports: PORTS.map((port): ListedPort => {
 					const holder = held.find((other) => other.port === port);
-					return { port, cable: holder ? cable(holder) : null, vlan: vlanOf(lab, { switch: name, port }) };
+					const ref = { switch: name, port };
+					const counted = carried(ref) ?? NOTHING_CARRIED;
+					return { port, cable: holder ? cable(holder, counted) : null, vlan: vlanOf(lab, ref) };
 				}),
 				...(storm ? { storm: { rate: storm.rate, dropped: storm.dropped } } : {}),
 			};
@@ -132,14 +150,27 @@ function endLine(lab: LabState, to: CableEnd, link: string, vlan: PortVlan | nul
 	return [endText(lab, to), link, ...state, ...carried].join(" · ");
 }
 
+/** `delay 100 ms · loss 20% · 804 delivered · 196 dropped (196 by loss)`. A cable as good as new that dropped nothing says none of it. */
+function cableWords(conditions: Conditions, { carried }: ListedCable): readonly string[] {
+	if (!hasConditions(conditions) && droppedWords([carried]) === null) return [];
+	return [...conditionWords(conditions), ...carriedWords(carried)];
+}
+
+/** The cables that have conditions, each once. */
+const impaired = (lab: LabState): number =>
+	lab.switches.flatMap((on) => heldPorts(lab, on)).filter((held) => hasConditions(held.conditions)).length -
+	lab.switchCables.filter(({ conditions }) => conditions && hasConditions(conditions)).length;
+
 const stormLine = ({ rate, dropped }: ListedStorm): string =>
 	`storming · ${rate} looped frames a second · ${dropped} dropped`;
 
 function rows(lab: LabState, { switches, unplugged }: Topology): readonly ReportRow[] {
 	const listed = switches.map(({ name, ports: all, storm }): ReportRow => {
-		const taken = all.flatMap(({ port, cable, vlan }) =>
-			cable ? [`port ${port} · ${endLine(lab, cable.to, cable.link, vlan)}`] : [],
-		);
+		const taken = all.flatMap(({ port, cable, vlan }) => {
+			if (!cable) return [];
+			const words = cableWords(conditionsAt(lab, { switch: name, port }), cable);
+			return [[`port ${port}`, endLine(lab, cable.to, cable.link, vlan), ...words].join(" · ")];
+		});
 		const free = all.flatMap(({ port, cable }) => (cable ? [] : [port]));
 		const lines = [
 			...(storm ? [stormLine(storm)] : []),
@@ -157,14 +188,14 @@ export const topology = defineVerb({
 	name: "topology",
 	about: "list switches, their ports and what is plugged in",
 	description:
-		"List the wiring: every switch with its eight ports, what each port's cable goes to, its link (up, cut, or down while the machine at its end is not ready), and what the port carries: a VLAN, or as a trunk the VLANs it allows and its native one. A cable between switches is at both its ports. A switch that looped frames come into has storm: how many came in the last second, and how many it dropped. Then the NICs in no switch. Port 3 of lan is lan:3.",
+		"List the wiring: every switch with its eight ports, what each port's cable goes to, its link (up, cut, or down while the machine at its end is not ready), its conditions, what it delivered and dropped (by loss, rate or MTU), and what the port carries: a VLAN, or a trunk's VLANs and its native one. A cable between switches is at both its ports. A storming switch has storm: its looped frames in the last second, and what it dropped. Then the NICs in no switch. Port 3 of lan is lan:3.",
 	danger: false,
 	grammar: {},
 	example: {},
 	plan: (_a, lab) => ({ lab }),
 	describe: ({ lab }) => `list ${count(lab.switches.length, "switch", "switches")} and what is plugged in`,
-	async execute({ lab }) {
-		const data = topologyOf(lab);
+	async execute({ lab }, _ctx, deps) {
+		const data = topologyOf(lab, deps.carried);
 		const all = data.switches.flatMap(({ ports }) => ports);
 		const taken = all.filter(({ cable }) => cable !== null).length;
 		const storming = data.switches.flatMap(({ name, storm }) => (storm ? [name] : []));
@@ -172,6 +203,7 @@ export const topology = defineVerb({
 			count(data.switches.length, "switch", "switches"),
 			`${taken} of ${all.length} ports taken`,
 			...(storming.length === 0 ? [] : [`${andList(storming)} storming`]),
+			...(impaired(lab) === 0 ? [] : [`${count(impaired(lab), "cable")} with conditions`]),
 		].join(" · ");
 		return { kind: "report", header, blocks: [], rows: rows(lab, data), data };
 	},

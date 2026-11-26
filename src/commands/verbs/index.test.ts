@@ -17,7 +17,11 @@ describe("VERBS", () => {
 			["exec", "<machines> -- <command>", "run a shell command in each console"],
 			["write", "<machine> <path> [--owner user[:group]] [--mode mode] -- <text>", "put a text in a file on a machine"],
 			["sh", "<machine>", "open another shell on a machine"],
-			["link", "<up | down> <machines>", "plug or cut cables"],
+			[
+				"link",
+				"<up | down> <machines> [--delay time] [--loss percent] [--reorder percent] [--rate rate] [--mtu bytes] [--clear]",
+				"plug or cut cables, and set their conditions",
+			],
 			["plug", "<nic> <switch[:port]>", "plug a NIC into a switch, or move its cable there"],
 			["unplug", "<nic>", "unplug a NIC and free its port"],
 			["mkswitch", "[name]", "add a switch"],

@@ -192,6 +192,7 @@ export function fakeDeps(initial: LabState, exec: ExecPort = NO_EXEC) {
 			});
 		},
 		now: () => clock++,
+		carried: () => undefined,
 		exec,
 		files: NO_FILES,
 	};

@@ -13,6 +13,7 @@
 import type { CaptureLog } from "../capture/index.ts";
 import type { ExecOutcome, ExecPort, FileOutcome, FilePort } from "../commands/index.ts";
 import {
+	type CableCounters,
 	type DiskCopy,
 	type Effect,
 	type HostEntry,
@@ -52,6 +53,8 @@ export class ExecRefused extends Error {
 export interface RuntimeReads {
 	macTable(of: SwitchName): readonly MacEntry[];
 	counters(port: PortRef): PortCounters | undefined;
+	/** What the cable in the port has carried and dropped, both ways. */
+	carried(port: PortRef): CableCounters | undefined;
 	/** The whole switch's. */
 	totals(of: SwitchName): SwitchCounters;
 }
@@ -668,6 +671,9 @@ export function createEngine(deps: EngineDeps): Engine {
 			case "port/vlan":
 				fabric.setVlan(switchOf(effect.port.switch).slot, effect.port.port, effect.vlan);
 				return;
+			case "port/conditions":
+				fabric.setConditions(switchOf(effect.port.switch).slot, effect.port.port, effect.conditions);
+				return;
 			case "pty/open": {
 				const s = sessions.get(effect.session);
 				if (!s || s.tty === "console" || s.state !== "closed") return;
@@ -839,6 +845,10 @@ export function createEngine(deps: EngineDeps): Engine {
 			counters({ switch: of, port }) {
 				const entry = switches.get(of);
 				return entry && fabric.counters(entry.slot, port);
+			},
+			carried({ switch: of, port }) {
+				const entry = switches.get(of);
+				return entry && fabric.carried(entry.slot, port);
 			},
 			totals(of) {
 				const entry = switches.get(of);

@@ -93,8 +93,8 @@ describe("a cable between switches", () => {
 	test("holds a port on each, which no NIC and no other cable is then given", () => {
 		const s = cabled(three(), place(lan), place(wan, 3));
 		expect(ends(s)).toEqual(["lan:1-wan:3 up"]);
-		expect(heldPorts(s, lan)).toEqual([{ port: 1, far: at(wan, 3), link: "up" }]);
-		expect(heldPorts(s, wan)).toEqual([{ port: 3, far: at(lan, 1), link: "up" }]);
+		expect(heldPorts(s, lan)).toEqual([{ port: 1, far: at(wan, 3), link: "up", conditions: {} }]);
+		expect(heldPorts(s, wan)).toEqual([{ port: 3, far: at(lan, 1), link: "up", conditions: {} }]);
 		expect(lowestFreePorts(s, lan, 2)).toEqual([2, 3]);
 		const spawned = planSpawn(s, 1, spawnRequest({ net: lan }));
 		expect("machines" in spawned && spawned.machines[0].ports).toEqual([at(lan, 2)]);
@@ -295,7 +295,7 @@ describe("a saved lab", () => {
 		expect(state.switchCables).toEqual(s.switchCables);
 		expect(state.storms).toEqual({});
 		expect(JSON.parse(saveWorkspace(s))).toMatchObject({
-			version: 9,
+			version: 10,
 			cables: [
 				{ ends: [at(lan, 8), at(wan, 7)], cut: false },
 				{ ends: [at(wan, 1), port0(3)], cut: true },

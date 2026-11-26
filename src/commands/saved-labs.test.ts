@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, test } from "vitest";
 import {
 	createStore,
+	heldPorts,
 	initialState,
 	machineList,
 	portsOf,
@@ -27,6 +28,7 @@ async function open(saved: string) {
 			dispatch: (event) => store.dispatchCommand(event),
 			until: store.until,
 			now: () => 0,
+			carried: () => undefined,
 			exec: NO_EXEC,
 			files: NO_FILES,
 		},
@@ -113,7 +115,7 @@ describe("a lab saved before there were cables between switches", () => {
 		expect(portsOf(on("node5") as never).map((port) => port.switch)).toEqual(["switch0", "wan", "switch0"]);
 
 		const saved = JSON.parse(saveWorkspace(state));
-		expect(saved).toMatchObject({ version: 9, switches: ["switch0", "lan", "wan"], cables: [], vlans: [] });
+		expect(saved).toMatchObject({ version: 10, switches: ["switch0", "lan", "wan"], cables: [], vlans: [] });
 		const again = await open(JSON.stringify(saved));
 		expect([again.cables, again.booted]).toEqual([cables, booted]);
 	});
@@ -180,8 +182,33 @@ describe("a lab saved before ports had VLANs", () => {
 		]);
 		expect(state.portVlans).toEqual([]);
 		const saved = JSON.parse(saveWorkspace(state));
-		expect(saved).toMatchObject({ version: 9, vlans: [] });
+		expect(saved).toMatchObject({ version: 10, vlans: [] });
 		const again = await open(JSON.stringify(saved));
 		expect([again.state.switchCables, again.booted]).toEqual([state.switchCables, booted]);
+	});
+});
+
+describe("a lab saved before cables had conditions", () => {
+	test("version 9 opens with its VLANs and trunks as they were, and no cable has conditions", async () => {
+		const { state, booted } = await open(savedBy(9));
+		expect(state.portVlans).toEqual([
+			{ port: { switch: "lan", port: 3 }, vlan: { mode: "access", vlan: 10 } },
+			{ port: { switch: "switch0", port: 8 }, vlan: { mode: "trunk", allowed: [10, 20], native: 1 } },
+			{ port: { switch: "lan", port: 7 }, vlan: { mode: "trunk", allowed: [10, 20], native: 1 } },
+		]);
+		const held = state.switches.flatMap((on) => heldPorts(state, on));
+		expect(held).toHaveLength(10);
+		expect(held.map(({ conditions }) => conditions)).toEqual(held.map(() => ({})));
+		const saved = JSON.parse(saveWorkspace(state));
+		expect(saved.version).toBe(10);
+		expect(saved.cables.map((cable: { conditions: unknown }) => cable.conditions)).toEqual([{}, {}]);
+		const nics = saved.nodes.flatMap((node: { nics: { conditions: unknown }[] }) => node.nics);
+		expect(nics.map((nic: { conditions: unknown }) => nic.conditions)).toEqual(nics.map(() => ({})));
+		const again = await open(JSON.stringify(saved));
+		expect([again.state.switchCables, again.state.portVlans, again.booted]).toEqual([
+			state.switchCables,
+			state.portVlans,
+			booted,
+		]);
 	});
 });

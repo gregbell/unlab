@@ -1,0 +1,33 @@
+TCP between two guests with no cable conditions, on one switch and across one cable between two switches, sides in turn:
+ONLY="one,one cable" node .audit/phase2/cables/drive.mjs tcp 6 af0af43=<dist> c3aab35=<dist>
+af0af43 is main. c3aab35 is this slice. 16 cores, load average 0.1 before the run. Each run sends 256 MiB after 16 MiB to warm up, and
+fails on a short transfer. The first run of each also has the cores that the busiest threads used in a second transfer.
+
+run 0 af0af43 one: 716 Mbit/s, ping avg 1.181 ms, receiver took 280678992 bytes threads in a second transfer: DedicatedWorker 0.92, chromium MAIN 0.88, DedicatedWorker 0.72, ThreadPoolForeg 0.37, ThreadPoolForeg 0.21, ThreadPoolForeg 0.11
+run 0 af0af43 one cable: 598 Mbit/s, ping avg 1.28 ms, receiver took 280671468 bytes threads in a second transfer: chromium MAIN 0.94, DedicatedWorker 0.92, DedicatedWorker 0.68, ThreadPoolForeg 0.26, ThreadPoolForeg 0.18, ThreadPoolForeg 0.10
+run 0 c3aab35 one: 722 Mbit/s, ping avg 1.316 ms, receiver took 280679256 bytes threads in a second transfer: chromium MAIN 0.93, DedicatedWorker 0.91, DedicatedWorker 0.71, ThreadPoolForeg 0.25, ThreadPoolForeg 0.12, DedicatedWorker 0.10
+run 0 c3aab35 one cable: 592 Mbit/s, ping avg 1.508 ms, receiver took 280671930 bytes threads in a second transfer: chromium MAIN 0.92, DedicatedWorker 0.87, DedicatedWorker 0.64, ThreadPoolForeg 0.28, ThreadPoolForeg 0.20, ThreadPoolForeg 0.11
+run 1 af0af43 one: 715 Mbit/s, ping avg 1.304 ms, receiver took 280678728 bytes
+run 1 af0af43 one cable: 605 Mbit/s, ping avg 1.435 ms, receiver took 280671270 bytes
+run 1 c3aab35 one: 698 Mbit/s, ping avg 1.311 ms, receiver took 280679520 bytes
+run 1 c3aab35 one cable: 592 Mbit/s, ping avg 1.373 ms, receiver took 280671732 bytes
+run 2 af0af43 one: 680 Mbit/s, ping avg 1.239 ms, receiver took 280677078 bytes
+run 2 af0af43 one cable: 607 Mbit/s, ping avg 1.486 ms, receiver took 280672062 bytes
+run 2 c3aab35 one: 748 Mbit/s, ping avg 1.355 ms, receiver took 280680114 bytes
+run 2 c3aab35 one cable: 618 Mbit/s, ping avg 1.533 ms, receiver took 280673382 bytes
+run 3 af0af43 one: 699 Mbit/s, ping avg 1.478 ms, receiver took 280680114 bytes
+run 3 af0af43 one cable: 602 Mbit/s, ping avg 1.514 ms, receiver took 280672722 bytes
+run 3 c3aab35 one: 715 Mbit/s, ping avg 1.464 ms, receiver took 280680114 bytes
+run 3 c3aab35 one cable: 604 Mbit/s, ping avg 1.55 ms, receiver took 280672986 bytes
+run 4 af0af43 one: 714 Mbit/s, ping avg 1.206 ms, receiver took 280678596 bytes
+run 4 af0af43 one cable: 656 Mbit/s, ping avg 1.7 ms, receiver took 280676022 bytes
+run 4 c3aab35 one: 739 Mbit/s, ping avg 1.251 ms, receiver took 280679652 bytes
+run 4 c3aab35 one cable: 600 Mbit/s, ping avg 1.606 ms, receiver took 280671600 bytes
+run 5 af0af43 one: 699 Mbit/s, ping avg 1.202 ms, receiver took 280681104 bytes
+run 5 af0af43 one cable: 598 Mbit/s, ping avg 1.379 ms, receiver took 280683084 bytes
+run 5 c3aab35 one: 747 Mbit/s, ping avg 1.353 ms, receiver took 280679454 bytes
+run 5 c3aab35 one cable: 605 Mbit/s, ping avg 1.479 ms, receiver took 280673382 bytes
+af0af43 one: TCP Mbit/s 714 [680-716], ping avg ms 1.24 [1.18-1.48], n=6
+af0af43 one cable: TCP Mbit/s 605 [598-656], ping avg ms 1.49 [1.28-1.70], n=6
+c3aab35 one: TCP Mbit/s 739 [698-748], ping avg ms 1.35 [1.25-1.46], n=6
+c3aab35 one cable: TCP Mbit/s 604 [592-618], ping avg ms 1.53 [1.37-1.61], n=6

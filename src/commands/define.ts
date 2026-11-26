@@ -1,10 +1,12 @@
 import type {
+	CableCounters,
 	CommandEvent,
 	LabState,
 	Machine,
 	MachineName,
 	Phase,
 	Policy,
+	PortRef,
 	SessionId,
 	Source,
 	ToolName,
@@ -85,6 +87,8 @@ export interface CommandDeps {
 	/** Resolves with the first state that satisfies the predicate; rejects when the signal aborts. */
 	until(predicate: (state: LabState) => boolean, signal: AbortSignal): Promise<LabState>;
 	now(): number;
+	/** What the cable in the port has carried and dropped, which the switches count and the lab's state does not hold. */
+	carried(port: PortRef): CableCounters | undefined;
 	readonly exec: ExecPort;
 	readonly files: FilePort;
 }

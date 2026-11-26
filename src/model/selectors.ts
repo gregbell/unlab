@@ -3,6 +3,7 @@
 // compare with Object.is.
 
 import { addressStr, ip4str, LAB_SUBNET, type NameBook, NICS, nicName, subnetStr } from "../net/index.ts";
+import { conditionWords, hasConditions } from "./conditions.ts";
 import { type Device, disksOf, sizeText } from "./disks.ts";
 import { nicLabel, nicMac, sessionLabel } from "./identity.ts";
 import {
@@ -202,6 +203,8 @@ export interface DetailRow {
 		| "gateway"
 		| "uplink"
 		| "link"
+		| "conditions"
+		| `${NicName} conditions`
 		| "shells"
 		| NicName;
 	readonly value: string;
@@ -297,8 +300,23 @@ function nicRows(lab: Pick<LabState, "switches" | "cli">, machine: Machine): Det
 			{ label: "mac", value: nicMac(machine.n, nic) },
 		];
 	};
-	if (nics.length === 1) return [...facts(0), ...uplink, linkRow(lab, "link", machine, 0)];
-	return [...uplink, ...nics.flatMap((nic) => [linkRow(lab, nicName(nic), machine, nic), ...facts(nic)])];
+	/** What the NIC's cable does to frames, said only of one that does something. */
+	const conditions = (nic: NicNo, label: DetailRow["label"]): DetailRow[] => {
+		const plug = plugsOf(machine.life)[nic];
+		const words = plug?.kind === "port" && plug.conditions ? conditionWords(plug.conditions) : [];
+		return words.length === 0 ? [] : [{ label, value: words.join(", ") }];
+	};
+	if (nics.length === 1) {
+		return [...facts(0), ...uplink, linkRow(lab, "link", machine, 0), ...conditions(0, "conditions")];
+	}
+	return [
+		...uplink,
+		...nics.flatMap((nic) => [
+			linkRow(lab, nicName(nic), machine, nic),
+			...conditions(nic, `${nicName(nic)} conditions`),
+			...facts(nic),
+		]),
+	];
 }
 
 function cables(machine: Machine): readonly Cable[] {
@@ -378,13 +396,25 @@ export interface PortView {
 	readonly cable?: PortCable;
 	/** There when the port is not in VLAN 1. A free port always is. */
 	readonly vlan?: PortVlanView;
+	/** The conditions of the cable in it, there when it has some: `delay 100 ms, loss 20%`. */
+	readonly conditions?: string;
 	/** The word under the socket, one of `boot`, `up`, `cut`, `stop`, `off`, `down`. An empty port shows only its number. */
 	readonly word: string | null;
 	/** What a click will do, for the button's accessible name. Null when a click does nothing. */
 	readonly actionLabel: string | null;
 }
 
+/** What a cable with conditions is marked with where there is room for one word. */
+export const IMPAIRED = "impaired";
+
 function portView(lab: Pick<LabState, "switches">, ref: PortRef, held: HeldPort | undefined): PortView {
+	const view = cableView(lab, ref, held);
+	return held && hasConditions(held.conditions)
+		? { ...view, conditions: conditionWords(held.conditions).join(", ") }
+		: view;
+}
+
+function cableView(lab: Pick<LabState, "switches">, ref: PortRef, held: HeldPort | undefined): PortView {
 	const { port } = ref;
 	if (!held) return { port, state: "empty", machine: null, word: null, actionLabel: null };
 	if (!holdsNic(held)) {

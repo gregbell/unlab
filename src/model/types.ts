@@ -51,6 +51,46 @@ export interface NicRef {
 	readonly nic: NicNo;
 }
 
+declare const conditions: unique symbol;
+/**
+ * How a cable treats the frames that cross it, the same in both directions. A
+ * part that is left out does nothing, so a cable that is as good as new has
+ * none. Made only by `conditionsOf`, which keeps each part in its range.
+ */
+export type Conditions = {
+	/** How long each frame takes to cross, in whole ms. */
+	readonly delay?: number;
+	/** The frames it loses, in percent. */
+	readonly loss?: number;
+	/** The frames that skip the delay, and so arrive before those sent just ahead of them, in percent. Only with a delay. */
+	readonly reorder?: number;
+	/** The most it carries, in bits a second. */
+	readonly rate?: number;
+	/** The longest packet that a frame on it can hold, in bytes, below Ethernet's 1500. */
+	readonly mtu?: number;
+} & { readonly [conditions]: true };
+
+/** A cable that is as good as new. */
+export const NO_CONDITIONS = {} as Conditions;
+
+export type ConditionPart = "delay" | "loss" | "reorder" | "rate" | "mtu";
+
+/** Why a cable did not carry a frame: it lost it, had no room for it at its rate, or the frame was longer than its MTU. */
+export type DropReason = "loss" | "rate" | "mtu";
+
+/** A frame that a cable dropped, by the port of the switch that the cable is in. */
+export interface CableDrop {
+	readonly port: PortNo;
+	readonly reason: DropReason;
+}
+
+/** What a cable has carried, both ways, since it was put in. */
+export interface CableCounters {
+	/** Frames that reached its far end. */
+	readonly delivered: number;
+	readonly dropped: Readonly<Record<DropReason, number>>;
+}
+
 /**
  * A cable between two ports of switches, which can both be of one switch. A
  * port holds one cable, so either of its ports names it. Cut, it keeps both.
@@ -58,6 +98,8 @@ export interface NicRef {
 export interface SwitchCable {
 	readonly ends: readonly [PortRef, PortRef];
 	readonly link: "up" | "cut";
+	/** Left out, none. */
+	readonly conditions?: Conditions;
 }
 
 declare const vlanId: unique symbol;
@@ -102,7 +144,13 @@ export type Cause = Source | "runtime" | "power";
 
 export type Plug =
 	| { readonly kind: "none" }
-	| { readonly kind: "port"; readonly port: PortRef; readonly link: "up" | "cut" };
+	| {
+			readonly kind: "port";
+			readonly port: PortRef;
+			readonly link: "up" | "cut";
+			/** The cable's, which go where it is moved. Left out, none. */
+			readonly conditions?: Conditions;
+	  };
 
 /** A port for each NIC, eth0 first, or null for one that is not plugged in. */
 export type NicPorts = readonly (PortRef | null)[];
@@ -532,6 +580,12 @@ export interface CablePlan {
 
 export type CablePlanError = NoPorts | PortTaken | { readonly kind: "one-port"; readonly port: PortRef };
 
+/** A cable, by a port that it is in, and the conditions it is to have. */
+export interface ConditionsChange {
+	readonly port: PortRef;
+	readonly conditions: Conditions;
+}
+
 /** A cable between switches, by either of its ports, and whether its link is to be up. */
 export interface CableChange {
 	readonly port: PortRef;
@@ -637,6 +691,7 @@ export type CommandEvent =
 	| { readonly type: "cmd/uncable"; readonly port: PortRef; readonly cause: Cause }
 	| { readonly type: "cmd/cable-link"; readonly changes: readonly CableChange[]; readonly cause: Cause }
 	| { readonly type: "cmd/vlan"; readonly port: PortRef; readonly vlan: PortVlan }
+	| { readonly type: "cmd/conditions"; readonly changes: readonly ConditionsChange[] }
 	| { readonly type: "cmd/shell"; readonly machine: MachineName }
 	| {
 			readonly type: "cmd/focus";
@@ -778,6 +833,8 @@ export type Effect =
 	  }
 	/** What the port carries from now on. The switch forgets what it learned on it. */
 	| { readonly type: "port/vlan"; readonly port: PortRef; readonly vlan: PortVlan }
+	/** How the cable in the port treats frames from now on. One between switches is told at both its ports. */
+	| { readonly type: "port/conditions"; readonly port: PortRef; readonly conditions: Conditions }
 	| { readonly type: "pty/open"; readonly session: SessionId }
 	| { readonly type: "pty/close"; readonly session: SessionId }
 	| { readonly type: "screen/create"; readonly session: SessionId }

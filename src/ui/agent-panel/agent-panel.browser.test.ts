@@ -66,7 +66,7 @@ describe("<unlab-agent-panel>", () => {
 			"shell_exec(targets, command)",
 			"shell_read(machine, lines)",
 			"file_write(machine, path, owner, mode, text)",
-			"link_set(link, machines)",
+			"link_set(link, machines, delay, loss, reorder, rate, mtu, conditions)",
 			"cable_plug(nic, to)",
 			"cable_unplug(nic)",
 			"capture_read(filter, limit)",

@@ -2,8 +2,10 @@
 // screen: decoding runs per visible row, never per frame.
 
 import {
+	type CableDrop,
 	type Cause,
 	type DeadCable,
+	DROP_WORD,
 	type MachineName,
 	PORTS,
 	type PortNo,
@@ -67,6 +69,8 @@ export interface FrameRow {
 	readonly vlan?: number;
 	/** The ports it had an 802.1Q tag on, there when it had one. */
 	readonly tagged?: readonly PortNo[];
+	/** The cables that dropped it, each by its port and with the reason, there when one did. */
+	readonly dropped?: readonly CableDrop[];
 }
 
 export interface LinkRow {
@@ -145,6 +149,7 @@ function frameRow(e: FrameEntry, names: RowNames): FrameRow {
 		...(e.looped ? { looped: true } : {}),
 		...(e.vlan !== 1 || e.tagged !== 0 ? { vlan: e.vlan } : {}),
 		...(e.tagged !== 0 ? { tagged: portsIn(e.tagged) } : {}),
+		...(e.dropped.length > 0 ? { dropped: e.dropped } : {}),
 	};
 }
 
@@ -190,6 +195,12 @@ function vlanNote(e: FrameEntry, on: SwitchName | null): string | null {
 	return `802.1Q vlan ${e.vlan} on ${of}${where}`;
 }
 
+/** `dropped by the cable out of port 3: loss`, or `into port 1` for one that never reached the switch. */
+function dropNote(e: FrameEntry, { port, reason }: CableDrop, on: SwitchName | null): string {
+	const way = port === e.from ? "into" : "out of";
+	return `dropped by the cable ${way} ${portText(on, port)}: ${DROP_WORD[reason]}`;
+}
+
 function note(e: FrameEntry, on: SwitchName | null): string | null {
 	const parts: string[] = [];
 	if (e.looped) parts.push("looped");
@@ -197,6 +208,7 @@ function note(e: FrameEntry, on: SwitchName | null): string | null {
 	if (vlan) parts.push(vlan);
 	if (e.flood === "group") parts.push(portList(e.to, on));
 	if (e.flood === "unknown") parts.push(`unknown destination, ${portList(e.to, on)}`);
+	for (const drop of e.dropped) parts.push(dropNote(e, drop, on));
 	if (e.noReply) parts.push("no reply");
 	return parts.length ? parts.join(" · ") : null;
 }

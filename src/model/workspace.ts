@@ -9,12 +9,15 @@ import {
 	parseDefaultName,
 } from "../net/index.ts";
 import { cableEffects } from "./cables.ts";
+import { CONDITION_PARTS, conditionEffects, conditionsOf, hasConditions, isConditionsFault } from "./conditions.ts";
 import { FIRST_SETS, MAX_EXTRA_DISKS, parseGiB } from "./disks.ts";
 import { identity, isNameFault, parseCheckpointName, parseMachineName, parseSwitchName } from "./identity.ts";
 import { type BootNode, bootMachines, machineList, plugsOf, samePort } from "./machines.ts";
 import { addPanes, focusPane, keyboardHolder, parkPane, toggleMaximise } from "./panes.ts";
 import {
 	type Checkpoint,
+	type ConditionPart,
+	type Conditions,
 	DEFAULT_SWITCH,
 	DISK_SIZES,
 	type DiskSets,
@@ -24,6 +27,7 @@ import {
 	type LabState,
 	MAX_SWITCHES,
 	type NicSpec,
+	NO_CONDITIONS,
 	PANELS,
 	type PanelName,
 	type Plug,
@@ -55,6 +59,7 @@ export function saveWorkspace(state: LabState): string {
 						address: nic.address ? addressStr(nic.address) : null,
 						port: plug?.kind === "port" ? plug.port : null,
 						cut: plug?.kind === "port" && plug.link === "cut",
+						conditions: (plug?.kind === "port" && plug.conditions) || NO_CONDITIONS,
 					};
 				}),
 				failure: m.life.phase === "failed" ? m.life.reason : undefined,
@@ -70,7 +75,11 @@ export function saveWorkspace(state: LabState): string {
 		nextN: state.nextN,
 		switches: state.switches,
 		shown: state.shownSwitch,
-		cables: state.switchCables.map(({ ends, link }) => ({ ends, cut: link === "cut" })),
+		cables: state.switchCables.map(({ ends, link, conditions = NO_CONDITIONS }) => ({
+			ends,
+			cut: link === "cut",
+			conditions,
+		})),
 		vlans: state.portVlans.map(({ port, vlan }) =>
 			vlan.mode === "access"
 				? { port, vlan: vlan.vlan }
@@ -116,12 +125,29 @@ function readPort(saved: unknown, switches: LabState["switches"]): PortRef | nul
 	return { switch: readSwitch(saved.switch, switches), port: PORTS.find((port) => port === saved.port) ?? invalid() };
 }
 
+/** A cable's conditions, each part a number in its range. In the lab, a cable with none has no such field. */
+function readConditions(saved: unknown): { readonly conditions?: Conditions } {
+	if (!record(saved) || Object.keys(saved).some((key) => !CONDITION_PARTS.some((part) => part === key))) {
+		return invalid();
+	}
+	const values: Partial<Record<ConditionPart, number>> = {};
+	for (const part of CONDITION_PARTS) {
+		const value = saved[part];
+		if (value === undefined) continue;
+		if (typeof value !== "number") return invalid();
+		values[part] = value;
+	}
+	const conditions = conditionsOf(values);
+	if (isConditionsFault(conditions)) return invalid();
+	return hasConditions(conditions) ? { conditions } : {};
+}
+
 function readCable(saved: unknown, switches: LabState["switches"]): SwitchCable {
 	if (!record(saved) || typeof saved.cut !== "boolean" || !Array.isArray(saved.ends) || saved.ends.length !== 2) {
 		return invalid();
 	}
 	const [a, b] = saved.ends.map((end: unknown) => readPort(end, switches) ?? invalid());
-	return { ends: [a, b], link: saved.cut ? "cut" : "up" };
+	return { ends: [a, b], link: saved.cut ? "cut" : "up", ...readConditions(saved.conditions) };
 }
 
 function readCables(saved: unknown, switches: LabState["switches"]): readonly SwitchCable[] {
@@ -165,7 +191,9 @@ function readNic(saved: unknown, switches: LabState["switches"]): SavedNic {
 			net: port?.switch ?? net,
 			address: readAddress(saved.address),
 		},
-		plug: port ? { kind: "port", port, link: saved.cut ? "cut" : "up" } : { kind: "none" },
+		plug: port
+			? { kind: "port", port, link: saved.cut ? "cut" : "up", ...readConditions(saved.conditions) }
+			: { kind: "none" },
 	};
 }
 
@@ -262,6 +290,13 @@ const UPGRADES: readonly ((lab: SavedLab) => SavedLab)[] = [
 	(lab) => ({ ...lab, cables: [] }),
 	// Every port was in VLAN 1.
 	(lab) => ({ ...lab, vlans: [] }),
+	// No cable had conditions.
+	(lab) => ({
+		...eachNode((node) => ({ nics: savedNics(node).map((nic) => ({ ...nic, conditions: {} })) }))(lab),
+		cables: Array.isArray(lab.cables)
+			? lab.cables.map((cable: unknown) => (record(cable) ? { ...cable, conditions: {} } : invalid()))
+			: invalid(),
+	}),
 ];
 const VERSION = UPGRADES.length + 1;
 
@@ -354,8 +389,8 @@ export function restoreWorkspace(base: LabState, raw: string | null): Step {
 	const booted = bootMachines(wired, nodes, saved.nextN, 0);
 	// A machine that failed holds no port, so the one it held is in VLAN 1.
 	const state = { ...booted.state, portVlans: heldVlans(booted.state, vlans) };
-	// The cables and what their ports carry first, so a machine's first frame crosses them.
-	const effects = [...cableEffects(wired), ...vlanEffects(state), ...booted.effects];
+	// The cables, what their ports carry and how they treat frames first, so a machine's first frame crosses them.
+	const effects = [...cableEffects(wired), ...vlanEffects(state), ...conditionEffects(state), ...booted.effects];
 	const order = Array.isArray(saved.order) ? saved.order : [];
 	const sorted = [...state.rail].sort((a, b) => order.indexOf(a) - order.indexOf(b));
 	let panes = addPanes(base.panes, sorted);

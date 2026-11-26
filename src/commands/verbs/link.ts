@@ -1,9 +1,17 @@
 import {
 	ACCEPTS,
 	type CableChange,
+	CONDITION_PARTS,
+	type Conditions,
+	type ConditionsChange,
+	type ConditionValues,
 	cableAt,
+	conditionsAt,
+	conditionWords,
 	DEFAULT_SWITCH,
 	endsFrom,
+	hasConditions,
+	isConditionsFault,
 	isPlanError,
 	joined,
 	type LabState,
@@ -13,6 +21,7 @@ import {
 	type NicName,
 	type NicNo,
 	type NicRef,
+	NO_CONDITIONS,
 	nicLabel,
 	nicPortsOf,
 	type PortNo,
@@ -21,7 +30,11 @@ import {
 	plugsOf,
 	portName,
 	type SwitchName,
+	sameConditions,
 	samePort,
+	type WrittenConditions,
+	withConditions,
+	writtenConditions,
 } from "../../model/index.ts";
 import { nicName } from "../../net/index.ts";
 import { defineVerb, machineNow, Refusal, refuse } from "../define.ts";
@@ -40,12 +53,16 @@ export interface CableState {
 	readonly switch?: SwitchName;
 	readonly port: PortNo | null;
 	readonly link: CableLink;
+	/** The cable's, each part as an option takes it. There when the line set or cleared conditions. */
+	readonly conditions?: WrittenConditions;
 }
 
 /** A cable between two switches as `link_set` reports it, from the port that named it. */
 export interface SwitchCableState extends PortRef {
 	readonly to: PortRef;
 	readonly link: "up" | "cut";
+	/** As a NIC's cable has them. */
+	readonly conditions?: WrittenConditions;
 }
 
 /** Null while the machine takes no change to its cables. */
@@ -82,6 +99,43 @@ function between(lab: LabState, port: PortRef): SwitchCableState | null {
 
 const same = (a: NicRef, b: NicRef): boolean => a.machine === b.machine && a.nic === b.nic;
 
+/** A cable that the line gives conditions: the port it will be in, what a sentence calls it, and what it is to have. */
+interface Conditioned extends ConditionsChange {
+	/** `node2`, or `lan port 3 to wan port 1` for one between switches. */
+	readonly to: string | null;
+	readonly between: string | null;
+	readonly was: Conditions;
+}
+
+/** `delay 100 ms and loss 20%`, or `no conditions`. */
+function conditionsText(conditions: Conditions): string {
+	return hasConditions(conditions) ? andList(conditionWords(conditions)) : "no conditions";
+}
+
+/** `the cables to node1 and node2`, `the cable from lan port 3 to wan port 1`. */
+function cablesText(cables: readonly Conditioned[]): string {
+	const nics = cables.flatMap(({ to }) => to ?? []);
+	const between = cables.flatMap((cable) => (cable.between === null ? [] : [`the cable from ${cable.between}`]));
+	const to = nics.length === 0 ? [] : [`the ${nics.length === 1 ? "cable" : "cables"} to ${andList(nics)}`];
+	return andList([...to, ...between]);
+}
+
+/** What the line will do to conditions, a part for each set of cables that end up alike. */
+function conditionParts(cables: readonly Conditioned[], nothing: string): string[] {
+	const changed = cables.filter(({ was, conditions }) => !sameConditions(was, conditions));
+	const parts = [...Map.groupBy(changed, ({ conditions }) => conditionsText(conditions))].map(([text, group]) =>
+		hasConditions(group[0].conditions)
+			? `give ${cablesText(group)} ${text}`
+			: `clear the conditions of ${cablesText(group)}`,
+	);
+	const kept = cables.filter(({ was, conditions }) => sameConditions(was, conditions));
+	const prefix = parts.length === 0 ? nothing : "";
+	for (const [text, group] of Map.groupBy(kept, ({ conditions }) => conditionsText(conditions))) {
+		parts.push(`${prefix}${cablesText(group)} already ${group.length === 1 ? "has" : "have"} ${text}`);
+	}
+	return parts;
+}
+
 type Kind = "cut" | "reconnect" | "plug";
 
 const KINDS: readonly Kind[] = ["cut", "reconnect", "plug"];
@@ -99,11 +153,24 @@ function kindOf(change: LinkChange): Kind {
 
 export const link = defineVerb({
 	name: "link",
-	about: "plug or cut cables",
-	description: `Plug in (up) or cut (down) the switch cables of machines or of single NICs. Returns the port and link state per NIC, with the port's switch when the lab has several. A cable already as asked is left alone. A NIC that is unplugged goes into the lowest free port of ${DEFAULT_SWITCH}, and plug puts it in any. The cables of a machine that is off can be cut or plugged in; their links come up when it boots. A port names the cable in it (lan:3), also one between switches.`,
+	about: "plug or cut cables, and set their conditions",
+	description: `Plug in (up) or cut (down) the cables of machines or of single NICs. A port names the cable in it (lan:3), also one between switches. One already as asked is left alone. An unplugged NIC goes into the lowest free port of ${DEFAULT_SWITCH}. A machine that is off takes it too: its links come up when it boots. The options set the cables' conditions, alike in both directions: one left out stays, and a cut, a move or a reboot keeps them. Returns each cable's port and link, and with an option its conditions.`,
 	danger: false,
 	phases: ["ready", "off"],
-	grammar: { link: slots.choice("up plugs the cables in, down cuts them.", ["up", "down"]), machines: slots.cables() },
+	grammar: {
+		link: slots.choice("up plugs the cables in, down cuts them.", ["up", "down"]),
+		machines: slots.cables(),
+		delay: slots.option("--delay", slots.condition("delay"), null),
+		loss: slots.option("--loss", slots.condition("loss"), null),
+		reorder: slots.option("--reorder", slots.condition("reorder"), null),
+		rate: slots.option("--rate", slots.condition("rate"), null),
+		mtu: slots.option("--mtu", slots.condition("mtu"), null),
+		conditions: slots.exclusive(
+			"--clear takes every condition of the cables away, before those that the other options set.",
+			"keep",
+			[slots.flag("--clear", "clear")],
+		),
+	},
 	example: { link: "down", machines: "node2" },
 	plan(a, lab, ctx) {
 		for (const { machine } of a.machines.nics) {
@@ -117,7 +184,50 @@ export const link = defineVerb({
 		// One that has gone since the line was read is left out, as a NIC that takes no change is.
 		const cables = a.machines.between.flatMap((port) => between(lab, port) ?? []);
 		const turned = cables.filter((now) => (now.link === "up") !== up);
-		return { up, changes, unchanged, cables, turned, skipped: a.machines.skipped };
+		const plan = { up, changes, unchanged, cables, turned, skipped: a.machines.skipped };
+
+		const values: ConditionValues = Object.fromEntries(
+			CONDITION_PARTS.flatMap((part) => (a[part] === null ? [] : [[part, a[part]]])),
+		);
+		const clear = a.conditions === "clear";
+		if (!clear && Object.keys(values).length === 0) return { ...plan, conditioned: null };
+		// Every cable that the line names, where it will be once the line has run.
+		const named: Omit<Conditioned, "conditions">[] = [];
+		const held = unchanged.map((ref) => {
+			const life = lab.machines[ref.machine]?.life;
+			return { ref, port: life && nicPortsOf(life)[ref.nic], fresh: false };
+		});
+		for (const { ref, port, fresh } of [
+			...changes.map((ref) => ({ ref, port: ref.port, fresh: ref.newPort })),
+			...held,
+		]) {
+			const to = label(lab, ref);
+			if (!port) return refuse(`${to} has no cable to give conditions, so plug it in with link up ${to}.`, "machines");
+			named.push({ port, to, between: null, was: fresh ? NO_CONDITIONS : conditionsAt(lab, port) });
+		}
+		for (const { to, ...port } of cables) {
+			named.push({ port, to: null, between: cableLabel(lab, [port, to]), was: conditionsAt(lab, port) });
+		}
+		const conditioned: Conditioned[] = [];
+		for (const cable of named) {
+			const conditions = withConditions(clear ? NO_CONDITIONS : cable.was, values);
+			if (isConditionsFault(conditions)) {
+				const whose = cable.to ?? `the cable from ${cable.between}`;
+				if (conditions.kind !== "reorder-needs-delay") return refuse(`${whose} cannot have that ${conditions.part}.`);
+				// Reordering that was there is at fault only when this line takes the delay away.
+				return a.reorder !== null && a.reorder > 0
+					? refuse(
+							`Reordering lets frames skip a cable's delay, and ${whose} has none, so give --delay too, such as --delay 20ms.`,
+							"reorder",
+						)
+					: refuse(
+							`${whose} reorders frames by letting them skip its delay, so keep the delay, or take both away with --delay 0 --reorder 0.`,
+							"delay",
+						);
+			}
+			conditioned.push({ ...cable, conditions });
+		}
+		return { ...plan, conditioned };
 	},
 	describe(plan, lab) {
 		const names = (refs: readonly NicRef[]) => andList(refs.map((ref) => label(lab, ref)));
@@ -139,7 +249,9 @@ export const link = defineVerb({
 			const loop = plan.up && joined(lab, port.switch, to.switch) ? [LOOP] : [];
 			parts.push(`${plan.up ? "reconnect" : "cut"} the cable from ${cableLabel(lab, [port, to])}`, ...loop);
 		}
-		const nothing = parts.length === 0 ? "change nothing: " : "";
+		const conditioned = plan.conditioned ?? [];
+		const sets = conditioned.some(({ was, conditions }) => !sameConditions(was, conditions));
+		const nothing = parts.length === 0 && !sets ? "change nothing: " : "";
 		const as = plan.up ? "up" : "cut";
 		if (plan.unchanged.length > 0) {
 			const are = plan.unchanged.length === 1 ? "is" : "are";
@@ -152,7 +264,8 @@ export const link = defineVerb({
 			(name) => lab.machines[name]?.life.phase === "off",
 		);
 		if (off.length > 0) parts.push(`${andList(off)} ${off.length === 1 ? "is" : "are"} off`);
-		return [...parts, ...skippedPart(plan.skipped)].join(" · ");
+		const said = conditionParts(conditioned, parts.length === 0 ? nothing : "");
+		return [...parts, ...said, ...skippedPart(plan.skipped)].join(" · ");
 	},
 	async execute(plan, ctx, deps) {
 		const turned: readonly CableChange[] = plan.turned.map(({ switch: on, port }) => ({
@@ -161,19 +274,38 @@ export const link = defineVerb({
 		}));
 		deps.dispatch({ type: "cmd/link", changes: plan.changes, cause: ctx.source });
 		if (turned.length > 0) deps.dispatch({ type: "cmd/cable-link", changes: turned, cause: ctx.source });
+		const conditioned = plan.conditioned ?? [];
+		// After the links, so a cable that this line plugs in is there to take them.
+		if (conditioned.length > 0) {
+			const changes = conditioned.map(({ port, conditions }) => ({ port, conditions }));
+			deps.dispatch({ type: "cmd/conditions", changes });
+		}
 		const settled = await deps.until(
 			(s) =>
 				plan.changes.every((c) => applied(s, c)) &&
-				turned.every(({ port }) => (cableAt(s, port)?.link === "up") === plan.up),
+				turned.every(({ port }) => (cableAt(s, port)?.link === "up") === plan.up) &&
+				conditioned.every(({ port, conditions }) => sameConditions(conditionsAt(s, port), conditions)),
 			ctx.signal,
 		);
+		/** What a cable has now, said and returned when the line was about conditions. */
+		const had = (port: PortRef | null | undefined) => {
+			if (plan.conditioned === null || !port) return { text: "", data: {} };
+			const conditions = conditionsAt(settled, port);
+			return { text: ` with ${conditionsText(conditions)}`, data: { conditions: writtenConditions(conditions) } };
+		};
 		const cables = [...plan.changes, ...plan.unchanged].flatMap((ref) => {
 			const now = cable(settled, ref);
-			return now ? [{ now, text: `${label(settled, ref)} ${now.link === "off" ? "plugged in" : now.link}` }] : [];
+			if (!now) return [];
+			const life = settled.machines[ref.machine]?.life;
+			const has = had(life && nicPortsOf(life)[ref.nic]);
+			const link = now.link === "off" ? "plugged in" : now.link;
+			return [{ now: { ...now, ...has.data }, text: `${label(settled, ref)} ${link}${has.text}` }];
 		});
 		const switched = plan.cables.flatMap((port) => {
 			const now = between(settled, port);
-			return now ? [{ now, text: `${portName(port)} ${now.link}` }] : [];
+			if (!now) return [];
+			const has = had(port);
+			return [{ now: { ...now, ...has.data }, text: `${portName(port)} ${now.link}${has.text}` }];
 		});
 		const all = [...cables, ...switched];
 		const text = all.map((c) => c.text).join(", ");
@@ -181,7 +313,7 @@ export const link = defineVerb({
 	},
 	tool: {
 		name: "link_set",
-		title: "Plug in or cut cables",
+		title: "Plug in or cut cables, and set their conditions",
 		policy: "run",
 	},
 });

@@ -20,6 +20,7 @@ function storeLab() {
 			dispatch: (event) => store.dispatchCommand(event),
 			until: store.until,
 			now: () => store.state.now,
+			carried: () => undefined,
 			exec: { inject: () => Promise.reject(new Error("This test has no exec port.")) },
 			files: { write: () => Promise.reject(new Error("This test has no file port.")) },
 		},

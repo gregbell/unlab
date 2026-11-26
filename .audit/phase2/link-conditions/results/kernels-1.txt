@@ -1,0 +1,24 @@
+ RUN  v5.1.1 /home/greg/src/unlab/.claude/worktrees/phase2
+stdout | test/integration/link-conditions.test.ts > 100 ms of delay on a NIC's cable, or on a cable between switches, adds about 200 ms to a ping's round trip, and slows no other cable
+measured | ping round trip, ms | {"base":1.667,"beside":1.355,"nic":204.281,"other":1.161,"cleared":1.135,"between":204.368,"both":406.176}
+ ✓ |integration| test/integration/link-conditions.test.ts > 100 ms of delay on a NIC's cable, or on a cable between switches, adds about 200 ms to a ping's round trip, and slows no other cable 29437ms
+stdout | test/integration/link-conditions.test.ts > with 20% loss on a cable, the share of 1,000 frames that it loses in one direction is within three points of it, by the receiver's count and by the cable's
+measured | 20% loss on node1's cable | {"sent":1000,"arrived":801,"share":0.199,"node2Received":802,"pingsAnswered":618,"cableOffered":1803,"cableDropped":382,"cableShare":0.21186910704381587}
+ ✓ |integration| test/integration/link-conditions.test.ts > with 20% loss on a cable, the share of 1,000 frames that it loses in one direction is within three points of it, by the receiver's count and by the cable's 16787ms
+stdout | test/integration/link-conditions.test.ts > with reordering, pings arrive in another order than they were sent in, which the guest and the switch's tap both show
+measured | delay 50 ms, reorder 25% | {"requests":[1,4,0,6,2,3,8,5,7,12,9,10,11,16,17,13,14,15,22,18,19,20,25,21,23,24,29,26,27,32,28,33,30,31,36,37,34,35,38,39],"answered":[1,8,4,0,6,2,12,3,5,10,7,9,14,11,16,17,13,18,15,22,19,24,20,25,21,26,32,23,33,29,27,36,28,30,31,37,34,35,38,39]}
+ ✓ |integration| test/integration/link-conditions.test.ts > with reordering, pings arrive in another order than they were sent in, which the guest and the switch's tap both show 2578ms
+stdout | test/integration/link-conditions.test.ts > with a rate of 1 Mbit/s on a cable, a TCP transfer across it runs within 20% of that, and what its queue has no room for is dropped
+measured | TCP at 1 Mbit/s on the cable between the switches | {"bytes":1048576,"seconds":8.809514821999997,"mbit":0.952221339028925,"droppedByRate":10}
+stdout | test/integration/link-conditions.test.ts > with a rate of 1 Mbit/s on a cable, a TCP transfer across it runs within 20% of that, and what its queue has no room for is dropped
+measured | TCP at 1 Mbit/s on node1's cable | {"bytes":1048576,"seconds":8.803559032999997,"mbit":0.9528655363763041,"droppedByRate":10}
+ ✓ |integration| test/integration/link-conditions.test.ts > with a rate of 1 Mbit/s on a cable, a TCP transfer across it runs within 20% of that, and what its queue has no room for is dropped 20198ms
+stdout | test/integration/link-conditions.test.ts > a frame that holds a packet longer than a cable's MTU is dropped, one of that size passes, and the tap says why
+measured | MTU 1400 on node1's cable | {"dropped":2,"counted":2,"bytes":[1415,1415]}
+stdout | test/integration/link-conditions.test.ts > a frame that holds a packet longer than a cable's MTU is dropped, one of that size passes, and the tap says why
+measured | MTU 1400 on the cable between the switches | {"dropped":2,"counted":2,"bytes":[1415,1415]}
+ ✓ |integration| test/integration/link-conditions.test.ts > a frame that holds a packet longer than a cable's MTU is dropped, one of that size passes, and the tap says why 9767ms
+ Test Files  1 passed (1)
+      Tests  5 passed (5)
+   Start at  12:12:06
+   Duration  78.95s (tests 100%)

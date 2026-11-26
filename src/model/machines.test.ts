@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import { conditions } from "../../test/support/conditions.ts";
 import { port0 } from "../../test/support/ports.ts";
 import { nameOf } from "../net/index.ts";
 import { identity } from "./identity.ts";
@@ -137,6 +138,7 @@ const TABLE: Readonly<Record<Phase, Readonly<Record<Column, Outcome>>>> = {
 		"cmd/uncable": "ignored",
 		"cmd/cable-link": "ignored",
 		"cmd/vlan": "ignored",
+		"cmd/conditions": "booting",
 		"switch/storm": "untouched",
 		"cmd/shell": "ignored",
 		"cmd/focus": "untouched",
@@ -175,6 +177,7 @@ const TABLE: Readonly<Record<Phase, Readonly<Record<Column, Outcome>>>> = {
 		"cmd/uncable": "ignored",
 		"cmd/cable-link": "ignored",
 		"cmd/vlan": "ignored",
+		"cmd/conditions": "ready",
 		"switch/storm": "untouched",
 		"cmd/shell": "ready",
 		"cmd/focus": "untouched",
@@ -213,6 +216,7 @@ const TABLE: Readonly<Record<Phase, Readonly<Record<Column, Outcome>>>> = {
 		"cmd/uncable": "ignored",
 		"cmd/cable-link": "ignored",
 		"cmd/vlan": "ignored",
+		"cmd/conditions": "stopping",
 		"switch/storm": "untouched",
 		"cmd/shell": "ignored",
 		"cmd/focus": "untouched",
@@ -251,6 +255,7 @@ const TABLE: Readonly<Record<Phase, Readonly<Record<Column, Outcome>>>> = {
 		"cmd/uncable": "ignored",
 		"cmd/cable-link": "ignored",
 		"cmd/vlan": "ignored",
+		"cmd/conditions": "off",
 		"switch/storm": "untouched",
 		"cmd/shell": "ignored",
 		"cmd/focus": "untouched",
@@ -289,6 +294,7 @@ const TABLE: Readonly<Record<Phase, Readonly<Record<Column, Outcome>>>> = {
 		"cmd/uncable": "ignored",
 		"cmd/cable-link": "ignored",
 		"cmd/vlan": "ignored",
+		"cmd/conditions": "restoring",
 		"switch/storm": "untouched",
 		"cmd/shell": "ignored",
 		"cmd/focus": "untouched",
@@ -327,6 +333,7 @@ const TABLE: Readonly<Record<Phase, Readonly<Record<Column, Outcome>>>> = {
 		"cmd/uncable": "ignored",
 		"cmd/cable-link": "ignored",
 		"cmd/vlan": "ignored",
+		"cmd/conditions": "ignored",
 		"switch/storm": "untouched",
 		"cmd/shell": "ignored",
 		"cmd/focus": "untouched",
@@ -365,6 +372,7 @@ const TABLE: Readonly<Record<Phase, Readonly<Record<Column, Outcome>>>> = {
 		"cmd/uncable": "ignored",
 		"cmd/cable-link": "ignored",
 		"cmd/vlan": "ignored",
+		"cmd/conditions": "ignored",
 		"switch/storm": "untouched",
 		"cmd/shell": "ignored",
 		"cmd/focus": "untouched",
@@ -445,6 +453,8 @@ function eventFor(column: Column, s: LabState, name: MachineName, attempt: numbe
 			return { type: "cmd/cable-link", changes: [{ port: port0(8), up: false }], cause: "bar" };
 		case "cmd/vlan":
 			return { type: "cmd/vlan", port: port0(8), vlan: { mode: "access", vlan: 10 as VlanId } };
+		case "cmd/conditions":
+			return { type: "cmd/conditions", changes: [{ port: port0(1), conditions: conditions({ delay: 100 }) }] };
 		case "switch/storm":
 			return { type: "switch/storm", switch: "switch0", storm: { since: s.now, rate: 100, dropped: 0 } };
 		case "cmd/shell":
@@ -485,6 +495,7 @@ const ADDRESSED = COLUMNS.filter(
 			"cmd/uncable",
 			"cmd/cable-link",
 			"cmd/vlan",
+			"cmd/conditions",
 			"switch/storm",
 			"cmd/capture",
 			"cmd/logged",

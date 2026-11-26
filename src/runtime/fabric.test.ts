@@ -1,12 +1,16 @@
 import { describe, expect, test } from "vitest";
+import { conditions, seededStreams } from "../../test/support/conditions.ts";
 import { arpReply, arpRequest, BROADCAST, eth, mac, ping } from "../../test/support/frames.ts";
-import type { PortNo, PortVlan, VlanId } from "../model/index.ts";
+import type { ConditionValues, PortNo, PortVlan, VlanId } from "../model/index.ts";
 import { vlanTag, withoutTag, withTag } from "../net/index.ts";
 import {
 	Fabric,
+	type FabricOptions,
+	HELD_LIMIT,
 	PACE_MS,
 	PACED_LIMIT,
 	QUEUE_LIMIT,
+	RATE_QUEUE_BYTES,
 	STORM_QUIET_MS,
 	type StormReading,
 	type TapEvent,
@@ -223,16 +227,19 @@ type Letter = "a" | "b" | "c" | "d";
  * Switches by letter, each with machine n on its port 1 (a has node1, b node2
  * and so on), and cables written `a8-b7`. Time is the test's.
  */
-function net(letters: readonly Letter[], cables: readonly string[]) {
+function net(letters: readonly Letter[], cables: readonly string[], options: FabricOptions = {}) {
 	const taps: { on: Letter; at: number; e: TapEvent }[] = [];
 	const storms: { on: Letter; over: boolean; reading: StormReading }[] = [];
 	const slots = new Map<Letter, number>();
 	const names: Letter[] = [];
 	let now = 0;
-	const fabric = new Fabric({
-		tap: (slot, e) => taps.push({ on: names[slot], at: now, e }),
-		storm: (slot, reading, over) => storms.push({ on: names[slot], over, reading }),
-	});
+	const fabric = new Fabric(
+		{
+			tap: (slot, e) => taps.push({ on: names[slot], at: now, e }),
+			storm: (slot, reading, over) => storms.push({ on: names[slot], over, reading }),
+		},
+		options,
+	);
 	const got = new Map<Letter, Uint8Array[]>();
 	for (const letter of letters) {
 		const slot = fabric.addSwitch();
@@ -260,6 +267,14 @@ function net(letters: readonly Letter[], cables: readonly string[]) {
 		send: (on: Letter, frame: Uint8Array) => fabric.receive(slot(on), 1, frame, now),
 		/** What the machine on the switch has been handed. */
 		got: (on: Letter) => got.get(on)?.length ?? 0,
+		/** The number of each ping that the machine on the switch has been handed, in the order they came. */
+		pings: (on: Letter) => (got.get(on) ?? []).map((frame) => (frame[40] << 8) | frame[41]),
+		/** Gives a cable its conditions as the lab does: at the port a NIC's is in, and at both ports of one between switches. */
+		impair(cable: string, values: ConditionValues) {
+			for (const at of cable.split("-")) fabric.setConditions(end(at).slot, end(at).port, conditions(values));
+		},
+		/** What the cable has carried, by a port that it is in. */
+		carried: (at: string) => fabric.carried(end(at).slot, end(at).port),
 		/** Carries everything that is due now. */
 		drain() {
 			while (fabric.drain(now, 64) > 0);
@@ -1042,5 +1057,295 @@ describe("VLANs", () => {
 		t.run(STORM_QUIET_MS * 2);
 		expect(t.storming("a")).toBe(false);
 		expect(t.table("a")).toEqual(twenty);
+	});
+});
+
+/** A frame from node1 to node2 with as many bytes after its header as given: a packet of that size. */
+const packet = (bytes: number, seq = 1): Uint8Array => {
+	const frame = new Uint8Array(14 + bytes);
+	frame.set(ping(1, 2, seq).subarray(0, Math.min(98, frame.length)));
+	return frame;
+};
+
+/** Node1 is on switch a and node2 on switch b, so a frame between them crosses node1's cable and the one between the switches, once each. */
+const CABLES = [
+	["a NIC's cable", "a1"],
+	["a cable between switches", "a8-b8"],
+] as const;
+
+describe.each(CABLES)("conditions on %s", (_, cable) => {
+	const two = (options: FabricOptions = {}) => net(["a", "b"], ["a8-b8"], options);
+	/** The port of switch a that says what the cable dropped. */
+	const port = cable === "a1" ? 1 : 8;
+
+	test("a delay holds each frame that long in each direction, so a ping and its reply take twice as long", () => {
+		const t = two();
+		t.impair(cable, { delay: 100 });
+		t.send("a", ping(1, 2));
+		expect([t.fabric.next(), t.fabric.busy]).toEqual([100, true]);
+		t.run(99);
+		expect(t.got("b")).toBe(0);
+		t.run(1);
+		expect([t.got("b"), t.now]).toEqual([1, 100]);
+		t.send("b", ping(2, 1, 1, 0));
+		t.run(99);
+		expect(t.got("a")).toBe(0);
+		t.run(1);
+		expect([t.got("a"), t.now]).toEqual([1, 200]);
+	});
+
+	test("with 20% loss, the share of 1,000 frames lost in one direction is within three points of it, each is in the tap with the reason, and the cable counts both", () => {
+		const t = two({ random: seededStreams() });
+		t.impair(cable, { loss: 20 });
+		for (let seq = 1; seq <= 1000; seq++) t.send("a", ping(1, 2, seq));
+		t.drain();
+		const lost = 1000 - t.got("b");
+		expect(Math.abs(lost / 1000 - 0.2)).toBeLessThanOrEqual(0.03);
+		const dropped = t.taps.filter(({ e }) => e.dropped.length > 0);
+		expect(dropped).toHaveLength(lost);
+		expect(
+			dropped.every(({ on, e }) => on === "a" && e.dropped[0].port === port && e.dropped[0].reason === "loss"),
+		).toBe(true);
+		expect(t.carried(cable.slice(0, 2))).toEqual({ delivered: 1000 - lost, dropped: { loss: lost, rate: 0, mtu: 0 } });
+	});
+
+	test("loses every frame at 100%, in both directions, and none once its loss is set to nothing", () => {
+		const t = two();
+		t.impair(cable, { loss: 100 });
+		for (let i = 0; i < 20; i++) t.send("a", ping(1, 2));
+		for (let i = 0; i < 20; i++) t.send("b", ping(2, 1));
+		t.drain();
+		expect([t.got("a"), t.got("b")]).toEqual([0, 0]);
+		t.impair(cable, {});
+		for (let i = 0; i < 20; i++) t.send("a", ping(1, 2));
+		for (let i = 0; i < 20; i++) t.send("b", ping(2, 1));
+		t.drain();
+		expect([t.got("a"), t.got("b")]).toEqual([20, 20]);
+	});
+
+	test("with reordering, a share of the frames skips the delay, so they come in another order, and none is lost", () => {
+		const t = two({ random: seededStreams() });
+		t.impair(cable, { delay: 20, reorder: 25 });
+		const sent = Array.from({ length: 200 }, (_, i) => i + 1);
+		for (const seq of sent) {
+			t.send("a", ping(1, 2, seq));
+			t.run(1);
+		}
+		t.run(20);
+		const came = t.pings("b");
+		expect(came.toSorted((x, y) => x - y)).toEqual(sent);
+		expect(came).not.toEqual(sent);
+		// The frames of switch b's tap are in the order that they came, each as late as it was held: not at all, or 20 ms.
+		const held = t.taps
+			.filter(({ on }) => on === "b")
+			.map(({ at, e }) => at - (((e.frame[40] << 8) | e.frame[41]) - 1));
+		expect(new Set(held)).toEqual(new Set([0, 20]));
+		const skipped = held.filter((ms) => ms === 0).length;
+		expect(Math.abs(skipped / 200 - 0.25)).toBeLessThanOrEqual(0.1);
+	});
+
+	test("a rate lets one frame go at a time, each as long on its way as its bytes take, and drops what its queue has no room for", () => {
+		const t = two();
+		t.impair(cable, { rate: 1_000_000 });
+		// 1,514 bytes take 12.112 ms at 1 Mbit/s, and 43 of them are the 64 KiB that may wait.
+		const fits = Math.floor(RATE_QUEUE_BYTES / 1514);
+		for (let seq = 1; seq <= fits + 7; seq++) t.send("a", packet(1500, seq));
+		t.drain();
+		expect(t.carried(cable.slice(0, 2))?.dropped).toEqual({ loss: 0, rate: 7, mtu: 0 });
+		expect(t.taps.filter(({ e }) => e.dropped.some(({ reason }) => reason === "rate"))).toHaveLength(7);
+		t.run(12);
+		expect(t.got("b")).toBe(0);
+		t.run(1);
+		expect(t.got("b")).toBe(1);
+		t.run(1000 - 13);
+		// A second carries a megabit: 82 frames of 12,112 bits, which is more than had waited.
+		expect(t.got("b")).toBe(fits);
+		expect(t.pings("b")).toEqual(Array.from({ length: fits }, (_, i) => i + 1));
+
+		for (let ms = 0; ms < 2000; ms += 10) {
+			t.send("a", packet(1500));
+			t.run(10);
+		}
+		const bits = (t.got("b") - fits) * 1514 * 8;
+		expect(Math.abs(bits / 2 / 1_000_000 - 1)).toBeLessThan(0.02);
+	});
+
+	test("an MTU drops a frame that holds a longer packet, and lets one of that size and shorter ones pass", () => {
+		const t = two();
+		t.impair(cable, { mtu: 1400 });
+		t.send("a", packet(1401));
+		t.drain();
+		expect(t.got("b")).toBe(0);
+		expect(t.taps.at(-1)?.e.dropped).toEqual([{ port, reason: "mtu" }]);
+		expect(t.carried(cable.slice(0, 2))).toEqual({ delivered: 0, dropped: { loss: 0, rate: 0, mtu: 1 } });
+		t.send("a", packet(1400));
+		t.send("a", packet(28));
+		t.drain();
+		expect(t.got("b")).toBe(2);
+	});
+
+	test("that change let what was on its way arrive at once, in order, ahead of what is sent after", () => {
+		const t = two();
+		t.impair(cable, { delay: 100 });
+		t.send("a", ping(1, 2, 1));
+		t.run(10);
+		t.send("a", ping(1, 2, 2));
+		t.run(10);
+		t.impair(cable, { delay: 5 });
+		t.send("a", ping(1, 2, 3));
+		t.drain();
+		expect(t.pings("b")).toEqual([1, 2]);
+		t.run(5);
+		expect(t.pings("b")).toEqual([1, 2, 3]);
+	});
+
+	test("a cut loses what waits on it, and it has its conditions when it is reconnected", () => {
+		const t = two();
+		t.impair(cable, { delay: 100 });
+		t.send("a", ping(1, 2));
+		t.run(50);
+		t.cut(cable.slice(0, 2));
+		expect([t.fabric.waiting, t.fabric.busy]).toEqual([0, false]);
+		t.cut(cable.slice(0, 2), true);
+		t.run(100);
+		expect(t.got("b")).toBe(0);
+		t.send("a", ping(1, 2));
+		t.run(99);
+		expect(t.got("b")).toBe(0);
+		t.run(1);
+		expect(t.got("b")).toBe(1);
+	});
+
+	test("holds no more frames than its bound, and the port counts those it had no room for", () => {
+		const t = two();
+		t.impair(cable, { delay: 1000 });
+		for (let i = 0; i < HELD_LIMIT + 5; i++) t.send("a", ping(1, 2));
+		expect(t.fabric.waiting).toBe(HELD_LIMIT);
+		expect(t.fabric.counters(t.slot("a"), port)?.dropped).toBe(5);
+		expect(t.taps.some(({ e }) => e.dropped.length > 0)).toBe(false);
+		t.run(1000);
+		expect(t.got("b")).toBe(HELD_LIMIT);
+	});
+});
+
+describe("a NIC's cable", () => {
+	/** One switch with a machine on each of ports 1 to 3, and what each was handed. */
+	function three() {
+		const taps: TapEvent[] = [];
+		const fabric = new Fabric({ tap: (_, e) => taps.push(e) });
+		const slot = fabric.addSwitch();
+		const got = [0, 0, 0, 0];
+		for (const p of [1, 2, 3] as const) fabric.attach(slot, p, { deliver: () => got[p]++ });
+		const impair = (p: PortNo, values: ConditionValues) => fabric.setConditions(slot, p, conditions(values));
+		return { fabric, slot, got, taps, impair };
+	}
+
+	test("with no conditions hands a frame on inside the call, and nothing waits", () => {
+		const { fabric, slot, got } = three();
+		fabric.receive(slot, 1, ping(1, 2), 0);
+		expect([got[2], got[3], fabric.waiting, fabric.busy, fabric.next()]).toEqual([1, 1, 0, false, -1]);
+	});
+
+	test("with conditions slows no other: frames between two other machines go inside the call, while its own wait", () => {
+		const { fabric, slot, got, impair } = three();
+		fabric.receive(slot, 3, arpRequest(3, 2), 0);
+		impair(1, { delay: 100 });
+		fabric.receive(slot, 1, arpRequest(1, 2), 0);
+		expect([got[2], fabric.waiting]).toEqual([1, 1]);
+		fabric.receive(slot, 2, arpReply(2, 3), 0);
+		expect([got[3], fabric.waiting]).toEqual([1, 1]);
+		// The broadcast from node1 reaches the others when it has crossed node1's cable.
+		fabric.drain(100, 64);
+		expect([got[2], got[3], fabric.waiting]).toEqual([2, 2, 0]);
+	});
+
+	test("is a call again once its conditions are cleared and what waited has gone", () => {
+		const { fabric, slot, got, impair } = three();
+		impair(1, { delay: 100 });
+		fabric.receive(slot, 1, arpRequest(1, 2), 0);
+		impair(1, {});
+		fabric.receive(slot, 1, arpRequest(1, 2), 1);
+		expect([got[2], fabric.waiting]).toEqual([0, 2]);
+		fabric.drain(1, 64);
+		expect([got[2], fabric.waiting, fabric.busy]).toEqual([2, 0, false]);
+		fabric.receive(slot, 1, arpRequest(1, 2), 2);
+		fabric.receive(slot, 2, arpReply(2, 1), 2);
+		expect([got[2], got[1], fabric.waiting]).toEqual([3, 1, 0]);
+	});
+
+	test("says in the tap that it dropped a frame from its machine: the port, no port that it went to, and the reason", () => {
+		const { fabric, slot, got, taps, impair } = three();
+		impair(1, { loss: 100 });
+		fabric.receive(slot, 1, arpRequest(1, 2), 0);
+		expect([got[2], got[3]]).toEqual([0, 0]);
+		expect(taps).toMatchObject([{ from: 1, to: 0, flood: null, vlan: 1, dropped: [{ port: 1, reason: "loss" }] }]);
+		expect(fabric.totals(slot)).toMatchObject({ in: 0, delivered: 0 });
+		// One to its machine was sent by the switch, and then dropped.
+		fabric.receive(slot, 2, arpRequest(2, 1), 0);
+		expect(taps[1]).toMatchObject({ from: 2, to: bit(1) | bit(3), dropped: [{ port: 1, reason: "loss" }] });
+		expect(fabric.carried(slot, 1)).toEqual({ delivered: 0, dropped: { loss: 2, rate: 0, mtu: 0 } });
+		expect(fabric.carried(slot, 2)).toEqual({ delivered: 1, dropped: { loss: 0, rate: 0, mtu: 0 } });
+	});
+
+	test("keeps its port's conditions for whatever is plugged into the port next, until the port is told otherwise", () => {
+		const { fabric, slot, got, impair } = three();
+		impair(1, { delay: 100 });
+		fabric.detach(slot, 1);
+		fabric.attach(slot, 1, { deliver: () => got[1]++ });
+		fabric.receive(slot, 2, arpRequest(2, 1), 0);
+		expect(got[1]).toBe(0);
+		fabric.drain(100, 64);
+		expect(got[1]).toBe(1);
+		fabric.detach(slot, 1);
+		impair(1, {});
+		fabric.attach(slot, 1, { deliver: () => got[1]++ });
+		fabric.receive(slot, 2, arpRequest(2, 1), 100);
+		expect(got[1]).toBe(2);
+	});
+
+	test("is not taken for one between switches", () => {
+		const { fabric, slot, impair } = three();
+		impair(1, { delay: 100 });
+		expect(fabric.farEnd(slot, 1)).toBeNull();
+		fabric.setLink(slot, 1, false);
+		expect([fabric.isUp(slot, 1), fabric.isUp(slot, 2)]).toEqual([false, true]);
+	});
+});
+
+describe("conditions and the rest of the fabric", () => {
+	test("a tag is not counted in a cable's MTU: a trunk carries a packet of that size with its tag", () => {
+		const t = vlanNet(["a1:10", "b1:10"], [["a8-b8", trunk("all"), trunk("all")]]);
+		for (const end of ["a8", "b8"]) t.fabric.setConditions(t.at(end).slot, t.at(end).port, conditions({ mtu: 1400 }));
+		t.send(1, packet(1400));
+		expect([t.reached(), t.taps.at(-1)?.e.tagged]).toEqual([{ 9: 1 }, bit(8)]);
+		t.send(1, packet(1401));
+		expect(t.reached()).toEqual({ 9: 1 });
+	});
+
+	test("a loop with a cable that loses every frame does not storm, and one that loses some ends its storm by itself", () => {
+		const t = net(["a", "b", "c"], TRIANGLE, { random: seededStreams() });
+		t.impair("a7-b8", { loss: 100 });
+		t.send("a", arpRequest(1, 9));
+		t.run(50);
+		expect(t.storming()).toEqual([]);
+		t.impair("a7-b8", { loss: 50 });
+		t.send("a", arpRequest(1, 9));
+		t.run(20);
+		expect(t.storming()).not.toEqual([]);
+		t.run(2000);
+		expect([t.storming(), t.fabric.busy]).toEqual([[], false]);
+	});
+
+	test("a looped frame on a cable with a delay waits both its turn and the delay", () => {
+		const t = net(["a"], ["a7-a8"]);
+		t.impair("a7-a8", { delay: 50 });
+		t.send("a", arpRequest(1, 9));
+		t.run(49);
+		expect(t.taps).toHaveLength(1);
+		t.run(1000);
+		const looped = t.taps.filter(({ e }) => e.looped);
+		// Two copies go round, one each way, and each takes 50 ms a lap.
+		expect(looped.length).toBeGreaterThan(30);
+		expect(looped.length).toBeLessThanOrEqual(2 * (1000 / 50) + 2);
 	});
 });

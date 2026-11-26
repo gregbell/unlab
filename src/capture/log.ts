@@ -5,7 +5,7 @@
 // filter change rebuilds it once. Subscribers hear at most once per scheduled
 // flush, whatever the frame rate.
 
-import type { Cause, DeadCable, MachineName, PortNo, PortRef, SwitchName } from "../model/index.ts";
+import type { CableDrop, Cause, DeadCable, MachineName, PortNo, PortRef, SwitchName } from "../model/index.ts";
 import {
 	arpAddrs,
 	type CaptureFilter,
@@ -41,6 +41,11 @@ export interface FrameEntry {
 	readonly vlan: number;
 	/** The ports it had an 802.1Q tag on, as a mask: the one it came in by, those it went out of, or none. */
 	readonly tagged: number;
+	/**
+	 * The cables that dropped it, each by the port it is in. One at `from` dropped it on its way from a machine,
+	 * so the switch never had it and `to` is none. Any other dropped it after the switch sent it out of that port.
+	 */
+	readonly dropped: readonly CableDrop[];
 }
 
 export interface LinkEntry extends LinkEvent {
@@ -76,7 +81,7 @@ function isOn(entry: CaptureEntry, on: SwitchName): boolean {
 	}
 }
 
-/** One frame as a switch's tap reports it. */
+/** One frame as a switch's tap reports it: one that it took, or one from a machine that its cable dropped on the way. */
 export interface SwitchedFrame {
 	readonly switch: SwitchName;
 	readonly from: PortNo;
@@ -88,6 +93,8 @@ export interface SwitchedFrame {
 	readonly vlan?: number;
 	/** Left out, no tag anywhere. */
 	readonly tagged?: number;
+	/** Left out, no cable dropped it. */
+	readonly dropped?: readonly CableDrop[];
 }
 
 /** A change to a cable between two ports of switches, or to its link. */
@@ -124,7 +131,7 @@ export interface LinkEvent {
 }
 
 export interface CaptureCounters {
-	/** Frames the switch accepted. */
+	/** Frames the switches accepted. One that its cable dropped on the way from a machine is not among them. */
 	readonly in: number;
 	/** Copies handed to ports: a flood to two ports counts two. */
 	readonly delivered: number;
@@ -209,6 +216,7 @@ interface OpenRequest {
 }
 
 const arpKey = (asker: number, asked: number): string => `${asker}>${asked}`;
+const NO_DROPS: readonly CableDrop[] = [];
 
 export function createCaptureLog(opts: CaptureOptions): CaptureLog {
 	const limit = opts.limit ?? 10_000;
@@ -389,8 +397,8 @@ export function createCaptureLog(opts: CaptureOptions): CaptureLog {
 			return () => listeners.delete(fn);
 		},
 
-		appendFrame({ switch: on, from, to, flood, frame, looped = false, vlan = 1, tagged = 0 }) {
-			counters.in++;
+		appendFrame({ switch: on, from, to, flood, frame, looped = false, vlan = 1, tagged = 0, dropped = NO_DROPS }) {
+			if (!dropped.some(({ port }) => port === from)) counters.in++;
 			for (let m = to; m; m &= m - 1) counters.delivered++;
 			if (flood) counters.flooded++;
 
@@ -420,6 +428,7 @@ export function createCaptureLog(opts: CaptureOptions): CaptureLog {
 				looped,
 				vlan,
 				tagged,
+				dropped,
 			};
 			push(e);
 			if (addrs?.op === 1 && addrs.spa !== addrs.tpa) ask(e, arpKey(addrs.spa, addrs.tpa));

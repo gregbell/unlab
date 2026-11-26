@@ -157,6 +157,21 @@ describe("ls", () => {
 		expect(result.data).not.toHaveProperty("1.internet");
 	});
 
+	it("says the conditions of a NIC's cable beside its link, and nothing of a cable that has none", async () => {
+		const lab = storeLab();
+		await lab.lab(2);
+		await lab.run("link up node1 --delay 100ms --loss 20%");
+		const result = await lab.run("ls");
+		if (result.kind !== "report") throw new Error("ls reports");
+		expect(result.blocks.map((block) => block.lastLine)).toEqual([
+			"10.88.0.11/24 · 52:54:00:88:00:0b · up on port 1 · delay 100ms, loss 20% · package repositories only · 4 GiB disk · console",
+			"10.88.0.12/24 · 52:54:00:88:00:0c · up on port 2 · package repositories only · 4 GiB disk · console",
+		]);
+		const [node1, node2] = result.data as { nics: object[] }[];
+		expect(node1.nics[0]).toMatchObject({ link: "up", conditions: { delay: "100ms", loss: "20%" } });
+		expect(node2.nics[0]).not.toHaveProperty("conditions");
+	});
+
 	it("says so when the lab is empty", async () => {
 		const lab = storeLab();
 		expect(lab.parsed("ls").preview(lab.store.state)).toMatchObject({

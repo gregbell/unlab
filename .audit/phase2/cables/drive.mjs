@@ -5,6 +5,9 @@
 //                                                              ONLY=one keeps to the lab of one switch
 //                                                              ONLY="one join" is one switch, with node1 in VLAN 10,
 //                                                              node2 in VLAN 20, and a cable from VLAN 10 to VLAN 20
+//                                                              ONLY="one,one bad" is one switch, and the same with a
+//                                                              third machine that pings over a cable with a delay and
+//                                                              loss, which is to slow no other
 //   node drive.mjs storm <runs> <dir> triangle|mesh [seconds]  one broadcast round a loop, and its cut
 //
 // Without ONLY the first side of two runs only the lab of one switch: it may not have more. Each line that starts
@@ -135,6 +138,14 @@ const LABS = {
 	"one join": ["spawn 2 alpine", "cable switch0:7 switch0:8", "vlan switch0:7 10", "vlan switch0:8 20", "vlan node1 10", "vlan node2 20"],
 	"one cable": ["mkswitch lan", "spawn 1 alpine", "spawn 1 alpine --net lan", "cable switch0 lan"],
 	"two cables": ["mkswitch lan", "mkswitch wan", "spawn 1 alpine", "spawn 1 alpine --net wan", "cable switch0 lan", "cable lan wan"],
+	"one bad": ["spawn 3 alpine"],
+};
+/** What a lab is given once its machines are ready. */
+const AFTER = {
+	async "one bad"(lab) {
+		await lab.call("link_set", { link: "up", machines: "node3", delay: "100ms", loss: "5%" });
+		await lab.sh("node3", "ping -i 0.01 node1 </dev/null >/dev/null 2>&1 &");
+	},
 };
 
 /** MiB sent from node1 to node2, which discards them, and how fast: by dd's own clock and by the receiver's NIC. */
@@ -153,14 +164,16 @@ async function transfer(lab, mib) {
 
 if (what === "tcp") {
 	const sides = rest.map((arg) => arg.split("="));
-	const topologies = process.env.ONLY ? process.env.ONLY.split(",") : Object.keys(LABS).filter((name) => name !== "one join");
+	const topologies = process.env.ONLY ? process.env.ONLY.split(",") : Object.keys(LABS).filter((name) => name !== "one join" && name !== "one bad");
 	const variants = sides.flatMap(([label, dir], i) => (i === 0 && sides.length > 1 && !process.env.ONLY ? ["one"] : topologies).map((topology) => ({ label, dir, topology })));
 	const got = variants.map(() => ({ mbit: [], ping: [] }));
 	for (let i = 0; i < runs; i++)
 		for (const [v, { label, dir, topology }] of variants.entries())
 			await withLab(dir, async (lab) => {
 				for (const line of LABS[topology]) await lab.typed(line);
-				await lab.ready("2 of 2 ready");
+				const machines = topology === "one bad" ? 3 : 2;
+				await lab.ready(`${machines} of ${machines} ready`);
+				await AFTER[topology]?.(lab);
 				await wait(1000);
 				const ping = await lab.sh("node1", "ping -c 100 -i 0.01 -W 2 node2 | tail -1");
 				const p50 = Number(/= [\d.]+\/([\d.]+)\//.exec(ping.output)?.[1]);
@@ -169,7 +182,9 @@ if (what === "tcp") {
 				got[v].mbit.push(t.mbit);
 				got[v].ping.push(p50);
 				const cpu = i === 0 ? ` threads in a second transfer: ${await (async () => { const again = transfer(lab, 256); await wait(1200); const said = await busy(lab.browser); await again; return said; })()}` : "";
-				console.log(`run ${i} ${label} ${topology}: ${t.mbit.toFixed(0)} Mbit/s, ping avg ${p50} ms, receiver took ${t.got} bytes${lab.errors.length ? ` ERRORS ${lab.errors}` : ""}${cpu}`);
+				// What the bad cable carried meanwhile, to show that the third machine's pings crossed it.
+				const bad = topology === "one bad" ? `, node3's cable ${JSON.stringify((await lab.call("topology_read", {})).data.switches[0].ports[2].cable.carried)}` : "";
+				console.log(`run ${i} ${label} ${topology}: ${t.mbit.toFixed(0)} Mbit/s, ping avg ${p50} ms, receiver took ${t.got} bytes${bad}${lab.errors.length ? ` ERRORS ${lab.errors}` : ""}${cpu}`);
 			});
 	for (const [v, { label, topology }] of variants.entries()) console.log(`${label} ${topology}: TCP Mbit/s ${med(got[v].mbit)}, ping avg ms ${med(got[v].ping, 2)}, n=${runs}`);
 }

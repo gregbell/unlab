@@ -2,14 +2,17 @@ import {
 	addressOf,
 	type Checkpoint,
 	type CheckpointName,
+	conditionsAt,
 	type Disk,
 	disksOf,
 	gatewayReach,
+	hasConditions,
 	type LabState,
 	type Machine,
 	type MachineName,
 	machineList,
 	type NicName,
+	NO_CONDITIONS,
 	nicMac,
 	nicPortsOf,
 	type Phase,
@@ -20,6 +23,8 @@ import {
 	savingOf,
 	sessionLabel,
 	sizeText,
+	type WrittenConditions,
+	writtenConditions,
 } from "../../model/index.ts";
 import { ip4str, NICS, nicName } from "../../net/index.ts";
 import { defineVerb } from "../define.ts";
@@ -39,6 +44,8 @@ export interface ListedNic {
 	readonly port: PortNo | null;
 	/** Null unless the machine is ready or off. */
 	readonly link: CableLink | null;
+	/** Its cable's, each as link's options take it. There when the cable has some. */
+	readonly conditions?: WrittenConditions;
 }
 
 /** One machine as `machines_list` returns it. */
@@ -68,6 +75,8 @@ function listed(lab: LabState, m: Machine): ListedMachine {
 	const ports = nicPortsOf(m.life);
 	const nics = NICS.slice(0, m.spec.nics.length).map((nic): ListedNic => {
 		const { address } = m.spec.nics[nic];
+		const at = ports[nic];
+		const cable = at ? conditionsAt(lab, at) : NO_CONDITIONS;
 		return {
 			name: nicName(nic),
 			mac: nicMac(m.n, nic),
@@ -75,6 +84,7 @@ function listed(lab: LabState, m: Machine): ListedMachine {
 			prefix: address?.prefix ?? null,
 			...portOf(lab, ports[nic]),
 			link: cableLink(m.life, nic),
+			...(hasConditions(cable) ? { conditions: writtenConditions(cable) } : {}),
 		};
 	});
 	const address = addressOf(m);
@@ -101,8 +111,19 @@ function cableLine({ switch: on, port: no, link }: ListedNic): string {
 	return link === "off" ? `plugged into ${port}` : `${link} on ${port}`;
 }
 
+/** `delay 100ms, loss 20%`, as the options that set them. */
+const conditionsLine = (conditions: WrittenConditions): string =>
+	Object.entries(conditions)
+		.map(([part, value]) => `${part} ${value}`)
+		.join(", ");
+
 function nicLine(nic: ListedNic): string {
-	return [nic.address === null ? "no address" : `${nic.address}/${nic.prefix}`, nic.mac, cableLine(nic)].join(" · ");
+	return [
+		nic.address === null ? "no address" : `${nic.address}/${nic.prefix}`,
+		nic.mac,
+		cableLine(nic),
+		...(nic.conditions ? [conditionsLine(nic.conditions)] : []),
+	].join(" · ");
 }
 
 function checkpointPart({ checkpoints, saving }: ListedMachine): string[] {
@@ -146,7 +167,7 @@ export const ls = defineVerb({
 	name: "ls",
 	about: "list machines, addresses, links and disks",
 	description:
-		"List every machine with its state (booting, ready, stopping, off, restoring, failed or removing), why it failed, and its sessions, disks, checkpoints and NICs. A checkpoint has the bytes of storage it takes. Each NIC has its MAC, the address and prefix the lab set, switch port and link, and the port's switch when the lab has several. Only a ready machine runs commands and takes files.",
+		"List every machine with its state (booting, ready, stopping, off, restoring, failed or removing), why it failed, and its sessions, disks, checkpoints and NICs. A checkpoint has the bytes of storage it takes. Each NIC has its MAC, the address and prefix the lab set, switch port and link, the port's switch when the lab has several, and its cable's conditions if it has any. Only a ready machine runs commands and takes files.",
 	danger: false,
 	grammar: {},
 	example: {},
