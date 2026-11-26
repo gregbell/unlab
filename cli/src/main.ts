@@ -2,7 +2,7 @@
 // `npx unlab.run`: links the lab in the browser with this computer.
 
 import { spawn } from "node:child_process";
-import { mkdirSync, readFileSync } from "node:fs";
+import { closeSync, mkdirSync, openSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { createInterface as createLineReader } from "node:readline";
 import { createInterface } from "node:readline/promises";
@@ -157,17 +157,63 @@ async function interactive(options: Options, core: Core | null): Promise<void> {
 	});
 }
 
-/** How long it waits before it tries again to join or start the CLI. */
+/** How long it waits before it tries again to join the CLI. */
 const REJOIN_MS = 1000;
+/** How long a call waits for the CLI to be joined, longer than another may hold the port as it starts. */
+const JOINING_MS = 5000;
+
+/** What a CLI that predates `mcp` lacks. */
+const OLD_CLI =
+	"The CLI that is running is older than this one. Quit it, and start it again with: npx unlab.run@latest";
+
+const serveLog = () => join(configDir(), "serve.log");
+
+/**
+ * Starts the CLI on its own, so that no agent's client takes it down with the
+ * agent: it ends once nothing uses it. Resolves once it answers, or rejects
+ * with why it did not start.
+ */
+async function startInBackground(options: Options): Promise<void> {
+	const [node, program] = keepProgram();
+	const flags = ["--port", String(options.port), "--origin", options.origin];
+	if (options.lan) flags.push("--lan");
+	const log = openSync(serveLog(), "w", 0o600);
+	const child = spawn(node, [program, ...flags, "serve"], { detached: true, stdio: ["ignore", "ignore", log] });
+	closeSync(log);
+	child.unref();
+	const exited = new Promise<number | null>((resolve) => child.once("exit", resolve));
+	for (;;) {
+		try {
+			await request<Status>({ type: "status" });
+			return;
+		} catch (error) {
+			if (!(error instanceof NotRunning)) throw error;
+		}
+		const code = await Promise.race([exited, new Promise((resolve) => setTimeout(resolve, 100, "waiting"))]);
+		if (code === "waiting") continue;
+		if (code === 0) return;
+		const said = readFileSync(serveLog(), "utf8").trim().split("\n").at(-1);
+		throw new Error(said || "The CLI did not start.");
+	}
+}
+
+/** The CLI on its own, until nothing uses it. */
+async function serve(options: Options): Promise<number> {
+	const core = await start(options);
+	if (!core) return 0;
+	await core.idle();
+	core.stop();
+	return 0;
+}
 
 /**
  * Serves MCP on stdio until the client closes it. It joins the CLI that runs,
- * or starts one, and does so again when that one quits. It never opens the
- * browser. Its stdout carries only MCP.
+ * or starts one on its own, and does so again when that one quits. It holds
+ * nothing that another needs, and it never opens the browser. Its stdout
+ * carries only MCP.
  */
 async function serveMcp(options: Options): Promise<number> {
 	let tools: readonly ToolInfo[] = [];
-	let core = null as Core | null;
 	let trouble: string | null = null;
 	let unwatch = () => {};
 	let closed = false;
@@ -175,57 +221,87 @@ async function serveMcp(options: Options): Promise<number> {
 		version: UNLAB_VERSION,
 		send: (message) => process.stdout.write(`${JSON.stringify(message)}\n`),
 		tools: () => tools,
-		call: (name, input, signal) =>
-			trouble === null ? request({ type: "call", name, input }, { signal }) : Promise.reject(new Error(trouble)),
+		call: async (name, input, signal) => {
+			await Promise.race([joined, new Promise((resolve) => setTimeout(resolve, JOINING_MS))]);
+			if (trouble !== null) throw new Error(trouble);
+			return request({ type: "call", name, input }, { signal });
+		},
 	});
 	const offer = (next: readonly ToolInfo[]) => {
 		if (JSON.stringify(next) === JSON.stringify(tools)) return;
 		tools = next;
 		server.changed();
 	};
-	const join = async (): Promise<void> => {
+	const failed = (error: unknown) => {
+		const said = error instanceof Error ? error.message : String(error);
+		if (said !== trouble) process.stderr.write(`${said}\n`);
+		trouble = said;
+	};
+
+	async function joinOnce(): Promise<void> {
+		offer([]);
 		while (!closed) {
+			unwatch();
+			unwatch = () => {};
 			try {
-				core ??= await start(options);
 				unwatch = await watch(
 					(notice) => notice.kind === "tools" && offer(notice.tools),
 					() => {
 						offer([]);
 						void join();
 					},
+					{ tools: true },
 				);
-				offer((await request<Status>({ type: "status" })).tools);
+				if (closed) break;
+				const status = await request<Status>({ type: "status" });
+				if (!Array.isArray(status.tools)) throw new Error(OLD_CLI);
 				trouble = null;
 				return;
 			} catch (error) {
-				const said = error instanceof Error ? error.message : String(error);
-				if (said !== trouble) process.stderr.write(`${said}\n`);
-				trouble = said;
-				await new Promise((resolve) => setTimeout(resolve, REJOIN_MS));
+				if (!(error instanceof NotRunning)) {
+					failed(error);
+					await new Promise((resolve) => setTimeout(resolve, REJOIN_MS));
+					continue;
+				}
+				try {
+					await startInBackground(options);
+				} catch (why) {
+					failed(why);
+					await new Promise((resolve) => setTimeout(resolve, REJOIN_MS));
+				}
 			}
 		}
-	};
-	const stop = () => {
-		closed = true;
 		unwatch();
-		server.close();
-	};
-	for (const signal of ["SIGTERM", "SIGHUP"] as const) {
-		process.once(signal, () => {
-			stop();
-			core?.stop();
-			process.exit(128 + (signal === "SIGTERM" ? 15 : 1));
-		});
 	}
+
+	/** One join at a time. One asked for meanwhile runs once that ends. */
+	let joining = false;
+	let again = false;
+	let joined: Promise<void> = Promise.resolve();
+	function join(): Promise<void> {
+		if (joining) {
+			again = true;
+			return joined;
+		}
+		joining = true;
+		joined = (async () => {
+			do {
+				again = false;
+				await joinOnce();
+			} while (again && !closed);
+			joining = false;
+		})();
+		return joined;
+	}
+
 	const input = createLineReader({ input: process.stdin, crlfDelay: Number.POSITIVE_INFINITY });
 	input.on("line", (line) => server.receive(line));
 	const ended = new Promise((resolve) => input.once("close", resolve));
 	void join();
 	await ended;
-	stop();
-	// Another that uses this CLI keeps it until it is done.
-	await core?.idle();
-	core?.stop();
+	closed = true;
+	unwatch();
+	server.close();
 	return 0;
 }
 
@@ -244,6 +320,7 @@ async function main(args: readonly string[]): Promise<number> {
 		return 0;
 	}
 	if (options.words[0] === "mcp") return serveMcp(options);
+	if (options.words[0] === "serve") return serve(options);
 	if (options.words[0] === "ssh-config") {
 		process.stdout.write(`Include ${join(configDir(), "ssh_config")}\n`);
 		return 0;

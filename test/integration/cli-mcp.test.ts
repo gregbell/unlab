@@ -1,7 +1,10 @@
 // `npx unlab.run mcp` as an agent's client runs it, with a page that speaks the
 // link as the lab does. No machine is needed: the page answers for the tools.
 
+import { execFileSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import { createServer } from "node:net";
+import { join } from "node:path";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import { PROTOCOL, type ToolInfo } from "../../src/streams/index.ts";
 import { freePort, type McpSession, TestCli, TestPage } from "../support/cli.ts";
@@ -145,30 +148,70 @@ test("a lab that cannot be used is said in the call's answer: one of another ver
 	older.close();
 });
 
-test("two agents and a person's prompt share one CLI, and the others stay linked whichever quits", async () => {
+test("agents share a CLI that none of them holds: however a client ends its server, the others stay linked", async () => {
 	const first = await started();
 	const second = await started();
 	const prompt = cli.start();
 	await prompt.shows("The CLI is already running, so this uses it.");
-	await lab();
+	const page = await lab();
 	await expect.poll(() => second.tools()).toHaveLength(2);
-	await expect.poll(() => first.tools()).toHaveLength(2);
 
-	// The first started the CLI. Its client ends it, and the CLI stays for the others.
 	first.end();
-	await new Promise((resolve) => setTimeout(resolve, 2500));
-	expect(await second.tools()).toHaveLength(2);
+	expect(await first.exited).toBe(0);
+	const third = await started();
+	third.child.kill("SIGTERM");
+	await third.exited;
+	const fourth = await started();
+	fourth.child.kill("SIGKILL");
+	await fourth.exited;
 
-	// Killed outright, the CLI goes with it: the second starts another, and the lab links to that.
-	first.child.kill("SIGKILL");
-	await first.exited;
+	await new Promise((resolve) => setTimeout(resolve, 2000));
+	expect(prompt.printed).not.toContain("has quit");
+	expect(await second.tools()).toHaveLength(2);
+	const id = second.ask("tools/call", { name: "machines_list", arguments: {} });
+	const call = await page.hears("call");
+	page.say({ type: "reply", id: call.id, reply: { result: "still here" } });
+	expect(text(await second.answer(id))).toBe('{"result":"still here"}');
+});
+
+test("when the CLI it joined quits, it starts one of its own, and the lab links to that", async () => {
+	const prompt = cli.start();
+	await prompt.shows("Waiting for the lab");
+	const mcp = await started();
+	await lab();
+	await expect.poll(() => mcp.tools()).toHaveLength(2);
+	prompt.child.kill("SIGTERM");
+	await prompt.exited;
+	await expect.poll(() => mcp.tools()).toEqual([]);
 	await expect.poll(() => cli.once("status").then((ran) => ran.code), { timeout: 10_000 }).toBe(0);
 	const again = await lab();
-	await expect.poll(() => second.tools(), { timeout: 10_000 }).toHaveLength(2);
-	const id = second.ask("tools/call", { name: "machines_list", arguments: {} });
+	await expect.poll(() => mcp.tools(), { timeout: 10_000 }).toHaveLength(2);
+	const id = mcp.ask("tools/call", { name: "machines_list", arguments: {} });
 	const call = await again.hears("call");
 	again.say({ type: "reply", id: call.id, reply: { result: "none" } });
-	expect(text(await second.answer(id))).toBe('{"result":"none"}');
+	expect(text(await mcp.answer(id))).toBe('{"result":"none"}');
+});
+
+test("a CLI from before mcp is not trusted with calls, and says to update it", async () => {
+	const old = createServer((socket) => {
+		socket.once("data", (line) => {
+			const request = JSON.parse(String(line).split("\n")[0]) as { type: string };
+			if (request.type === "watch") return;
+			const value =
+				request.type === "status"
+					? { linked: true, lan: false, machines: [], connections: [], forwards: [] }
+					: undefined;
+			socket.end(`${JSON.stringify({ type: "ok", value })}\n`);
+		});
+	});
+	await new Promise<void>((resolve) => old.listen(join(cli.dir, "cli.sock"), resolve));
+	const mcp = cli.mcp();
+	await mcp.begin();
+	expect(await mcp.tools()).toEqual([]);
+	await expect
+		.poll(async () => text(await mcp.request("tools/call", { name: "machines_list" })), { timeout: 15_000 })
+		.toBe("The CLI that is running is older than this one. Quit it, and start it again with: npx unlab.run@latest");
+	old.close();
 });
 
 test("when another program has the port, a call says so, and stdout carries only MCP", async () => {
@@ -185,3 +228,22 @@ test("when another program has the port, a call says so, and stdout carries only
 	expect(mcp.said.every((message) => message.jsonrpc === "2.0")).toBe(true);
 	other.close();
 });
+
+test("the CLI it starts ends once nothing uses it", async () => {
+	const mcp = cli.mcp();
+	await mcp.begin();
+	const socket = join(cli.dir, "cli.sock");
+	await expect.poll(() => existsSync(socket)).toBe(true);
+	await new Promise((resolve) => setTimeout(resolve, 1000));
+	mcp.end();
+	expect(await mcp.exited).toBe(0);
+	await expect.poll(() => existsSync(socket), { timeout: 10_000 }).toBe(false);
+	await expect.poll(() => running(join(cli.dir, "cli.mjs")), { timeout: 10_000 }).toBe(false);
+});
+
+/** Whether a process runs this program. */
+function running(program: string): boolean {
+	return execFileSync("ps", ["-eo", "args"], { encoding: "utf8" })
+		.split("\n")
+		.some((line) => line.includes(program));
+}

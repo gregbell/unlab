@@ -170,6 +170,7 @@ export class LinkServer {
 
 	/** An agent's call of one of the lab's tools. Resolves with what the tool replied; rejects with a sentence. */
 	call(name: string, input: unknown, signal?: AbortSignal): Promise<unknown> {
+		if (signal?.aborted) return Promise.reject(signal.reason);
 		if (!this.#linked) return Promise.reject(new NotLinked(this.#told ?? AGENT_NOT_LINKED));
 		if (!this.#labFeatures.includes("tools")) return Promise.reject(new Error(LAB_OLDER));
 		const id = ++this.#ids;
