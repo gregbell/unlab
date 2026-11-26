@@ -231,7 +231,7 @@ interface Storm {
 
 class Switch {
 	readonly ports: (Port | undefined)[] = new Array<Port | undefined>(PORTS + 1).fill(undefined);
-	/** Whatever is in the port, or nothing. */
+	/** What each port carries, whether or not something is in it. */
 	readonly modes: Mode[] = new Array<Mode>(PORTS + 1).fill(ACCESS_1);
 	/** A table for each VLAN that has had a frame. */
 	readonly tables = new Map<number, Map<number, Learned>>();
