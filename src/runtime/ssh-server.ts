@@ -22,11 +22,12 @@ export interface SshPrograms {
 const PORTS = { first: 47022, tried: 20 } as const;
 
 type Guest = Pick<KernelHandle, "exec">;
+const installations = new WeakMap<Guest, Promise<string>>();
 
 /** dropbear opens its port before it goes to the background, so a port that is taken is its exit status. */
-function startScript(dir: string): string {
+function startScript(programs: string, dir: string): string {
 	return [
-		`cd ${sh(dir)} || exit 1`,
+		`mkdir -p ${sh(dir)} && cd ${sh(dir)} || exit 1`,
 		"umask 077",
 		`if [ -f pid ]; then kill "$(cat pid)" 2>/dev/null; rm -f pid; fi`,
 		`printf '%s' "$1" | base64 -d > host_key`,
@@ -34,7 +35,7 @@ function startScript(dir: string): string {
 		"chmod 644 authorized_keys",
 		`port=${PORTS.first}`,
 		`while [ "$port" -lt ${PORTS.first + PORTS.tried} ]; do`,
-		`  if ./dropbear -s -r ${sh(`${dir}/host_key`)} -D ${sh(dir)} -P ${sh(`${dir}/pid`)} -p "127.0.0.1:$port" </dev/null >/dev/null 2>&1; then`,
+		`  if ${sh(`${programs}/dropbear`)} -s -r ${sh(`${dir}/host_key`)} -D ${sh(dir)} -P ${sh(`${dir}/pid`)} -p "127.0.0.1:$port" </dev/null >/dev/null 2>&1; then`,
 		`    echo "$port"; exit 0`,
 		"  fi",
 		"  port=$((port + 1))",
@@ -47,10 +48,12 @@ function startScript(dir: string): string {
 export class SshServer {
 	readonly #guest: Guest;
 	readonly #programs: () => Promise<SshPrograms>;
+	readonly #stateDir: string | undefined;
 	#installed: Promise<string> | undefined;
 	#running: { readonly keys: string; readonly port: Promise<number> } | undefined;
 
-	constructor(guest: Guest, programs: () => Promise<SshPrograms>) {
+	constructor(guest: Guest, programs: () => Promise<SshPrograms>, stateDir?: string) {
+		this.#stateDir = stateDir;
 		this.#guest = guest;
 		this.#programs = programs;
 	}
@@ -72,21 +75,36 @@ export class SshServer {
 		return port;
 	}
 
+	async stop(): Promise<void> {
+		await this.#running?.port.catch(() => {});
+		this.#running = undefined;
+		if (this.#stateDir)
+			await this.#root(
+				`cd ${sh(this.#stateDir)} && if [ -f pid ]; then kill "$(cat pid)" 2>/dev/null; fi; rm -f pid authorized_keys host_key`,
+				[],
+			);
+	}
+
 	/** Nothing listens on the port it had: someone ended it. */
 	lost(): void {
 		this.#running = undefined;
 	}
 
 	async #start(keys: SshKeys): Promise<number> {
-		this.#installed ??= this.#install();
+		this.#installed ??= installations.get(this.#guest);
+		if (!this.#installed) {
+			this.#installed = this.#install();
+			installations.set(this.#guest, this.#installed);
+		}
 		let dir: string;
 		try {
 			dir = await this.#installed;
 		} catch (error) {
+			installations.delete(this.#guest);
 			this.#installed = undefined;
 			throw error;
 		}
-		const started = await this.#root(startScript(dir), [keys.hostKey, keys.authorizedKey]);
+		const started = await this.#root(startScript(dir, this.#stateDir ?? dir), [keys.hostKey, keys.authorizedKey]);
 		return Number(started.trim());
 	}
 

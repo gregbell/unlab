@@ -154,6 +154,22 @@ same frames, each as the switch at that end carried it. **save .pcap** saves
 everything captured, or only the frames shown when the filter names a switch or a
 cable.
 
+## SSH into a guest from another computer
+
+1. In the rack manager, open **Configure** for a running guest and select **Share via SSH**.
+2. Paste the remote user's OpenSSH public key, such as the contents of their
+   `~/.ssh/id_ed25519.pub`, and select **Start sharing**.
+3. Select **Copy command**. On the remote computer, run the command with
+   [Tailcat](https://github.com/tailscale/tailcat/blob/main/INSTALL.md) installed. It looks
+   like `tailcat ssh user@tc…`. If the private key has a custom filename, use
+   `tailcat ssh -i /path/to/key user@tc…`.
+
+Keep the lab tab running. The browser uses Tailcat's DERP relays to carry SSH
+traffic to the selected guest. Its SSH server accepts the key you supplied. The key holder can administer
+the guest, including its disks, just as they could from its console.
+Select **Stop sharing** to disconnect clients. Rebooting the guest or reloading
+the tab also ends the share.
+
 ## Reach the lab from your terminal
 
 Run this on the computer your browser is on:
@@ -483,6 +499,10 @@ checksums.
 The lab image is Alpine with packages installed. It is a
 [release asset](https://github.com/gregbell/unlab/releases/tag/lab-image-1) that
 [this script](scripts/build-lab-image.ts) built.
+
+For SSH sharing in a local build, install Go 1.27.4 and run `npm run tailcat`
+before starting Vite or building the site. This builds the browser listener and
+its license notices. The hosted lab loads the listener when you start sharing.
 
 The SSH programs in [public/ssh](public/ssh/) are built from pinned releases by
 [this script](scripts/build-ssh-server.ts): `npm run ssh-server`, which needs

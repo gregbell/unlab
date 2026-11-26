@@ -53,6 +53,7 @@ export interface CopyJob {
 }
 
 export type ToVm =
+	| { type: "share-ssh"; port: MessagePort }
 	| { type: "boot"; cfg: VmConfig }
 	| { type: "frame"; nic: NicNo; frame: Uint8Array }
 	| { type: "input"; data: string }
