@@ -52,7 +52,7 @@ const isError = (answer: Record<string, unknown>) => (answer.result as { isError
 async function started(): Promise<McpSession> {
 	const mcp = cli.mcp();
 	await mcp.begin();
-	await expect.poll(() => cli.once("status").then((ran) => ran.code), { timeout: 10_000 }).toBe(0);
+	await expect.poll(() => cli.answers(), { timeout: 10_000 }).toBe(true);
 	return mcp;
 }
 
@@ -183,7 +183,7 @@ test("when the CLI it joined quits, it starts one of its own, and the lab links 
 	prompt.child.kill("SIGTERM");
 	await prompt.exited;
 	await expect.poll(() => mcp.tools()).toEqual([]);
-	await expect.poll(() => cli.once("status").then((ran) => ran.code), { timeout: 10_000 }).toBe(0);
+	await expect.poll(() => cli.answers(), { timeout: 10_000 }).toBe(true);
 	const again = await lab();
 	await expect.poll(() => mcp.tools(), { timeout: 10_000 }).toHaveLength(2);
 	const id = mcp.ask("tools/call", { name: "machines_list", arguments: {} });

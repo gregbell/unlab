@@ -37,7 +37,7 @@ async function linked(page: Page): Promise<McpSession> {
 	const mcp = cli.mcp();
 	await mcp.begin();
 	expect(await mcp.tools()).toEqual([]);
-	await expect.poll(() => cli.once("status").then((ran) => ran.code)).toBe(0);
+	await expect.poll(() => cli.answers()).toBe(true);
 	await openWithTwoMachines(page);
 	expect(await page.evaluate(() => "modelContext" in document || "modelContext" in navigator)).toBe(false);
 	await page.evaluate((hash) => {

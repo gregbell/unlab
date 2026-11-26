@@ -3,7 +3,7 @@
 
 import { type ChildProcess, execFile, spawn } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { createServer } from "node:net";
+import { createConnection, createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -104,6 +104,23 @@ export class TestCli {
 	/** One command, to its end. */
 	once(...args: string[]): Promise<Ran> {
 		return this.run(process.execPath, this.#args(args));
+	}
+
+	/**
+	 * Whether a CLI answers on the socket. Unlike a command, this never starts
+	 * one, which would race the CLI that is starting and could hold the port.
+	 */
+	answers(): Promise<boolean> {
+		return new Promise((resolve) => {
+			const socket = createConnection(join(this.dir, "cli.sock"));
+			let said = "";
+			socket.on("data", (data) => {
+				said += data;
+			});
+			socket.once("connect", () => socket.write(`${JSON.stringify({ type: "status" })}\n`));
+			socket.once("error", () => resolve(false));
+			socket.once("close", () => resolve(said.startsWith('{"type":"ok"')));
+		});
 	}
 
 	/** Any program, with the person's SSH configuration. */
