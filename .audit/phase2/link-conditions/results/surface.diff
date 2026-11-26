@@ -1,0 +1,520 @@
+43c43
+<     "text": "plug or cut cables"
+---
+>     "text": "plug or cut cables, and set their conditions"
+151c151
+<     "about": "plug or cut cables",
+---
+>     "about": "plug or cut cables, and set their conditions",
+615c615
+<     "text": "List every machine with its state (booting, ready, stopping, off, restoring, failed or removing), why it failed, and its sessions, disks, checkpoints and NICs. A checkpoint has the bytes of storage it takes. Each NIC has its MAC, the address and prefix the lab set, switch port and link, and the port's switch when the lab has several. Only a ready machine runs commands and takes files."
+---
+>     "text": "List every machine with its state (booting, ready, stopping, off, restoring, failed or removing), why it failed, and its sessions, disks, checkpoints and NICs. A checkpoint has the bytes of storage it takes. Each NIC has its MAC, the address and prefix the lab set, switch port and link, the port's switch when the lab has several, and its cable's conditions if it has any. Only a ready machine runs commands and takes files."
+631c631
+<    "description": "List every machine with its state (booting, ready, stopping, off, restoring, failed or removing), why it failed, and its sessions, disks, checkpoints and NICs. A checkpoint has the bytes of storage it takes. Each NIC has its MAC, the address and prefix the lab set, switch port and link, and the port's switch when the lab has several. Only a ready machine runs commands and takes files.",
+---
+>    "description": "List every machine with its state (booting, ready, stopping, off, restoring, failed or removing), why it failed, and its sessions, disks, checkpoints and NICs. A checkpoint has the bytes of storage it takes. Each NIC has its MAC, the address and prefix the lab set, switch port and link, the port's switch when the lab has several, and its cable's conditions if it has any. Only a ready machine runs commands and takes files.",
+646c646
+<  "description": "List every machine with its state (booting, ready, stopping, off, restoring, failed or removing), why it failed, and its sessions, disks, checkpoints and NICs. A checkpoint has the bytes of storage it takes. Each NIC has its MAC, the address and prefix the lab set, switch port and link, and the port's switch when the lab has several. Only a ready machine runs commands and takes files.",
+---
+>  "description": "List every machine with its state (booting, ready, stopping, off, restoring, failed or removing), why it failed, and its sessions, disks, checkpoints and NICs. A checkpoint has the bytes of storage it takes. Each NIC has its MAC, the address and prefix the lab set, switch port and link, the port's switch when the lab has several, and its cable's conditions if it has any. Only a ready machine runs commands and takes files.",
+1000c1000
+<   "header": "link <up | down> <machines>",
+---
+>   "header": "link <up | down> <machines> [--delay time] [--loss percent] [--reorder percent] [--rate rate] [--mtu bytes] [--clear]",
+1005c1005
+<     "text": "Plug in (up) or cut (down) the switch cables of machines or of single NICs. Returns the port and link state per NIC, with the port's switch when the lab has several. A cable already as asked is left alone. A NIC that is unplugged goes into the lowest free port of switch0, and plug puts it in any. The cables of a machine that is off can be cut or plugged in; their links come up when it boots. A port names the cable in it (lan:3), also one between switches."
+---
+>     "text": "Plug in (up) or cut (down) the cables of machines or of single NICs. A port names the cable in it (lan:3), also one between switches. One already as asked is left alone. An unplugged NIC goes into the lowest free port of switch0. A machine that is off takes it too: its links come up when it boots. The options set the cables' conditions, alike in both directions: one left out stays, and a cut, a move or a reboot keeps them. Returns each cable's port and link, and with an option its conditions."
+1015a1016,1039
+>     "term": "[--delay time]",
+>     "text": "How long each frame takes to cross the cable, in each direction: 100ms or 1.5s, up to 10 s. 0 takes the delay away."
+>    },
+>    {
+>     "term": "[--loss percent]",
+>     "text": "The share of frames that the cable loses, in each direction: 20%, or 0.5%. 0 takes the loss away."
+>    },
+>    {
+>     "term": "[--reorder percent]",
+>     "text": "The share of frames that skip the delay, and so arrive ahead of those sent before them: 25%. It needs a delay. 0 takes it away."
+>    },
+>    {
+>     "term": "[--rate rate]",
+>     "text": "The most the cable carries each way, in bits a second: 1mbit, 500kbit. A frame that would wait behind 64 KiB is dropped. 0 takes the rate away."
+>    },
+>    {
+>     "term": "[--mtu bytes]",
+>     "text": "The longest packet a frame on the cable can hold, in bytes, from 68 to 1500: a longer frame is dropped. 1500 is Ethernet's, and takes it away."
+>    },
+>    {
+>     "term": "[--clear]",
+>     "text": "--clear takes every condition of the cables away, before those that the other options set."
+>    },
+>    {
+1026c1050
+<    "about": "plug or cut cables",
+---
+>    "about": "plug or cut cables, and set their conditions",
+1028,1029c1052,1053
+<    "usage": "link <up | down> <machines>",
+<    "description": "Plug in (up) or cut (down) the switch cables of machines or of single NICs. Returns the port and link state per NIC, with the port's switch when the lab has several. A cable already as asked is left alone. A NIC that is unplugged goes into the lowest free port of switch0, and plug puts it in any. The cables of a machine that is off can be cut or plugged in; their links come up when it boots. A port names the cable in it (lan:3), also one between switches.",
+---
+>    "usage": "link <up | down> <machines> [--delay time] [--loss percent] [--reorder percent] [--rate rate] [--mtu bytes] [--clear]",
+>    "description": "Plug in (up) or cut (down) the cables of machines or of single NICs. A port names the cable in it (lan:3), also one between switches. One already as asked is left alone. An unplugged NIC goes into the lowest free port of switch0. A machine that is off takes it too: its links come up when it boots. The options set the cables' conditions, alike in both directions: one left out stays, and a cut, a move or a reboot keeps them. Returns each cable's port and link, and with an option its conditions.",
+1043a1068,1109
+>     },
+>     {
+>      "field": "delay",
+>      "written": "[--delay time]",
+>      "about": "How long each frame takes to cross the cable, in each direction: 100ms or 1.5s, up to 10 s. 0 takes the delay away.",
+>      "required": false,
+>      "default": null
+>     },
+>     {
+>      "field": "loss",
+>      "written": "[--loss percent]",
+>      "about": "The share of frames that the cable loses, in each direction: 20%, or 0.5%. 0 takes the loss away.",
+>      "required": false,
+>      "default": null
+>     },
+>     {
+>      "field": "reorder",
+>      "written": "[--reorder percent]",
+>      "about": "The share of frames that skip the delay, and so arrive ahead of those sent before them: 25%. It needs a delay. 0 takes it away.",
+>      "required": false,
+>      "default": null
+>     },
+>     {
+>      "field": "rate",
+>      "written": "[--rate rate]",
+>      "about": "The most the cable carries each way, in bits a second: 1mbit, 500kbit. A frame that would wait behind 64 KiB is dropped. 0 takes the rate away.",
+>      "required": false,
+>      "default": null
+>     },
+>     {
+>      "field": "mtu",
+>      "written": "[--mtu bytes]",
+>      "about": "The longest packet a frame on the cable can hold, in bytes, from 68 to 1500: a longer frame is dropped. 1500 is Ethernet's, and takes it away.",
+>      "required": false,
+>      "default": null
+>     },
+>     {
+>      "field": "conditions",
+>      "written": "[--clear]",
+>      "about": "--clear takes every condition of the cables away, before those that the other options set.",
+>      "required": false,
+>      "default": null
+1059c1125
+<  "about": "plug or cut cables",
+---
+>  "about": "plug or cut cables, and set their conditions",
+1061,1062c1127,1128
+<  "usage": "link <up | down> <machines>",
+<  "description": "Plug in (up) or cut (down) the switch cables of machines or of single NICs. Returns the port and link state per NIC, with the port's switch when the lab has several. A cable already as asked is left alone. A NIC that is unplugged goes into the lowest free port of switch0, and plug puts it in any. The cables of a machine that is off can be cut or plugged in; their links come up when it boots. A port names the cable in it (lan:3), also one between switches.",
+---
+>  "usage": "link <up | down> <machines> [--delay time] [--loss percent] [--reorder percent] [--rate rate] [--mtu bytes] [--clear]",
+>  "description": "Plug in (up) or cut (down) the cables of machines or of single NICs. A port names the cable in it (lan:3), also one between switches. One already as asked is left alone. An unplugged NIC goes into the lowest free port of switch0. A machine that is off takes it too: its links come up when it boots. The options set the cables' conditions, alike in both directions: one left out stays, and a cut, a move or a reboot keeps them. Returns each cable's port and link, and with an option its conditions.",
+1076a1143,1184
+>   },
+>   {
+>    "field": "delay",
+>    "written": "[--delay time]",
+>    "about": "How long each frame takes to cross the cable, in each direction: 100ms or 1.5s, up to 10 s. 0 takes the delay away.",
+>    "required": false,
+>    "default": null
+>   },
+>   {
+>    "field": "loss",
+>    "written": "[--loss percent]",
+>    "about": "The share of frames that the cable loses, in each direction: 20%, or 0.5%. 0 takes the loss away.",
+>    "required": false,
+>    "default": null
+>   },
+>   {
+>    "field": "reorder",
+>    "written": "[--reorder percent]",
+>    "about": "The share of frames that skip the delay, and so arrive ahead of those sent before them: 25%. It needs a delay. 0 takes it away.",
+>    "required": false,
+>    "default": null
+>   },
+>   {
+>    "field": "rate",
+>    "written": "[--rate rate]",
+>    "about": "The most the cable carries each way, in bits a second: 1mbit, 500kbit. A frame that would wait behind 64 KiB is dropped. 0 takes the rate away.",
+>    "required": false,
+>    "default": null
+>   },
+>   {
+>    "field": "mtu",
+>    "written": "[--mtu bytes]",
+>    "about": "The longest packet a frame on the cable can hold, in bytes, from 68 to 1500: a longer frame is dropped. 1500 is Ethernet's, and takes it away.",
+>    "required": false,
+>    "default": null
+>   },
+>   {
+>    "field": "conditions",
+>    "written": "[--clear]",
+>    "about": "--clear takes every condition of the cables away, before those that the other options set.",
+>    "required": false,
+>    "default": null
+1845c1953
+<     "text": "List the wiring: every switch with its eight ports, what each port's cable goes to, its link (up, cut, or down while the machine at its end is not ready), and what the port carries: a VLAN, or as a trunk the VLANs it allows and its native one. A cable between switches is at both its ports. A switch that looped frames come into has storm: how many came in the last second, and how many it dropped. Then the NICs in no switch. Port 3 of lan is lan:3."
+---
+>     "text": "List the wiring: every switch with its eight ports, what each port's cable goes to, its link (up, cut, or down while the machine at its end is not ready), its conditions, what it delivered and dropped (by loss, rate or MTU), and what the port carries: a VLAN, or a trunk's VLANs and its native one. A cable between switches is at both its ports. A storming switch has storm: its looped frames in the last second, and what it dropped. Then the NICs in no switch. Port 3 of lan is lan:3."
+1861c1969
+<    "description": "List the wiring: every switch with its eight ports, what each port's cable goes to, its link (up, cut, or down while the machine at its end is not ready), and what the port carries: a VLAN, or as a trunk the VLANs it allows and its native one. A cable between switches is at both its ports. A switch that looped frames come into has storm: how many came in the last second, and how many it dropped. Then the NICs in no switch. Port 3 of lan is lan:3.",
+---
+>    "description": "List the wiring: every switch with its eight ports, what each port's cable goes to, its link (up, cut, or down while the machine at its end is not ready), its conditions, what it delivered and dropped (by loss, rate or MTU), and what the port carries: a VLAN, or a trunk's VLANs and its native one. A cable between switches is at both its ports. A storming switch has storm: its looped frames in the last second, and what it dropped. Then the NICs in no switch. Port 3 of lan is lan:3.",
+1876c1984
+<  "description": "List the wiring: every switch with its eight ports, what each port's cable goes to, its link (up, cut, or down while the machine at its end is not ready), and what the port carries: a VLAN, or as a trunk the VLANs it allows and its native one. A cable between switches is at both its ports. A switch that looped frames come into has storm: how many came in the last second, and how many it dropped. Then the NICs in no switch. Port 3 of lan is lan:3.",
+---
+>  "description": "List the wiring: every switch with its eight ports, what each port's cable goes to, its link (up, cut, or down while the machine at its end is not ready), its conditions, what it delivered and dropped (by loss, rate or MTU), and what the port carries: a VLAN, or a trunk's VLANs and its native one. A cable between switches is at both its ports. A storming switch has storm: its looped frames in the last second, and what it dropped. Then the NICs in no switch. Port 3 of lan is lan:3.",
+2699c2807
+<  "description": "List every machine with its state (booting, ready, stopping, off, restoring, failed or removing), why it failed, and its sessions, disks, checkpoints and NICs. A checkpoint has the bytes of storage it takes. Each NIC has its MAC, the address and prefix the lab set, switch port and link, and the port's switch when the lab has several. Only a ready machine runs commands and takes files.",
+---
+>  "description": "List every machine with its state (booting, ready, stopping, off, restoring, failed or removing), why it failed, and its sessions, disks, checkpoints and NICs. A checkpoint has the bytes of storage it takes. Each NIC has its MAC, the address and prefix the lab set, switch port and link, the port's switch when the lab has several, and its cable's conditions if it has any. Only a ready machine runs commands and takes files.",
+2714c2822
+<  "description": "List the wiring: every switch with its eight ports, what each port's cable goes to, its link (up, cut, or down while the machine at its end is not ready), and what the port carries: a VLAN, or as a trunk the VLANs it allows and its native one. A cable between switches is at both its ports. A switch that looped frames come into has storm: how many came in the last second, and how many it dropped. Then the NICs in no switch. Port 3 of lan is lan:3.",
+---
+>  "description": "List the wiring: every switch with its eight ports, what each port's cable goes to, its link (up, cut, or down while the machine at its end is not ready), its conditions, what it delivered and dropped (by loss, rate or MTU), and what the port carries: a VLAN, or a trunk's VLANs and its native one. A cable between switches is at both its ports. A storming switch has storm: its looped frames in the last second, and what it dropped. Then the NICs in no switch. Port 3 of lan is lan:3.",
+3221,3222c3329,3330
+<  "title": "Plug in or cut cables",
+<  "description": "Plug in (up) or cut (down) the switch cables of machines or of single NICs. Returns the port and link state per NIC, with the port's switch when the lab has several. A cable already as asked is left alone. A NIC that is unplugged goes into the lowest free port of switch0, and plug puts it in any. The cables of a machine that is off can be cut or plugged in; their links come up when it boots. A port names the cable in it (lan:3), also one between switches.",
+---
+>  "title": "Plug in or cut cables, and set their conditions",
+>  "description": "Plug in (up) or cut (down) the cables of machines or of single NICs. A port names the cable in it (lan:3), also one between switches. One already as asked is left alone. An unplugged NIC goes into the lowest free port of switch0. A machine that is off takes it too: its links come up when it boots. The options set the cables' conditions, alike in both directions: one left out stays, and a cut, a move or a reboot keeps them. Returns each cable's port and link, and with an option its conditions.",
+3236a3345,3375
+>    },
+>    "delay": {
+>     "type": "string",
+>     "description": "How long each frame takes to cross the cable, in each direction: 100ms or 1.5s, up to 10 s. 0 takes the delay away."
+>    },
+>    "loss": {
+>     "type": "string",
+>     "description": "The share of frames that the cable loses, in each direction: 20%, or 0.5%. 0 takes the loss away."
+>    },
+>    "reorder": {
+>     "type": "string",
+>     "description": "The share of frames that skip the delay, and so arrive ahead of those sent before them: 25%. It needs a delay. 0 takes it away."
+>    },
+>    "rate": {
+>     "type": "string",
+>     "description": "The most the cable carries each way, in bits a second: 1mbit, 500kbit. A frame that would wait behind 64 KiB is dropped. 0 takes the rate away."
+>    },
+>    "mtu": {
+>     "type": "integer",
+>     "minimum": 68,
+>     "maximum": 1500,
+>     "description": "The longest packet a frame on the cable can hold, in bytes, from 68 to 1500: a longer frame is dropped. 1500 is Ethernet's, and takes it away."
+>    },
+>    "conditions": {
+>     "type": "string",
+>     "enum": [
+>      "clear",
+>      "keep"
+>     ],
+>     "default": "keep",
+>     "description": "--clear takes every condition of the cables away, before those that the other options set."
+3296c3435
+<  "description": "Read the newest frames that the switches carried, as decoded rows, oldest first. In a lab of several switches a row has its switch, the port the frame came in by and those it went out of. In the filter, lan is what that switch carried, lan:3 what crossed the cable in its port 3, port:3 that port of every switch, and vlan 10 what was in VLAN 10. Frames come from the guests.",
+---
+>  "description": "Read the newest frames that the switches carried, as decoded rows, oldest first. In a lab of several switches a row has its switch, the port the frame came in by and those it went out of. A frame that a cable dropped has dropped: the cable's port and the reason (loss, rate or mtu). In the filter, lan is what that switch carried, lan:3 what crossed the cable in its port 3, port:3 that port of every switch, and vlan 10 what was in VLAN 10. Frames come from the guests.",
+52819c52958,52967
+<         "link": "up"
+---
+>         "link": "up",
+>         "conditions": {},
+>         "carried": {
+>          "delivered": 0,
+>          "dropped": {
+>           "loss": 0,
+>           "rate": 0,
+>           "mtu": 0
+>          }
+>         }
+52835c52983,52992
+<         "link": "up"
+---
+>         "link": "up",
+>         "conditions": {},
+>         "carried": {
+>          "delivered": 0,
+>          "dropped": {
+>           "loss": 0,
+>           "rate": 0,
+>           "mtu": 0
+>          }
+>         }
+52904c53061,53070
+<         "link": "up"
+---
+>         "link": "up",
+>         "conditions": {},
+>         "carried": {
+>          "delivered": 0,
+>          "dropped": {
+>           "loss": 0,
+>           "rate": 0,
+>           "mtu": 0
+>          }
+>         }
+52981c53147,53156
+<         "link": "up"
+---
+>         "link": "up",
+>         "conditions": {},
+>         "carried": {
+>          "delivered": 0,
+>          "dropped": {
+>           "loss": 0,
+>           "rate": 0,
+>           "mtu": 0
+>          }
+>         }
+52997c53172,53181
+<         "link": "up"
+---
+>         "link": "up",
+>         "conditions": {},
+>         "carried": {
+>          "delivered": 0,
+>          "dropped": {
+>           "loss": 0,
+>           "rate": 0,
+>           "mtu": 0
+>          }
+>         }
+53013c53197,53206
+<         "link": "up"
+---
+>         "link": "up",
+>         "conditions": {},
+>         "carried": {
+>          "delivered": 0,
+>          "dropped": {
+>           "loss": 0,
+>           "rate": 0,
+>           "mtu": 0
+>          }
+>         }
+53029c53222,53231
+<         "link": "up"
+---
+>         "link": "up",
+>         "conditions": {},
+>         "carried": {
+>          "delivered": 0,
+>          "dropped": {
+>           "loss": 0,
+>           "rate": 0,
+>           "mtu": 0
+>          }
+>         }
+53045c53247,53256
+<         "link": "up"
+---
+>         "link": "up",
+>         "conditions": {},
+>         "carried": {
+>          "delivered": 0,
+>          "dropped": {
+>           "loss": 0,
+>           "rate": 0,
+>           "mtu": 0
+>          }
+>         }
+53061c53272,53281
+<         "link": "up"
+---
+>         "link": "up",
+>         "conditions": {},
+>         "carried": {
+>          "delivered": 0,
+>          "dropped": {
+>           "loss": 0,
+>           "rate": 0,
+>           "mtu": 0
+>          }
+>         }
+68042c68262,68271
+<         "link": "up"
+---
+>         "link": "up",
+>         "conditions": {},
+>         "carried": {
+>          "delivered": 0,
+>          "dropped": {
+>           "loss": 0,
+>           "rate": 0,
+>           "mtu": 0
+>          }
+>         }
+68119c68348,68357
+<         "link": "cut"
+---
+>         "link": "cut",
+>         "conditions": {},
+>         "carried": {
+>          "delivered": 0,
+>          "dropped": {
+>           "loss": 0,
+>           "rate": 0,
+>           "mtu": 0
+>          }
+>         }
+68143c68381,68390
+<         "link": "up"
+---
+>         "link": "up",
+>         "conditions": {},
+>         "carried": {
+>          "delivered": 0,
+>          "dropped": {
+>           "loss": 0,
+>           "rate": 0,
+>           "mtu": 0
+>          }
+>         }
+68159c68406,68415
+<         "link": "up"
+---
+>         "link": "up",
+>         "conditions": {},
+>         "carried": {
+>          "delivered": 0,
+>          "dropped": {
+>           "loss": 0,
+>           "rate": 0,
+>           "mtu": 0
+>          }
+>         }
+68175c68431,68440
+<         "link": "up"
+---
+>         "link": "up",
+>         "conditions": {},
+>         "carried": {
+>          "delivered": 0,
+>          "dropped": {
+>           "loss": 0,
+>           "rate": 0,
+>           "mtu": 0
+>          }
+>         }
+68191c68456,68465
+<         "link": "up"
+---
+>         "link": "up",
+>         "conditions": {},
+>         "carried": {
+>          "delivered": 0,
+>          "dropped": {
+>           "loss": 0,
+>           "rate": 0,
+>           "mtu": 0
+>          }
+>         }
+68207c68481,68490
+<         "link": "up"
+---
+>         "link": "up",
+>         "conditions": {},
+>         "carried": {
+>          "delivered": 0,
+>          "dropped": {
+>           "loss": 0,
+>           "rate": 0,
+>           "mtu": 0
+>          }
+>         }
+72680c72963,72972
+<         "link": "up"
+---
+>         "link": "up",
+>         "conditions": {},
+>         "carried": {
+>          "delivered": 0,
+>          "dropped": {
+>           "loss": 0,
+>           "rate": 0,
+>           "mtu": 0
+>          }
+>         }
+72757c73049,73058
+<         "link": "cut"
+---
+>         "link": "cut",
+>         "conditions": {},
+>         "carried": {
+>          "delivered": 0,
+>          "dropped": {
+>           "loss": 0,
+>           "rate": 0,
+>           "mtu": 0
+>          }
+>         }
+72781c73082,73091
+<         "link": "up"
+---
+>         "link": "up",
+>         "conditions": {},
+>         "carried": {
+>          "delivered": 0,
+>          "dropped": {
+>           "loss": 0,
+>           "rate": 0,
+>           "mtu": 0
+>          }
+>         }
+72797c73107,73116
+<         "link": "up"
+---
+>         "link": "up",
+>         "conditions": {},
+>         "carried": {
+>          "delivered": 0,
+>          "dropped": {
+>           "loss": 0,
+>           "rate": 0,
+>           "mtu": 0
+>          }
+>         }
+72813c73132,73141
+<         "link": "up"
+---
+>         "link": "up",
+>         "conditions": {},
+>         "carried": {
+>          "delivered": 0,
+>          "dropped": {
+>           "loss": 0,
+>           "rate": 0,
+>           "mtu": 0
+>          }
+>         }
+72829c73157,73166
+<         "link": "up"
+---
+>         "link": "up",
+>         "conditions": {},
+>         "carried": {
+>          "delivered": 0,
+>          "dropped": {
+>           "loss": 0,
+>           "rate": 0,
+>           "mtu": 0
+>          }
+>         }
+72845c73182,73191
+<         "link": "up"
+---
+>         "link": "up",
+>         "conditions": {},
+>         "carried": {
+>          "delivered": 0,
+>          "dropped": {
+>           "loss": 0,
+>           "rate": 0,
+>           "mtu": 0
+>          }
+>         }
