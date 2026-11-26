@@ -16,7 +16,19 @@ import {
 	update,
 	type VlanId,
 } from "../../model/index.ts";
-import { addSwitch, lab, link, mount, ready, type Step, spawn, switchNamed, unmountAll } from "../base/testing.ts";
+import {
+	addSwitch,
+	lab,
+	link,
+	mount,
+	named,
+	ready,
+	type Step,
+	spawn,
+	spawnNamed,
+	switchNamed,
+	unmountAll,
+} from "../base/testing.ts";
 
 beforeEach(() => page.viewport(1440, 900));
 afterEach(() => {
@@ -79,6 +91,8 @@ async function topology(state: LabState) {
 		note: (name: string) => nodeOf(name).querySelector("small")?.textContent?.replaceAll("\u00a0", " "),
 		/** The node, for what it says to a screen reader. */
 		described: (name: string) => page.elementLocator(nodeOf(name)),
+		/** What a pointer resting on the node shows. */
+		titled: (name: string) => nodeOf(name).title,
 		/** Each line's state, by the nodes its ends are on, as `switch0 node1 up`. */
 		lines: () => {
 			const centre = (el: Element) => {
@@ -104,7 +118,7 @@ async function topology(state: LabState) {
 
 describe("the Topology window", () => {
 	it("draws every switch, machine and cable, and says which NIC and which port each cable goes to", async () => {
-		const { map, lines, note, described } = await topology(wired());
+		const { map, lines, note, described, titled } = await topology(wired());
 		expect([...map.querySelectorAll(".n-node strong")].map((name) => name.textContent)).toEqual([
 			"switch0",
 			"lan",
@@ -121,8 +135,10 @@ describe("the Topology window", () => {
 			"switch0 node2 up",
 			"switch0 node3 up",
 		]);
-		expect(note("node3")).toBe("alpine · 2 NICs");
+		expect(note("node3")).toBe("alpine");
 		expect(note("node1")).toBe("alpine");
+		expect(note("switch0")).toBe("4 / 8 ports");
+		expect(titled("node3")).toBe("eth0 · to switch0 port 3 · up\neth1 · to lan port 1 · up");
 		// node3 shares a column with lan, which it is cabled to, so a line crosses its name, as on main.
 		expect(unreadable(map).filter((what) => what.includes(" under "))).toEqual([]);
 		await expect
@@ -140,7 +156,7 @@ describe("the Topology window", () => {
 	});
 
 	it("follows each command without a reload: a moved, cut and impaired cable, a VLAN, a trunk and a storm", async () => {
-		const { element, store, settle, lines, note, described } = await topology(wired());
+		const { element, store, settle, lines, note, described, titled } = await topology(wired());
 		const step = async (...steps: Step[]) => {
 			send(store, ...steps);
 			await settle();
@@ -167,14 +183,16 @@ describe("the Topology window", () => {
 			type: "cmd/conditions",
 			changes: [{ port: port(DEFAULT_SWITCH, 3), conditions: conditions({ delay: 50, loss: 10 }) }],
 		});
-		expect(note("node3")).toBe("alpine · 2 NICs · impaired");
+		expect(note("node3")).toBe("alpine · impaired");
 		await expect
 			.element(described("node3"))
 			.toHaveAccessibleDescription("eth0 · to switch0 port 3 · up · delay 50 ms, loss 10%. eth1 · to lan port 1 · up");
 
 		await step(vlan(port(lan, 2), 10), trunk(port(lan, 8), 1, 10));
-		expect(note("node4")).toBe("alpine · v10");
-		expect(note("node3")).toBe("alpine · 2 NICs · impaired");
+		expect(titled("node4")).toBe("eth0 · to lan port 2 · up · vlan 10");
+		expect(titled("lan")).toContain("Port 2 · node4 · up · vlan 10");
+		expect(note("node4")).toBe("alpine");
+		expect(note("node3")).toBe("alpine · impaired");
 		expect(note("lan")).toBe("4 / 8 ports");
 		expect(note("switch0")).toBe("3 / 8 ports · impaired");
 		await expect.element(described("node4")).toHaveAccessibleDescription("eth0 · to lan port 2 · up · vlan 10");
@@ -185,7 +203,8 @@ describe("the Topology window", () => {
 			);
 
 		await step(vlan(port(lan, 1), 20));
-		expect(note("node3")).toBe("alpine · 2 NICs · impaired");
+		expect(titled("node3")).toContain("eth1 · to lan port 1 · up · vlan 20");
+		expect(note("node3")).toBe("alpine · impaired");
 		await expect
 			.element(described("node3"))
 			.toHaveAccessibleDescription(expect.stringContaining("eth1 · to lan port 1 · up · vlan 20"));
@@ -194,6 +213,7 @@ describe("the Topology window", () => {
 		expect(note("lan")).toBe("4 / 8 ports · storming");
 		await step(storm(lan, false), vlan(port(lan, 2), 1));
 		expect(note("lan")).toBe("4 / 8 ports");
+		expect(titled("node4")).toBe("eth0 · to lan port 2 · up");
 		expect(note("node4")).toBe("alpine");
 		await expect.element(described("node4")).toHaveAccessibleDescription("eth0 · to lan port 2 · up");
 
@@ -236,8 +256,8 @@ describe("the Topology window", () => {
 /**
  * Eight switches, seven of them cabled to core, and sixteen machines, one of them with a NIC on each of switch0, lan
  * and wan and a fourth on switch0. A lab holds eight machines until story 6.1, so the eight past that are spawned into
- * the lab as if it had none yet, on switches where no machine is, and the two are put together. Ports in VLANs, a
- * trunk, a cable with conditions and two storms give the nodes their longest notes.
+ * the lab as if it had none yet, on switches where no machine is, and the two are put together. A cable with
+ * conditions and two storms give the nodes their longest notes, and ports in VLANs and a trunk their longest titles.
  */
 function crowd(): LabState {
 	const leaves = [DEFAULT_SWITCH, lan, wan, dmz, edge, office, labs];
@@ -319,28 +339,41 @@ function unreadable(map: Element): string[] {
 	];
 }
 
-describe("the Topology window of a machine with several NICs", () => {
-	it("keeps its note clear of the machine drawn below it, as the window opens and maximized", async () => {
-		const { map, note } = await topology(
+describe("the Topology window of machines with long names", () => {
+	it("keeps each name and note clear of the node drawn below it, as the window opens and maximized", async () => {
+		const [router, database, backup] = ["internal-router-east", "database-server-west", "backup-storage-south"].map(
+			named,
+		);
+		const { map, note, titled } = await topology(
 			lab(
 				addSwitch(lan),
 				addSwitch(wan),
-				spawn(1),
-				spawn(1, DEFAULT_SWITCH, lan, wan),
+				spawnNamed(router, DEFAULT_SWITCH, lan),
+				spawnNamed(database),
+				spawnNamed(backup, DEFAULT_SWITCH, wan),
 				spawn(2),
 				ready(),
 				vlan(port(DEFAULT_SWITCH, 2), 10),
 				vlan(port(lan, 1), 20),
-				vlan(port(wan, 1), 30),
-				{ type: "cmd/conditions", changes: [{ port: port(DEFAULT_SWITCH, 2), conditions: conditions({ delay: 30 }) }] },
+				{
+					type: "cmd/conditions",
+					changes: [1, 2].map((n) => ({ port: port(DEFAULT_SWITCH, n), conditions: conditions({ delay: 30 }) })),
+				},
 			),
 		);
-		expect(note("node2")).toBe("alpine · 3 NICs · impaired");
-		expect(unreadable(map).filter((what) => what.includes(" under "))).toEqual([]);
+		const clear = async () => {
+			await document.fonts.ready;
+			return unreadable(map).filter((what) => what.includes(" under "));
+		};
+		expect(await clear()).toEqual([]);
 		await page.getByRole("button", { name: "Maximize Topology" }).click();
 		await expect.poll(() => map.dataset.max).toBe("true");
 		await new Promise((done) => setTimeout(done, 600));
-		expect(unreadable(map).filter((what) => what.includes(" under "))).toEqual([]);
+		expect(await clear()).toEqual([]);
+		expect(note(router)).toBe("alpine · impaired");
+		expect(note(database)).toBe("alpine · impaired");
+		expect(titled(router)).toBe("eth0 · to switch0 port 1 · up · delay 30 ms\neth1 · to lan port 1 · up · vlan 20");
+		expect(titled(database)).toBe("eth0 · to switch0 port 2 · up · vlan 10 · delay 30 ms");
 	});
 });
 
@@ -349,7 +382,7 @@ describe("the Topology window of a full lab", () => {
 		const state = crowd();
 		expect([state.rail.length, state.switches.length]).toEqual([16, 8]);
 		const { map, note } = await topology(state);
-		expect(note("node3")).toBe("alpine · 4 NICs");
+		expect(note("node3")).toBe("alpine");
 		expect(note("core")).toBe("7 / 8 ports · storming · impaired");
 		const drawing = map.querySelector(".n-drawing")?.getBoundingClientRect();
 		const names = [...map.querySelectorAll(".n-node strong")];

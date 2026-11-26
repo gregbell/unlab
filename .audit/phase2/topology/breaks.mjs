@@ -7,37 +7,84 @@ const browser = (grep) => ({ kind: "browser", files: ["src/ui/desktop/topology.b
 const drawn = browser("draws every switch");
 const follows = browser("follows each command");
 const keyboard = browser("keyboard");
+const names = browser("long names");
 const crowd = browser("16 machines");
 const page = { kind: "e2e", files: ["e2e/desktop-cables.spec.ts"] };
 
+/** The note at origin/main, which this slice keeps. */
+const MAIN_NOTE = `const impaired = edges.some((edge) => edge.conditions && edge.ends.some((end) => end.name === d.name));
+			const marked = impaired ? \` · \${IMPAIRED}\` : "";
+			const meta =
+				d.kind === "switch"
+					? \`\${selectPorts(d.name)(lab).filter((port) => port.state !== "empty").length} / 8 ports\${selectStorm(d.name)(lab) ? " · storming" : ""}\${marked}\`
+					: \`\${m?.spec.image ?? ""}\${marked}\`;`;
+
+/** The note at 7609dd7: a machine's NIC count, or its one NIC's VLAN, besides its marks. */
+const NOTE_7609DD7 = `const sides = sidesAt(edges, d.name);
+			const marks = [
+				...(d.kind === "switch" && selectStorm(d.name)(lab) ? ["storming"] : []),
+				...(sides.some(({ edge }) => edge.conditions) ? [IMPAIRED] : []),
+			];
+			const nics = m?.spec.nics.length ?? 0;
+			const meta = (
+				d.kind === "switch"
+					? [\`\${selectPorts(d.name)(lab).filter((port) => port.state !== "empty").length} / 8 ports\`, ...marks]
+					: [
+							m?.spec.image ?? "",
+							...(nics > 1 ? [\`\${nics} NICs\`] : sides.flatMap((side) => vlanAt(side)?.tag ?? [])),
+							...marks,
+						]
+			).join(" · ");`;
+
 export const BREAKS = [
 	{
-		name: "the map names no NIC",
+		name: "a note says a machine's NICs or VLAN, as at 7609dd7",
 		file: MAP,
-		from: "...((m?.spec.nics.length ?? 0) > 1",
-		to: "...(false",
-		tests: [drawn, follows, crowd],
+		from: MAIN_NOTE,
+		to: NOTE_7609DD7,
+		tests: [names, drawn, follows],
 	},
 	{
 		name: "a node describes none of its cables",
 		file: MAP,
 		from: 'aria-description=${words.length ? words.join(". ") : nothing} title=${words.length ? words.join("\\n") : nothing}',
 		to: "",
-		tests: [drawn, keyboard, page],
+		tests: [drawn, follows, keyboard, names, page],
 	},
 	{
-		name: "the map says no VLAN",
+		name: "a node's words name no NIC",
 		file: MAP,
-		from: "const vlans = [...new Set(sides.flatMap((side) => vlanAt(side)?.tag ?? []))];",
-		to: "const vlans: string[] = [];",
-		tests: [follows, crowd, page],
+		from: "? `${side.end.nic} · to ${side.other.label}`",
+		to: "? `to ${side.other.label}`",
+		tests: [drawn, follows, names, page],
+	},
+	{
+		name: "a node's words say no VLAN or trunk",
+		file: MAP,
+		from: "vlanAt(side)?.text,",
+		to: "",
+		tests: [follows, names, page],
+	},
+	{
+		name: "a node's words say no conditions",
+		file: MAP,
+		from: "side.edge.conditions,",
+		to: "",
+		tests: [follows, names],
 	},
 	{
 		name: "the map marks no storm",
 		file: MAP,
-		from: '...(d.kind === "switch" && selectStorm(d.name)(lab) ? ["storming"] : []),',
+		from: '${selectStorm(d.name)(lab) ? " · storming" : ""}',
 		to: "",
 		tests: [follows, crowd, page],
+	},
+	{
+		name: "the map marks no impaired cable",
+		file: MAP,
+		from: "const marked = impaired ? ` · ${IMPAIRED}` : \"\";",
+		to: 'const marked = "";',
+		tests: [follows, names, crowd],
 	},
 	{
 		name: "the desktop draws a port's VLAN at its next tick",
@@ -86,7 +133,7 @@ export const BREAKS = [
 		file: MAP,
 		from: "height = Math.max(280, rows * 116);",
 		to: "height = Math.max(280, rows * 64);",
-		tests: [crowd],
+		tests: [crowd, names],
 	},
 	{
 		name: "a name sits where the lines come in",

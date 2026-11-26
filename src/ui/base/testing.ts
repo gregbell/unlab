@@ -105,11 +105,13 @@ export function named(text: string): MachineName {
 	return name;
 }
 
-/** One machine with the name, plugged in. */
+/** One machine with the name, plugged in, with a NIC on each switch given or on switch0. */
 export const spawnNamed =
-	(name: MachineName) =>
+	(name: MachineName, ...nets: readonly SwitchName[]) =>
 	(state: LabState): readonly CommandEvent[] => {
-		const nics: NicRequest[] = [{ net: DEFAULT_SWITCH, address: "default" }];
+		const nics = (nets.length > 0 ? nets : [DEFAULT_SWITCH]).map(
+			(net, nic): NicRequest => ({ net, address: nic === 0 ? "default" : null }),
+		);
 		const plan = planSpawn(state, 1, {
 			image: "alpine",
 			memMiB: 256,

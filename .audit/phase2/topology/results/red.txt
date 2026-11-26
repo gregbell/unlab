@@ -1,16 +1,28 @@
 Each line: what was broken | the tests that were run | their exit code | the tests that went red.
-Made by node .audit/phase2/topology/red.mjs, which puts each source back after its break: the browser tests with KINDS=browser
-on the final tests, then the page (e2e/desktop-cables.spec.ts) for the three breaks that name it. No test stayed green under its break.
+Made by node .audit/phase2/topology/red.mjs, which puts each source back after its break. The browser lines are from
+KINDS=browser on the final tests. The page lines (e2e/desktop-cables.spec.ts, for the four breaks that name it) are from a
+full run just before, on the same source and the same e2e spec; only the browser test changed after it, so that a VLAN
+step reads the title before any polled check. No test stayed green under its break.
 
-the map names no NIC | browser src/ui/desktop/topology.browser.test.ts "draws every switch" | exit 1 | red: draws every switch, machine and cable, and says which NIC and which port each cable goes to
-the map names no NIC | browser src/ui/desktop/topology.browser.test.ts "follows each command" | exit 1 | red: follows each command without a reload: a moved, cut and impaired cable, a VLAN, a trunk and a storm
-the map names no NIC | browser src/ui/desktop/topology.browser.test.ts "16 machines" | exit 1 | red: with 16 machines and eight switches, every name can be read, in the window as it opens and maximized
+a note says a machine's NICs or VLAN, as at 7609dd7 | browser src/ui/desktop/topology.browser.test.ts "long names" | exit 1 | red: keeps each name and note clear of the node drawn below it, as the window opens and maximized
+a note says a machine's NICs or VLAN, as at 7609dd7 | browser src/ui/desktop/topology.browser.test.ts "draws every switch" | exit 1 | red: draws every switch, machine and cable, and says which NIC and which port each cable goes to
+a note says a machine's NICs or VLAN, as at 7609dd7 | browser src/ui/desktop/topology.browser.test.ts "follows each command" | exit 1 | red: follows each command without a reload: a moved, cut and impaired cable, a VLAN, a trunk and a storm
 a node describes none of its cables | browser src/ui/desktop/topology.browser.test.ts "draws every switch" | exit 1 | red: draws every switch, machine and cable, and says which NIC and which port each cable goes to
+a node describes none of its cables | browser src/ui/desktop/topology.browser.test.ts "follows each command" | exit 1 | red: follows each command without a reload: a moved, cut and impaired cable, a VLAN, a trunk and a storm
 a node describes none of its cables | browser src/ui/desktop/topology.browser.test.ts "keyboard" | exit 1 | red: can be used by keyboard, and says in words what a line shows by its colour
-the map says no VLAN | browser src/ui/desktop/topology.browser.test.ts "follows each command" | exit 1 | red: follows each command without a reload: a moved, cut and impaired cable, a VLAN, a trunk and a storm
-the map says no VLAN | browser src/ui/desktop/topology.browser.test.ts "16 machines" | exit 1 | red: with 16 machines and eight switches, every name can be read, in the window as it opens and maximized
+a node describes none of its cables | browser src/ui/desktop/topology.browser.test.ts "long names" | exit 1 | red: keeps each name and note clear of the node drawn below it, as the window opens and maximized
+a node's words name no NIC | browser src/ui/desktop/topology.browser.test.ts "draws every switch" | exit 1 | red: draws every switch, machine and cable, and says which NIC and which port each cable goes to
+a node's words name no NIC | browser src/ui/desktop/topology.browser.test.ts "follows each command" | exit 1 | red: follows each command without a reload: a moved, cut and impaired cable, a VLAN, a trunk and a storm
+a node's words name no NIC | browser src/ui/desktop/topology.browser.test.ts "long names" | exit 1 | red: keeps each name and note clear of the node drawn below it, as the window opens and maximized
+a node's words say no VLAN or trunk | browser src/ui/desktop/topology.browser.test.ts "follows each command" | exit 1 | red: follows each command without a reload: a moved, cut and impaired cable, a VLAN, a trunk and a storm
+a node's words say no VLAN or trunk | browser src/ui/desktop/topology.browser.test.ts "long names" | exit 1 | red: keeps each name and note clear of the node drawn below it, as the window opens and maximized
+a node's words say no conditions | browser src/ui/desktop/topology.browser.test.ts "follows each command" | exit 1 | red: follows each command without a reload: a moved, cut and impaired cable, a VLAN, a trunk and a storm
+a node's words say no conditions | browser src/ui/desktop/topology.browser.test.ts "long names" | exit 1 | red: keeps each name and note clear of the node drawn below it, as the window opens and maximized
 the map marks no storm | browser src/ui/desktop/topology.browser.test.ts "follows each command" | exit 1 | red: follows each command without a reload: a moved, cut and impaired cable, a VLAN, a trunk and a storm
 the map marks no storm | browser src/ui/desktop/topology.browser.test.ts "16 machines" | exit 1 | red: with 16 machines and eight switches, every name can be read, in the window as it opens and maximized
+the map marks no impaired cable | browser src/ui/desktop/topology.browser.test.ts "follows each command" | exit 1 | red: follows each command without a reload: a moved, cut and impaired cable, a VLAN, a trunk and a storm
+the map marks no impaired cable | browser src/ui/desktop/topology.browser.test.ts "long names" | exit 1 | red: keeps each name and note clear of the node drawn below it, as the window opens and maximized
+the map marks no impaired cable | browser src/ui/desktop/topology.browser.test.ts "16 machines" | exit 1 | red: with 16 machines and eight switches, every name can be read, in the window as it opens and maximized
 the desktop draws a port's VLAN at its next tick | browser src/ui/desktop/topology.browser.test.ts "follows each command" | exit 1 | red: follows each command without a reload: a moved, cut and impaired cable, a VLAN, a trunk and a storm
 the desktop draws a moved, cut or impaired cable at its next tick | browser src/ui/desktop/topology.browser.test.ts "follows each command" | exit 1 | red: follows each command without a reload: a moved, cut and impaired cable, a VLAN, a trunk and a storm
 a cut cable is drawn only in red | browser src/ui/desktop/topology.browser.test.ts "keyboard" | exit 1 | red: can be used by keyboard, and says in words what a line shows by its colour
@@ -18,7 +30,9 @@ Tab passes the map's nodes by | browser src/ui/desktop/topology.browser.test.ts 
 a node with focus looks as one without | browser src/ui/desktop/topology.browser.test.ts "keyboard" | exit 1 | red: can be used by keyboard, and says in words what a line shows by its colour
 Enter on a node opens nothing | browser src/ui/desktop/topology.browser.test.ts "keyboard" | exit 1 | red: can be used by keyboard, and says in words what a line shows by its colour
 rows are too close for their names | browser src/ui/desktop/topology.browser.test.ts "16 machines" | exit 1 | red: with 16 machines and eight switches, every name can be read, in the window as it opens and maximized
+rows are too close for their names | browser src/ui/desktop/topology.browser.test.ts "long names" | exit 1 | red: keeps each name and note clear of the node drawn below it, as the window opens and maximized
 a name sits where the lines come in | browser src/ui/desktop/topology.browser.test.ts "16 machines" | exit 1 | red: with 16 machines and eight switches, every name can be read, in the window as it opens and maximized
-the map says no VLAN | e2e e2e/desktop-cables.spec.ts | exit 1 | red: the desktop draws a cable between switches, cuts and removes it from the switch's ports, shows a storm until its loop is cut, and maps a VLAN and a moved cable
-the map marks no storm | e2e e2e/desktop-cables.spec.ts | exit 1 | red: the desktop draws a cable between switches, cuts and removes it from the switch's ports, shows a storm until its loop is cut, and maps a VLAN and a moved cable
 a node describes none of its cables | e2e e2e/desktop-cables.spec.ts | exit 1 | red: the desktop draws a cable between switches, cuts and removes it from the switch's ports, shows a storm until its loop is cut, and maps a VLAN and a moved cable
+a node's words name no NIC | e2e e2e/desktop-cables.spec.ts | exit 1 | red: the desktop draws a cable between switches, cuts and removes it from the switch's ports, shows a storm until its loop is cut, and maps a VLAN and a moved cable
+a node's words say no VLAN or trunk | e2e e2e/desktop-cables.spec.ts | exit 1 | red: the desktop draws a cable between switches, cuts and removes it from the switch's ports, shows a storm until its loop is cut, and maps a VLAN and a moved cable
+the map marks no storm | e2e e2e/desktop-cables.spec.ts | exit 1 | red: the desktop draws a cable between switches, cuts and removes it from the switch's ports, shows a storm until its loop is cut, and maps a VLAN and a moved cable

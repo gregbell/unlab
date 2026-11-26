@@ -98,8 +98,11 @@ test("the desktop draws a cable between switches, cuts and removes it from the s
 	await expect(topology.locator('[data-switch="lan"] small')).toHaveText("3 / 8 ports");
 
 	await typed(page, "vlan node2 10");
-	await expect(topology.locator('[data-machine="node2"] small')).toHaveText("lab · v10");
-	await expect(topology.locator('[data-switch="lan"]')).toHaveAttribute("title", /· vlan 10/);
+	await expect(topology.getByRole("button", { name: "Inspect machine node2" })).toHaveAccessibleDescription(
+		"eth0 · to lan port 1 · up · vlan 10",
+	);
+	await expect(topology.locator('[data-switch="lan"]')).toHaveAttribute("title", /^Port 1 · node2 · up · vlan 10$/m);
+	await expect(topology.locator('[data-machine="node2"] small')).toHaveText("lab");
 	await typed(page, "plug node1 lan");
 	await expect.poll(() => wire(topology, "lan", "node1")).toBe("up");
 	await expect.poll(() => wire(topology, "switch0", "node1")).toBeNull();

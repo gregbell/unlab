@@ -163,25 +163,16 @@ export function topologyMap(lab: LabState, selected: Selection | null, pick: (s:
 		${devices.map((d) => {
 			const p = point(d.name),
 				m = d.kind === "machine" ? lab.machines[d.name] : null;
-			const sides = sidesAt(edges, d.name);
-			// A wire has no words of its own, so each end says what the line would show only by its colour, or not at all.
-			const marks = [
-				...(d.kind === "switch" && selectStorm(d.name)(lab) ? ["storming"] : []),
-				...(sides.some(({ edge }) => edge.conditions) ? [IMPAIRED] : []),
-			];
-			// Rows leave room for two lines of note, so a note holds at most one short word more than its marks. Which NIC
-			// or port goes where, and in which VLAN, is in the title and the description.
-			const nics = m?.spec.nics.length ?? 0;
+			// A wire has no words of its own, so each end of a cable with conditions says so.
+			const impaired = edges.some((edge) => edge.conditions && edge.ends.some((end) => end.name === d.name));
+			const marked = impaired ? ` · ${IMPAIRED}` : "";
 			const meta =
 				d.kind === "switch"
-					? [`${selectPorts(d.name)(lab).filter((port) => port.state !== "empty").length} / 8 ports`, ...marks]
-					: [
-							m?.spec.image ?? "",
-							...(nics > 1 ? [`${nics} NICs`] : sides.flatMap((side) => vlanAt(side)?.tag ?? [])),
-							...marks,
-						];
-			const words = sides.map(sideWords);
+					? `${selectPorts(d.name)(lab).filter((port) => port.state !== "empty").length} / 8 ports${selectStorm(d.name)(lab) ? " · storming" : ""}${marked}`
+					: `${m?.spec.image ?? ""}${marked}`;
+			// Rows are a fixed 116px apart, so the note says no more than it did, and each cable is in the title and description.
+			const words = sidesAt(edges, d.name).map(sideWords);
 			return html`<button class="n-node" data-machine=${d.kind === "machine" ? d.name : nothing} data-switch=${d.kind === "switch" ? d.name : nothing} data-hue=${m?.hue ?? nothing} aria-pressed=${selected?.name === d.name} data-selected=${selected?.name === d.name} aria-description=${words.length ? words.join(". ") : nothing} title=${words.length ? words.join("\n") : nothing} style=${`left:${(100 * p.x) / width}%;top:${p.y}px`} @click=${() => pick(d)}>
-				<span class="visually-hidden">Inspect ${d.kind} </span>${art(d.kind)}<span class="n-node-label"><strong>${d.name}</strong> <small>${meta.join(" · ")}</small></span></button>`;
+				<span class="visually-hidden">Inspect ${d.kind} </span>${art(d.kind)}<span class="n-node-label"><strong>${d.name}</strong> <small>${meta}</small></span></button>`;
 		})}</div></div>`;
 }
