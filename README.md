@@ -149,9 +149,10 @@ checkpoint, no switch carries it, and port 22 stays yours. A reboot removes it.
 ### The internet
 
 While the CLI is linked, each machine that has a gateway reaches the internet through
-your computer: names, and TCP connections to IPv4 addresses. Package downloads take the
-same path. It starts and ends on running machines, and `ls` says which have it.
-`--no-gateway` leaves a machine out. It carries no `ping`, UDP or IPv6, and nothing on
+your computer: names, TCP connections to IPv4 addresses, and `ping`, which your
+computer's own `ping` sends for each echo, so its times are a few milliseconds longer
+than the far end's. Package downloads take the same path. It starts and ends on running machines, and `ls` says which have it.
+`--no-gateway` leaves a machine out. It carries no UDP, `traceroute` or IPv6, and nothing on
 the internet can connect to a machine. `npx unlab.run --log` prints each connection.
 
 Sites see your computer's address. A machine cannot reach your computer or your local

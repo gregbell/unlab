@@ -102,10 +102,13 @@ export class Core {
 		this.#relay = new Relay({
 			lan: options.lan,
 			ownPort: () => this.#port,
+			log: options.log,
 			opened: (connection, name) => {
 				if (!options.log) return;
 				const { machine, host, port } = connection;
-				this.#notice({ kind: "connection", text: `${machine} → ${name ? `${name} (${host})` : host}:${port}` });
+				const text =
+					name === "ping" ? `${machine} → ping ${host}` : `${machine} → ${name ? `${name} (${host})` : host}:${port}`;
+				this.#notice({ kind: "connection", text });
 			},
 		});
 		this.#server = new LinkServer({
