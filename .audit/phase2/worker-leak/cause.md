@@ -40,7 +40,7 @@ A second CPU that still ran guest code when its kernel was stopped, and not shut
 - With the fix and the worker held busy, 0 of 88: `results/after-busy.txt`.
 - With the fix alone, 0 of 196: `results/after.txt`.
 - `e2e/power.spec.ts`, no worker is left by machines that power off while their workers are busy: 24 power-offs with the worker held busy. Red in 12 runs of 12 before the fix, and green in 5 of 5 after.
-- All of `e2e/power.spec.ts` ten times in a row, 120 tests: `results/power-spec-x10.txt`.
+- All of `e2e/power.spec.ts` ten times in a row, 120 tests, at the fix and again at the end of the slice: `results/power-spec-x10.txt` and `results/power-spec-x10-head.txt`.
 
 ## Not done
 

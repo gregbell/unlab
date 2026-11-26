@@ -1,0 +1,14 @@
+taskset -c 1,3,9,11 npx playwright test e2e/scale.spec.ts e2e/power.spec.ts -g "sixteen|no memory|status bar says|no worker is left", on the sources of ce44c6d:
+the four new tests of the page, and one that the pattern also took, on four logical CPUs of two 3.5 GHz cores.
+
+Running 5 tests using 1 worker
+  ✓  1 [chromium] › e2e/power.spec.ts:151:1 › a machine that is off holds no memory, keeps its ports, name and disks, and stays off across a reload (12.5s)
+  ✓  2 [chromium] › e2e/power.spec.ts:224:1 › no worker is left by machines that power off while their workers are busy (30.3s)
+sixteen machines of 256 MiB on two switches: ready 16.3 s after the first command
+each pinged the 7 others in its subnet, 112 pings in 1.5 s
+the browser's processes hold 1889 MiB (PSS, 2514 RSS), and held 311 MiB with the lab empty
+the host has 4 CPUs and 31377 MiB of memory, 4784 MiB of it available now
+  ✓  3 [chromium] › e2e/scale.spec.ts:74:1 › sixteen machines on two switches boot and each pings the others in its subnet, a seventeenth is refused, the lab says the memory they were given, and each is told apart (22.4s)
+  ✓  4 [chromium] › e2e/scale.spec.ts:184:1 › a machine that the browser has no memory for fails and says so, the others keep running, and it boots once there is memory (8.2s)
+  ✓  5 [chromium] › e2e/scale.spec.ts:227:1 › the desktop's status bar says the memory given to the machines that run (5.2s)
+  5 passed (1.4m)
