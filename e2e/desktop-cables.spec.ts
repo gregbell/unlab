@@ -19,7 +19,7 @@ async function wire(topology: Locator, a: string, b: string): Promise<string | n
 	const p = await centre(a),
 		q = await centre(b);
 	// A box takes in the stroke, which a selected line has wider.
-	const near =(u: number, v: number) => Math.abs(u - v) < 10;
+	const near = (u: number, v: number) => Math.abs(u - v) < 10;
 	for (const path of await topology.locator(".wire").all()) {
 		const box = await path.boundingBox();
 		if (
