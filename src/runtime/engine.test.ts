@@ -1770,4 +1770,30 @@ describe("cables between switches", () => {
 		t.intervals[0].fn();
 		expect(t.take().filter((e) => e.type === "switch/storm")).toEqual([]);
 	});
+
+	test("end with a switch that is removed while it storms: the capture says so of it, and of the others once they are quiet", () => {
+		const t = three();
+		const [vm1] = t.vms;
+		const loop: readonly [PortRef, PortRef] = [
+			{ switch: lan, port: 5 },
+			{ switch: lan, port: 6 },
+		];
+		t.run(...up(cable), ...up(loop));
+		vm1.sink.frame(vm1.ref, 0, arpRequest(1, 9));
+		t.clock.pass(300);
+		t.take();
+		t.run({ type: "switch/remove", switch: lan });
+		expect(t.capture.tail(10_000).filter((row) => row.kind === "storm")).toMatchObject([
+			{ switch: "lan", over: false },
+			{ switch: "switch0", over: false },
+			{ switch: "lan", over: true, text: "lan storm over" },
+		]);
+		t.clock.pass(300);
+		expect(t.capture.tail(10_000).filter((row) => row.kind === "storm")).toMatchObject([
+			{ switch: "lan", over: false },
+			{ switch: "switch0", over: false },
+			{ switch: "lan", over: true },
+			{ switch: "switch0", over: true },
+		]);
+	});
 });
