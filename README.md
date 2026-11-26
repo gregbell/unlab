@@ -8,6 +8,7 @@ play with networking between linux boxes right in a tab. Send a ping, pull a
 cable, and see what happens to the packets.
 
 **[Open the live lab](https://unlab.run/)** ·
+[Follow your first ping](#follow-your-first-ping) ·
 [Reach it from your terminal](#reach-the-lab-from-your-terminal) ·
 [Run locally](#run-locally) · [Contribute](#contribute)
 
@@ -19,18 +20,32 @@ the tab before launching the app so it can open that lab.
 
 ## Follow your first ping
 
-1. In **Welcome to unLAB**, select **Boot 2 machines**. The preview shows the
-   names, addresses and switch ports before either guest starts. For CPU, disk
-   and network settings, select **Customize machines**.
-2. In **Rack manager**, select **node1**. When both guests are ready, select
-   **Ping node2** under **Network**. The replies appear in node1’s terminal.
-3. Beside **switch0** in the rack, select **Open capture** to follow traffic.
-   For frame headers, cable filters and a Wireshark download, open the logo menu
-   and choose **Packet capture → Packet inspector**.
-4. Select **switch0** in the rack. Cut the cable to node2, watch its port block
-   change, then reconnect it. Open **Topology** to see how the machines are wired.
+In a fresh lab, send one ping, cut the cable, and try the same ping again.
 
-![The running desktop with the rack, network topology and two terminals.](docs/images/desktop-lab.jpg)
+1. In **Welcome to unLAB**, keep the two Alpine machines and select **Boot 2 machines**.
+   Wait for **2 links up** in **Rack manager**.
+2. In node1's terminal, run the command below. It sends one ping to node2 and
+   waits up to two seconds for a reply.
+
+   ```sh
+   ping -c 1 -W 2 node2
+   ```
+
+3. Look for `0% packet loss` in the terminal. In **Rack manager**, select
+   **Open capture** beside **switch0**. Find the ICMP `echo request` from node1
+   to node2 and the `echo reply` going back to node1.
+4. Select **switch0** in the rack. In the **node2** port row, select **Cut cable**.
+   When the link reads `cut`, repeat the command in node1's terminal. This time
+   the summary reads `100% packet loss`. No new echo reply appears in the capture.
+5. Select **Reconnect** in the same port row. When the link reads `up`, repeat
+   the ping. A new echo reply appears in the capture and packet loss returns to 0%.
+
+To bring the terminal forward, select the terminal icon beside **node1** in the rack.
+You can also select **node1** itself and choose **Ping node2** under **Network**.
+For frame headers, capture filters, or a Wireshark download, open
+**Packet capture** in the logo menu and choose **Packet inspector**.
+
+![Node1 reports 100% packet loss with its peer disconnected, then 0% after reconnecting. The switch capture shows the cable events and the returning echo reply.](docs/images/desktop-lab.jpg)
 
 Drag a window by its title bar, double-click to maximize it, or minimize it to
 the bottom-left dock. Right-click a title bar, a machine, a switch or the desktop
@@ -459,10 +474,27 @@ The SSH programs in [public/ssh](public/ssh/) are built from pinned releases by
 `npm run cli` builds it, and
 `node cli/dist/cli.mjs --origin http://localhost:5173` takes that lab's pages.
 
-To release the CLI, raise `version` in [cli/package.json](cli/package.json), merge it, then tag that commit
-`cli-v` and the version, as in `git tag cli-v0.1.2 && git push origin cli-v0.1.2`. The
-[CLI workflow](.github/workflows/cli.yml) tests it and publishes it to npm with provenance. That needs the repository
-secret `NPM_TOKEN` in its `npm` environment: a granular npm token that may publish `unlab.run`.
+### Release the CLI
+
+Only the repository's owner releases `unlab.run`, by hand, in two steps that each need them. npm takes a release
+from the [release workflow](.github/workflows/cli-release.yml) alone, through
+[trusted publishing](https://docs.npmjs.com/trusted-publishers), so no npm token is kept anywhere. The workflow can only
+stage it, and it goes out once the owner approves it with their two-factor login. Each release says on npm which commit
+of this repository it was built from.
+
+1. Raise `version` in [cli/package.json](cli/package.json) in a pull request, and merge it.
+2. In **Actions**, choose **Release the CLI**, then **Run workflow** on `main`. It tests and builds the CLI from `main`
+   and stages it. It refuses a version that is published or tagged already, a branch other than `main`, and anyone but
+   the owner.
+3. Approve the staged version on npmjs.com, or in your own terminal with `npm stage list unlab.run` and
+   `npm stage approve <stage-id>`.
+4. Tag what was released, with the command the run's summary gives, and check it with
+   `npx unlab.run@latest --version`.
+
+Set up once: in the package's settings on npmjs.com, under **Trusted publishing**, add GitHub Actions with the
+repository `gregbell/unlab`, the workflow `cli-release.yml` and the environment `npm`, and leave **Allow npm publish**
+and **Allow npm dist-tag** unticked. Under **Publishing access**, choose **Require two-factor authentication and disallow
+tokens**.
 
 ## How it works
 

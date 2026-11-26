@@ -1,0 +1,70 @@
+name: Release the CLI
+
+# Run by hand from the Actions tab: it stages the version that cli/package.json on main has. npm takes it from this
+# workflow alone, through trusted publishing, so no npm token is kept anywhere, and it goes out only once the owner
+# approves it on npm with their two-factor login. See "Release the CLI" in the README.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cli-release
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main' && github.actor == github.repository_owner
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          registry-url: https://registry.npmjs.org
+      # Trusted publishing and staging need a newer npm than Node.js comes with.
+      - run: npm install --global npm@^11.19.0
+      - run: npm ci
+      - name: Read the version
+        id: version
+        run: |
+          version=$(node -p "require('./cli/package.json').version")
+          if npm view "unlab.run@$version" version >/dev/null 2>&1; then
+            echo "unlab.run $version is published already. Raise version in cli/package.json first." >&2
+            exit 1
+          fi
+          if git ls-remote --exit-code --tags origin "refs/tags/cli-v$version" >/dev/null; then
+            echo "The tag cli-v$version is there already, on another commit perhaps." >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - run: npx vitest run --project unit cli src/streams
+      - run: npx vitest run --project integration test/integration/cli-link.test.ts
+      - run: npm run cli
+      - run: test "$(node cli/dist/cli.mjs --version)" = "${{ steps.version.outputs.version }}"
+      - name: Stage it
+        id: stage
+        working-directory: cli
+        # Named, so that a failure is not hidden by tee: GitHub then runs it with pipefail.
+        shell: bash
+        run: npm stage publish . --provenance --access public 2>&1 | tee staged.txt
+      - name: Say how to release it
+        run: |
+          version=${{ steps.version.outputs.version }}
+          {
+            echo "Staged unlab.run $version from \`${GITHUB_SHA::7}\`. Nothing is published until you approve it."
+            echo
+            echo '```'
+            cat cli/staged.txt
+            echo '```'
+            echo
+            echo "Approve it on npmjs.com, or in your own terminal: \`npm stage list unlab.run\`, then \`npm stage approve <stage-id>\`."
+            echo "Then tag what was released: \`git tag cli-v$version ${GITHUB_SHA} && git push origin cli-v$version\`"
+          } >> "$GITHUB_STEP_SUMMARY"
