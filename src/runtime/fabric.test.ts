@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { arpReply, arpRequest, ping } from "../../test/support/frames.ts";
+import { arpReply, arpRequest, BROADCAST, eth, mac, ping } from "../../test/support/frames.ts";
 import type { PortNo, PortVlan, VlanId } from "../model/index.ts";
 import { vlanTag, withoutTag, withTag } from "../net/index.ts";
 import {
@@ -863,6 +863,29 @@ describe("VLANs", () => {
 			expect(t.storming("a")).toBe(false);
 		},
 	);
+
+	test("a port takes a frame of up to 1,514 bytes, or 1,518 with its tag, and drops and counts a longer one", () => {
+		const t = vlanNet(["a1:10", "b1:10"], [["a8-b8", trunk("all")]]);
+		const { slot } = t.at("a1");
+		const ofPayload = (bytes: number) => eth(BROADCAST, mac(1), 0x0800, new Uint8Array(bytes));
+		const longest = ofPayload(1500);
+		expect(longest.length).toBe(1514);
+		t.send(1, longest);
+		expect(t.last(B + 1)).toEqual(longest);
+		expect(t.taps.map(({ on, e }) => [on, e.tagged])).toEqual([
+			["a", bit(8)],
+			["b", bit(8)],
+		]);
+		t.send(1, withTag(longest, 10));
+		expect(t.reached()).toEqual({ [B + 1]: 2 });
+		expect(t.fabric.counters(slot, 1)).toMatchObject({ rxFrames: 2, dropped: 0 });
+
+		t.clear();
+		t.send(1, ofPayload(1501));
+		t.send(1, withTag(ofPayload(1501), 10));
+		expect([t.reached(), t.taps]).toEqual([{}, []]);
+		expect(t.fabric.counters(slot, 1)).toMatchObject({ rxFrames: 4, dropped: 2 });
+	});
 
 	test("a native VLAN that the trunk does not allow does not cross it untagged", () => {
 		const t = vlanNet(["a1", "b1"], [["a8-b8", trunk([10, 20])]]);

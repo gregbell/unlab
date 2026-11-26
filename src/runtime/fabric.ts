@@ -21,12 +21,22 @@
 // each VLAN floods within itself and has a table of its own. On a cable between
 // switches it is as it would be on the wire: tagged, but for a trunk's native
 // VLAN. A tag that a trunk puts on comes off at the next port or the frame is
-// dropped there, so no wiring makes a frame longer.
+// dropped there, so no wiring makes a frame longer. A port also drops a frame
+// that is longer than Ethernet carries, wherever it came from.
 //
 // Addresses are numbers here. They are text only where someone reads a table.
 
 import type { PortNo, PortVlan } from "../model/index.ts";
-import { type Flood, PRIORITY_ONLY, RESERVED_VLAN, vlanTag, withoutTag, withTag } from "../net/index.ts";
+import {
+	ETH_MAX,
+	type Flood,
+	PRIORITY_ONLY,
+	RESERVED_VLAN,
+	TAG_BYTES,
+	vlanTag,
+	withoutTag,
+	withTag,
+} from "../net/index.ts";
 
 export interface PortCounters {
 	rxFrames: number;
@@ -505,7 +515,8 @@ export class Fabric {
 		const mode = sw.modes[from];
 		const tag = vlanTag(frame);
 		const vlan = tag === null || tag === PRIORITY_ONLY ? mode.vlan : tag;
-		if (vlan === RESERVED_VLAN || !carries(mode, vlan)) {
+		const longest = tag === null ? ETH_MAX : ETH_MAX + TAG_BYTES;
+		if (vlan === RESERVED_VLAN || !carries(mode, vlan) || frame.length > longest) {
 			src.counters.dropped++;
 			return;
 		}

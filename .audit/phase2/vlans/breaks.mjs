@@ -216,6 +216,13 @@ export const BREAKS = [
 		tests: [fabricUnit, kernels],
 	},
 	{
+		name: "a port takes a frame of any length",
+		file: FABRIC,
+		from: " || frame.length > longest) {",
+		to: ") {",
+		tests: [fabricUnit],
+	},
+	{
 		name: "the frame detail dumps a frame without the tag it came in with",
 		file: "src/ui/capture/frame-detail-model.ts",
 		from: "const wire = onWire(e.bytes, e.vlan, e.tagged, e.from);",
