@@ -34,6 +34,7 @@ Commands of its own:
   forward                        list them; forward --rm <port> ends one
   status                         say what is linked, forwarded and connected
   ssh-config                     print the line that lets any terminal use ssh <machine>.unlab
+  mcp                            give an AI agent the lab's tools, as an MCP server on stdio
 Any other command is the lab's: help lists them.
 
 Options:

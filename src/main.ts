@@ -175,6 +175,7 @@ async function main(): Promise<void> {
 		...browserDeps,
 		store,
 		registry,
+		tools: agent,
 		machines: (target) => engine.link(target && { ...target, programs: new URL("ssh/", document.baseURI).href }),
 	});
 	const takeHash = () => {

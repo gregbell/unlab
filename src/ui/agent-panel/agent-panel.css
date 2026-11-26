@@ -126,6 +126,10 @@
 			overflow-wrap: anywhere;
 		}
 
+		.call .via {
+			color: var(--text-3);
+		}
+
 		.call .result {
 			overflow-wrap: anywhere;
 			color: var(--text-2);

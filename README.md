@@ -239,87 +239,49 @@ lab that has never linked does not look for a CLI.
 | `cli: blocked` | Select the icon left of the address, allow access to apps on your device, and reload. |
 | `cli: refused` | Click it to read why. The lab or the CLI may be out of date: `npx unlab.run@latest`.  |
 
-Commands from the CLI do not go through the agent panel's `ask me` settings. An agent with
-a shell can use the CLI, so it can do what you can.
+Commands typed into the CLI do not go through the agent panel's `ask me` settings. An
+agent with a shell can type them too, so it can do what you can. An agent's calls through
+`npx unlab.run mcp` do go through those settings.
 
 ## Use the lab with an AI agent
 
 An agent can boot machines, run commands in them, cut cables, and read the
-capture. unlab registers its lab commands with your browser through
-[WebMCP](https://developer.chrome.com/docs/ai/webmcp/imperative-api), and the
-agent calls them through that browser. The lab needs no server and no account.
-The tools exist only while the lab is open in a tab.
+capture. It works on the lab open in your browser, through the CLI. The lab needs
+no server and no account. The tools exist only while the lab is open in a tab and
+linked to the CLI.
 
-You need Chrome 150 or later. WebMCP is a Chrome trial feature, so Firefox and
-Safari do not have it.
+You need Node.js 22.12 or later.
 
-### Connect Claude Code
-
-You also need Node.js 22.12 or later.
-
-1. Add the Chrome DevTools MCP server with its WebMCP tools turned on:
+1. Run `npx unlab.run`, and allow the browser's question. See
+   [Reach the lab from your terminal](#reach-the-lab-from-your-terminal).
+2. Add the server to your agent:
 
    ```sh
-   claude mcp add --scope user unlab -- npx -y chrome-devtools-mcp@latest \
-     --categoryExperimentalWebmcp --chromeArg=--enable-features=WebMCP \
-     --no-javascript-evaluation --no-category-input
+   claude mcp add --scope user unlab -- npx -y unlab.run mcp
+   codex mcp add unlab -- npx -y unlab.run mcp
    ```
 
-   If you use Chromium, or Chrome is not in its default place, also add
-   `--executablePath=` with the browser's full path. `command -v chromium` prints
-   Chromium's.
+   In another MCP client, add a server with the command `npx` and the arguments
+   `-y unlab.run mcp`.
 
-2. Start a new Claude Code session and ask:
+3. Ask the agent to work in the lab:
 
-   > Open https://unlab.run/ and use its WebMCP tools to boot two
-   > Alpine machines and check that they can ping each other.
+   > Boot two Alpine machines and check that they can ping each other.
 
-3. A Chrome window opens on the lab. When the agent asks to boot the machines, the
-   agent panel opens. Click **Boot node1 and node2**.
+   When it asks to boot the machines, the agent panel opens. Click
+   **Boot node1 and node2**.
 
-The window has its own profile, so its lab is separate from the one in your
-everyday browser.
+The lab's tools appear when the lab links, also in a session that started before.
+The server reaches the lab and nothing else in your browser, and it works in a
+browser without WebMCP. The agent panel marks its calls `via cli`, and the status
+line reads `cli: linked, agent active` while it works.
 
-Keep the last two flags. Without them, the server also lets the agent click and
-run JavaScript in the page, so it could approve its own calls. The server sends
-usage statistics to Google unless you add `--no-usage-statistics`.
+### Agents in the browser
 
-To change the flags later, run `claude mcp remove --scope user unlab`, then add the
-server again. A running session keeps the old flags until you reconnect `unlab` in
-`/mcp` or restart Claude Code.
-
-In another MCP client, add a server with the command `npx` and the arguments
-that follow it in step 1.
-
-### Use the browser you already have open
-
-The server can attach to your own browser instead of opening a window, so the
-agent works with the lab in your open tab.
-
-**The agent can then see every tab in that browser, including sites you are
-signed in to.** It can read and screenshot those pages and navigate the tabs. Use
-the separate window unless you need this.
-
-1. Open `chrome://inspect/#remote-debugging` in your browser and turn on remote
-   debugging.
-2. Add the server with `--autoConnect` in place of `--chromeArg` and any
-   `--executablePath`:
-
-   ```sh
-   claude mcp add --scope user unlab -- npx -y chrome-devtools-mcp@latest \
-     --categoryExperimentalWebmcp --autoConnect \
-     --no-javascript-evaluation --no-category-input
-   ```
-
-   For Chromium on Linux, also add `--userDataDir=$HOME/.config/chromium`.
-
-3. Ask the agent to use the lab that is already open. The lab runs in one tab at a
-   time, so a second tab will not load it. Your browser may ask you to allow the
-   connection.
-
-When you are done, turn remote debugging off.
-
-### Connect a browser extension
+The lab also registers its tools with Chrome through
+[WebMCP](https://developer.chrome.com/docs/ai/webmcp/imperative-api), for an agent
+that lives in the browser. You need Chrome 150 or later. WebMCP is a Chrome trial
+feature, so Firefox and Safari do not have it.
 
 1. [Open the lab](https://unlab.run/) in Chrome and open **WebMCP** from the logo menu.
 2. To see a call without an agent, click **try a call**. The
@@ -340,8 +302,9 @@ The live lab turns WebMCP on in Chrome by itself. For your own copy, open
 ### Choose what runs without asking
 
 The agent panel sets each tool to `run`, `ask me`, or `off`. A call to an
-`ask me` tool waits until you approve or deny it. **pause tools** hides all of
-them. Your choices survive a reload.
+`ask me` tool waits until you approve or deny it in the lab. **pause tools** hides
+all of them. Your choices survive a reload, and apply to agents through the CLI and
+in the browser alike.
 
 | Tool                 | What it does                             | Default  |
 | -------------------- | ---------------------------------------- | -------- |
@@ -375,17 +338,15 @@ text that tries to instruct the agent, so unlab marks it as untrusted.
 
 ### If the agent cannot call the tools
 
-| Status line                      | What to do                                                                                       |
+| What you see                     | What to do                                                                                       |
 | -------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `webmcp: not available`          | Turn on the flag above, or check that the MCP server has `--chromeArg=--enable-features=WebMCP`. |
+| The agent lists no unlab tools   | Run `npx unlab.run` until the status line reads `cli: linked`. Then reconnect `unlab` in `/mcp`. |
+| `The lab is not linked.`         | Run `npx unlab.run`, and allow the browser's question.                                           |
+| `cli: refused`                   | Update with `npx unlab.run@latest`, or reload the lab, as it says.                               |
+| `webmcp: not available`          | Nothing, for an agent through the CLI. For one in the browser, turn on the flag above.           |
 | `webmcp: blocked`                | Click it to read the browser's reason.                                                           |
 | `webmcp: paused`                 | Click it, then click **resume tools**.                                                           |
 | `webmcp: 1 call waiting for you` | Click it, then approve or deny the call.                                                         |
-
-If the server reports `Could not find Google Chrome executable`, add
-`--executablePath=` as in step 1 of [Connect Claude Code](#connect-claude-code). If
-a separate window opens when you wanted your own browser, reconnect `unlab` in
-`/mcp`.
 
 ## Network and storage
 

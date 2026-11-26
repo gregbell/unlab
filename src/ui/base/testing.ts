@@ -176,7 +176,17 @@ export const webmcp = (webmcp: WebMcp): AgentEvent => ({ type: "agent/webmcp", w
 export const tick = (now: number): LabEvent => ({ type: "tick", now });
 export const agentCall = (id: number, status: AgentCall["status"] = "done"): AgentEvent => ({
 	type: "agent/call",
-	call: { id, tool: "machines_list", line: "ls", status, preview: null, actionLabel: null, result: null, at: 0 },
+	call: {
+		id,
+		tool: "machines_list",
+		line: "ls",
+		status,
+		preview: null,
+		actionLabel: null,
+		result: null,
+		at: 0,
+		via: "webmcp",
+	},
 });
 
 export interface Counters {

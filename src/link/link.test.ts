@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { createRegistry, isLineError, parseLine, VERBS } from "../commands/index.ts";
 import { createStore, initialState } from "../model/index.ts";
-import type { FromCli, FromLab } from "../streams/index.ts";
+import type { Feature, FromCli, FromLab, ToolInfo } from "../streams/index.ts";
 import { FORGOTTEN, type LinkDeps, type LinkMemory, type LinkSocket, linkAsked, startLink } from "./link.ts";
 
 /** The real store and every verb; the runtime stand-in answers vm/stop so removals finish. */
@@ -62,15 +62,23 @@ class FakeSocket implements LinkSocket {
 	hears(message: FromCli) {
 		this.onmessage?.({ data: JSON.stringify(message) });
 	}
-	/** The CLI takes the lab. */
-	takes() {
+	/** The CLI takes the lab. One of version 0.1 lists no features. */
+	takes(features?: readonly Feature[]) {
 		this.onopen?.();
-		this.hears({ type: "hello", protocol: 1, token: "secret" });
+		this.hears({ type: "hello", protocol: 1, token: "secret", ...(features && { features }) });
 	}
 	last<T extends FromLab["type"]>(type: T) {
 		return this.said.findLast((m): m is Extract<FromLab, { type: T }> => m.type === type);
 	}
 }
+
+const tool = (name: string): ToolInfo => ({
+	name,
+	title: name,
+	description: `${name} does a thing.`,
+	inputSchema: { type: "object" },
+	annotations: {},
+});
 
 function rig(memory: LinkMemory = FORGOTTEN) {
 	const lab = storeLab();
@@ -78,6 +86,10 @@ function rig(memory: LinkMemory = FORGOTTEN) {
 	const ticks = new Set<() => void>();
 	const targets: unknown[] = [];
 	const state = { memory, permission: "granted" as PermissionState | null };
+	const tools = {
+		offered: [tool("machines_list")] as readonly ToolInfo[],
+		calls: [] as { name: string; input: unknown; signal: AbortSignal; answer(reply: unknown): void }[],
+	};
 	const deps: LinkDeps = {
 		store: lab.store,
 		registry: lab.registry,
@@ -98,6 +110,14 @@ function rig(memory: LinkMemory = FORGOTTEN) {
 		},
 		permission: async () => state.permission,
 		machines: (target) => targets.push(target),
+		tools: {
+			offered: () => tools.offered,
+			call: (name, input, signal) =>
+				new Promise((resolve, reject) => {
+					signal.addEventListener("abort", () => reject(signal.reason));
+					tools.calls.push({ name, input, signal, answer: resolve });
+				}),
+		},
 	};
 	const link = startLink(deps);
 	const second = async () => {
@@ -105,13 +125,13 @@ function rig(memory: LinkMemory = FORGOTTEN) {
 		await vi.waitFor(() => {});
 		await Promise.resolve();
 	};
-	const linked = async () => {
+	const linked = async (features?: readonly Feature[]) => {
 		await vi.waitFor(() => expect(sockets.length).toBeGreaterThan(0));
 		const socket = sockets[sockets.length - 1];
-		socket.takes();
+		socket.takes(features);
 		return socket;
 	};
-	return { lab, link, sockets, ticks, targets, state, second, linked, cli: () => lab.store.state.cli };
+	return { lab, link, sockets, ticks, targets, state, tools, second, linked, cli: () => lab.store.state.cli };
 }
 
 test("a lab that was never asked to link dials nothing and keeps no clock", async () => {
@@ -131,7 +151,7 @@ test("one that has linked before dials by itself, again each second until the CL
 	await second();
 	expect(sockets).toHaveLength(2);
 	const socket = await linked();
-	expect(socket.said[0]).toEqual({ type: "hello", protocol: 1 });
+	expect(socket.said[0]).toEqual({ type: "hello", protocol: 1, features: ["tools"] });
 	expect(cli()).toEqual({ kind: "linked" });
 	expect(targets).toEqual([{ url: "ws://127.0.0.1:27122", token: "secret" }]);
 	expect(socket.last("machines")).toEqual({ type: "machines", machines: [] });
@@ -293,4 +313,72 @@ test.each([
 	["", null],
 ])("%s asks for %j", (hash, asked) => {
 	expect(linkAsked(hash)).toEqual(asked);
+});
+
+describe("the agent's tools", () => {
+	test("are told to a CLI that takes them once linked, and again only when they change", async () => {
+		const { link, linked, tools, lab } = rig();
+		link.set(true);
+		const socket = await linked(["tools"]);
+		expect(socket.said.map((m) => m.type)).toEqual(["hello", "machines", "tools"]);
+		expect(socket.last("tools")?.tools).toEqual([tool("machines_list")]);
+		await lab.lab(1);
+		expect(socket.said.filter((m) => m.type === "tools")).toHaveLength(1);
+		tools.offered = [];
+		lab.store.dispatchUi({ type: "ui/tools-paused", paused: true });
+		expect(socket.last("tools")?.tools).toEqual([]);
+	});
+
+	test("are not told to a CLI of version 0.1, which would not know the message", async () => {
+		const { link, linked, lab } = rig();
+		link.set(true);
+		const socket = await linked();
+		await lab.lab(1);
+		expect(socket.said.some((m) => m.type === "tools")).toBe(false);
+	});
+
+	test("a call is answered with what the tool replied, and stopped from the CLI with a sentence", async () => {
+		const { link, linked, tools } = rig();
+		link.set(true);
+		const socket = await linked(["tools"]);
+		socket.hears({ type: "call", id: 7, name: "machines_list", input: { a: 1 } });
+		expect(tools.calls[0]).toMatchObject({ name: "machines_list", input: { a: 1 } });
+		tools.calls[0].answer({ result: "2 machines" });
+		await vi.waitFor(() =>
+			expect(socket.last("reply")).toEqual({ type: "reply", id: 7, reply: { result: "2 machines" } }),
+		);
+
+		socket.hears({ type: "call", id: 8, name: "machines_remove", input: {} });
+		socket.hears({ type: "abort", id: 8 });
+		expect(tools.calls[1].signal.aborted).toBe(true);
+		await vi.waitFor(() =>
+			expect(socket.last("reply")).toEqual({ type: "reply", id: 8, reply: { error: "Stopped from the CLI." } }),
+		);
+	});
+
+	test("a call's reply is not told to another CLI that linked meanwhile", async () => {
+		const { link, linked, tools, sockets, second } = rig();
+		link.set(true);
+		const first = await linked(["tools"]);
+		first.hears({ type: "call", id: 1, name: "machines_list", input: {} });
+		first.onclose?.();
+		await second();
+		const next = await linked(["tools"]);
+		expect(next).not.toBe(first);
+		tools.calls[0].answer({ result: "late" });
+		await Promise.resolve();
+		await Promise.resolve();
+		expect(sockets.flatMap((s) => s.said).some((m) => m.type === "reply")).toBe(false);
+	});
+});
+
+test("an agent's call is withdrawn when the CLI goes, so a yes given later runs nothing", async () => {
+	const { link, linked, tools } = rig();
+	link.set(true);
+	const socket = await linked(["tools"]);
+	socket.hears({ type: "call", id: 3, name: "machines_remove", input: {} });
+	expect(tools.calls[0].signal.aborted).toBe(false);
+	socket.onclose?.();
+	expect(tools.calls[0].signal.aborted).toBe(true);
+	expect(tools.calls[0].signal.reason).toEqual(new Error("The CLI left."));
 });

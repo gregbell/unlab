@@ -5,6 +5,12 @@
 /** Goes up when either end could not understand the other. */
 export const PROTOCOL = 1;
 /**
+ * What each end can do beyond PROTOCOL, said in its hello. Neither sends the
+ * other a message of a feature that the other's hello did not list.
+ */
+export type Feature = "tools";
+export const FEATURES: readonly Feature[] = ["tools"];
+/**
  * Where the CLI listens, on this computer only, unless it is told otherwise.
  * Below what Linux and macOS hand out to outgoing connections, any of which
  * would hold it against a listener.
@@ -66,14 +72,27 @@ export interface Asking {
 	readonly actionLabel: string;
 }
 
+/** An agent tool as the lab offers it, which the CLI passes on as it is. */
+export interface ToolInfo {
+	readonly name: string;
+	readonly title: string;
+	readonly description: string;
+	readonly inputSchema: object;
+	readonly annotations: object;
+}
+
 export interface RemoteSuggestion {
 	readonly insert: string;
 	readonly detail: string | null;
 }
 
 export type FromLab =
-	| { readonly type: "hello"; readonly protocol: number }
+	| { readonly type: "hello"; readonly protocol: number; readonly features?: readonly Feature[] }
 	| { readonly type: "machines"; readonly machines: readonly LinkedMachine[] }
+	/** What an agent may call now. Said once linked, and again whenever it changes. */
+	| { readonly type: "tools"; readonly tools: readonly ToolInfo[] }
+	/** A call's answer, `{ error }` for one that failed or was refused. */
+	| { readonly type: "reply"; readonly id: number; readonly reply: unknown }
 	| { readonly type: "ask"; readonly id: number; readonly asking: Asking }
 	| { readonly type: "result"; readonly id: number; readonly result: RemoteResult }
 	| {
@@ -86,20 +105,29 @@ export type FromLab =
 
 export type FromCli =
 	/** The CLI takes this lab. */
-	| { readonly type: "hello"; readonly protocol: number; readonly token: string }
+	| {
+			readonly type: "hello";
+			readonly protocol: number;
+			readonly token: string;
+			readonly features?: readonly Feature[];
+	  }
 	/** It does not, and why. One sentence. */
 	| { readonly type: "refused"; readonly message: string }
 	| { readonly type: "run"; readonly id: number; readonly line: string }
 	| { readonly type: "answer"; readonly id: number; readonly yes: boolean }
+	/** Ends a `run` or a `call`. */
 	| { readonly type: "abort"; readonly id: number }
+	/** An agent's call of a tool, which the lab answers as it would one through WebMCP. */
+	| { readonly type: "call"; readonly id: number; readonly name: string; readonly input: unknown }
 	| { readonly type: "complete"; readonly id: number; readonly line: string; readonly caret: number };
+
+export const CLI_OLDER = "This CLI is older than the lab, so update it with: npx unlab.run@latest";
+export const LAB_OLDER = "The lab open in the browser is older than this CLI, so reload the lab.";
 
 /** Why two versions cannot work together, or null when they can. */
 export function versionRefusal(cli: number, lab: number): string | null {
 	if (cli === lab) return null;
-	return cli < lab
-		? "This CLI is older than the lab, so update it with: npx unlab.run@latest"
-		: "The lab open in the browser is older than this CLI, so reload the lab.";
+	return cli < lab ? CLI_OLDER : LAB_OLDER;
 }
 
 // ───────────────────────────── a machine's channel ─────────────────────────────
