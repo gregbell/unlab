@@ -430,7 +430,8 @@ text that tries to instruct the agent, so unlab marks it as untrusted.
   looped says so in its row. Pause the capture to read it. The counters and each storm's
   own rows say what it came to.
 - Select a switch in **Rack manager** for its ports, connected guests and cable actions.
-- **Topology** draws every switch, machine and cable. A port's VLAN shows as `v10` or `trunk`.
+- **Topology** draws every switch, machine and cable. A machine with one
+  interface shows its VLAN as `v10`, and one with several says how many it has.
   Hover over a switch or machine, or Tab to it, to read or hear each of its cables: the port or interface, the far
   end, and whether it is cut, impaired or in a VLAN.
 - Unless you choose, `eth0` starts with an address in `10.88.0.0/24` and `eth1` and

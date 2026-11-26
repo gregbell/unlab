@@ -165,23 +165,19 @@ export function topologyMap(lab: LabState, selected: Selection | null, pick: (s:
 				m = d.kind === "machine" ? lab.machines[d.name] : null;
 			const sides = sidesAt(edges, d.name);
 			// A wire has no words of its own, so each end says what the line would show only by its colour, or not at all.
-			const vlans = [...new Set(sides.flatMap((side) => vlanAt(side)?.tag ?? []))];
 			const marks = [
 				...(d.kind === "switch" && selectStorm(d.name)(lab) ? ["storming"] : []),
 				...(sides.some(({ edge }) => edge.conditions) ? [IMPAIRED] : []),
 			];
+			// Rows leave room for two lines of note, so a note holds at most one short word more than its marks. Which NIC
+			// or port goes where, and in which VLAN, is in the title and the description.
+			const nics = m?.spec.nics.length ?? 0;
 			const meta =
 				d.kind === "switch"
-					? [
-							`${selectPorts(d.name)(lab).filter((port) => port.state !== "empty").length} / 8 ports`,
-							...marks,
-							...(vlans.length ? [vlans.join(", ")] : []),
-						]
+					? [`${selectPorts(d.name)(lab).filter((port) => port.state !== "empty").length} / 8 ports`, ...marks]
 					: [
 							m?.spec.image ?? "",
-							// Rows leave room for a short note only, so which NIC goes where is in the title and the description.
-							...((m?.spec.nics.length ?? 0) > 1 ? [`${m?.spec.nics.length} NICs`] : []),
-							...(vlans.length ? [vlans.join(", ")] : []),
+							...(nics > 1 ? [`${nics} NICs`] : sides.flatMap((side) => vlanAt(side)?.tag ?? [])),
 							...marks,
 						];
 			const words = sides.map(sideWords);

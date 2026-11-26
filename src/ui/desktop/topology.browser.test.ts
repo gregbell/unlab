@@ -175,7 +175,7 @@ describe("the Topology window", () => {
 		await step(vlan(port(lan, 2), 10), trunk(port(lan, 8), 1, 10));
 		expect(note("node4")).toBe("alpine · v10");
 		expect(note("node3")).toBe("alpine · 2 NICs · impaired");
-		expect(note("lan")).toBe("4 / 8 ports · v10, trunk");
+		expect(note("lan")).toBe("4 / 8 ports");
 		expect(note("switch0")).toBe("3 / 8 ports · impaired");
 		await expect.element(described("node4")).toHaveAccessibleDescription("eth0 · to lan port 2 · up · vlan 10");
 		await expect
@@ -185,13 +185,17 @@ describe("the Topology window", () => {
 			);
 
 		await step(vlan(port(lan, 1), 20));
-		expect(note("node3")).toBe("alpine · 2 NICs · v20 · impaired");
+		expect(note("node3")).toBe("alpine · 2 NICs · impaired");
+		await expect
+			.element(described("node3"))
+			.toHaveAccessibleDescription(expect.stringContaining("eth1 · to lan port 1 · up · vlan 20"));
 
 		await step(storm(lan, true));
-		expect(note("lan")).toBe("4 / 8 ports · storming · v20, v10, trunk");
+		expect(note("lan")).toBe("4 / 8 ports · storming");
 		await step(storm(lan, false), vlan(port(lan, 2), 1));
-		expect(note("lan")).toBe("4 / 8 ports · v20, trunk");
+		expect(note("lan")).toBe("4 / 8 ports");
 		expect(note("node4")).toBe("alpine");
+		await expect.element(described("node4")).toHaveAccessibleDescription("eth0 · to lan port 2 · up");
 
 		await step({ type: "cmd/uncable", port: port(lan, 8), cause: "bar" });
 		expect(lines()).not.toContain("switch0 lan cut");
@@ -318,9 +322,20 @@ function unreadable(map: Element): string[] {
 describe("the Topology window of a machine with several NICs", () => {
 	it("keeps its note clear of the machine drawn below it, as the window opens and maximized", async () => {
 		const { map, note } = await topology(
-			lab(addSwitch(lan), addSwitch(wan), spawn(1), spawn(1, DEFAULT_SWITCH, lan, wan), spawn(2), ready()),
+			lab(
+				addSwitch(lan),
+				addSwitch(wan),
+				spawn(1),
+				spawn(1, DEFAULT_SWITCH, lan, wan),
+				spawn(2),
+				ready(),
+				vlan(port(DEFAULT_SWITCH, 2), 10),
+				vlan(port(lan, 1), 20),
+				vlan(port(wan, 1), 30),
+				{ type: "cmd/conditions", changes: [{ port: port(DEFAULT_SWITCH, 2), conditions: conditions({ delay: 30 }) }] },
+			),
 		);
-		expect(note("node2")).toBe("alpine · 3 NICs");
+		expect(note("node2")).toBe("alpine · 3 NICs · impaired");
 		expect(unreadable(map).filter((what) => what.includes(" under "))).toEqual([]);
 		await page.getByRole("button", { name: "Maximize Topology" }).click();
 		await expect.poll(() => map.dataset.max).toBe("true");
@@ -334,8 +349,8 @@ describe("the Topology window of a full lab", () => {
 		const state = crowd();
 		expect([state.rail.length, state.switches.length]).toEqual([16, 8]);
 		const { map, note } = await topology(state);
-		expect(note("node3")).toBe("alpine · 4 NICs · v10, v20");
-		expect(note("core")).toBe("7 / 8 ports · storming · impaired · trunk");
+		expect(note("node3")).toBe("alpine · 4 NICs");
+		expect(note("core")).toBe("7 / 8 ports · storming · impaired");
 		const drawing = map.querySelector(".n-drawing")?.getBoundingClientRect();
 		const names = [...map.querySelectorAll(".n-node strong")];
 		expect(names.map((n) => n.textContent)).toEqual([...state.switches, ...state.rail]);

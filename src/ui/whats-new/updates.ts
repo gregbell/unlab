@@ -16,7 +16,7 @@ export const UPDATES: readonly Update[] = [
 		date: "2026-11-26",
 		title: "Read the wiring in Topology",
 		detail:
-			"Topology shows the VLAN of each port. Hover over a switch or machine there, or Tab to it, to read or hear its cables: each port or interface, where it goes, and whether it is cut, impaired or in a VLAN.",
+			"Topology shows the VLAN of a machine with one interface, and how many interfaces a machine has. Hover over a switch or machine there, or Tab to it, to read or hear its cables: each port or interface, where it goes, and whether it is cut, impaired or in a VLAN.",
 		example: "vlan node1 10",
 	},
 	{

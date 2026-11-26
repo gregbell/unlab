@@ -99,7 +99,7 @@ test("the desktop draws a cable between switches, cuts and removes it from the s
 
 	await typed(page, "vlan node2 10");
 	await expect(topology.locator('[data-machine="node2"] small')).toHaveText("lab · v10");
-	await expect(topology.locator('[data-switch="lan"] small')).toHaveText("3 / 8 ports · v10");
+	await expect(topology.locator('[data-switch="lan"]')).toHaveAttribute("title", /· vlan 10/);
 	await typed(page, "plug node1 lan");
 	await expect.poll(() => wire(topology, "lan", "node1")).toBe("up");
 	await expect.poll(() => wire(topology, "switch0", "node1")).toBeNull();
