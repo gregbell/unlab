@@ -267,6 +267,13 @@ describe("a storm", () => {
 		const gone = run(s, storm(lan, 100), { type: "cmd/switch-remove", switch: lan, cause: "bar" });
 		expect(gone.storms).toEqual({});
 	});
+
+	test("is over when the last switch that storms is removed, and not while another storms", () => {
+		const remove = { type: "cmd/switch-remove", switch: lan, cause: "bar" } as const;
+		const over = { type: "announce", text: "The storm is over" };
+		expect(effectsOf(run(three(), storm(lan, 100)), remove)).toContainEqual(over);
+		expect(effectsOf(run(three(), storm(lan, 100), storm(wan, 100)), remove)).not.toContainEqual(over);
+	});
 });
 
 describe("a saved lab", () => {

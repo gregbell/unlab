@@ -631,9 +631,13 @@ describe("a loop of cables", () => {
 		const t = net(["a", "b", "c"], TRIANGLE);
 		t.send("a", arpRequest(1, 9));
 		t.run(100);
-		t.fabric.removeSwitch(t.slot("b"));
+		const looped = t.taps.filter(({ on, e }) => on === "b" && e.looped).length;
+		t.fabric.removeSwitch(t.slot("b"), t.now);
+		// Its storm is over as it goes, with what it came to, and the others' when they have been quiet.
+		expect(t.storms.filter(({ over }) => over)).toMatchObject([{ on: "b", reading: { since: 0, looped } }]);
 		t.run(200);
 		expect(t.storming()).toEqual([]);
+		expect(t.storms.filter(({ over }) => over).map(({ on }) => on)).toEqual(["b", "a", "c"]);
 		expect([t.fabric.farEnd(t.slot("a"), 7), t.fabric.farEnd(t.slot("c"), 8)]).toEqual([null, null]);
 		expect(t.fabric.addSwitch()).toBe(t.slot("b"));
 		expect(t.fabric.totals(t.slot("b"))).toEqual({ in: 0, delivered: 0, flooded: 0, dropped: 0 });
