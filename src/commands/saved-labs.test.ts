@@ -28,6 +28,7 @@ async function open(saved: string) {
 			dispatch: (event) => store.dispatchCommand(event),
 			until: store.until,
 			now: () => 0,
+			carried: () => undefined,
 			exec: NO_EXEC,
 			files: NO_FILES,
 		},

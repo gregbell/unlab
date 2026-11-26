@@ -1,6 +1,15 @@
 import type { CaptureView } from "../capture/index.ts";
 import type { CommandService } from "../commands/index.ts";
-import type { PortNo, PortRef, ReadStore, SessionId, SwitchName, ToolName, UiEvent } from "../model/index.ts";
+import type {
+	CableCounters,
+	PortNo,
+	PortRef,
+	ReadStore,
+	SessionId,
+	SwitchName,
+	ToolName,
+	UiEvent,
+} from "../model/index.ts";
 
 export type { CommandService };
 
@@ -39,6 +48,8 @@ export interface AgentService {
 /** Live figures the switches own; read on render, never copied into state. */
 export interface SwitchReadout {
 	counters(port: PortRef): { readonly rxFrames: number; readonly txFrames: number } | undefined;
+	/** What the cable in the port has carried and dropped, both ways. */
+	carried(port: PortRef): CableCounters | undefined;
 	/** The whole switch's, since it was added. */
 	totals(of: SwitchName): { readonly in: number; readonly delivered: number; readonly flooded: number };
 	macTable(of: SwitchName): readonly {

@@ -63,6 +63,7 @@ function recordedRun(services: AppServices): CommandService["run"] {
 			dispatch: () => {},
 			until: (predicate, signal) => services.store.until(predicate, signal),
 			now: () => clock,
+			carried: () => undefined,
 			files: { write: () => Promise.reject(new Error("This test has no file port.")) },
 			exec: {
 				inject: async (session) => {

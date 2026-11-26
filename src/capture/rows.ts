@@ -5,7 +5,7 @@ import {
 	type CableDrop,
 	type Cause,
 	type DeadCable,
-	type DropReason,
+	DROP_WORD,
 	type MachineName,
 	PORTS,
 	type PortNo,
@@ -195,13 +195,10 @@ function vlanNote(e: FrameEntry, on: SwitchName | null): string | null {
 	return `802.1Q vlan ${e.vlan} on ${of}${where}`;
 }
 
-/** As a row says why a cable dropped a frame. */
-export const DROP_REASON: Readonly<Record<DropReason, string>> = { loss: "loss", rate: "rate", mtu: "MTU" };
-
 /** `dropped by the cable out of port 3: loss`, or `into port 1` for one that never reached the switch. */
 function dropNote(e: FrameEntry, { port, reason }: CableDrop, on: SwitchName | null): string {
 	const way = port === e.from ? "into" : "out of";
-	return `dropped by the cable ${way} ${portText(on, port)}: ${DROP_REASON[reason]}`;
+	return `dropped by the cable ${way} ${portText(on, port)}: ${DROP_WORD[reason]}`;
 }
 
 function note(e: FrameEntry, on: SwitchName | null): string | null {

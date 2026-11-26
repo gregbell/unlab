@@ -9,6 +9,7 @@ import { completeLine, createRegistry, parseLine, type Registry, VERBS } from ".
 import {
 	type AgentCall,
 	type AgentEvent,
+	type CableCounters,
 	type CommandEvent,
 	createStore,
 	DEFAULT_POLICIES,
@@ -30,6 +31,7 @@ import {
 	parseSwitchName,
 	planLink,
 	planSpawn,
+	portName,
 	type Source,
 	type Store,
 	type SwitchName,
@@ -196,6 +198,8 @@ export interface Mounted<E extends HTMLElement> {
 	readonly links: readonly boolean[];
 	/** What `services.switch.counters` answers for the default switch's ports. */
 	readonly counters: Map<PortNo, Counters>;
+	/** What `services.switch.carried` answers for the cable in a port, by the port's name: `switch0:3`. */
+	readonly carried: Map<string, CableCounters>;
 	/** Resolves once every element in the tree has rendered. */
 	settle(): Promise<void>;
 }
@@ -248,12 +252,14 @@ export async function mount<K extends keyof HTMLElementTagNameMap>(
 	const answers: Mounted<HTMLElement>["answers"] = [];
 	const links: boolean[] = [];
 	const counters = new Map<PortNo, Counters>(options.counters);
+	const carried = new Map<string, CableCounters>();
 	const registry = createRegistry(
 		{
 			state: () => store.state,
 			dispatch: () => {},
 			until: (predicate, signal) => store.until(predicate, signal),
 			now: () => store.state.now,
+			carried: (port) => carried.get(portName(port)),
 			exec: { inject: () => Promise.reject(new Error("This fixture has no runtime.")) },
 			files: { write: () => Promise.reject(new Error("This fixture has no runtime.")) },
 		},
@@ -280,6 +286,7 @@ export async function mount<K extends keyof HTMLElementTagNameMap>(
 			now: () => 0,
 			...options.switch,
 			counters: ({ switch: on, port }) => (on === DEFAULT_SWITCH ? counters.get(port) : undefined),
+			carried: (port) => carried.get(portName(port)),
 		},
 		terminals: options.terminals ?? { host: () => null },
 		agent: {
@@ -305,7 +312,7 @@ export async function mount<K extends keyof HTMLElementTagNameMap>(
 	host.append(element);
 	const settle = () => settled(host);
 	await settle();
-	return { element, store, services, runs, confirms, answers, links, counters, settle };
+	return { element, store, services, runs, confirms, answers, links, counters, carried, settle };
 }
 
 /** The tool list the agent layer derives, rebuilt here because ui may not import agent. */

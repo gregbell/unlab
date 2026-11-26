@@ -220,6 +220,11 @@ const link = (machines: string, sentence: string, dir = "up"): Row => [
 	sentence,
 	["link_set", { link: dir, machines }],
 ];
+const conditions = (options: string, input: object, sentence: string): Row => [
+	`link up node1 ${options}`,
+	sentence,
+	["link_set", { link: "up", machines: "node1", ...input }],
+];
 const plugIn = (nic: string, to: string, sentence: string, on?: LabState): Row => [
 	`plug ${nic} ${to}`,
 	sentence,
@@ -395,6 +400,27 @@ const ROWS: readonly Row[] = [
 		"node*:eth3",
 		"link wants a ready or off machine here, and node1 has no eth3, node2 has no eth3, node3 has no eth3 and node5 is still booting.",
 	),
+	conditions(
+		"--delay fast",
+		{ delay: "fast" },
+		"fast is no delay, so use one from 1ms to 10s in whole milliseconds, such as 100ms, or 0 for none.",
+	),
+	conditions("--loss 120%", { loss: "120%" }, "120% is no share of frames, so use one from 0 to 100%, such as 20%."),
+	conditions(
+		"--rate 10",
+		{ rate: 10 },
+		"10 is no rate, so use one from 1kbit to 10gbit, such as 1mbit, or 0 for none.",
+	),
+	conditions("--mtu 9000", { mtu: 9000 }, "9000 is no MTU, so use one from 68 to 1500 bytes, such as 1400."),
+	conditions(
+		"--reorder 25%",
+		{ reorder: "25%" },
+		"Reordering lets frames skip a cable's delay, and node1 has none, so give --delay too, such as --delay 20ms.",
+	),
+	[
+		"link up node1 --speed 1mbit",
+		"link has no option --speed, so use --delay, --loss, --reorder, --rate, --mtu or --clear.",
+	],
 	plugIn("nodx", "switch0", `No machine is called nodx, ${MACHINES}`),
 	plugIn("node1:eth1", "switch0", "node1 has no NIC called eth1, so use eth0."),
 	plugIn("node1:", "switch0", "node1: names no NIC, so use eth0."),

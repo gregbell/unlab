@@ -3,8 +3,10 @@ import {
 	ALL_MACHINES,
 	addressText,
 	type CheckpointName,
+	type ConditionPart,
 	cableAt,
 	DEFAULT_SWITCH,
+	ETH_MTU,
 	type GiB,
 	type HeldPort,
 	heldPorts,
@@ -12,12 +14,14 @@ import {
 	isNameFault,
 	type LabState,
 	lowestFreePorts,
+	MAX_DELAY_MS,
 	MAX_EXTRA_DISKS,
 	MAX_EXTRA_GIB,
 	MAX_NAME,
 	MAX_VLAN,
 	type Machine,
 	type MachineName,
+	MIN_MTU,
 	MIN_VLAN,
 	machineLink,
 	type NameFault,
@@ -33,6 +37,7 @@ import {
 	type PortRef,
 	parseCheckpointName,
 	parseChosenName,
+	parseCondition,
 	parseGiB,
 	parseSwitchName,
 	parseVlanId,
@@ -48,6 +53,7 @@ import {
 	vlanList,
 	vlanOf,
 	vlanText,
+	writeCondition,
 } from "../../model/index.ts";
 import {
 	type AddressFault,
@@ -1143,6 +1149,76 @@ export function diskSizes(): Value<readonly GiB[] | null> {
 		},
 		format: (sizes) => (sizes ?? []).join(","),
 		schema: { type: "string" },
+	};
+}
+
+interface ConditionSlot {
+	readonly label: string;
+	readonly noun: string;
+	readonly about: string;
+	/** What would work, after `<text> is no <thing>, so use `. */
+	readonly instead: string;
+	readonly offered: readonly string[];
+	readonly schema: Value<unknown>["schema"];
+}
+
+const CONDITION_SLOTS: Readonly<Record<ConditionPart, ConditionSlot>> = {
+	delay: {
+		label: "time",
+		noun: "a delay such as 100ms",
+		about: `How long each frame takes to cross the cable, in each direction: 100ms or 1.5s, up to ${MAX_DELAY_MS / 1000} s. 0 takes the delay away.`,
+		instead: `delay, so use one from 1ms to ${MAX_DELAY_MS / 1000}s in whole milliseconds, such as 100ms, or 0 for none`,
+		offered: ["10ms", "100ms", "1s", "0"],
+		schema: { type: "string" },
+	},
+	loss: {
+		label: "percent",
+		noun: "a share of frames such as 20%",
+		about: "The share of frames that the cable loses, in each direction: 20%, or 0.5%. 0 takes the loss away.",
+		instead: "share of frames, so use one from 0 to 100%, such as 20%",
+		offered: ["1%", "20%", "100%", "0"],
+		schema: { type: "string" },
+	},
+	reorder: {
+		label: "percent",
+		noun: "a share of frames such as 25%",
+		about:
+			"The share of frames that skip the delay, and so arrive ahead of those sent before them: 25%. It needs a delay. 0 takes it away.",
+		instead: "share of frames, so use one from 0 to 100%, such as 25%",
+		offered: ["25%", "50%", "0"],
+		schema: { type: "string" },
+	},
+	rate: {
+		label: "rate",
+		noun: "a rate such as 1mbit",
+		about:
+			"The most the cable carries each way, in bits a second: 1mbit, 500kbit. A frame that would wait behind 64 KiB is dropped. 0 takes the rate away.",
+		instead: "rate, so use one from 1kbit to 10gbit, such as 1mbit, or 0 for none",
+		offered: ["1mbit", "10mbit", "500kbit", "0"],
+		schema: { type: "string" },
+	},
+	mtu: {
+		label: "bytes",
+		noun: "an MTU such as 1400",
+		about: `The longest packet a frame on the cable can hold, in bytes, from ${MIN_MTU} to ${ETH_MTU}: a longer frame is dropped. ${ETH_MTU} is Ethernet's, and takes it away.`,
+		instead: `MTU, so use one from ${MIN_MTU} to ${ETH_MTU} bytes, such as 1400`,
+		offered: ["1400", "576", String(ETH_MTU)],
+		schema: { type: "integer", minimum: MIN_MTU, maximum: ETH_MTU },
+	},
+};
+
+/** One of a cable's conditions, as a number. Null is what no option says: the cable keeps what it has. */
+export function condition(part: ConditionPart): Value<number | null> {
+	const { label, noun, about, instead, offered, schema } = CONDITION_SLOTS[part];
+	return {
+		kind: "positional",
+		label,
+		noun,
+		about,
+		read: (text) => parseCondition(part, text) ?? new Miss(`${text} is no ${instead}.`, undefined, false),
+		suggest: () => offered.map((text) => ({ insert: text, label: text })),
+		format: (value) => (value === null ? "" : writeCondition(part, value)),
+		schema,
 	};
 }
 

@@ -151,6 +151,7 @@ async function main(): Promise<void> {
 			dispatch: (event) => store.dispatchCommand(event),
 			until: (predicate, signal) => store.until(predicate, signal),
 			now,
+			carried: engine.reads.carried,
 			exec: engine.exec,
 			files: engine.files,
 		},

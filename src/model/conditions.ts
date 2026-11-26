@@ -7,9 +7,11 @@
 import { heldPorts, machineList, plugsOf, samePort, type Wiring } from "./machines.ts";
 import { step } from "./step.ts";
 import {
+	type CableCounters,
 	type ConditionPart,
 	type Conditions,
 	type ConditionsChange,
+	type DropReason,
 	type Effect,
 	type LabState,
 	NO_CONDITIONS,
@@ -131,6 +133,11 @@ export function parseCondition(part: ConditionPart, text: string): number | null
 	return value !== null && (value === none || fits(value)) ? value : null;
 }
 
+/** One part's value as a command takes it: `100ms`, `20%`, `1mbit`, `1400`. */
+export function writeCondition(part: ConditionPart, value: number): string {
+	return PARTS[part].written(value);
+}
+
 /** The only way conditions are made: each part in its range, and none that does nothing. */
 export function conditionsOf(values: ConditionValues): Conditions | ConditionsFault {
 	const kept: Partial<Record<ConditionPart, number>> = {};
@@ -174,6 +181,19 @@ export type WrittenConditions = Readonly<Partial<Record<ConditionPart, string>>>
 
 export function writtenConditions(conditions: Conditions): WrittenConditions {
 	return Object.fromEntries(said(conditions, "written"));
+}
+
+/** As a reason is written where a person reads it. */
+export const DROP_WORD: Readonly<Record<DropReason, string>> = { loss: "loss", rate: "rate", mtu: "MTU" };
+
+export const NOTHING_CARRIED: CableCounters = { delivered: 0, dropped: { loss: 0, rate: 0, mtu: 0 } };
+
+/** `804 delivered` and `196 dropped (190 by loss, 6 by MTU)`, or `0 dropped`. */
+export function carriedWords({ delivered, dropped }: CableCounters): readonly string[] {
+	const reasons = (Object.keys(DROP_WORD) as DropReason[]).filter((reason) => dropped[reason] > 0);
+	const total = reasons.reduce((sum, reason) => sum + dropped[reason], 0);
+	const by = reasons.map((reason) => `${dropped[reason]} by ${DROP_WORD[reason]}`).join(", ");
+	return [`${delivered} delivered`, total === 0 ? "0 dropped" : `${total} dropped (${by})`];
 }
 
 /** The conditions of the cable in the port. A port with no cable has none. */

@@ -43,6 +43,7 @@ function labOf() {
 		dispatch: store.dispatchCommand,
 		until: store.until,
 		now: () => clock,
+		carried: () => undefined,
 		files: { write: () => Promise.reject(new Error("This test has no file port.")) },
 		exec: {
 			inject: (session, _line, _source, signal) =>
@@ -344,7 +345,20 @@ describe("the artboards, replayed", () => {
 		expect(view.chosen).toBe(0);
 		expect(view.hint).toBe("tab → fix it");
 		expect(view.footer).toEqual(["tab take the fix", "↵ take it and run", "esc close"]);
-		expect(view.signature).toEqual({ verb: "link", parts: ["<up | down>", "<machines>"], current: 0 });
+		expect(view.signature).toEqual({
+			verb: "link",
+			parts: [
+				"<up | down>",
+				"<machines>",
+				"[--delay time]",
+				"[--loss percent]",
+				"[--reorder percent]",
+				"[--rate rate]",
+				"[--mtu bytes]",
+				"[--clear]",
+			],
+			current: 0,
+		});
 		expect(h.take().filter((e) => e.type === "run")).toEqual([]);
 	});
 

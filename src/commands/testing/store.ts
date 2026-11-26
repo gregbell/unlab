@@ -1,9 +1,11 @@
 import {
+	type CableCounters,
 	type CommandEvent,
 	createStore,
 	type Effect,
 	initialState,
 	type MachineName,
+	portName,
 	type RuntimeEvent,
 	type SessionId,
 } from "../../model/index.ts";
@@ -21,6 +23,8 @@ export function storeLab(exec: ExecPort = NO_EXEC, files: FilePort = NO_FILES) {
 	const effects: Effect[] = [];
 	const events: CommandEvent[] = [];
 	let clock = 0;
+	/** What each cable has carried, by a port that it is in: `counted.set("switch0:3", …)`. */
+	const counted = new Map<string, CableCounters>();
 	const store = createStore(initialState(IMAGES, { width: 1300, height: 500 }), (effect) => {
 		effects.push(effect);
 		if (effect.type === "vm/stop") {
@@ -36,6 +40,7 @@ export function storeLab(exec: ExecPort = NO_EXEC, files: FilePort = NO_FILES) {
 		},
 		until: store.until,
 		now: () => clock,
+		carried: (port) => counted.get(portName(port)),
 		exec,
 		files,
 	};
@@ -57,6 +62,7 @@ export function storeLab(exec: ExecPort = NO_EXEC, files: FilePort = NO_FILES) {
 		registry,
 		effects,
 		events,
+		counted,
 		signal,
 		advance(ms: number) {
 			clock += ms;
