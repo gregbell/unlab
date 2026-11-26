@@ -78,7 +78,7 @@ on, such as the ready ones for `exec` and the ones that are off or failed for `b
 | Command bar example | What it does                                                                                                     |
 | ------------------- | ---------------------------------------------------------------------------------------------------------------- |
 | `ls`                | List machines and their disks, and each network interface's MAC, address, port, and link.                        |
-| `topology`          | List every switch, every port, what is in it, whether its link is up, its VLAN, and which switches are storming. |
+| `topology`          | List every switch and port, what is in it, its link and VLAN, its cable's conditions and drops, and what storms. |
 | `help reboot`       | Explain a command. `help` alone lists them all.                                                                  |
 
 ### Create machines
@@ -106,6 +106,9 @@ on, such as the ready ones for `exec` and the ones that are off or failed for `b
 | `unplug node2:eth1`                      | Take the interface's cable out and free its port, also for later boots.                                                                                    |
 | `link down node2`                        | Cut node2's cables, whether it is on or off. Reconnect them with `link up node2`. Name one of several with `node2:eth1`.                                   |
 | `link down lan:3`                        | Cut the cable in that port, also one between switches. Both switches forget what they learned over it. `link up lan:3` reconnects it.                      |
+| `link up node2 --delay 100ms --loss 20%` | Make node2's cable a bad one, in both directions and at once: a frame takes 100 ms to cross, and one in five is lost.                                      |
+| `link up lan:3 --rate 1mbit --mtu 1400`  | Let that cable carry 1 Mbit/s, and no packet over 1,400 bytes. With a delay, `--reorder 25%` lets a quarter of the frames skip it.                         |
+| `link up node2 --loss 0`                 | Take one condition away and keep the others. `--mtu 1500` takes the MTU away, and `--clear` takes them all.                                                |
 | `vlan node2 10`                          | Put the port that node2 is in, or one named as `lan:3`, in VLAN 10. It reaches only the ports of VLAN 10. Every port starts in 1.                          |
 | `trunk lan:8 --allow 1,10,20 --native 1` | Make the port of a cable between switches a trunk of VLANs 1, 10 and 20: 10 and 20 tagged, and 1, its native VLAN, untagged. Make the far end a trunk too. |
 
@@ -142,6 +145,7 @@ on, such as the ready ones for `exec` and the ones that are off or failed for `b
 | `capture arp or node2` | Maximise the capture with a filter for ARP or traffic involving node2. `node2:eth1` keeps one interface's frames. |
 | `capture lan:3 icmp`   | Show the pings that crossed one cable, the one in port 3 of `lan`. `lan` alone is all that the switch carried.    |
 | `capture vlan 10`      | Show the frames that were in VLAN 10. On a trunk, a row also gives the 802.1Q tag the frame had there.            |
+| `capture lan:3`        | See what a bad cable did: a frame that it dropped says so in its row, with the reason: loss, rate or MTU.         |
 
 In a capture filter, terms that follow one another must all match, and `or`
 starts an alternative. A term is a protocol, a machine, an interface, an address,
@@ -361,7 +365,7 @@ them. Your choices survive a reload.
 | `shell_exec`         | Run a command in a guest's shell.        | `run`    |
 | `shell_read`         | Read what a guest's terminal shows.      | `run`    |
 | `file_write`         | Put a text in a file on a machine.       | `run`    |
-| `link_set`           | Cut or reconnect cables.                 | `run`    |
+| `link_set`           | Cut, reconnect, or impair cables.        | `run`    |
 | `cable_plug`         | Plug a NIC in, or move its cable.        | `run`    |
 | `cable_unplug`       | Unplug a NIC and free its port.          | `run`    |
 | `capture_read`       | Read captured frames from the switches.  | `run`    |
@@ -427,6 +431,23 @@ a separate window opens when you wanted your own browser, reconnect `unlab` in
   A frame's capture row says its VLAN, and the ports it had its tag on, and
   `capture vlan 10` keeps those of VLAN 10. A cable's `.pcap` has each frame as it was on
   that cable, tagged or not.
+- A cable has conditions, the same in both directions: `--delay`, `--loss`, `--reorder`,
+  `--rate` and `--mtu` of `link`. They are the cable's, as its cut is: a cut, a reboot and
+  `plug` to another port keep them, and `unplug`, `uncable` and a machine that fails lose
+  them. They take effect at once, on a NIC's cable and on one between switches, and no
+  other cable is slowed. A delay is from 1 ms to 10 s, and runs on the clock that a hidden
+  tab does not slow. Reordering is frames that skip the delay, so it needs one, as in
+  Linux's `netem`. A rate sends one frame at a time, each for as long as its bytes take,
+  and holds 64 KiB that wait their turn: a frame that would wait behind more is dropped. An
+  MTU is of the packet that a frame holds, from 68 to 1,500 bytes, so a frame of up to 14
+  bytes more passes, or 18 with an 802.1Q tag. The guest is not told, so a longer packet is
+  lost in silence, as on a path that hides its MTU. A change to a cable's conditions lets
+  what was on its way arrive at once. A cable with conditions holds at most 8,192 frames in
+  each direction, and what it has no room for is counted among the port's dropped frames.
+  Each cable counts what it delivered and what it dropped, by loss, rate and MTU, from when
+  it was plugged in. `topology` has the counts, and so have the port's title on the
+  faceplate and the desktop's port table. A frame that a cable dropped is in the capture,
+  as the switch sent it or as its machine did, with the cable's port and the reason.
 - The capture keeps its newest 10,000 rows. In a storm that is the last seven seconds of
   one loop of three switches, and less than a second of a mesh of four. A frame that has
   looped says so in its row. Pause the capture to read it. The counters and each storm's

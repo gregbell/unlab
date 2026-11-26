@@ -14,6 +14,13 @@ export interface Update {
 export const UPDATES: readonly Update[] = [
 	{
 		date: "2026-11-26",
+		title: "Make a cable a bad one",
+		detail:
+			"Give any cable a delay, loss, reordering, a rate or an MTU with link, and watch what a poor link does to a ping or a download. The capture says which cable dropped a frame and why, and topology counts what each delivered and dropped.",
+		example: "link up node1 --delay 100ms --loss 20%",
+	},
+	{
+		date: "2026-11-26",
 		title: "Put switch ports in VLANs, and trunk them",
 		detail:
 			"Split one switch into segments with vlan, and carry several over one cable between switches with trunk. The capture shows each frame's VLAN and its 802.1Q tag, and capture vlan 10 keeps one VLAN's frames.",
