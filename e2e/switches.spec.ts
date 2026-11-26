@@ -44,6 +44,10 @@ async function topology(page: Page): Promise<Topology> {
 	return ((await call(page, "topology_read", {})) as { data: Topology }).data;
 }
 
+/** The wiring without what each cable has carried, which a reload starts again. */
+const wiringOf = (listed: Topology): unknown =>
+	JSON.parse(JSON.stringify(listed, (key, value) => (key === "carried" ? undefined : value)));
+
 /** `lan: 1 node2:eth0 up, 2 node3:eth0 cut` for each switch. */
 async function wiring(page: Page): Promise<string[]> {
 	const { switches } = await topology(page);
@@ -345,7 +349,7 @@ test("a reload brings back every switch and what was plugged in, with tables and
 
 	await page.reload();
 	await ready(page, "3 of 3 ready");
-	expect(await topology(page)).toEqual(before);
+	expect(wiringOf(await topology(page))).toEqual(wiringOf(before));
 	await expect(chooser(page)).toHaveValue("lan");
 	expect(await counted()).toBeLessThan(60);
 	await chooser(page).selectOption("switch1");

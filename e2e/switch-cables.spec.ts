@@ -55,6 +55,10 @@ async function topology(page: Page): Promise<Topology> {
 	return ((await call(page, "topology_read", {})) as { data: Topology }).data;
 }
 
+/** The wiring without what each cable has carried, which a reload starts again. */
+const wiringOf = (listed: Topology): unknown =>
+	JSON.parse(JSON.stringify(listed, (key, value) => (key === "carried" ? undefined : value)));
+
 /** `lan: 1 node2:eth0 up, 8 switch0:3 cut` for each switch. */
 async function wiring(page: Page): Promise<string[]> {
 	const { switches } = await topology(page);
@@ -169,7 +173,7 @@ test("a cable joins two switches at the lowest free ports or those that are name
 	expect(await wiring(page)).toEqual(["switch0: 1 node1:eth0 up, 2 lan:2 up", "lan: 1 node2:eth0 up, 2 switch0:2 up"]);
 	expect((await topology(page)).switches[0].ports[1]).toEqual({
 		port: 2,
-		cable: { to: { kind: "port", switch: "lan", port: 2 }, link: "up" },
+		cable: { to: { kind: "port", switch: "lan", port: 2 }, link: "up", conditions: {}, carried: expect.any(Object) },
 		vlan: { mode: "access", vlan: 1 },
 	});
 	expect(await events(page, "lan:2")).toEqual([
@@ -613,7 +617,7 @@ test("a reload brings back the cables between switches, cut or not, with tables 
 
 	await page.reload();
 	await ready(page, "2 of 2 ready");
-	expect(await topology(page)).toEqual(before);
+	expect(wiringOf(await topology(page))).toEqual(wiringOf(before));
 	await page.getByRole("button", { name: "Maximise switches" }).click();
 	// Only what the machines have said since they booted, and nothing of before the reload.
 	expect((await learned(page, "lan")).filter((row) => row.includes("flushed"))).toEqual([]);
