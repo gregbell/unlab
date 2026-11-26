@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { testCapture } from "../../../test/support/capture.ts";
 import { ping } from "../../../test/support/frames.ts";
-import type { LabEvent } from "../../model/index.ts";
+import type { LabEvent, PortRef, PortVlan, VlanId } from "../../model/index.ts";
 import {
 	addSwitch,
 	LONG_NAME,
@@ -393,6 +393,29 @@ describe("cables between switches", () => {
 
 		await page.getByRole("button", { name: "Cut the cable from lan port 8 to wan port 7" }).click();
 		expect(runs).toEqual([{ line: "link down lan:8", source: "button" }]);
+	});
+
+	it("puts a port's VLAN on its cable's tag, beside a NIC's name or a cable's far port, and says it in full in its title", async () => {
+		const vlan = (port: PortRef, setting: PortVlan): LabEvent => ({
+			type: "cmd/vlan",
+			port,
+			vlan: setting,
+		});
+		const { store, settle } = await mount("unlab-switch", {
+			state: cabled(
+				vlan({ switch: lan, port: 1 }, { mode: "access", vlan: 10 as VlanId }),
+				vlan(ends[0], { mode: "trunk", allowed: [10, 20] as VlanId[], native: 1 as VlanId }),
+			),
+		});
+		expect([".nic", ".word"].map((part) => column(1).querySelector(part)?.textContent)).toEqual(["v10", "up"]);
+		expect(column(1).title).toBe("node1 · vlan 10");
+		expect(part(column(8), ".nic").textContent).toBe("port 7 trunk");
+		expect(column(8).title).toBe("to wan port 7 · trunk of 10 and 20, native 1");
+
+		store.dispatchUi({ type: "ui/switch-shown", switch: wan });
+		await settle();
+		expect(part(column(7), ".nic").textContent).toBe("port 8");
+		expect(column(7).title).toBe("to lan port 8");
 	});
 
 	it("draws a cut one dashed and red, and reconnects it, from either switch", async () => {

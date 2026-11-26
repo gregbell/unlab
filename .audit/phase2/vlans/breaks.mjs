@@ -151,4 +151,11 @@ export const BREAKS = [
 		to: "apart: false",
 		tests: [detailUnit],
 	},
+	{
+		name: "the faceplate says nothing of a VLAN",
+		file: "src/ui/switch/switch.ts",
+		from: "[held.nic, port.vlan?.tag]",
+		to: "[held.nic]",
+		tests: [{ kind: "browser", files: ["src/ui/switch/switch.browser.test.ts"], grep: "VLAN" }],
+	},
 ];

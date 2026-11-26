@@ -125,8 +125,11 @@ export class UnlabSwitch extends UnlabElement {
 			? { name: far.switch, nic: `port ${far.port}`, label: `to ${far.switch} port ${far.port}`, hue: nothing }
 			: port.machine;
 		if (!held) return html`<div class="port" data-port=${port.port} data-state="empty">${socket}</div>`;
+		// The cable's tag says which NIC it is and what the port carries, whichever of them it needs to.
+		const tag = [held.nic, port.vlan?.tag].filter((part) => part !== null && part !== undefined).join(" ");
+		const title = port.vlan ? `${held.label} · ${port.vlan.text}` : held.label;
 		const parts = html`<span class="name">${held.name}</span><span class="cable"></span>${
-			held.nic === null ? nothing : html`<span class="nic">${held.nic}</span>`
+			tag === "" ? nothing : html`<span class="nic">${tag}</span>`
 		}${socket}<span class="word"
 				>${port.word}</span
 			>`;
@@ -134,7 +137,7 @@ export class UnlabSwitch extends UnlabElement {
 		const action = line === null ? null : port.actionLabel;
 		// The button lies over the whole column with the face beside it, not inside it: its name is
 		// the action, and a face inside would make the name disagree with its own visible text.
-		return html`<div class="port" data-port=${port.port} data-state=${port.state} data-hue=${held.hue} title=${held.label}>
+		return html`<div class="port" data-port=${port.port} data-state=${port.state} data-hue=${held.hue} title=${title}>
 			<span class="face" aria-hidden=${action === null ? nothing : "true"}>${parts}</span>
 			${
 				line === null || action === null

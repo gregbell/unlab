@@ -547,7 +547,14 @@ describe("a VLAN term", () => {
 	const carried = (source: string, vlan: number | undefined) => {
 		const r = compileFilter(source, NAMES);
 		if (!r.ok) throw new Error(r.error.message);
-		return r.filter.matchesFrame({ switch: "switch0", from: 1, to: bit(2), bytes: arpRequest(1, 2), names: NAMES, vlan });
+		return r.filter.matchesFrame({
+			switch: "switch0",
+			from: 1,
+			to: bit(2),
+			bytes: arpRequest(1, 2),
+			names: NAMES,
+			vlan,
+		});
 	};
 
 	test("keeps the frames that a switch carried in that VLAN, a frame with none being in VLAN 1", () => {
