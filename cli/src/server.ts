@@ -8,8 +8,11 @@ import { type RawData, type WebSocket, WebSocketServer } from "ws";
 import {
 	type Asked,
 	type Asking,
+	FEATURES,
+	type Feature,
 	type FromCli,
 	type FromLab,
+	LAB_OLDER,
 	LAB_PATH,
 	type LinkedMachine,
 	MACHINE_PATH,
@@ -19,6 +22,7 @@ import {
 	type RemoteSuggestion,
 	type SshKeys,
 	type Stream,
+	type ToolInfo,
 	versionRefusal,
 } from "../../src/streams/index.ts";
 
@@ -30,6 +34,8 @@ export interface LinkEvents {
 	refused(message: string): void;
 	/** A machine asks for a connection or a name. */
 	asked(machine: string, asked: Asked): void;
+	/** What an agent may call now. None while no lab is linked. */
+	tools(tools: readonly ToolInfo[]): void;
 }
 
 export interface LinkServerOptions {
@@ -49,6 +55,9 @@ export class NotLinked extends Error {
 }
 
 const NOT_LINKED = "The lab is not linked. Open it in the browser, and allow it to reach apps on this device.";
+/** What an agent is told, which a person reads in its answer. */
+const AGENT_NOT_LINKED = "The lab is not linked. Run `npx unlab.run` to open it, and allow the browser's question.";
+const CLOSED_DURING_CALL = "The lab closed while this ran. Whether it finished is not known.";
 /** How long a machine's worker has to connect once the machine is there. */
 const MACHINE_MS = 8000;
 /** A lab that does not answer within this is gone. */
@@ -57,6 +66,11 @@ const PING_MS = 10_000;
 interface Running {
 	ask(asking: Asking): Promise<boolean>;
 	settle(result: RemoteResult): void;
+	fail(error: Error): void;
+}
+
+interface Call {
+	settle(reply: unknown): void;
 	fail(error: Error): void;
 }
 
@@ -81,6 +95,9 @@ export class LinkServer {
 	/** The last refusal that was told. A lab that is refused comes again each second. */
 	#told: string | null = null;
 	#machines: readonly LinkedMachine[] = [];
+	#labFeatures: readonly Feature[] = [];
+	#tools: readonly ToolInfo[] = [];
+	readonly #calls = new Map<number, Call>();
 	readonly #channels = new Map<string, Machine>();
 	readonly #running = new Map<number, Running>();
 	readonly #completing = new Map<number, (completion: Completion) => void>();
@@ -115,6 +132,10 @@ export class LinkServer {
 		return this.#machines;
 	}
 
+	get tools(): readonly ToolInfo[] {
+		return this.#tools;
+	}
+
 	close(): void {
 		for (const socket of this.#sockets.clients) socket.terminate();
 		this.#http.close();
@@ -144,6 +165,22 @@ export class LinkServer {
 		return running.promise.finally(() => {
 			signal?.removeEventListener("abort", abort);
 			this.#running.delete(id);
+		});
+	}
+
+	/** An agent's call of one of the lab's tools. Resolves with what the tool replied; rejects with a sentence. */
+	call(name: string, input: unknown, signal?: AbortSignal): Promise<unknown> {
+		if (!this.#linked) return Promise.reject(new NotLinked(this.#told ?? AGENT_NOT_LINKED));
+		if (!this.#labFeatures.includes("tools")) return Promise.reject(new Error(LAB_OLDER));
+		const id = ++this.#ids;
+		const calling = Promise.withResolvers<unknown>();
+		this.#calls.set(id, { settle: calling.resolve, fail: calling.reject });
+		const abort = () => this.#say({ type: "abort", id });
+		signal?.addEventListener("abort", abort, { once: true });
+		this.#say({ type: "call", id, name, input });
+		return calling.promise.finally(() => {
+			signal?.removeEventListener("abort", abort);
+			this.#calls.delete(id);
 		});
 	}
 
@@ -293,8 +330,9 @@ export class LinkServer {
 			}
 			this.#lab = ws;
 			this.#told = null;
+			this.#labFeatures = hello.features ?? [];
 			this.#token = randomBytes(16).toString("hex");
-			this.#say({ type: "hello", protocol: PROTOCOL, token: this.#token });
+			this.#say({ type: "hello", protocol: PROTOCOL, token: this.#token, features: FEATURES });
 			ws.on("message", (more) => this.#labSaid(JSON.parse(String(more)) as FromLab));
 		});
 	}
@@ -308,6 +346,14 @@ export class LinkServer {
 		const left = new NotLinked("The lab closed or was reloaded before it answered.");
 		for (const running of this.#running.values()) running.fail(left);
 		this.#running.clear();
+		const closed = new NotLinked(CLOSED_DURING_CALL);
+		for (const call of this.#calls.values()) call.fail(closed);
+		this.#calls.clear();
+		this.#labFeatures = [];
+		if (this.#tools.length > 0) {
+			this.#tools = [];
+			this.#options.on.tools([]);
+		}
 		if (!this.#linked) return;
 		this.#linked = false;
 		this.#options.on.linked(false);
@@ -340,6 +386,13 @@ export class LinkServer {
 				return;
 			case "completion":
 				this.#completing.get(message.id)?.(message);
+				return;
+			case "tools":
+				this.#tools = message.tools;
+				this.#options.on.tools(message.tools);
+				return;
+			case "reply":
+				this.#calls.get(message.id)?.settle(message.reply);
 				return;
 		}
 	}

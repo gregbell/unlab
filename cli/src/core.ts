@@ -4,11 +4,11 @@
 
 import { rmSync } from "node:fs";
 import { connect, createServer, type Server, type Socket } from "node:net";
-import type { Asking, LinkedMachine, RemoteResult, Stream } from "../../src/streams/index.ts";
+import type { Asking, LinkedMachine, Stream, ToolInfo } from "../../src/streams/index.ts";
 import { Forwards } from "./forwards.ts";
 import { type SshFiles, socketPath, sshFiles } from "./keys.ts";
 import { type Connection, joinSocket, Relay } from "./relay.ts";
-import { type Completion, LinkServer } from "./server.ts";
+import { LinkServer } from "./server.ts";
 
 export interface CoreOptions {
 	readonly port: number;
@@ -23,6 +23,8 @@ export interface Status {
 	readonly linked: boolean;
 	readonly lan: boolean;
 	readonly machines: readonly LinkedMachine[];
+	/** What an agent may call now. */
+	readonly tools: readonly ToolInfo[];
 	readonly connections: readonly Connection[];
 	readonly forwards: readonly { readonly machine: string; readonly local: number; readonly remote: number }[];
 }
@@ -34,6 +36,8 @@ export type Request =
 	| { readonly type: "wait"; readonly ms: number }
 	| { readonly type: "run"; readonly line: string }
 	| { readonly type: "complete"; readonly line: string; readonly caret: number }
+	/** An agent's call of one of the lab's tools, answered with what the tool replied. */
+	| { readonly type: "call"; readonly name: string; readonly input: unknown }
 	/** From `ssh`. Once answered, the rest of the connection is the machine's SSH server. */
 	| { readonly type: "ssh"; readonly machine: string }
 	| { readonly type: "forward"; readonly machine: string; readonly local: number; readonly remote: number }
@@ -52,7 +56,8 @@ export type Notice =
 	| { readonly kind: "unlinked" }
 	| { readonly kind: "refused"; readonly message: string }
 	| { readonly kind: "ready"; readonly machines: readonly string[] }
-	| { readonly kind: "connection"; readonly text: string };
+	| { readonly kind: "connection"; readonly text: string }
+	| { readonly kind: "tools"; readonly tools: readonly ToolInfo[] };
 
 /** The lines of a socket. One that answers with a function is the last, and the function has the rest of the socket. */
 export function onLines(socket: Socket, line: (text: string) => "more" | (() => void)): void {
@@ -124,6 +129,7 @@ export class Core {
 				machines: (machines) => this.#machinesNow(machines),
 				refused: (message) => this.#notice({ kind: "refused", message }),
 				asked: (machine, asked) => void this.#relay.asked(machine, asked),
+				tools: (tools) => this.#notice({ kind: "tools", tools }),
 			},
 		});
 		this.#forwards = new Forwards((machine, port) => this.#server.port(machine, port));
@@ -186,6 +192,7 @@ export class Core {
 			linked: this.#server.linked,
 			lan: this.#options.lan,
 			machines: this.#server.machines,
+			tools: this.#server.tools,
 			connections: [...this.#relay.open],
 			forwards: this.#forwards.list(),
 		};
@@ -264,7 +271,7 @@ export class Core {
 		socket: Socket,
 		ask: (asking: Asking) => Promise<boolean>,
 		signal: AbortSignal,
-	): Promise<Status | RemoteResult | Completion | string | null> {
+	): Promise<unknown> {
 		switch (request.type) {
 			case "status":
 				return this.#status();
@@ -274,6 +281,8 @@ export class Core {
 				return this.#server.run(request.line, ask, signal);
 			case "complete":
 				return this.#server.complete(request.line, request.caret);
+			case "call":
+				return this.#server.call(request.name, request.input, signal);
 			case "forward":
 				await this.#forwards.add(request.machine, request.local, request.remote, this.#server.machines);
 				return this.#status();

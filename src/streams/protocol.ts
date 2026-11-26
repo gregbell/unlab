@@ -121,12 +121,13 @@ export type FromCli =
 	| { readonly type: "call"; readonly id: number; readonly name: string; readonly input: unknown }
 	| { readonly type: "complete"; readonly id: number; readonly line: string; readonly caret: number };
 
+export const CLI_OLDER = "This CLI is older than the lab, so update it with: npx unlab.run@latest";
+export const LAB_OLDER = "The lab open in the browser is older than this CLI, so reload the lab.";
+
 /** Why two versions cannot work together, or null when they can. */
 export function versionRefusal(cli: number, lab: number): string | null {
 	if (cli === lab) return null;
-	return cli < lab
-		? "This CLI is older than the lab, so update it with: npx unlab.run@latest"
-		: "The lab open in the browser is older than this CLI, so reload the lab.";
+	return cli < lab ? CLI_OLDER : LAB_OLDER;
 }
 
 // ───────────────────────────── a machine's channel ─────────────────────────────
