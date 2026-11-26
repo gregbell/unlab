@@ -243,7 +243,7 @@ export function createEngine(deps: EngineDeps): Engine {
 		const entry = switches.get(name);
 		if (!entry) return;
 		for (const port of entry.cables.keys()) unplug({ switch: name, port });
-		fabric.removeSwitch(entry.slot);
+		fabric.removeSwitch(entry.slot, now());
 		slots[entry.slot] = undefined;
 		switches.delete(name);
 	};

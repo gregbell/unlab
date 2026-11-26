@@ -266,13 +266,15 @@ export class Fabric {
 		return slot;
 	}
 
-	/** The switch, what was plugged into it and what it had learned and counted are gone. */
-	removeSwitch(slot: number): void {
+	/** The switch, what was plugged into it and what it had learned and counted are gone. Its storm is over. */
+	removeSwitch(slot: number, now: number): void {
 		const sw = this.#switches[slot];
 		if (!sw) return;
 		for (let port = 1; port <= PORTS; port++) this.detach(slot, port as PortNo);
-		if (sw.storm) this.#storming--;
 		this.#switches[slot] = undefined;
+		if (!sw.storm) return;
+		this.#storming--;
+		this.#events.storm?.(slot, readingOf(sw.storm, now), true);
 	}
 
 	/** Plug a machine into a port, link up. */

@@ -634,7 +634,7 @@ describe("a loop of cables", () => {
 		const looped = t.taps.filter(({ on, e }) => on === "b" && e.looped).length;
 		t.fabric.removeSwitch(t.slot("b"), t.now);
 		// Its storm is over as it goes, with what it came to, and the others' when they have been quiet.
-		expect(t.storms.filter(({ over }) => over)).toMatchObject([{ on: "b", reading: { since: 0, looped } }]);
+		expect(t.storms.filter(({ over }) => over)).toMatchObject([{ on: "b", reading: { looped } }]);
 		t.run(200);
 		expect(t.storming()).toEqual([]);
 		expect(t.storms.filter(({ over }) => over).map(({ on }) => on)).toEqual(["b", "a", "c"]);

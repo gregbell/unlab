@@ -1,7 +1,6 @@
-import { uncableAll } from "./cables.ts";
+import { storm, uncableAll } from "./cables.ts";
 import { parseSwitchName } from "./identity.ts";
 import { nameHolder, unplugAll } from "./machines.ts";
-import { without } from "./record.ts";
 import { andThen, patch, step } from "./step.ts";
 import {
 	type Cause,
@@ -60,16 +59,16 @@ export function addSwitch(state: LabState, { name }: SwitchPlan): Step {
 	]);
 }
 
-/** The links go down first, so the capture says which cables were in. */
+/** The links go down first, so the capture says which cables were in. Its storm is over, and the last one says so. */
 export function removeSwitch(state: LabState, name: SwitchName, cause: Cause): Step {
 	if (name === DEFAULT_SWITCH || !state.switches.includes(name)) return step(state);
-	const { state: alone, effects } = andThen(unplugAll(state, name, cause), (s) => uncableAll(s, name, cause));
+	const unplugged = andThen(unplugAll(state, name, cause), (s) => uncableAll(s, name, cause));
+	const { state: alone, effects } = andThen(unplugged, (s) => storm(s, name, null));
 	const [first, ...others] = alone.switches;
 	const next: LabState = {
 		...alone,
 		switches: [first, ...others.filter((other) => other !== name)],
 		departedSwitches: [...state.departedSwitches, name],
-		storms: without(alone.storms, name),
 	};
 	return step(showSwitch(next, next.shownSwitch), [
 		...effects,
