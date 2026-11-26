@@ -14,6 +14,13 @@ export interface Update {
 export const UPDATES: readonly Update[] = [
 	{
 		date: "2026-11-26",
+		title: "Read the wiring in Topology",
+		detail:
+			"Topology says which interface of a machine each cable goes to, and the VLAN of each port. Tab to a switch or machine there to hear its cables: each port or interface, where it goes, and whether it is cut, impaired or in a VLAN.",
+		example: "vlan node1 10",
+	},
+	{
+		date: "2026-11-26",
 		title: "Make a cable a bad one",
 		detail:
 			"Give any cable a delay, loss, reordering, a rate or an MTU with link, and watch what a poor link does to a ping or a download. The capture says which cable dropped a frame and why, and topology counts what each delivered and dropped.",
