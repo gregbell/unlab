@@ -1,0 +1,191 @@
+@layer tokens, base, components;
+@layer components {
+	.n-network {
+		container-type: inline-size;
+		color: var(--text);
+		min-width: 0;
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+		font: var(--fs-ui) / var(--lh-ui) var(--font);
+		text-align: left;
+	}
+	.n-node {
+		cursor: pointer;
+	}
+	.n-node-label strong {
+		color: var(--machine-hue, var(--text));
+	}
+	.n-node-label small {
+		color: var(--text-3);
+	}
+	.n-map-scroll {
+		flex: 1;
+		min-height: 330px;
+		display: grid;
+		place-items: safe center;
+		overflow: auto;
+		padding: 18px 8px 36px;
+		background-image: radial-gradient(color-mix(in srgb, var(--text-3) 26%, transparent) 0.8px, transparent 0.9px);
+		background-size: 19px 19px;
+		mask-image: linear-gradient(to bottom, transparent, var(--crust) 5%, var(--crust) 96%, transparent);
+	}
+	.n-drawing {
+		position: relative;
+		flex: none;
+	}
+	.n-wires {
+		position: absolute;
+		inset: 0;
+		width: 100%;
+		height: 100%;
+		pointer-events: none;
+	}
+	.wire {
+		fill: none;
+		stroke: color-mix(in srgb, var(--text-3) 55%, var(--line-strong));
+		stroke-width: 2;
+	}
+	.wire[data-selected="true"] {
+		stroke: var(--machine-hue, var(--agent));
+		stroke-width: 2.4;
+	}
+	.wire[data-state="off"] {
+		stroke-dasharray: 2 4;
+	}
+	.wire[data-state="cut"] {
+		stroke: var(--down);
+		stroke-dasharray: 5 5;
+	}
+	.n-node {
+		position: absolute;
+		transform: translate(-50%, -50%);
+		width: 84px;
+		height: 56px;
+		display: grid;
+		place-items: center;
+		background: var(--mantle);
+		border: 1px solid var(--line);
+		border-radius: var(--r-panel);
+	}
+	.n-node:is(:hover, :focus-visible) {
+		background: var(--base);
+	}
+	.n-node[data-selected="true"] {
+		border-color: var(--machine-hue, var(--agent));
+		background: color-mix(in srgb, var(--machine-hue, var(--agent)) 12%, var(--mantle));
+	}
+	.n-node-label {
+		position: absolute;
+		top: 100%;
+		padding-top: 5px;
+		display: grid;
+		justify-items: center;
+		width: 135px;
+		line-height: 1.4;
+		overflow-wrap: anywhere;
+	}
+	.n-node-label strong {
+		font-size: var(--fs-input);
+		font-weight: 500;
+	}
+	.n-node-label small {
+		font-size: 11px;
+	}
+	.n-art {
+		display: inline-block;
+		position: relative;
+		width: 65px;
+		height: 36px;
+	}
+	.n-art::before,
+	.n-art::after,
+	.n-art i,
+	.n-art b {
+		content: "";
+		position: absolute;
+		display: block;
+	}
+	.n-art.switch::before {
+		left: 1px;
+		top: 11px;
+		width: 63px;
+		height: 14px;
+		border: 1px solid var(--text-3);
+		background: linear-gradient(var(--text-3), var(--line-strong));
+		border-radius: 3px;
+		box-shadow: 0 3px 3px var(--crust);
+	}
+	.n-art.switch::after {
+		left: 4px;
+		top: 7px;
+		width: 57px;
+		height: 5px;
+		transform: skewX(-24deg);
+		background: linear-gradient(var(--text-3), var(--line-strong));
+		border: 1px solid var(--line-strong);
+		border-radius: 2px;
+	}
+	.n-art:where(.switch) i {
+		z-index: 1;
+		left: 17px;
+		top: 16px;
+		width: 40px;
+		height: 5px;
+		background: repeating-linear-gradient(90deg, var(--crust) 0 3.8px, var(--line-strong) 3.8px 5px);
+		border-bottom: 1px solid var(--line-strong);
+	}
+	.n-art:where(.switch) b {
+		left: 7px;
+		top: 16px;
+		width: 5px;
+		height: 4px;
+		background: var(--agent);
+	}
+	.n-art.machine::before {
+		inset: 3px 10px 8px;
+		border: 2px solid var(--line-strong);
+		border-radius: 3px;
+		background: linear-gradient(145deg, var(--line-strong), var(--crust));
+		box-shadow: 0 2px 2px var(--crust);
+	}
+	.n-art.machine::after {
+		width: 24px;
+		height: 3px;
+		left: 21px;
+		bottom: 3px;
+		background: var(--text-3);
+		border-radius: 60% 60% 1px 1px;
+	}
+	.n-art:where(.machine) i {
+		width: 5px;
+		height: 5px;
+		left: 30px;
+		bottom: 5px;
+		background: var(--text-3);
+	}
+	.n-art:where(.machine) b {
+		left: 17px;
+		top: 10px;
+		width: 8px;
+		height: 5px;
+		border-left: 1px solid var(--machine-hue, var(--agent));
+		border-bottom: 1px solid var(--machine-hue, var(--agent));
+		transform: rotate(-130deg);
+	}
+	@container (max-width: 530px) {
+		.n-node {
+			width: 55px;
+			height: 43px;
+		}
+		.n-node .n-art {
+			transform: scale(0.78);
+		}
+		.n-node-label {
+			width: 80px;
+		}
+		.n-node-label strong {
+			font-size: 12px;
+		}
+	}
+}

@@ -11,7 +11,7 @@ test.use({
 });
 
 async function openLab(page: Page): Promise<void> {
-	await page.goto("/");
+	await page.goto("/?layout=classic");
 	await expect(page.getByRole("heading", { name: "Your Linux lab in a tab." })).toBeVisible();
 }
 

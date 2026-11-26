@@ -43,7 +43,7 @@ export class UnlabCliLink extends UnlabElement {
 						</button>
 					</div>
 					<div class="body">
-						<p class="said">${said(this.#cli.value)}</p>
+						<p class="said">${cliGuidance(this.#cli.value)}</p>
 						<code>${CLI_COMMAND}</code>
 						<p class="note">
 							It gives you <code>ssh node1</code> into any machine, every lab command, and the internet for machines that
@@ -58,7 +58,7 @@ export class UnlabCliLink extends UnlabElement {
 	}
 }
 
-function said(cli: CliLink): string {
+export function cliGuidance(cli: CliLink): string {
 	switch (cli.kind) {
 		case "off":
 			return "The link is off. Run the CLI in a terminal on this computer, and it opens the lab and links to it:";

@@ -172,7 +172,7 @@ test("a lab saved before machines had several NICs boots on the ports it had", a
 		const saved = { version: 1, nextN: 3, nodes: [node(1, 2, false), node(2, 5, true)], dock: "open" };
 		localStorage.setItem("unlab.workspace.v1", JSON.stringify({ ...saved, order: ["node1", "node2"], parked: [] }));
 	});
-	await page.goto("/");
+	await page.goto("/?layout=classic");
 	await expect(page.getByText("2 of 2 ready")).toBeVisible({ timeout: 60_000 });
 	const faceplate = page.locator("unlab-switch[compact]");
 	await expect(faceplate.getByRole("button", { name: "Cut the cable from node1 to port 2" })).toBeVisible();

@@ -84,6 +84,9 @@ export class Core {
 	readonly #forwards: Forwards;
 	readonly #files: SshFiles;
 	readonly #watching = new Set<Socket>();
+	/** Every connection to the socket: the prompt's, ssh's, other runs of the CLI. */
+	readonly #clients = new Set<Socket>();
+	#idle: (() => void) | undefined;
 	#port = 0;
 	#states = new Map<string, string>();
 	#local: Server | undefined;
@@ -180,7 +183,30 @@ export class Core {
 		};
 	}
 
+	/**
+	 * Resolves once nothing is connected to the socket, and nothing new can be:
+	 * a single command that started the CLI ends it then, and not under the
+	 * feet of another that came meanwhile. One that comes later starts its own.
+	 */
+	async idle(): Promise<void> {
+		const none = () =>
+			this.#clients.size === 0
+				? Promise.resolve()
+				: new Promise<void>((resolve) => {
+						this.#idle = resolve;
+					});
+		await none();
+		await new Promise((resolve) => this.#local?.close(resolve) ?? resolve(null));
+		rmSync(socketPath(), { force: true });
+		await none();
+	}
+
 	#came(socket: Socket): void {
+		this.#clients.add(socket);
+		socket.once("close", () => {
+			this.#clients.delete(socket);
+			if (this.#clients.size === 0) this.#idle?.();
+		});
 		const say = (reply: Reply) => socket.write(`${JSON.stringify(reply)}\n`);
 		const done = (value: unknown = null) => {
 			say({ type: "ok", value });

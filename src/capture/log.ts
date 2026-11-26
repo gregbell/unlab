@@ -60,6 +60,18 @@ export interface StormEntry extends StormEvent {
 
 export type CaptureEntry = FrameEntry | LinkEntry | CableEntry | StormEntry;
 
+function isOn(entry: CaptureEntry, on: SwitchName): boolean {
+	switch (entry.kind) {
+		case "frame":
+		case "storm":
+			return entry.switch === on;
+		case "link":
+			return entry.port.switch === on;
+		case "cable":
+			return entry.ends.some((end) => end.switch === on);
+	}
+}
+
 /** One frame as a switch's tap reports it. */
 export interface SwitchedFrame {
 	readonly switch: SwitchName;
@@ -126,7 +138,7 @@ export interface CaptureView {
 	/** Since the log was created. Clear does not reset them. */
 	readonly counters: CaptureCounters;
 	/** The newest k rows of the filtered view, oldest first. */
-	tail(k: number): readonly CaptureRow[];
+	tail(k: number, on?: SwitchName): readonly CaptureRow[];
 	/** Rows [from, from + count) of the filtered view. */
 	window(from: number, count: number): readonly CaptureRow[];
 	/** The position of seq in the filtered view, or -1. */
@@ -326,7 +338,16 @@ export function createCaptureLog(opts: CaptureOptions): CaptureLog {
 		get counters() {
 			return { ...counters };
 		},
-		tail: (k) => rows(matchLen - k, k),
+		tail(k, on) {
+			if (on === undefined) return rows(matchLen - k, k);
+			const out: CaptureRow[] = [];
+			for (let i = matchLen - 1; i >= 0 && out.length < k; i--) {
+				const entry = at(matchAt(i));
+				if (entry && isOn(entry, on))
+					out.push(captureRow(entry, rowNames));
+			}
+			return out.reverse();
+		},
 		window: rows,
 		indexOf(seq) {
 			let lo = 0;

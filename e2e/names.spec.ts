@@ -17,7 +17,7 @@ const allReady = (page: Page, count: number) =>
 
 /** web-1 is alpine, db is debian, and the third chooses nothing. */
 async function openNamed(page: Page): Promise<void> {
-	await page.goto("/");
+	await page.goto("/?layout=classic");
 	await expect(page.getByRole("heading", { name: "Your Linux lab in a tab." })).toBeVisible();
 	await typed(page, "spawn 1 alpine --name web-1");
 	await expect(page.locator("unlab-pane")).toHaveCount(1);

@@ -3,7 +3,7 @@ import { call } from "./webmcp.ts";
 
 /** A fresh lab starts empty; most tests want two ready machines, typed into the bar as a person would. */
 export async function openWithTwoMachines(page: Page): Promise<void> {
-	await page.goto("/");
+	await page.goto("/?layout=classic");
 	await expect(page.getByRole("heading", { name: "Your Linux lab in a tab." })).toBeVisible();
 	await page.keyboard.press("Control+/");
 	await expect(page.getByRole("combobox", { name: "Command" })).toBeFocused();

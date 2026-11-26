@@ -42,7 +42,7 @@ async function seqs(page: Page, filter: string): Promise<number[]> {
 
 /** node1 is on two subnets, node2 on the first of them and node3 on the second. node4 chooses nothing. */
 async function openAddressed(page: Page): Promise<void> {
-	await page.goto("/");
+	await page.goto("/?layout=classic");
 	await expect(page.getByRole("heading", { name: "Your Linux lab in a tab." })).toBeVisible();
 	await typed(page, "spawn 1 alpine --nics 3 --addr 10.1.0.1/24,10.2.0.1/24,none");
 	await expect(page.locator("unlab-pane")).toHaveCount(1);
