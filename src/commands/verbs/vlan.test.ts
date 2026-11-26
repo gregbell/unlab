@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { vlanOf } from "../../model/index.ts";
 import { completeLine } from "../index.ts";
@@ -122,6 +123,21 @@ describe("trunk", () => {
 		expect(await lab.run("trunk lan:1 --allow 10,20 --native 30", "agent")).toMatchObject({
 			text: "lan:1 already trunk of 10 and 20, native 30 · native 30 is not allowed, so nothing crosses it untagged",
 		});
+	});
+
+	it("has an example, here and in the README, of a trunk that allows its native VLAN, so that VLAN crosses untagged as they say", async () => {
+		const lab = storeLab();
+		await lab.run("mkswitch lan");
+		await lab.run("mkswitch wan");
+		await lab.run("cable lan:3 switch0:8");
+		await lab.run("cable lan:8 wan:8");
+		const example = lab.registry.commands.find(({ manual }) => manual.verb === "trunk")?.manual.example.line;
+		const readme = readFileSync(new URL("../../../README.md", import.meta.url), "utf8");
+		const row = /^\| `(trunk [^`]+)`/m.exec(readme)?.[1];
+		for (const line of [example, row]) {
+			expect(line).toMatch(/^trunk lan:[38] /);
+			expect(will(lab, String(line))).not.toContain("is not allowed");
+		}
 	});
 
 	it("refuses the port of a machine's NIC, whose kernel cannot read tags, and names what would do", async () => {

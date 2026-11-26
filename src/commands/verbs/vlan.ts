@@ -107,7 +107,7 @@ export const trunk = defineVerb({
 		),
 		native: slots.option("--native", slots.vlanId("The VLAN that goes without a tag."), DEFAULT_VLAN),
 	},
-	example: { port: "lan:3", allow: "10,20", native: 1 },
+	example: { port: "lan:3", allow: "1,10,20", native: 1 },
 	plan(a, lab, ctx) {
 		const read = slots.readPort(a.port, ctx);
 		if (read instanceof slots.Miss) return refuse(String(read.message), "port");

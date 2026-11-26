@@ -96,18 +96,18 @@ on, such as the ready ones for `exec` and the ones that are off or failed for `b
 
 ### Wire machines and switches
 
-| Command bar example                    | What it does                                                                                                                          |
-| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `mkswitch lan`                         | Add a switch called `lan`. Without a name, it is the next free `switch1`. Frames pass from one switch to another only over a cable.   |
-| `rmswitch lan`                         | Remove a switch, after a confirmation that lists what is plugged in and its cables to other switches. The machines run on.            |
-| `cable lan wan:8`                      | Put a cable between two switches, so that their machines share a segment. `lan` alone is its lowest free port.                        |
-| `uncable lan:3`                        | Take out the cable between switches that is in port 3 of `lan`. Either of its two ports names it.                                     |
-| `plug node2 lan:3`                     | Move node2's cable to port 3 of `lan`, or plug it in. `lan` alone is its lowest free port. Name one of several with `node2:eth1`.     |
-| `unplug node2:eth1`                    | Take the interface's cable out and free its port, also for later boots.                                                               |
-| `link down node2`                      | Cut node2's cables, whether it is on or off. Reconnect them with `link up node2`. Name one of several with `node2:eth1`.              |
-| `link down lan:3`                      | Cut the cable in that port, also one between switches. Both switches forget what they learned over it. `link up lan:3` reconnects it. |
-| `vlan node2 10`                        | Put the port that node2 is in, or one named as `lan:3`, in VLAN 10. It reaches only the ports of VLAN 10. Every port starts in 1.     |
-| `trunk lan:8 --allow 10,20 --native 1` | Make the port of a cable between switches a trunk of VLANs 10 and 20, tagged, and 1 untagged. Make the far end a trunk too.           |
+| Command bar example                      | What it does                                                                                                                                               |
+| ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `mkswitch lan`                           | Add a switch called `lan`. Without a name, it is the next free `switch1`. Frames pass from one switch to another only over a cable.                        |
+| `rmswitch lan`                           | Remove a switch, after a confirmation that lists what is plugged in and its cables to other switches. The machines run on.                                 |
+| `cable lan wan:8`                        | Put a cable between two switches, so that their machines share a segment. `lan` alone is its lowest free port.                                             |
+| `uncable lan:3`                          | Take out the cable between switches that is in port 3 of `lan`. Either of its two ports names it.                                                          |
+| `plug node2 lan:3`                       | Move node2's cable to port 3 of `lan`, or plug it in. `lan` alone is its lowest free port. Name one of several with `node2:eth1`.                          |
+| `unplug node2:eth1`                      | Take the interface's cable out and free its port, also for later boots.                                                                                    |
+| `link down node2`                        | Cut node2's cables, whether it is on or off. Reconnect them with `link up node2`. Name one of several with `node2:eth1`.                                   |
+| `link down lan:3`                        | Cut the cable in that port, also one between switches. Both switches forget what they learned over it. `link up lan:3` reconnects it.                      |
+| `vlan node2 10`                          | Put the port that node2 is in, or one named as `lan:3`, in VLAN 10. It reaches only the ports of VLAN 10. Every port starts in 1.                          |
+| `trunk lan:8 --allow 1,10,20 --native 1` | Make the port of a cable between switches a trunk of VLANs 1, 10 and 20: 10 and 20 tagged, and 1, its native VLAN, untagged. Make the far end a trunk too. |
 
 ### Run commands and open consoles
 
