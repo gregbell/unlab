@@ -17,6 +17,7 @@ import {
 import { type CliLink, type LabState, machineList, type Store } from "../model/index.ts";
 import {
 	type Asking,
+	FEATURES,
 	FIRST_LINK_PORT,
 	type FromCli,
 	type FromLab,
@@ -26,6 +27,7 @@ import {
 	PROTOCOL,
 	type RemoteBlock,
 	type RemoteResult,
+	type ToolInfo,
 } from "../streams/index.ts";
 
 /** As much of a WebSocket as this uses. */
@@ -54,6 +56,12 @@ export interface LinkDeps {
 	permission(): Promise<PermissionState | null>;
 	/** Where the machines' workers dial, or null when there is no link. */
 	machines(target: { readonly url: string; readonly token: string } | null): void;
+	/** The agent's tools, which the CLI offers to agents outside the browser. */
+	readonly tools: {
+		offered(): readonly ToolInfo[];
+		/** Resolves with what the agent reads; rejects only when `signal` aborts. */
+		call(name: string, input: unknown, signal: AbortSignal): Promise<unknown>;
+	};
 }
 
 export interface Link {
@@ -126,6 +134,9 @@ export function startLink(deps: LinkDeps): Link {
 	let refused: string | null = null;
 	let stopClock: (() => void) | undefined;
 	let said = "";
+	/** The CLI takes the agent's tools: its hello said so. */
+	let offering = false;
+	let toolsSaid = "";
 	const running = new Map<number, AbortController>();
 	const answers = new Map<number, (yes: boolean) => void>();
 
@@ -139,6 +150,20 @@ export function startLink(deps: LinkDeps): Link {
 		if (text === said) return;
 		said = text;
 		say({ type: "machines", machines });
+	};
+
+	const sayTools = () => {
+		if (!linked || !offering) return;
+		const tools = deps.tools.offered();
+		const text = JSON.stringify(tools);
+		if (text === toolsSaid) return;
+		toolsSaid = text;
+		say({ type: "tools", tools });
+	};
+
+	const sayAll = () => {
+		sayMachines();
+		sayTools();
 	};
 
 	const ask = (id: number, asking: Asking, signal: AbortSignal) =>
@@ -173,9 +198,11 @@ export function startLink(deps: LinkDeps): Link {
 				linked = true;
 				refused = null;
 				said = "";
+				offering = message.features?.includes("tools") ?? false;
+				toolsSaid = "";
 				show({ kind: "linked" });
 				deps.machines({ url: url(), token: message.token });
-				sayMachines();
+				sayAll();
 				return;
 			case "refused":
 				refused = message.message;
@@ -198,6 +225,21 @@ export function startLink(deps: LinkDeps): Link {
 						// What the line changed, before its result: what is typed next may need it.
 						sayMachines();
 						say({ type: "result", id, result });
+					});
+				return;
+			}
+			case "call": {
+				const { id, name, input } = message;
+				const abort = new AbortController();
+				running.set(id, abort);
+				const asking = socket;
+				deps.tools
+					.call(name, input, abort.signal)
+					.catch((error: unknown) => ({ error: error instanceof Error ? error.message : String(error) }))
+					.then((reply) => {
+						if (running.get(id) === abort) running.delete(id);
+						if (socket !== asking) return;
+						say({ type: "reply", id, reply });
 					});
 				return;
 			}
@@ -245,7 +287,7 @@ export function startLink(deps: LinkDeps): Link {
 		if (refused === null) show({ kind: "waiting" });
 		const dialled = deps.dial(url() + LAB_PATH);
 		socket = dialled;
-		dialled.onopen = () => say({ type: "hello", protocol: PROTOCOL });
+		dialled.onopen = () => say({ type: "hello", protocol: PROTOCOL, features: FEATURES });
 		dialled.onmessage = ({ data }) => {
 			if (socket === dialled) heard(JSON.parse(String(data)) as FromCli);
 		};
@@ -269,7 +311,7 @@ export function startLink(deps: LinkDeps): Link {
 		open?.close();
 	}
 
-	const unsubscribe = store.subscribe(sayMachines);
+	const unsubscribe = store.subscribe(sayAll);
 	if (memory.on) begin();
 
 	return {
