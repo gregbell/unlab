@@ -179,14 +179,9 @@ export function topologyMap(lab: LabState, selected: Selection | null, pick: (s:
 						]
 					: [
 							m?.spec.image ?? "",
-							// Which NIC each line goes to, when there is more than one it could be, each kept on one line of the note.
-							...((m?.spec.nics.length ?? 0) > 1
-								? sides.map((side) =>
-										[side.end.nic, `${side.other.name}:${side.other.port}`, vlanAt(side)?.tag]
-											.filter(Boolean)
-											.join("\u00a0"),
-									)
-								: vlans),
+							// Rows leave room for a short note only, so which NIC goes where is in the title and the description.
+							...((m?.spec.nics.length ?? 0) > 1 ? [`${m?.spec.nics.length} NICs`] : []),
+							...(vlans.length ? [vlans.join(", ")] : []),
 							...marks,
 						];
 			const words = sides.map(sideWords);

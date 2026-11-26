@@ -121,8 +121,10 @@ describe("the Topology window", () => {
 			"switch0 node2 up",
 			"switch0 node3 up",
 		]);
-		expect(note("node3")).toBe("alpine · eth0 switch0:3 · eth1 lan:1");
+		expect(note("node3")).toBe("alpine · 2 NICs");
 		expect(note("node1")).toBe("alpine");
+		// node3 shares a column with lan, which it is cabled to, so a line crosses its name, as on main.
+		expect(unreadable(map).filter((what) => what.includes(" under "))).toEqual([]);
 		await expect
 			.element(described("node3"))
 			.toHaveAccessibleDescription("eth0 · to switch0 port 3 · up. eth1 · to lan port 1 · up");
@@ -165,14 +167,14 @@ describe("the Topology window", () => {
 			type: "cmd/conditions",
 			changes: [{ port: port(DEFAULT_SWITCH, 3), conditions: conditions({ delay: 50, loss: 10 }) }],
 		});
-		expect(note("node3")).toBe("alpine · eth0 switch0:3 · eth1 lan:1 · impaired");
+		expect(note("node3")).toBe("alpine · 2 NICs · impaired");
 		await expect
 			.element(described("node3"))
 			.toHaveAccessibleDescription("eth0 · to switch0 port 3 · up · delay 50 ms, loss 10%. eth1 · to lan port 1 · up");
 
 		await step(vlan(port(lan, 2), 10), trunk(port(lan, 8), 1, 10));
 		expect(note("node4")).toBe("alpine · v10");
-		expect(note("node3")).toBe("alpine · eth0 switch0:3 · eth1 lan:1 · impaired");
+		expect(note("node3")).toBe("alpine · 2 NICs · impaired");
 		expect(note("lan")).toBe("4 / 8 ports · v10, trunk");
 		expect(note("switch0")).toBe("3 / 8 ports · impaired");
 		await expect.element(described("node4")).toHaveAccessibleDescription("eth0 · to lan port 2 · up · vlan 10");
@@ -183,7 +185,7 @@ describe("the Topology window", () => {
 			);
 
 		await step(vlan(port(lan, 1), 20));
-		expect(note("node3")).toBe("alpine · eth0 switch0:3 · eth1 lan:1 v20 · impaired");
+		expect(note("node3")).toBe("alpine · 2 NICs · v20 · impaired");
 
 		await step(storm(lan, true));
 		expect(note("lan")).toBe("4 / 8 ports · storming · v20, v10, trunk");
@@ -270,7 +272,7 @@ function crowd(): LabState {
 	].reduce<LabState>((state, event) => update(state, event as LabEvent).state, sixteen);
 }
 
-/** What makes a name hard to read: another node, another node's name or note over it, or a line across it. */
+/** What makes a name or a note hard to read: another node over it, another node's name or note over a name, or a line across a name. */
 function unreadable(map: Element): string[] {
 	const parts = [...map.querySelectorAll<HTMLElement>(".n-node")].flatMap((node) => {
 		const who = node.dataset.machine ?? node.dataset.switch ?? "?";
@@ -288,7 +290,16 @@ function unreadable(map: Element): string[] {
 		),
 	);
 	const names = parts.filter((p) => p.what === "name");
+	const notes = parts.filter((p) => p.what === "note");
 	return [
+		...notes.flatMap((note) =>
+			parts
+				.filter(
+					(other) =>
+						other.who !== note.who && other.what === "node" && note.rect && other.rect && meet(note.rect, other.rect),
+				)
+				.map((other) => `${note.who}'s note under ${other.who}'s node`),
+		),
 		...names.flatMap((name) =>
 			parts
 				.filter((other) => other.who !== name.who && name.rect && other.rect && meet(name.rect, other.rect))
@@ -304,12 +315,26 @@ function unreadable(map: Element): string[] {
 	];
 }
 
+describe("the Topology window of a machine with several NICs", () => {
+	it("keeps its note clear of the machine drawn below it, as the window opens and maximized", async () => {
+		const { map, note } = await topology(
+			lab(addSwitch(lan), addSwitch(wan), spawn(1), spawn(1, DEFAULT_SWITCH, lan, wan), spawn(2), ready()),
+		);
+		expect(note("node2")).toBe("alpine · 3 NICs");
+		expect(unreadable(map).filter((what) => what.includes(" under "))).toEqual([]);
+		await page.getByRole("button", { name: "Maximize Topology" }).click();
+		await expect.poll(() => map.dataset.max).toBe("true");
+		await new Promise((done) => setTimeout(done, 600));
+		expect(unreadable(map).filter((what) => what.includes(" under "))).toEqual([]);
+	});
+});
+
 describe("the Topology window of a full lab", () => {
 	it("with 16 machines and eight switches, every name can be read, in the window as it opens and maximized", async () => {
 		const state = crowd();
 		expect([state.rail.length, state.switches.length]).toEqual([16, 8]);
 		const { map, note } = await topology(state);
-		expect(note("node3")).toBe("alpine · eth0 switch0:3 · eth1 lan:1 v10 · eth2 wan:1 v20 · eth3 switch0:4");
+		expect(note("node3")).toBe("alpine · 4 NICs · v10, v20");
 		expect(note("core")).toBe("7 / 8 ports · storming · impaired · trunk");
 		const drawing = map.querySelector(".n-drawing")?.getBoundingClientRect();
 		const names = [...map.querySelectorAll(".n-node strong")];
