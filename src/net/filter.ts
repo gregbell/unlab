@@ -65,7 +65,7 @@ export type FilterScope =
 	/** It is one switch, or with a port one cable, and nothing else. */
 	| { readonly kind: "place"; readonly switch: string; readonly port: number | null }
 	/** It names switches or cables among other terms. */
-	| { readonly kind: "places" };
+	| { readonly kind: "places"; readonly places: readonly FilterPlace[] };
 
 export interface CaptureFilter {
 	/** As typed. */
@@ -372,7 +372,7 @@ function filterOf(source: string, groups: readonly (readonly Term[])[]): Capture
 function scopeOf(terms: readonly Term[]): FilterScope {
 	const places = terms.flatMap(({ place }) => place ?? []);
 	if (places.length === 0) return { kind: "everywhere" };
-	return terms.length === 1 ? { kind: "place", ...places[0] } : { kind: "places" };
+	return terms.length === 1 ? { kind: "place", ...places[0] } : { kind: "places", places };
 }
 
 /** The empty filter. */

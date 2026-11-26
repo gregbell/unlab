@@ -239,7 +239,7 @@ describe("terms that say where a frame was", () => {
 		expect(scope("lan")).toEqual({ kind: "place", switch: "lan", port: null });
 		expect(scope("  lan:3 ")).toEqual({ kind: "place", switch: "lan", port: 3 });
 		for (const source of ["lan:3 icmp", "lan or wan", "arp or lan:3", "lan port:3"]) {
-			expect(scope(source), source).toEqual({ kind: "places" });
+			expect(scope(source), source).toMatchObject({ kind: "places" });
 		}
 	});
 
