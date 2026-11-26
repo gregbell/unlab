@@ -5,6 +5,7 @@ const fabricUnit = { kind: "unit", files: ["src/runtime/fabric.test.ts"], grep: 
 const modelUnit = { kind: "unit", files: ["src/model/vlans.test.ts"] };
 const savedUnit = { kind: "unit", files: ["src/commands/saved-labs.test.ts"] };
 const verbUnit = { kind: "unit", files: ["src/commands/verbs/vlan.test.ts"] };
+const kernels = { kind: "integration", files: ["test/integration/vlans.test.ts"] };
 const topologyUnit = { kind: "unit", files: ["src/commands/verbs/switches.test.ts"], grep: "topology" };
 
 export const BREAKS = [
@@ -13,7 +14,7 @@ export const BREAKS = [
 		file: FABRIC,
 		from: "const carries = (mode: Mode, vlan: number): boolean => (mode.trunk ? allows(mode, vlan) : mode.vlan === vlan);",
 		to: "const carries = (_mode: Mode, _vlan: number): boolean => true;",
-		tests: [fabricUnit],
+		tests: [fabricUnit, kernels],
 	},
 	{
 		name: "one table for every VLAN",
@@ -27,21 +28,21 @@ export const BREAKS = [
 		file: FABRIC,
 		from: "\t\t\tif (!egress.trunk || egress.vlan === vlan) return",
 		to: "\t\t\tif (true) return",
-		tests: [fabricUnit],
+		tests: [fabricUnit, kernels],
 	},
 	{
 		name: "a trunk allows every VLAN",
 		file: FABRIC,
-		from: "const allows = ({ allows }: Mode, vlan: number): boolean => allows === null ||",
-		to: "const allows = ({ allows }: Mode, vlan: number): boolean => true ||",
-		tests: [fabricUnit],
+		from: "\tallows === null || (allows[vlan >> 3]",
+		to: "\ttrue || (allows[vlan >> 3]",
+		tests: [fabricUnit, kernels],
 	},
 	{
 		name: "an untagged frame on a trunk is in VLAN 1",
 		file: FABRIC,
 		from: "\t\tconst vlan = tag ?? mode.vlan;",
 		to: "\t\tconst vlan = tag ?? (mode.trunk ? 1 : mode.vlan);",
-		tests: [fabricUnit],
+		tests: [fabricUnit, kernels],
 	},
 	{
 		name: "a port keeps what was learned on it when its VLAN changes",
@@ -55,7 +56,7 @@ export const BREAKS = [
 		file: FABRIC,
 		from: "\t\t\tif (!egress.trunk || egress.vlan === vlan) return",
 		to: "\t\t\tif (egress.trunk && egress.vlan === vlan) return",
-		tests: [fabricUnit],
+		tests: [fabricUnit, kernels],
 	},
 	{
 		name: "a freed port keeps its VLAN",
