@@ -47,6 +47,8 @@ For frame headers, capture filters, or a Wireshark download, open
 
 ![Node1 reports 100% packet loss with its peer disconnected, then 0% after reconnecting. The switch capture shows the cable events and the returning echo reply.](docs/images/desktop-lab.jpg)
 
+Next, [connect two switches](docs/labs/connect-two-switches.md) and see which cable carries the ping between them.
+
 Drag a window by its title bar, double-click to maximize it, or minimize it to
 the bottom-left dock. Right-click a title bar, a machine, a switch or the desktop
 for its actions. Returning to the lab restores your machines and desktop layout.
