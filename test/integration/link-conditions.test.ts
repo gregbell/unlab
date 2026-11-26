@@ -65,11 +65,13 @@ test("100 ms of delay on a NIC's cable, or on a cable between switches, adds abo
 			["on the cable between the switches", between, 2],
 			["on both", both, 4],
 		] as const) {
-			const added = ms - base;
-			assert.ok(added >= delays * 100 - 2 && added <= delays * 100 + 25, `${what}: ${added.toFixed(1)} ms added`);
+			// No less than the delays themselves, and no more than what the ping took without them on top. The other
+			// tests' machines boot beside this one, so a ping with no delay can take a few ms.
+			const least = delays * 100;
+			assert.ok(ms >= least && ms <= least + base + 25, `${what}: ${ms} ms, ${(ms - base).toFixed(1)} ms added`);
 		}
-		assert.ok(other < beside + 5, `node3 to node2 is as it was while node1's cable is slow: ${other} ms`);
-		assert.ok(cleared < base + 5, `and node1 is as it was once the delay is gone: ${cleared} ms`);
+		assert.ok(other < 50, `node3 to node2 has none of the delay while node1's cable is slow: ${other} ms`);
+		assert.ok(cleared < 50, `and node1 has none of it once the delay is gone: ${cleared} ms`);
 	} finally {
 		await lab.stop();
 	}

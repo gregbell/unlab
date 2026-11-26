@@ -89,3 +89,12 @@ the map marks no cable | e2e e2e/link-conditions.spec.ts "desktop" | exit 1 | re
 a saved lab has no conditions | e2e e2e/link-conditions.spec.ts "one command" | exit 1 | red: one command gives a NIC's cable or a cable between switches a delay, loss and an MTU, in both directions and with no reboot, clears them, and a reload brings them back
 a reload does not tell the switches | e2e e2e/link-conditions.spec.ts "one command" | exit 1 | red: one command gives a NIC's cable or a cable between switches a delay, loss and an MTU, in both directions and with no reboot, clears them, and a reload brings them back
 ls says nothing of a cable's conditions | unit src/commands/verbs/ls.test.ts "conditions" | exit 1 | red: says the conditions of a NIC's cable beside its link, and nothing of a cable that has none
+
+The delay tests on kernels and on the page then took their bounds from the round trip itself, not from what it added to a ping
+with no delay, which other tests' machines can slow. Run again under the breaks of a delay, they are red as before:
+
+a NIC's cable takes no conditions | integration test/integration/link-conditions.test.ts "delay" | exit 1 | red: 100 ms of delay on a NIC's cable, or on a cable between switches, adds about 200 ms to a ping's round trip, and slows no other cable
+a NIC's cable has conditions only on the way out of the switch | integration test/integration/link-conditions.test.ts "delay" | exit 1 | red: 100 ms of delay on a NIC's cable, or on a cable between switches, adds about 200 ms to a ping's round trip, and slows no other cable
+a delay holds nothing | integration test/integration/link-conditions.test.ts "delay" | exit 1 | red: 100 ms of delay on a NIC's cable, or on a cable between switches, adds about 200 ms to a ping's round trip, and slows no other cable
+a NIC's cable has conditions only on the way out of the switch | e2e e2e/link-conditions.spec.ts "one command" | exit 1 | red: one command gives a NIC's cable or a cable between switches a delay, loss and an MTU, in both directions and with no reboot, clears them, and a reload brings them back
+a delay holds nothing | e2e e2e/link-conditions.spec.ts "one command" | exit 1 | red: one command gives a NIC's cable or a cable between switches a delay, loss and an MTU, in both directions and with no reboot, clears them, and a reload brings them back

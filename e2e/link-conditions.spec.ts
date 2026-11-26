@@ -95,9 +95,10 @@ test("one command gives a NIC's cable or a cable between switches a delay, loss 
 	// A delay: from the bar on a NIC's cable, and from the tool on the cable between the switches, by its far port.
 	await typed(page, "link up node1 --delay 100ms");
 	await expect.poll(async () => (await cable(page, "switch0:1")).conditions).toEqual({ delay: "100ms" });
-	const one = (await roundTrip(page, 1, "node2")) - base;
-	expect(one).toBeGreaterThan(195);
-	expect(one).toBeLessThan(260);
+	// No less than the delay each way, and little more than that on top of what the ping took before.
+	const one = await roundTrip(page, 1, "node2");
+	expect(one).toBeGreaterThanOrEqual(200);
+	expect(one).toBeLessThan(200 + base + 60);
 	expect(await call(page, "link_set", { link: "up", machines: "lan:8", delay: "100ms" })).toEqual({
 		result: "lan:8 up with delay 100 ms",
 		data: [{ switch: "lan", port: 8, to: { switch: "switch0", port: 8 }, link: "up", conditions: { delay: "100ms" } }],
@@ -106,9 +107,9 @@ test("one command gives a NIC's cable or a cable between switches a delay, loss 
 		{ delay: "100ms" },
 		{ delay: "100ms" },
 	]);
-	const two = (await roundTrip(page, 2, "node1")) - base;
-	expect(two).toBeGreaterThan(395);
-	expect(two).toBeLessThan(470);
+	const two = await roundTrip(page, 2, "node1");
+	expect(two).toBeGreaterThanOrEqual(400);
+	expect(two).toBeLessThan(400 + base + 70);
 	await expect(panel(page).locator(".port[data-port='1'] .nic")).toHaveText("impaired");
 	await expect(panel(page).locator(".port[data-port='8'] .nic")).toHaveText("port 8 impaired");
 	await expect(panel(page).locator(".port[data-port='1']")).toHaveAttribute(
