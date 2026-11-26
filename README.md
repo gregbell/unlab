@@ -401,15 +401,14 @@ a separate window opens when you wanted your own browser, reconnect `unlab` in
   moves a machine to another switch, ping from it first.
 - Cables may make a loop, and a switch can be cabled to itself. One broadcast then goes
   round until a cable of the loop is cut. Every switch that such frames come into says that
-  it is storming, on its faceplate, in `topology` and in the capture, with the looped
-  frames it takes a second. The lab lets 1,000 looped frames a second along each cable and
-  keeps at most 64 waiting there, so the machines and the page still answer. What does not
-  fit is dropped and counted. A copy of a frame that comes into a switch in a VLAN after
-  another copy of it has taken a second way there, so what the switch sends on of it waits
-  its turn at the same pace, with no looped mark. No other frame is slowed, and where a
-  frame has one way to each switch, nothing waits. When its storm ends, a switch forgets
-  its MAC table for each VLAN that looped frames came in, so that pings work again. A mesh
-  storms on until every loop is cut.
+  it is storming, on its faceplate, in `topology` and in the capture, with the looped frames
+  it takes a second. The lab lets 1,000 looped frames a second along each cable and keeps at
+  most 64 waiting there, so the machines and the page still answer. What does not fit is
+  dropped and counted. Where a frame has two ways to a switch, the copy that comes in
+  second, in the same VLAN, is not marked, but what the switch sends on of it waits its turn
+  at the same pace. No other frame is slowed: where a frame has one way to each switch,
+  nothing waits. When its storm ends, a switch forgets its MAC table for each VLAN that
+  looped frames came in, so that pings work again. A mesh storms on until every loop is cut.
 - A port is in VLAN 1 until `vlan` puts it in another, and is again once nothing is in it,
   so whatever is plugged in next starts there. A cut or a reboot leaves it as it is. Each
   VLAN floods within itself, and a switch learns addresses for each VLAN apart, so a loop in
@@ -419,14 +418,15 @@ a separate window opens when you wanted your own browser, reconnect `unlab` in
   native VLAN, which goes untagged. Ends with different native VLANs move untagged frames
   from one VLAN to the other, as real switches do. An access port takes a frame that has a
   tag only when the tag is of its own VLAN, and takes the tag off. It drops a frame tagged
-  with any other VLAN, as most switches do. So a trunk cabled to an access port carries that
-  port's VLAN alone, and no wiring makes a frame longer. A port also drops, and counts, a
-  frame longer than 1,514 bytes, or 1,518 with a tag: Ethernet's 1,500 bytes after the
-  header, without the checksum, which the lab's wires leave out. The guest kernels have no
+  with any other VLAN, as most switches do, and counts it among the port's dropped frames.
+  So a tag that a trunk puts on comes off at the next port, or the frame is dropped there,
+  and no wiring makes a frame longer. A port also drops a frame longer than 1,514 bytes, or
+  1,518 with a tag, and counts it. That is Ethernet's limit of 1,500 bytes after the header,
+  without the checksum, which frames in the lab do not have. The guest kernels have no
   802.1Q, so a machine's port cannot be a trunk: a router takes one interface for each VLAN.
-  A frame's capture row says its VLAN, and the ports it had its tag on, and `capture vlan
-  10` keeps those of VLAN 10. A cable's `.pcap` has each frame as it was on that cable,
-  tagged or not.
+  A frame's capture row says its VLAN, and the ports it had its tag on, and
+  `capture vlan 10` keeps those of VLAN 10. A cable's `.pcap` has each frame as it was on
+  that cable, tagged or not.
 - The capture keeps its newest 10,000 rows. In a storm that is the last seven seconds of
   one loop of three switches, and less than a second of a mesh of four. A frame that has
   looped says so in its row. Pause the capture to read it. The counters and each storm's
