@@ -121,3 +121,33 @@ test("ends of a trunk with different native VLANs move untagged frames from one 
 		await lab.stop();
 	}
 });
+
+test("a cable from a port in VLAN 10 to a port in VLAN 20 of one switch joins them, and pings cross it once, with no storm", async () => {
+	const lab = await bootLab(
+		[
+			{ n: 1, ports: [1] },
+			{ n: 2, ports: [2] },
+		],
+		{ cables: [[0, 7, 0, 8]] },
+	);
+	try {
+		lab.sw.setVlan(1, access(10));
+		lab.sw.setVlan(7, access(10));
+		lab.sw.setVlan(2, access(20));
+		lab.sw.setVlan(8, access(20));
+		assert.ok(await pings(lab, 1, 2), "node1 in VLAN 10 reaches node2 in VLAN 20 over the cable");
+		assert.ok(await pings(lab, 2, 1), "and node2 reaches node1");
+		assert.deepEqual(
+			lab.frames.filter((e) => e.looped).map((e) => `port ${e.from} vlan ${e.vlan}`),
+			[],
+			"no frame looped",
+		);
+		assert.deepEqual([lab.storms, lab.sw.storm()], [[], null], "and the switch never stormed");
+		assert.ok(
+			lab.sw.macTable().some((e) => e.vlan === 20 && e.port === 8),
+			"it learned node1 in VLAN 20, behind the cable",
+		);
+	} finally {
+		await lab.stop();
+	}
+});

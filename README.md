@@ -362,11 +362,14 @@ a separate window opens when you wanted your own browser, reconnect `unlab` in
   frames it takes a second. The lab lets 1,000 looped frames a second along each cable and
   keeps at most 64 waiting there, so the machines and the page still answer. What does not
   fit is dropped and counted, and no other frame is slowed. When its storm ends, a switch
-  forgets its MAC table, so that pings work again. A mesh storms on until every loop is cut.
+  forgets its MAC table for each VLAN that looped frames came in, so that pings work again.
+  A mesh storms on until every loop is cut.
 - A port is in VLAN 1 until `vlan` puts it in another, and is again once nothing is in it,
   so whatever is plugged in next starts there. A cut or a reboot leaves it as it is. Each
   VLAN floods within itself, and a switch learns addresses for each VLAN apart, so a loop in
-  one VLAN storms in that VLAN alone. A trunk tags each frame with its VLAN, but for its
+  one VLAN storms in that VLAN alone. A cable from a port in one VLAN to a port in another
+  joins the two, and a frame crosses it once: it has looped only when it comes back to a
+  switch in a VLAN that it was in there. A trunk tags each frame with its VLAN, but for its
   native VLAN, which goes untagged. Ends with different native VLANs move untagged frames
   from one VLAN to the other, as real switches do. The guest kernels have no 802.1Q, so a
   machine's port cannot be a trunk: a router takes one interface for each VLAN. A frame's

@@ -160,6 +160,20 @@ export const BREAKS = [
 		tests: [{ kind: "browser", files: ["src/ui/switch/switch.browser.test.ts"], grep: "VLAN" }],
 	},
 	{
+		name: "a frame has looped when it comes back to a switch in any VLAN",
+		file: FABRIC,
+		from: "if (at.slot === slot && at.vlan === vlan) return true;",
+		to: "if (at.slot === slot) return true;",
+		tests: [fabricUnit, kernels],
+	},
+	{
+		name: "a storm that ends forgets every VLAN's table",
+		file: FABRIC,
+		from: "for (const vlan of storm.vlans) sw.tables.delete(vlan);",
+		to: "sw.tables.clear();",
+		tests: [fabricUnit],
+	},
+	{
 		name: "vlan is a word that nothing may be called",
 		file: "src/net/filter.ts",
 		from: "[...FILTER_PROTOCOLS, OR, PORT_WORD];",

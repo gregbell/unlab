@@ -708,6 +708,8 @@ function vlanNet(machines: readonly string[], cables: readonly (readonly [string
 			for (const frames of got.values()) frames.length = 0;
 			taps.length = 0;
 		},
+		storming: (letter: string) => fabric.storm(slots.get(letter) as number, now) !== null,
+		cut: (text: string) => fabric.setLink(at(text).slot, at(text).port, false),
 		table: (letter: string) =>
 			fabric
 				.macTable(slots.get(letter) as number, now)
@@ -842,5 +844,68 @@ describe("VLANs", () => {
 			["a", 2, false],
 			["b", 6, false],
 		]);
+	});
+
+	test.each([
+		["a cable between two ports of one switch", ["a1:10", "a2:20"], [["a7-a8", access(10), access(20)]], { 2: 1 }],
+		[
+			"a cable beside a trunk",
+			["a1:10", "a2:20", "b1:10", "b2:20"],
+			[
+				["a8-b8", trunk("all")],
+				["a7-b7", access(10), access(20)],
+			],
+			{ 2: 1, [B + 1]: 1, [B + 2]: 1 },
+		],
+	] as const)(
+		"a frame that %s takes into another VLAN crosses once, has not looped, and is not slowed",
+		(_, machines, cables, reached) => {
+			const t = vlanNet(machines, cables);
+			t.send(1, arpRequest(1, 9));
+			expect(t.reached()).toEqual(reached);
+			expect(t.taps.filter(({ e }) => e.looped).map(({ on, e }) => `${on}${e.from}`)).toEqual([]);
+			expect(t.storming("a")).toBe(false);
+			const learned = t.table("a");
+			t.run(STORM_QUIET_MS * 2);
+			expect(t.table("a")).toEqual(learned);
+			expect(learned).toContain("0b vlan 10 at 1");
+		},
+	);
+
+	test("a loop that changes VLAN on the way round storms: one cable takes 10 to 20, and another takes 20 back to 10", () => {
+		const t = vlanNet(
+			["a1:10", "a2:20"],
+			[
+				["a7-a8", access(10), access(20)],
+				["a5-a6", access(20), access(10)],
+			],
+		);
+		t.send(1, arpRequest(1, 9));
+		// Out of 7 and 6 in VLAN 10, into 8 and 5 in 20, out of 5 and 8, and back into 6 and 7 in VLAN 10.
+		const round = t.taps.slice(0, 5).map(({ e }) => `${e.from} vlan ${e.vlan}${e.looped ? " looped" : ""}`);
+		expect(round.sort()).toEqual(["1 vlan 10", "5 vlan 20", "6 vlan 10 looped", "7 vlan 10 looped", "8 vlan 20"]);
+		expect(t.storming("a")).toBe(true);
+	});
+
+	test("a storm that ends forgets the tables of the VLANs it looped in, and keeps the others", () => {
+		const t = vlanNet(
+			["a1:10", "a2:20", "b1:10", "b2:20"],
+			[
+				["a7-b7", access(10)],
+				["a8-b8", access(10)],
+				["a6-b6", access(20)],
+			],
+		);
+		t.send(2, arpRequest(2, 9));
+		t.send(B + 2, arpReply(B + 2, 2));
+		const twenty = ["0c vlan 20 at 2", "14 vlan 20 at 6"];
+		expect(t.table("a").filter((e) => e.includes("vlan 20"))).toEqual(twenty);
+		t.send(1, arpRequest(1, 9));
+		t.run(50);
+		expect(t.storming("a")).toBe(true);
+		t.cut("a7");
+		t.run(STORM_QUIET_MS * 2);
+		expect(t.storming("a")).toBe(false);
+		expect(t.table("a")).toEqual(twenty);
 	});
 });
