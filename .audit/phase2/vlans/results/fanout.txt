@@ -1,0 +1,38 @@
+The frames that cross a cable at the instant of one broadcast. Made by node .audit/phase2/vlans/fanout.mjs <fabric.ts> 300 1, one at a time.
+
+== 4f9aa89
+mesh of 4 switches, 0 join(s): 16 unlooped, 33 turns, 0.5 ms
+mesh of 4 switches, 1 join(s): 16 unlooped, 38 turns, 0.1 ms
+mesh of 4 switches, 2 join(s): 16 unlooped, 38 turns, 0.1 ms
+mesh of 6 switches, 1 join(s): 326 unlooped, 1370 turns, 3.5 ms
+mesh of 6 switches, 2 join(s): 326 unlooped, 1370 turns, 1.6 ms
+mesh of 6 switches, 3 join(s): 326 unlooped, 1435 turns, 1.6 ms
+mesh of 8 switches, 1 join(s): 9281 unlooped, 40469 turns, 34.9 ms
+300 dense labs, seed 1: unlooped p50 2, p90 77, p99 268, max 406; turns p50 1, p90 170, p99 937, max 1341
+worst {"turns":1341,"unlooped":406,"ms":1,"caseSeed":3262543613,"cables":31,"accessOnly":false}; churn left 0 inconsistent; 0 threw
+
+== cfd20a2
+mesh of 4 switches, 0 join(s): 16 unlooped, 33 turns, 0.5 ms
+mesh of 4 switches, 1 join(s): 96 unlooped, 203 turns, 0.6 ms
+mesh of 4 switches, 2 join(s): 496 unlooped, 1053 turns, 2.3 ms
+mesh of 6 switches, 1 join(s): 11872 unlooped, 32471 turns, 26.8 ms
+mesh of 6 switches, 2 join(s): 35172 unlooped, 73288 turns, 51.9 ms
+mesh of 6 switches, 3 join(s): 40205 unlooped, 80766 turns, 45.8 ms
+mesh of 8 switches, 1 join(s): 61023 unlooped, 138264 turns, 82.5 ms
+300 dense labs, seed 1: unlooped p50 2, p90 31256, p99 82748, max 106086; turns p50 1, p90 55268, p99 158561, max 184514
+worst {"turns":184514,"unlooped":106086,"ms":271,"caseSeed":4217005310,"cables":28,"accessOnly":false}; churn left 0 inconsistent; 0 threw
+
+== this commit
+mesh of 4 switches, 0 join(s): 10 unlooped, 9 turns, 0.2 ms
+mesh of 4 switches, 1 join(s): 20 unlooped, 19 turns, 0.1 ms
+mesh of 4 switches, 2 join(s): 30 unlooped, 29 turns, 0.1 ms
+mesh of 6 switches, 1 join(s): 52 unlooped, 51 turns, 0.1 ms
+mesh of 6 switches, 2 join(s): 78 unlooped, 77 turns, 0.2 ms
+mesh of 6 switches, 3 join(s): 80 unlooped, 79 turns, 0.6 ms
+mesh of 8 switches, 1 join(s): 96 unlooped, 95 turns, 0.2 ms
+300 dense labs, seed 1: unlooped p50 2, p90 35, p99 87, max 104; turns p50 1, p90 71, p99 161, max 180
+worst {"turns":180,"unlooped":104,"ms":0,"caseSeed":1111145947,"cables":30,"accessOnly":false}; churn left 0 inconsistent; 0 threw
+
+== this commit, 3,000 labs, seed 5
+3000 dense labs, seed 5: unlooped p50 2, p90 33, p99 92, max 123; turns p50 1, p90 67, p99 169, max 219
+worst {"turns":219,"unlooped":121,"ms":0,"caseSeed":2562057197,"cables":30,"accessOnly":false}; churn left 0 inconsistent; 0 threw

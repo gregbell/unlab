@@ -4,8 +4,8 @@ import type { PortNo, PortVlan, VlanId } from "../model/index.ts";
 import { vlanTag, withoutTag, withTag } from "../net/index.ts";
 import {
 	Fabric,
-	LOOPED_LIMIT,
 	PACE_MS,
+	PACED_LIMIT,
 	QUEUE_LIMIT,
 	STORM_QUIET_MS,
 	type StormReading,
@@ -419,20 +419,17 @@ describe("a loop of cables", () => {
 		expect(looped() - full).toBeLessThanOrEqual((6 * 1000) / PACE_MS + 6);
 	});
 
-	test("marks a frame as looped from where it comes back to a switch that it had left", () => {
+	test("marks a frame as looped from where it comes back to a switch that it had left, which a copy that came into a switch after another does in its turn", () => {
 		const t = net(["a", "b", "c"], TRIANGLE);
 		t.send("a", arpRequest(1, 9));
 		t.drain();
-		// Out of a to b and c, on from each to the other, and from there back to a.
-		expect(t.taps.slice(0, 7).map(({ on, e }) => `${on}${e.from}${e.looped ? " looped" : ""}`)).toEqual([
-			"a1",
-			"b8",
-			"c7",
-			"c8",
-			"b7",
-			"a8 looped",
-			"a7 looped",
-		]);
+		const rows = () => t.taps.map(({ on, e }) => `${on}${e.from}${e.looped ? " looped" : ""}`);
+		// Out of a to b and c, and on from each to the other, which a copy from a had come into.
+		expect(rows()).toEqual(["a1", "b8", "c7", "c8", "b7"]);
+		expect(t.fabric.waiting).toBe(2);
+		// What those two send back to a waits a millisecond.
+		t.run(1);
+		expect(rows().slice(5, 7).sort()).toEqual(["a7 looped", "a8 looped"]);
 		t.run(5);
 		expect(t.taps.slice(7).every(({ e }) => e.looped)).toBe(true);
 	});
@@ -510,7 +507,7 @@ describe("a loop of cables", () => {
 			t.run(10);
 			most = Math.max(most, t.fabric.waiting);
 		}
-		expect(most).toBeLessThanOrEqual(12 * LOOPED_LIMIT);
+		expect(most).toBeLessThanOrEqual(12 * PACED_LIMIT);
 		for (const on of ["a", "b", "c", "d"] as const) {
 			const { dropped } = t.fabric.totals(t.slot(on));
 			// Three cables bring a thousand a second each, and each is to go out of the other two.
@@ -956,6 +953,57 @@ describe("VLANs", () => {
 			t.run(STORM_QUIET_MS * 2);
 			expect(t.table("a")).toEqual(learned);
 			expect(learned).toContain("0b vlan 10 at 1");
+		},
+	);
+
+	test("one broadcast into a mesh of six switches with a cable that joins two VLANs is carried at once to each switch in each VLAN, and no further until its turn", () => {
+		const letters = ["a", "b", "c", "d", "e", "f"];
+		const free = new Map(letters.map((letter) => [letter, 1]));
+		const take = (letter: string) => {
+			const port = free.get(letter) as number;
+			free.set(letter, port + 1);
+			return `${letter}${port}`;
+		};
+		const mesh = letters.flatMap((a, i) =>
+			letters.slice(i + 1).map((b) => [`${take(a)}-${take(b)}`, trunk("all")] as const),
+		);
+		const t = vlanNet(["a6:10", "f6:20"], [...mesh, ["b7-b8", access(10), access(20)]]);
+		const from = t.at("a6");
+		t.fabric.receive(from.slot, from.port, arpRequest(6, 9), 0);
+		while (t.fabric.drain(0, 64) > 0);
+		const places = new Set(t.taps.map(({ on, e }) => `${on} in VLAN ${e.vlan}`));
+		expect(places.size).toBe(12);
+		expect(t.reached()[5 * 8 + 6]).toBeGreaterThan(0);
+		// The first copy to come into a switch in a VLAN goes on at once, to its seven cables at most.
+		expect(t.taps.length).toBeLessThanOrEqual(1 + places.size * 7);
+		t.run(20);
+		expect(letters.filter((letter) => t.storming(letter))).toEqual(letters);
+	});
+
+	test.each([
+		["frames that go by the table", () => ping(1, B + 2)],
+		["broadcasts", () => arpRequest(1, 9)],
+	] as const)(
+		"%s cross a cable from one VLAN to another, and the next cable, at once, however many there are",
+		(_, frame) => {
+			const t = vlanNet(
+				["a1:10", "b2:20"],
+				[
+					["a7-a8", access(10), access(20)],
+					["a6-b6", access(20)],
+				],
+			);
+			t.send(1, arpRequest(1, B + 2));
+			t.send(B + 2, arpReply(B + 2, 1));
+			t.clear();
+			const from = t.at("a1");
+			for (let i = 0; i < 1000; i++) {
+				t.fabric.receive(from.slot, from.port, frame(), 100);
+				while (t.fabric.drain(100, 64) > 0);
+			}
+			expect(t.reached()).toEqual({ [B + 2]: 1000 });
+			expect(t.taps.filter(({ e }) => e.looped)).toEqual([]);
+			expect([t.storming("a"), t.storming("b")]).toEqual([false, false]);
 		},
 	);
 

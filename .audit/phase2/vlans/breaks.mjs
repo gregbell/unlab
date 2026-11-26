@@ -230,6 +230,20 @@ export const BREAKS = [
 		tests: [{ kind: "unit", files: ["src/runtime/pump.test.ts"] }],
 	},
 	{
+		name: "every copy of a frame goes on at once until it has looped",
+		file: FABRIC,
+		from: "paced: looped || second,",
+		to: "paced: looped,",
+		tests: [{ kind: "unit", files: ["src/runtime/fabric.test.ts"] }],
+	},
+	{
+		name: "every frame that came over a cable waits its turn",
+		file: FABRIC,
+		from: "paced: looped || second,",
+		to: "paced: looped || came !== null,",
+		tests: [fabricUnit],
+	},
+	{
 		name: "the frame detail dumps a frame without the tag it came in with",
 		file: "src/ui/capture/frame-detail-model.ts",
 		from: "const wire = onWire(e.bytes, e.vlan, e.tagged, e.from);",

@@ -404,9 +404,12 @@ a separate window opens when you wanted your own browser, reconnect `unlab` in
   it is storming, on its faceplate, in `topology` and in the capture, with the looped
   frames it takes a second. The lab lets 1,000 looped frames a second along each cable and
   keeps at most 64 waiting there, so the machines and the page still answer. What does not
-  fit is dropped and counted, and no other frame is slowed. When its storm ends, a switch
-  forgets its MAC table for each VLAN that looped frames came in, so that pings work again.
-  A mesh storms on until every loop is cut.
+  fit is dropped and counted. A copy of a frame that comes into a switch in a VLAN after
+  another copy of it has taken a second way there, so what the switch sends on of it waits
+  its turn at the same pace, with no looped mark. No other frame is slowed, and where a
+  frame has one way to each switch, nothing waits. When its storm ends, a switch forgets
+  its MAC table for each VLAN that looped frames came in, so that pings work again. A mesh
+  storms on until every loop is cut.
 - A port is in VLAN 1 until `vlan` puts it in another, and is again once nothing is in it,
   so whatever is plugged in next starts there. A cut or a reboot leaves it as it is. Each
   VLAN floods within itself, and a switch learns addresses for each VLAN apart, so a loop in

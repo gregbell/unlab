@@ -12,8 +12,14 @@
 // there, as lab metadata that is never on the wire. One that comes back to a
 // switch in a VLAN it has been in there has looped, and stays so: a cable from
 // one VLAN to another is crossed once, and a way round that comes back to the
-// first VLAN is a loop. Looped frames wait their turn at a pace, and nothing
-// else is slowed.
+// first VLAN is a loop. Looped frames wait their turn at a pace.
+//
+// The copies of a frame that a switch flooded share where they have come in.
+// The first to come into a switch in a VLAN goes on at once. One that comes in
+// after it goes on in its turn, at the pace, and is not marked: it has taken
+// another way, and may never loop. So one broadcast costs no more at once than
+// a flood for each switch and VLAN it reaches, however the lab is wired, and a
+// lab where a frame has one way to each switch waits for nothing.
 //
 // A frame is classified into a VLAN at the port it comes in by: the VLAN of its
 // tag, or the port's own when it has none. A port drops a frame of a VLAN that
@@ -126,11 +132,11 @@ export interface SlotPort {
 /** As many switches as a frame's mark has bits for. The lab has no more. */
 export const SLOTS = 8;
 const PORTS = 8;
-/** Frames that wait on one direction of a cable, of those that have not looped. More are dropped. */
+/** Frames that wait on one direction of a cable, of those that go at once. More are dropped. */
 export const QUEUE_LIMIT = 256;
-/** Looped frames that wait on one direction. More are dropped, which is what keeps a storm from growing. */
-export const LOOPED_LIMIT = 64;
-/** One looped frame a millisecond in each direction: 1,000 a second. */
+/** Frames that wait their turn on one direction. More are dropped, which is what keeps a storm from growing. */
+export const PACED_LIMIT = 64;
+/** One frame that waits its turn a millisecond in each direction: 1,000 a second. */
 export const PACE_MS = 1;
 /** A storm is over when no looped frame has come in for this long. */
 export const STORM_QUIET_MS = 100;
@@ -174,12 +180,26 @@ function hasLeft(trail: Trail | null, slot: number, vlan: number): boolean {
 	return false;
 }
 
-interface Waiting {
-	readonly due: number;
-	readonly frame: Uint8Array;
+/** A switch in a VLAN, as one number. */
+const place = (slot: number, vlan: number): number => slot * 4096 + vlan;
+
+/** What a switch gives the copies of a frame that it sends on. */
+interface Sent {
 	/** Null once it has looped, which it stays. */
 	readonly trail: Trail | null;
 	readonly looped: boolean;
+	/** It waits its turn: it has looped, or another copy had come into the switch in its VLAN. */
+	readonly paced: boolean;
+	/**
+	 * Where a copy of the frame has come in over a cable, since a switch first flooded it. Its copies share it. Null
+	 * for a frame that has gone only by the table, and once it has looped.
+	 */
+	readonly reached: Set<number> | null;
+}
+
+interface Waiting extends Sent {
+	readonly due: number;
+	readonly frame: Uint8Array;
 }
 
 /** One way along a cable between two switches. */
@@ -190,8 +210,9 @@ class Direction {
 	ready = false;
 	/** Its cable is out. */
 	gone = false;
-	waitingLooped = 0;
-	/** When the last looped frame put on it is due. */
+	/** Those that wait their turn. */
+	waitingPaced = 0;
+	/** When the last of them is due. */
 	paced = 0;
 	/** Its cable is whole. */
 	up = true;
@@ -208,7 +229,7 @@ class Direction {
 		const lost = this.q.length - this.head;
 		this.q = [];
 		this.head = 0;
-		this.waitingLooped = 0;
+		this.waitingPaced = 0;
 		this.paced = 0;
 		return lost;
 	}
@@ -328,8 +349,8 @@ export class Fabric {
 	/** How many switches storm. */
 	#storming = 0;
 	#waiting = 0;
-	/** Those of them that have looped. */
-	#loopedWaiting = 0;
+	/** Those of them that wait their turn. */
+	#pacedWaiting = 0;
 
 	constructor(events: FabricEvents = {}, options: FabricOptions = {}) {
 		this.#events = events;
@@ -339,7 +360,8 @@ export class Fabric {
 	/**
 	 * A new switch with nothing plugged in, at the lowest slot that is free. A
 	 * frame that still waits somewhere can have left the switch that had the
-	 * slot before, and is then taken for looped here: it is paced for nothing.
+	 * slot before, or have a copy that came into it, and is then taken for
+	 * looped here, or for the second to come: it is paced for nothing.
 	 */
 	addSwitch(): number {
 		const slot = this.#switches.indexOf(undefined);
@@ -446,7 +468,7 @@ export class Fabric {
 
 	/** What waits in the direction is lost. */
 	#lose(dir: Direction): void {
-		this.#loopedWaiting -= dir.waitingLooped;
+		this.#pacedWaiting -= dir.waitingPaced;
 		this.#waiting -= dir.empty();
 	}
 
@@ -523,6 +545,10 @@ export class Fabric {
 		const looped = came !== null && (came.looped || hasLeft(came.trail, slot, vlan));
 		// A frame that had looped waited for its turn, and is counted at it: that is what the pace holds to.
 		if (came && looped) this.#stormed(sw, slot, vlan, now, came.looped ? came.due : now);
+		// Another copy of the frame came into this switch in this VLAN first, by another way.
+		const here = place(slot, vlan);
+		const second = !looped && came?.reached?.has(here) === true;
+		if (!looped) came?.reached?.add(here);
 		const plain = tag === null ? frame : withoutTag(frame);
 		/** The frame as it goes out of a trunk, made when the first needs it. */
 		let tagged = tag === vlan ? frame : null;
@@ -536,13 +562,20 @@ export class Fabric {
 		let flood: Flood | null = null;
 		let to = 0;
 		let tags = tag === vlan ? 1 << (from - 1) : 0;
-		const left = looped ? null : { slot, vlan, before: came?.trail ?? null };
+		/** Made for the first copy, when the switch knows whether it floods. */
+		let sent: Sent | null = null;
 		const out = (p: number, port: Port): boolean => {
 			const egress = sw.modes[p];
 			if (!carries(egress, vlan)) return false;
-			if (!egress.trunk || egress.vlan === vlan) return this.#send(sw, port, plain, now, left, looped);
+			sent ??= {
+				trail: looped ? null : { slot, vlan, before: came?.trail ?? null },
+				looped,
+				paced: looped || second,
+				reached: looped ? null : (came?.reached ?? (flood ? new Set() : null)),
+			};
+			if (!egress.trunk || egress.vlan === vlan) return this.#send(sw, port, plain, now, sent);
 			tagged ??= withTag(plain, vlan);
-			if (!this.#send(sw, port, tagged, now, left, looped)) return false;
+			if (!this.#send(sw, port, tagged, now, sent)) return false;
 			tags |= 1 << (p - 1);
 			return true;
 		};
@@ -600,14 +633,14 @@ export class Fabric {
 		}
 	}
 
-	#send(sw: Switch, port: Port, frame: Uint8Array, now: number, left: Trail | null, looped: boolean): boolean {
+	#send(sw: Switch, port: Port, frame: Uint8Array, now: number, sent: Sent): boolean {
 		const c = port.counters;
 		if (!port.up) {
 			c.dropped++;
 			return false;
 		}
 		if (port.out) {
-			if (!this.#enqueue(port.out, frame, now, left, looped)) {
+			if (!this.#enqueue(port.out, frame, now, sent)) {
 				c.dropped++;
 				sw.totals.dropped++;
 				if (sw.storm) sw.storm.dropped++;
@@ -630,20 +663,20 @@ export class Fabric {
 	}
 
 	/** False when as many as may wait there are waiting. */
-	#enqueue(dir: Direction, frame: Uint8Array, now: number, trail: Trail | null, looped: boolean): boolean {
+	#enqueue(dir: Direction, frame: Uint8Array, now: number, sent: Sent): boolean {
 		const { q } = dir;
 		let due = 0;
-		if (looped) {
-			if (dir.waitingLooped >= LOOPED_LIMIT) return false;
-			dir.waitingLooped++;
-			this.#loopedWaiting++;
+		if (sent.paced) {
+			if (dir.waitingPaced >= PACED_LIMIT) return false;
+			dir.waitingPaced++;
+			this.#pacedWaiting++;
 			// From when the one before it is due, not from now, so the pace holds however late a turn comes.
 			dir.paced = Math.max(now, dir.paced) + PACE_MS;
 			due = dir.paced;
-		} else if (q.length - dir.head - dir.waitingLooped >= QUEUE_LIMIT) {
+		} else if (q.length - dir.head - dir.waitingPaced >= QUEUE_LIMIT) {
 			return false;
 		}
-		const item: Waiting = { due, frame, trail, looped };
+		const item: Waiting = { due, frame, ...sent };
 		this.#waiting++;
 		q.push(item);
 		for (let i = q.length - 1; i > dir.head && q[i - 1].due > due; i--) {
@@ -690,9 +723,9 @@ export class Fabric {
 				dir.q.splice(0, dir.head);
 				dir.head = 0;
 			}
-			if (item.looped) {
-				dir.waitingLooped--;
-				this.#loopedWaiting--;
+			if (item.paced) {
+				dir.waitingPaced--;
+				this.#pacedWaiting--;
 			}
 			this.#waiting--;
 			this.#arm(dir, now);
@@ -724,15 +757,15 @@ export class Fabric {
 		storm.looped++;
 	}
 
-	/** Whether a looped frame waits on a cable that still leads to the switch, by whatever way. */
+	/** Whether a frame that has looped, or may yet, waits on a cable that still leads to the switch, by whatever way. */
 	#stillComing(slot: number): boolean {
-		if (this.#loopedWaiting === 0) return false;
+		if (this.#pacedWaiting === 0) return false;
 		let reached = 1 << slot;
 		for (let grew = true; grew; ) {
 			grew = false;
 			for (const dir of this.#dirs) {
 				if (!dir.up || (reached & (1 << dir.fromSlot)) === 0) continue;
-				if (dir.waitingLooped > 0) return true;
+				if (dir.waitingPaced > 0) return true;
 				if ((reached & (1 << dir.toSlot)) !== 0) continue;
 				reached |= 1 << dir.toSlot;
 				grew = true;
@@ -775,8 +808,8 @@ export class Fabric {
 			if (at < 0 || due < at) at = due;
 		}
 		if (this.#storming === 0) return at;
-		// While a looped frame waits, carrying it is what there is to do next, however long a storm has been quiet.
-		const soonest = this.#loopedWaiting > 0 ? at : -1;
+		// While a frame waits its turn, carrying it is what there is to do next, however long a storm has been quiet.
+		const soonest = this.#pacedWaiting > 0 ? at : -1;
 		for (const sw of this.#switches) {
 			if (!sw?.storm) continue;
 			const quiet = Math.max(soonest, sw.loopedAt + STORM_QUIET_MS);
