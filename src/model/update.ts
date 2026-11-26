@@ -67,6 +67,7 @@ import {
 	type ToolName,
 	type WebMcp,
 } from "./types.ts";
+import { settleVlans, setVlan } from "./vlans.ts";
 
 /**
  * Every tool runs at once except spawn, which takes the browser's memory and
@@ -87,6 +88,8 @@ export const DEFAULT_POLICIES: Readonly<Record<ToolName, Policy>> = {
 	switch_remove: "ask",
 	switch_cable: "run",
 	switch_uncable: "run",
+	port_vlan: "run",
+	port_trunk: "run",
 	checkpoint_save: "run",
 	checkpoint_restore: "ask",
 	checkpoint_remove: "ask",
@@ -115,6 +118,7 @@ export function initialState(
 		switches: [DEFAULT_SWITCH],
 		shownSwitch: DEFAULT_SWITCH,
 		switchCables: [],
+		portVlans: [],
 		storms: {},
 		sessions: {},
 		panes: emptyPanes(gridFor(area.width, area.height)),
@@ -222,6 +226,8 @@ function reduce(state: LabState, event: LabEvent): Step {
 			return uncable(state, event.port, event.cause);
 		case "cmd/cable-link":
 			return linkCables(state, event.changes, event.cause);
+		case "cmd/vlan":
+			return setVlan(state, event.port, event.vlan);
 		case "cmd/shell":
 			return shell(state, event.machine);
 		case "cmd/focus":
@@ -292,15 +298,15 @@ function reduce(state: LabState, event: LabEvent): Step {
  * What must hold after every change, kept in one place. Each machine has a
  * pane and no pane outlives its machine. No panel stays maximised once the
  * last machine is gone, or it would hide the next one. The keyboard is on a
- * visible pane whenever there is one. The clock runs fast only while something
- * boots.
+ * visible pane whenever there is one. A port that nothing is in is in VLAN 1.
+ * The clock runs fast only while something boots.
  */
 function settle(before: LabState, reduced: Step): Step {
-	const state = settleKeyboard(followMachines(reduced.state));
+	const vlans = settleVlans(before, reduced.state);
+	const state = settleKeyboard(followMachines(vlans.state));
+	const effects = [...reduced.effects, ...vlans.effects];
 	const hz = clockHz(state);
-	return hz === clockHz(before)
-		? step(state, reduced.effects)
-		: step(state, [...reduced.effects, { type: "clock", hz }]);
+	return hz === clockHz(before) ? step(state, effects) : step(state, [...effects, { type: "clock", hz }]);
 }
 
 function followMachines(state: LabState): LabState {

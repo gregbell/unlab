@@ -3,7 +3,9 @@
 //
 // Some terms say what a frame is or whose: a protocol, a machine name (either
 // end, by any of its MACs or the addresses the lab set), one of its NICs
-// (`node2:eth1`, by its MAC alone), an IPv4 address, or a MAC address. They
+// (`node2:eth1`, by its MAC alone), an IPv4 address, a MAC address, or the
+// VLAN that a switch carried it in (`vlan 10`, two words; `vlan` alone is the
+// machine or switch of that name, as it was before VLANs). They
 // match the frame on every switch that carries it. The others say where it was:
 // a switch (`lan`), the cable in one of its ports (`lan:3`), or `port:N`, that
 // port of every switch.
@@ -39,6 +41,8 @@ export interface CarriedFrame {
 	readonly bytes: Uint8Array;
 	/** Who was who when it was captured. */
 	readonly names: NameBook;
+	/** The VLAN the switch carried it in. Left out, 1. */
+	readonly vlan?: number;
 }
 
 /** A change to what is in a port, or to its link. */
@@ -62,7 +66,7 @@ export type FilterScope =
 	/** It is one switch, or with a port one cable, and nothing else. */
 	| { readonly kind: "place"; readonly switch: string; readonly port: number | null }
 	/** It names switches or cables among other terms. */
-	| { readonly kind: "places" };
+	| { readonly kind: "places"; readonly places: readonly FilterPlace[] };
 
 export interface CaptureFilter {
 	/** As typed. */
@@ -158,6 +162,11 @@ const PROTOCOLS: ReadonlyMap<string, (f: Uint8Array) => boolean> = new Map([
 ]);
 
 const OR = "or";
+/** Before a VLAN's ID, as its own word. */
+export const VLAN_WORD = "vlan";
+/** What reads as a VLAN ID after `vlan`, in range or not. */
+const VLAN_ID = /^\d+$/;
+const MAX_VLAN = 4094;
 /** Before a port's number, for that port of every switch. */
 export const PORT_WORD = "port";
 const MAC = /^[0-9a-f]{2}([:-][0-9a-f]{2}){5}$/;
@@ -175,6 +184,8 @@ function isMachine(word: string, { names }: NameBook): boolean {
 	for (const name of names.values()) if (name === word) return true;
 	return false;
 }
+
+const isNamed = (word: string, known: NameBook): boolean => known.switches.has(word) || isMachine(word, known);
 
 const crosses = (f: CarriedFrame, port: number): boolean => f.from === port || (f.to & (1 << (port - 1))) !== 0;
 
@@ -215,6 +226,10 @@ function nicTerm(name: string, nic: NicNo): Term {
 
 function portTerm(port: number): Term {
 	return { frame: (f) => crosses(f, port), link: (c) => c.port.port === port, at: (p) => p.port === port };
+}
+
+function vlanTerm(id: number): Term {
+	return { frame: (f) => (f.vlan ?? 1) === id, link: always, at: always };
 }
 
 function addressTerm(ip: number): Term {
@@ -273,28 +288,39 @@ function notATerm(word: string, token: string, name: string, known: NameBook): s
 		return `No switch is called ${name}, so use ${all.slice(0, -1).join(", ")} or ${all.at(-1)}.`;
 	}
 	const places = several ? "a switch (lan), a cable (lan:3), " : "";
-	return `Capture cannot read ${token}, so use a protocol, a machine, a NIC (node2:eth1), ${places}an address, a MAC or port:N.`;
+	return `Capture cannot read ${token}, so use a protocol, a machine, a NIC (node2:eth1), ${places}an address, a MAC, vlan N or port:N.`;
 }
 
 /** `known` is who is who now, so that a word that names no machine or switch is not taken for one. */
 export function compileFilter(source: string, known: NameBook): FilterResult {
 	const groups: Term[][] = [[]];
 	let lastOr: { token: string; start: number } | null = null;
-	const orError = (token: string, start: number): FilterResult => ({
+	const fail = (token: string, start: number, message: string): FilterResult => ({
 		ok: false,
-		error: {
-			token,
-			start,
-			end: start + token.length,
-			message: `Capture needs a term on each side of ${OR}, such as arp or icmp.`,
-		},
+		error: { token, start, end: start + token.length, message },
 	});
+	const orError = (token: string, start: number): FilterResult =>
+		fail(token, start, `Capture needs a term on each side of ${OR}, such as arp or icmp.`);
 
-	for (const m of source.matchAll(/\S+/g)) {
-		const token = m[0];
-		const start = m.index;
+	const tokens = [...source.matchAll(/\S+/g)];
+	for (let i = 0; i < tokens.length; i++) {
+		const token = tokens[i][0];
+		const start = tokens[i].index;
 		const word = token.toLowerCase();
 		const group = groups[groups.length - 1];
+		const after = tokens[i + 1];
+		// A machine or switch called vlan was named before the word was, so vlan alone is still its name.
+		if (word === VLAN_WORD && (VLAN_ID.test(after?.[0] ?? "") || !isNamed(word, known))) {
+			if (!after) return fail(token, start, `Capture needs a VLAN ID after ${VLAN_WORD}, such as vlan 10.`);
+			i++;
+			const [id] = after;
+			const vlan = VLAN_ID.test(id) ? Number(id) : 0;
+			if (vlan < 1 || vlan > MAX_VLAN) {
+				return fail(id, after.index, `${id} is no VLAN, so use one from 1 to ${MAX_VLAN}, such as vlan 10.`);
+			}
+			group.push(vlanTerm(vlan));
+			continue;
+		}
 		if (word === OR) {
 			if (group.length === 0) return orError(token, start);
 			groups.push([]);
@@ -302,9 +328,7 @@ export function compileFilter(source: string, known: NameBook): FilterResult {
 			continue;
 		}
 		const term = parseTerm(word, token, known);
-		if (typeof term === "string") {
-			return { ok: false, error: { token, start, end: start + token.length, message: term } };
-		}
+		if (typeof term === "string") return fail(token, start, term);
 		group.push(term);
 	}
 	if (lastOr && groups[groups.length - 1].length === 0) return orError(lastOr.token, lastOr.start);
@@ -341,7 +365,7 @@ function filterOf(source: string, groups: readonly (readonly Term[])[]): Capture
 function scopeOf(terms: readonly Term[]): FilterScope {
 	const places = terms.flatMap(({ place }) => place ?? []);
 	if (places.length === 0) return { kind: "everywhere" };
-	return terms.length === 1 ? { kind: "place", ...places[0] } : { kind: "places" };
+	return terms.length === 1 ? { kind: "place", ...places[0] } : { kind: "places", places };
 }
 
 /** The empty filter. */

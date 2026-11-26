@@ -2,7 +2,7 @@
 
 import { Worker } from "node:worker_threads";
 import { address } from "../../src/model/testkit.ts";
-import type { PortNo } from "../../src/model/types.ts";
+import type { PortNo, PortVlan } from "../../src/model/types.ts";
 import { addressStr, defaultAddress, ip4str, macStr, NICS, type NicNo, nodeMac } from "../../src/net/index.ts";
 import { nodeClock } from "../../src/runtime/clock.ts";
 import { Fabric, type MacEntry, type StormReading, type TapEvent } from "../../src/runtime/fabric.ts";
@@ -50,6 +50,8 @@ export interface TestMachine {
 /** One switch of the lab's, by its ports. */
 export interface TestSwitch {
 	setLink(port: PortNo, up: boolean): void;
+	/** What the port carries from now on. */
+	setVlan(port: PortNo, vlan: PortVlan): void;
 	macTable(): readonly MacEntry[];
 	/** What it has dropped at its cables to other switches, which were full. */
 	readonly dropped: number;
@@ -101,6 +103,7 @@ export async function bootLab(setups: readonly MachineSetup[], wiring: Wiring = 
 		const slot = fabric.addSwitch();
 		return {
 			setLink: (port, up) => fabric.setLink(slot, port, up),
+			setVlan: (port, vlan) => fabric.setVlan(slot, port, vlan),
 			macTable: () => fabric.macTable(slot, clock.now()),
 			get dropped() {
 				return fabric.totals(slot).dropped;

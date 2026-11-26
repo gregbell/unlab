@@ -29,10 +29,14 @@ import {
 	type Plug,
 	PORTS,
 	type PortRef,
+	type PortVlan,
 	type Step,
 	type SwitchCable,
 	type SwitchName,
+	type VlanId,
+	type VlanPort,
 } from "./types.ts";
+import { heldVlans, parseVlanId, vlanEffects, vlanList } from "./vlans.ts";
 
 export function saveWorkspace(state: LabState): string {
 	const nodes = machineList(state)
@@ -67,6 +71,11 @@ export function saveWorkspace(state: LabState): string {
 		switches: state.switches,
 		shown: state.shownSwitch,
 		cables: state.switchCables.map(({ ends, link }) => ({ ends, cut: link === "cut" })),
+		vlans: state.portVlans.map(({ port, vlan }) =>
+			vlan.mode === "access"
+				? { port, vlan: vlan.vlan }
+				: { port, trunk: { allowed: vlan.allowed, native: vlan.native } },
+		),
 		nodes,
 		panels: state.panels.open,
 		order: state.panes.order,
@@ -117,6 +126,33 @@ function readCable(saved: unknown, switches: LabState["switches"]): SwitchCable 
 
 function readCables(saved: unknown, switches: LabState["switches"]): readonly SwitchCable[] {
 	return Array.isArray(saved) ? saved.map((cable: unknown) => readCable(cable, switches)) : invalid();
+}
+
+function readVlanId(saved: unknown): VlanId {
+	return (typeof saved === "number" ? parseVlanId(String(saved)) : null) ?? invalid();
+}
+
+function readPortVlan(saved: Record<string, unknown>): PortVlan {
+	if (saved.trunk === undefined) return { mode: "access", vlan: readVlanId(saved.vlan) };
+	const { trunk } = saved;
+	if (!record(trunk)) return invalid();
+	const { allowed } = trunk;
+	if (allowed !== "all" && !Array.isArray(allowed)) return invalid();
+	return {
+		mode: "trunk",
+		allowed: allowed === "all" ? "all" : vlanList(allowed.map(readVlanId)),
+		native: readVlanId(trunk.native),
+	};
+}
+
+function readVlans(saved: unknown, switches: LabState["switches"]): readonly VlanPort[] {
+	if (!Array.isArray(saved)) return invalid();
+	const vlans = saved.map((held: unknown): VlanPort => {
+		if (!record(held)) return invalid();
+		return { port: readPort(held.port, switches) ?? invalid(), vlan: readPortVlan(held) };
+	});
+	const ports = vlans.map(({ port }) => port);
+	return ports.some((port, i) => ports.findIndex((other) => samePort(other, port)) !== i) ? invalid() : vlans;
 }
 
 function readNic(saved: unknown, switches: LabState["switches"]): SavedNic {
@@ -224,6 +260,8 @@ const UPGRADES: readonly ((lab: SavedLab) => SavedLab)[] = [
 	(lab) => ({ ...withPortRefs(lab), switches: [DEFAULT_SWITCH] }),
 	// No cable went from one switch to another.
 	(lab) => ({ ...lab, cables: [] }),
+	// Every port was in VLAN 1.
+	(lab) => ({ ...lab, vlans: [] }),
 ];
 const VERSION = UPGRADES.length + 1;
 
@@ -258,6 +296,7 @@ export function restoreWorkspace(base: LabState, raw: string | null): Step {
 	const saved = readLab(raw);
 	const switches = readSwitches(saved.switches);
 	const switchCables = readCables(saved.cables, switches);
+	const vlans = readVlans(saved.vlans, switches);
 	const nodes: BootNode[] = [];
 	const taken: PortRef[] = switchCables.flatMap(({ ends }) => ends);
 	if (taken.some((port, i) => taken.findIndex((other) => samePort(other, port)) !== i)) return invalid();
@@ -313,9 +352,10 @@ export function restoreWorkspace(base: LabState, raw: string | null): Step {
 	const shownSwitch = switches.find((name) => name === saved.shown) ?? DEFAULT_SWITCH;
 	const wired: LabState = { ...base, switches, shownSwitch, switchCables };
 	const booted = bootMachines(wired, nodes, saved.nextN, 0);
-	const { state } = booted;
-	// The cables first, so a machine's first frame crosses them.
-	const effects = [...cableEffects(wired), ...booted.effects];
+	// A machine that failed holds no port, so the one it held is in VLAN 1.
+	const state = { ...booted.state, portVlans: heldVlans(booted.state, vlans) };
+	// The cables and what their ports carry first, so a machine's first frame crosses them.
+	const effects = [...cableEffects(wired), ...vlanEffects(state), ...booted.effects];
 	const order = Array.isArray(saved.order) ? saved.order : [];
 	const sorted = [...state.rail].sort((a, b) => order.indexOf(a) - order.indexOf(b));
 	let panes = addPanes(base.panes, sorted);

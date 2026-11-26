@@ -55,6 +55,8 @@ describe("<unlab-agent-panel>", () => {
 			"switch_remove(switch)",
 			"switch_cable(from, to)",
 			"switch_uncable(cable)",
+			"port_vlan(port, vlan)",
+			"port_trunk(port, allow, native)",
 			"checkpoint_save(machine, checkpoint)",
 			"checkpoint_restore(machine, checkpoint)",
 			"checkpoint_remove(machine, checkpoint)",
@@ -212,7 +214,7 @@ describe("<unlab-agent-panel>", () => {
 		expect(text(element.querySelector(".about"))).toBe(
 			"This tab has no WebMCP, so no agent can call these yet. In Chrome or Edge 150 or later, open chrome://flags/#enable-webmcp-testing, choose Enabled and relaunch. Or let an agent open the lab in its own Chrome: connect an agent.",
 		);
-		expect(element.querySelectorAll(".tool")).toHaveLength(22);
+		expect(element.querySelectorAll(".tool")).toHaveLength(24);
 		expect(page.getByRole("button", { name: "try a call" }).elements()).toEqual([]);
 
 		const copy = page.getByRole("button", { name: "copy address" }).element();

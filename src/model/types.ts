@@ -60,6 +60,31 @@ export interface SwitchCable {
 	readonly link: "up" | "cut";
 }
 
+declare const vlanId: unique symbol;
+/** A VLAN's number: a whole number from 1 to 4094. */
+export type VlanId = number & { readonly [vlanId]: true };
+export const MIN_VLAN = 1;
+export const MAX_VLAN = 4094;
+/** The VLAN that every port is in until it is put in another. */
+export const DEFAULT_VLAN = 1 as VlanId;
+
+/**
+ * What a port carries. An access port carries one VLAN, untagged. A trunk
+ * carries those it allows, each tagged but its native VLAN, which goes
+ * untagged and only when it is one of those allowed.
+ */
+export type PortVlan =
+	| { readonly mode: "access"; readonly vlan: VlanId }
+	| { readonly mode: "trunk"; readonly allowed: readonly VlanId[] | "all"; readonly native: VlanId };
+
+export const DEFAULT_PORT_VLAN: PortVlan = { mode: "access", vlan: DEFAULT_VLAN };
+
+/** A port that is not an access port of VLAN 1. */
+export interface VlanPort {
+	readonly port: PortRef;
+	readonly vlan: PortVlan;
+}
+
 /** A switch that looped frames come into: one on a loop of cables, or one that such a loop reaches. */
 export interface Storm {
 	readonly since: number;
@@ -317,6 +342,8 @@ export type ToolName =
 	| "switch_remove"
 	| "switch_cable"
 	| "switch_uncable"
+	| "port_vlan"
+	| "port_trunk"
 	| "checkpoint_save"
 	| "checkpoint_restore"
 	| "checkpoint_remove"
@@ -412,6 +439,8 @@ export interface LabState {
 	readonly shownSwitch: SwitchName;
 	/** The cables between switches, in the order they were put in. No two share a port, with each other or with a NIC. */
 	readonly switchCables: readonly SwitchCable[];
+	/** The ports that something is in and that are not access ports of VLAN 1, one each. A free port is in VLAN 1. */
+	readonly portVlans: readonly VlanPort[];
 	/** The switches that are storming now, as the runtime last said. Never saved. */
 	readonly storms: Readonly<Partial<Record<SwitchName, Storm>>>;
 	readonly sessions: Readonly<Partial<Record<SessionId, Session>>>;
@@ -605,6 +634,7 @@ export type CommandEvent =
 	| { readonly type: "cmd/cable"; readonly plan: CablePlan; readonly cause: Cause }
 	| { readonly type: "cmd/uncable"; readonly port: PortRef; readonly cause: Cause }
 	| { readonly type: "cmd/cable-link"; readonly changes: readonly CableChange[]; readonly cause: Cause }
+	| { readonly type: "cmd/vlan"; readonly port: PortRef; readonly vlan: PortVlan }
 	| { readonly type: "cmd/shell"; readonly machine: MachineName }
 	| {
 			readonly type: "cmd/focus";
@@ -744,6 +774,8 @@ export type Effect =
 			/** It was cut when it was taken out, so no link changed. */
 			readonly cut?: true;
 	  }
+	/** What the port carries from now on. The switch forgets what it learned on it. */
+	| { readonly type: "port/vlan"; readonly port: PortRef; readonly vlan: PortVlan }
 	| { readonly type: "pty/open"; readonly session: SessionId }
 	| { readonly type: "pty/close"; readonly session: SessionId }
 	| { readonly type: "screen/create"; readonly session: SessionId }

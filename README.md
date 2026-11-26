@@ -75,11 +75,11 @@ on, such as the ready ones for `exec` and the ones that are off or failed for `b
 
 ### Inspect the lab and get help
 
-| Command bar example | What it does                                                                                           |
-| ------------------- | ------------------------------------------------------------------------------------------------------ |
-| `ls`                | List machines and their disks, and each network interface's MAC, address, port, and link.              |
-| `topology`          | List every switch, every port, what is in it, whether its link is up, and which switches are storming. |
-| `help reboot`       | Explain a command. `help` alone lists them all.                                                        |
+| Command bar example | What it does                                                                                                     |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `ls`                | List machines and their disks, and each network interface's MAC, address, port, and link.                        |
+| `topology`          | List every switch, every port, what is in it, whether its link is up, its VLAN, and which switches are storming. |
+| `help reboot`       | Explain a command. `help` alone lists them all.                                                                  |
 
 ### Create machines
 
@@ -96,16 +96,18 @@ on, such as the ready ones for `exec` and the ones that are off or failed for `b
 
 ### Wire machines and switches
 
-| Command bar example | What it does                                                                                                                          |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `mkswitch lan`      | Add a switch called `lan`. Without a name, it is the next free `switch1`. Frames pass from one switch to another only over a cable.   |
-| `rmswitch lan`      | Remove a switch, after a confirmation that lists what is plugged in and its cables to other switches. The machines run on.            |
-| `cable lan wan:8`   | Put a cable between two switches, so that their machines share a segment. `lan` alone is its lowest free port.                        |
-| `uncable lan:3`     | Take out the cable between switches that is in port 3 of `lan`. Either of its two ports names it.                                     |
-| `plug node2 lan:3`  | Move node2's cable to port 3 of `lan`, or plug it in. `lan` alone is its lowest free port. Name one of several with `node2:eth1`.     |
-| `unplug node2:eth1` | Take the interface's cable out and free its port, also for later boots.                                                               |
-| `link down node2`   | Cut node2's cables, whether it is on or off. Reconnect them with `link up node2`. Name one of several with `node2:eth1`.              |
-| `link down lan:3`   | Cut the cable in that port, also one between switches. Both switches forget what they learned over it. `link up lan:3` reconnects it. |
+| Command bar example                      | What it does                                                                                                                                               |
+| ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `mkswitch lan`                           | Add a switch called `lan`. Without a name, it is the next free `switch1`. Frames pass from one switch to another only over a cable.                        |
+| `rmswitch lan`                           | Remove a switch, after a confirmation that lists what is plugged in and its cables to other switches. The machines run on.                                 |
+| `cable lan wan:8`                        | Put a cable between two switches, so that their machines share a segment. `lan` alone is its lowest free port.                                             |
+| `uncable lan:3`                          | Take out the cable between switches that is in port 3 of `lan`. Either of its two ports names it.                                                          |
+| `plug node2 lan:3`                       | Move node2's cable to port 3 of `lan`, or plug it in. `lan` alone is its lowest free port. Name one of several with `node2:eth1`.                          |
+| `unplug node2:eth1`                      | Take the interface's cable out and free its port, also for later boots.                                                                                    |
+| `link down node2`                        | Cut node2's cables, whether it is on or off. Reconnect them with `link up node2`. Name one of several with `node2:eth1`.                                   |
+| `link down lan:3`                        | Cut the cable in that port, also one between switches. Both switches forget what they learned over it. `link up lan:3` reconnects it.                      |
+| `vlan node2 10`                          | Put the port that node2 is in, or one named as `lan:3`, in VLAN 10. It reaches only the ports of VLAN 10. Every port starts in 1.                          |
+| `trunk lan:8 --allow 1,10,20 --native 1` | Make the port of a cable between switches a trunk of VLANs 1, 10 and 20: 10 and 20 tagged, and 1, its native VLAN, untagged. Make the far end a trunk too. |
 
 ### Run commands and open consoles
 
@@ -139,6 +141,7 @@ on, such as the ready ones for `exec` and the ones that are off or failed for `b
 | ---------------------- | ----------------------------------------------------------------------------------------------------------------- |
 | `capture arp or node2` | Maximise the capture with a filter for ARP or traffic involving node2. `node2:eth1` keeps one interface's frames. |
 | `capture lan:3 icmp`   | Show the pings that crossed one cable, the one in port 3 of `lan`. `lan` alone is all that the switch carried.    |
+| `capture vlan 10`      | Show the frames that were in VLAN 10. On a trunk, a row also gives the 802.1Q tag the frame had there.            |
 
 In a capture filter, terms that follow one another must all match, and `or`
 starts an alternative. A term is a protocol, a machine, an interface, an address,
@@ -366,6 +369,8 @@ them. Your choices survive a reload.
 | `switch_remove`      | Remove a switch and unplug its cables.   | `ask me` |
 | `switch_cable`       | Cable two switches together.             | `run`    |
 | `switch_uncable`     | Remove a cable between switches.         | `run`    |
+| `port_vlan`          | Put a switch port in a VLAN.             | `run`    |
+| `port_trunk`         | Make a switch port a trunk.              | `run`    |
 | `checkpoint_save`    | Save a machine's disks as they are now.  | `run`    |
 | `checkpoint_restore` | Go back to a checkpoint and boot.        | `ask me` |
 | `checkpoint_remove`  | Delete a checkpoint.                     | `ask me` |
@@ -412,11 +417,32 @@ a separate window opens when you wanted your own browser, reconnect `unlab` in
   moves a machine to another switch, ping from it first.
 - Cables may make a loop, and a switch can be cabled to itself. One broadcast then goes
   round until a cable of the loop is cut. Every switch that such frames come into says that
-  it is storming, on its faceplate, in `topology` and in the capture, with the looped
-  frames it takes a second. The lab lets 1,000 looped frames a second along each cable and
-  keeps at most 64 waiting there, so the machines and the page still answer. What does not
-  fit is dropped and counted, and no other frame is slowed. When its storm ends, a switch
-  forgets its MAC table, so that pings work again. A mesh storms on until every loop is cut.
+  it is storming, on its faceplate, in `topology` and in the capture, with the looped frames
+  it takes a second. The lab lets 1,000 looped frames a second along each cable and keeps at
+  most 64 waiting there, so the machines and the page still answer. What does not fit is
+  dropped and counted. Where a frame has two ways to a switch, the copy that comes in
+  second, in the same VLAN, is not marked, but what the switch sends on of it waits its turn
+  at the same pace. No other frame is slowed: where a frame has one way to each switch,
+  nothing waits. When its storm ends, a switch forgets its MAC table for each VLAN that
+  looped frames came in, so that pings work again. A mesh storms on until every loop is cut.
+- A port is in VLAN 1 until `vlan` puts it in another, and is again once nothing is in it,
+  so whatever is plugged in next starts there. A cut or a reboot leaves it as it is. Each
+  VLAN floods within itself, and a switch learns addresses for each VLAN apart, so a loop in
+  one VLAN storms in that VLAN alone. A cable from a port in one VLAN to a port in another
+  joins the two, and a frame crosses it once: it has looped only when it comes back to a
+  switch in a VLAN that it was in there. A trunk tags each frame with its VLAN, but for its
+  native VLAN, which goes untagged. Ends with different native VLANs move untagged frames
+  from one VLAN to the other, as real switches do. An access port takes a frame that has a
+  tag only when the tag is of its own VLAN, and takes the tag off. It drops a frame tagged
+  with any other VLAN, as most switches do, and counts it among the port's dropped frames.
+  So a tag that a trunk puts on comes off at the next port, or the frame is dropped there,
+  and no wiring makes a frame longer. A port also drops a frame longer than 1,514 bytes, or
+  1,518 with a tag, and counts it. That is Ethernet's limit of 1,500 bytes after the header,
+  without the checksum, which frames in the lab do not have. The guest kernels have no
+  802.1Q, so a machine's port cannot be a trunk: a router takes one interface for each VLAN.
+  A frame's capture row says its VLAN, and the ports it had its tag on, and
+  `capture vlan 10` keeps those of VLAN 10. A cable's `.pcap` has each frame as it was on
+  that cable, tagged or not.
 - The capture keeps its newest 10,000 rows. In a storm that is the last seven seconds of
   one loop of three switches, and less than a second of a mesh of four. A frame that has
   looped says so in its row. Pause the capture to read it. The counters and each storm's

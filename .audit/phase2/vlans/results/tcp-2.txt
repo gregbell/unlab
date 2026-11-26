@@ -1,0 +1,33 @@
+TCP between two guests on one switch, sides in turn: ONLY=one node .audit/phase2/cables/drive.mjs tcp 6 cfd20a2=<dist> <commit>=<dist>.
+
+== d1a4ead, which is the source that ships
+run 0 cfd20a2 one: 754 Mbit/s, ping avg 1.31 ms, receiver took 280680180 bytes threads in a second transfer: DedicatedWorker 0.94, chromium MAIN 0.90, DedicatedWorker 0.69, ThreadPoolForeg 0.26, ThreadPoolForeg 0.12, ThreadPoolForeg 0.09
+run 0 d1a4ead one: 749 Mbit/s, ping avg 1.133 ms, receiver took 280679784 bytes threads in a second transfer: DedicatedWorker 0.92, chromium MAIN 0.89, DedicatedWorker 0.69, ThreadPoolForeg 0.26, ThreadPoolForeg 0.12, DedicatedWorker 0.10
+run 1 cfd20a2 one: 721 Mbit/s, ping avg 1.277 ms, receiver took 280679982 bytes
+run 1 d1a4ead one: 752 Mbit/s, ping avg 1.196 ms, receiver took 280678992 bytes
+run 2 cfd20a2 one: 735 Mbit/s, ping avg 1.202 ms, receiver took 280679784 bytes
+run 2 d1a4ead one: 764 Mbit/s, ping avg 1.351 ms, receiver took 280680048 bytes
+run 3 cfd20a2 one: 657 Mbit/s, ping avg 1.376 ms, receiver took 280678002 bytes
+run 3 d1a4ead one: 741 Mbit/s, ping avg 1.284 ms, receiver took 280679388 bytes
+run 4 cfd20a2 one: 694 Mbit/s, ping avg 1.31 ms, receiver took 280678728 bytes
+run 4 d1a4ead one: 712 Mbit/s, ping avg 1.216 ms, receiver took 280679388 bytes
+run 5 cfd20a2 one: 748 Mbit/s, ping avg 1.353 ms, receiver took 280679520 bytes
+run 5 d1a4ead one: 506 Mbit/s, ping avg 1.356 ms, receiver took 280678662 bytes
+cfd20a2 one: TCP Mbit/s 735 [657-754], ping avg ms 1.31 [1.20-1.38], n=6
+d1a4ead one: TCP Mbit/s 749 [506-764], ping avg ms 1.28 [1.13-1.36], n=6
+
+== a56a98e, before every looped frame shared one record
+run 0 cfd20a2 one: 687 Mbit/s, ping avg 1.384 ms, receiver took 280676484 bytes threads in a second transfer: DedicatedWorker 0.93, chromium MAIN 0.91, DedicatedWorker 0.75, DedicatedWorker 0.58, ThreadPoolForeg 0.28, ThreadPoolForeg 0.13
+run 0 a56a98e one: 738 Mbit/s, ping avg 1.069 ms, receiver took 280679190 bytes threads in a second transfer: DedicatedWorker 0.93, chromium MAIN 0.92, DedicatedWorker 0.68, ThreadPoolForeg 0.30, ThreadPoolForeg 0.17, ThreadPoolForeg 0.11
+run 1 cfd20a2 one: 738 Mbit/s, ping avg 1.427 ms, receiver took 280678662 bytes
+run 1 a56a98e one: 741 Mbit/s, ping avg 1.295 ms, receiver took 280679916 bytes
+run 2 cfd20a2 one: 733 Mbit/s, ping avg 1.161 ms, receiver took 280679916 bytes
+run 2 a56a98e one: 710 Mbit/s, ping avg 1.359 ms, receiver took 280678662 bytes
+run 3 cfd20a2 one: 733 Mbit/s, ping avg 1.463 ms, receiver took 280679652 bytes
+run 3 a56a98e one: 714 Mbit/s, ping avg 1.2 ms, receiver took 280679850 bytes
+run 4 cfd20a2 one: 729 Mbit/s, ping avg 1.473 ms, receiver took 280679652 bytes
+run 4 a56a98e one: 709 Mbit/s, ping avg 1.317 ms, receiver took 280678728 bytes
+run 5 cfd20a2 one: 753 Mbit/s, ping avg 1.362 ms, receiver took 280679454 bytes
+run 5 a56a98e one: 738 Mbit/s, ping avg 1.247 ms, receiver took 280678728 bytes
+cfd20a2 one: TCP Mbit/s 733 [687-753], ping avg ms 1.43 [1.16-1.47], n=6
+a56a98e one: TCP Mbit/s 738 [709-741], ping avg ms 1.29 [1.07-1.36], n=6

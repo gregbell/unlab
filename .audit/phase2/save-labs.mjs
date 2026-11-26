@@ -1,6 +1,7 @@
-// Writes one saved lab for each version of the workspace before 8, with the code that wrote that version:
+// Writes one saved lab for each version of the workspace before 9, with the code that wrote that version:
 // the same lab as each version could hold it. A machine could be called switch1 from version 4 on, and
-// version 7 has two more switches, with a cable moved to one and a NIC plugged into the other.
+// version 7 has two more switches, with a cable moved to one and a NIC plugged into the other. Version 8 has
+// a cable from switch0 to lan, and one from lan to wan that is cut.
 //
 //   node .audit/phase2/save-labs.mjs <empty dir for checkouts> test/fixtures/saved-labs
 
@@ -9,7 +10,7 @@ import { mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 const [checkouts, out] = process.argv.slice(2).map((path) => resolve(path));
-const COMMITS = { 1: "5fb6f93", 2: "25759b5", 3: "582cb30", 4: "1243028", 5: "443b378", 6: "24c38d9", 7: "961d670" };
+const COMMITS = { 1: "5fb6f93", 2: "25759b5", 3: "582cb30", 4: "1243028", 5: "443b378", 6: "24c38d9", 7: "961d670", 8: "a7ed190" };
 
 function checkout(commit) {
 	const dir = join(checkouts, commit);
@@ -67,6 +68,14 @@ async function savedLab(version, dir) {
 		s = run(s, kit.plugEvent(s, { machine: "node1", nic: 0 }, { switch: lan, port: 3 }));
 		s = run(s, kit.plugEvent(s, { machine: "node5", nic: 1 }, { switch: wan, port: null }));
 		s = run(s, { type: "ui/switch-shown", switch: lan });
+	}
+	if (version >= 8) {
+		const lan = kit.switchNamed("lan");
+		const wan = kit.switchNamed("wan");
+		const cable = (from, to) => run(s, { type: "cmd/cable", plan: { ends: [from, to] }, cause: "bar" });
+		s = cable({ switch: "switch0", port: 8 }, { switch: lan, port: 7 });
+		s = cable({ switch: lan, port: 8 }, { switch: wan, port: 8 });
+		s = run(s, { type: "cmd/cable-link", changes: [{ port: { switch: lan, port: 8 }, up: false }], cause: "bar" });
 	}
 	return saveWorkspace(s);
 }

@@ -63,6 +63,10 @@ export interface FrameRow {
 	readonly note: string | null;
 	/** There when it had come back to a switch that it had left. */
 	readonly looped?: true;
+	/** The VLAN that carried it, there when that is not VLAN 1 or it had a tag. */
+	readonly vlan?: number;
+	/** The ports it had an 802.1Q tag on, there when it had one. */
+	readonly tagged?: readonly PortNo[];
 }
 
 export interface LinkRow {
@@ -139,6 +143,8 @@ function frameRow(e: FrameEntry, names: RowNames): FrameRow {
 		info: d.info,
 		note: note(e, on),
 		...(e.looped ? { looped: true } : {}),
+		...(e.vlan !== 1 || e.tagged !== 0 ? { vlan: e.vlan } : {}),
+		...(e.tagged !== 0 ? { tagged: portsIn(e.tagged) } : {}),
 	};
 }
 
@@ -173,9 +179,22 @@ function portList(mask: number, on: SwitchName | null): string {
 	return `flooded to ${of}ports ${ports.slice(0, -1).join(", ")} and ${ports[ports.length - 1]}`;
 }
 
+/** `vlan 10`, or `802.1Q vlan 10 on port 8` for a frame that had a tag there. */
+function vlanNote(e: FrameEntry, on: SwitchName | null): string | null {
+	if (e.vlan === 1 && e.tagged === 0) return null;
+	if (e.tagged === 0) return `vlan ${e.vlan}`;
+	const tagged = portsIn(e.tagged);
+	const of = on === null ? "" : `${on} `;
+	const where =
+		tagged.length === 1 ? `port ${tagged[0]}` : `ports ${tagged.slice(0, -1).join(", ")} and ${tagged.at(-1)}`;
+	return `802.1Q vlan ${e.vlan} on ${of}${where}`;
+}
+
 function note(e: FrameEntry, on: SwitchName | null): string | null {
 	const parts: string[] = [];
 	if (e.looped) parts.push("looped");
+	const vlan = vlanNote(e, on);
+	if (vlan) parts.push(vlan);
 	if (e.flood === "group") parts.push(portList(e.to, on));
 	if (e.flood === "unknown") parts.push(`unknown destination, ${portList(e.to, on)}`);
 	if (e.noReply) parts.push("no reply");

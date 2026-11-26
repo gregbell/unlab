@@ -12,9 +12,12 @@ import {
 	type Phase,
 	PORTS,
 	type PortNo,
+	type PortVlan,
 	plugsOf,
 	portName,
 	type SwitchName,
+	vlanOf,
+	vlanText,
 } from "../../model/index.ts";
 import { NICS, type NicName, type NicNo, nicName } from "../../net/index.ts";
 import { defineVerb } from "../define.ts";
@@ -58,6 +61,8 @@ export interface ListedPort {
 	readonly port: PortNo;
 	/** Null when the port is free. */
 	readonly cable: ListedCable | null;
+	/** What it carries. A free port is an access port of VLAN 1. */
+	readonly vlan: PortVlan;
 }
 
 export interface ListedSwitch {
@@ -100,7 +105,7 @@ function topologyOf(lab: LabState): Topology {
 				name,
 				ports: PORTS.map((port): ListedPort => {
 					const holder = held.find((other) => other.port === port);
-					return { port, cable: holder ? cable(holder) : null };
+					return { port, cable: holder ? cable(holder) : null, vlan: vlanOf(lab, { switch: name, port }) };
 				}),
 				...(storm ? { storm: { rate: storm.rate, dropped: storm.dropped } } : {}),
 			};
@@ -120,9 +125,11 @@ function endText(lab: LabState, to: CableEnd): string {
 	return record && no !== undefined ? nicLabel(record, no) : `${machine}:${nic}`;
 }
 
-/** `node3 · down · booting`. A ready machine's state goes without saying. */
-function endLine(lab: LabState, to: CableEnd, link: string): string {
-	return [endText(lab, to), link, ...(to.kind === "port" || to.state === "ready" ? [] : [to.state])].join(" · ");
+/** `node3 · down · booting`. A ready machine's state goes without saying, and so does VLAN 1. */
+function endLine(lab: LabState, to: CableEnd, link: string, vlan: PortVlan | null = null): string {
+	const state = to.kind === "port" || to.state === "ready" ? [] : [to.state];
+	const carried = vlan === null || (vlan.mode === "access" && vlan.vlan === 1) ? [] : [vlanText(vlan)];
+	return [endText(lab, to), link, ...state, ...carried].join(" · ");
 }
 
 const stormLine = ({ rate, dropped }: ListedStorm): string =>
@@ -130,8 +137,8 @@ const stormLine = ({ rate, dropped }: ListedStorm): string =>
 
 function rows(lab: LabState, { switches, unplugged }: Topology): readonly ReportRow[] {
 	const listed = switches.map(({ name, ports: all, storm }): ReportRow => {
-		const taken = all.flatMap(({ port, cable }) =>
-			cable ? [`port ${port} · ${endLine(lab, cable.to, cable.link)}`] : [],
+		const taken = all.flatMap(({ port, cable, vlan }) =>
+			cable ? [`port ${port} · ${endLine(lab, cable.to, cable.link, vlan)}`] : [],
 		);
 		const free = all.flatMap(({ port, cable }) => (cable ? [] : [port]));
 		const lines = [
@@ -150,7 +157,7 @@ export const topology = defineVerb({
 	name: "topology",
 	about: "list switches, their ports and what is plugged in",
 	description:
-		"List the lab's wiring: every switch with its eight ports, what each port's cable goes to, and the cable's link: up, cut, or down when the machine at its end is not ready. A cable between switches is at both its ports. A switch that looped frames come into has storm: how many came in the last second, and how many it dropped. Then the NICs that are plugged into no switch. Port 3 of lan is lan:3 to plug, cable, uncable and link.",
+		"List the wiring: every switch with its eight ports, what each port's cable goes to, its link (up, cut, or down while the machine at its end is not ready), and what the port carries: a VLAN, or as a trunk the VLANs it allows and its native one. A cable between switches is at both its ports. A switch that looped frames come into has storm: how many came in the last second, and how many it dropped. Then the NICs in no switch. Port 3 of lan is lan:3.",
 	danger: false,
 	grammar: {},
 	example: {},

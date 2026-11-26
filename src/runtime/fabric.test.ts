@@ -1,10 +1,11 @@
 import { describe, expect, test } from "vitest";
-import { arpReply, arpRequest, ping } from "../../test/support/frames.ts";
-import type { PortNo } from "../model/index.ts";
+import { arpReply, arpRequest, BROADCAST, eth, mac, ping } from "../../test/support/frames.ts";
+import type { PortNo, PortVlan, VlanId } from "../model/index.ts";
+import { vlanTag, withoutTag, withTag } from "../net/index.ts";
 import {
 	Fabric,
-	LOOPED_LIMIT,
 	PACE_MS,
+	PACED_LIMIT,
 	QUEUE_LIMIT,
 	STORM_QUIET_MS,
 	type StormReading,
@@ -69,8 +70,8 @@ describe("numbered ports", () => {
 		sw.receive(2, arpRequest(1, 4));
 		expect(sw.macTable()).toEqual(
 			expect.arrayContaining([
-				{ mac: "52:54:00:88:00:0e", port: 5, seen: 1000, flushed: false },
-				{ mac: "52:54:00:88:00:0b", port: 2, seen: 1250, flushed: false },
+				{ vlan: 1, mac: "52:54:00:88:00:0e", port: 5, seen: 1000, flushed: false },
+				{ vlan: 1, mac: "52:54:00:88:00:0b", port: 2, seen: 1250, flushed: false },
 			]),
 		);
 		expect(sw.macTable()).toHaveLength(2);
@@ -418,20 +419,17 @@ describe("a loop of cables", () => {
 		expect(looped() - full).toBeLessThanOrEqual((6 * 1000) / PACE_MS + 6);
 	});
 
-	test("marks a frame as looped from where it comes back to a switch that it had left", () => {
+	test("marks a frame as looped from where it comes back to a switch that it had left, which a copy that came into a switch after another does in its turn", () => {
 		const t = net(["a", "b", "c"], TRIANGLE);
 		t.send("a", arpRequest(1, 9));
 		t.drain();
-		// Out of a to b and c, on from each to the other, and from there back to a.
-		expect(t.taps.slice(0, 7).map(({ on, e }) => `${on}${e.from}${e.looped ? " looped" : ""}`)).toEqual([
-			"a1",
-			"b8",
-			"c7",
-			"c8",
-			"b7",
-			"a8 looped",
-			"a7 looped",
-		]);
+		const rows = () => t.taps.map(({ on, e }) => `${on}${e.from}${e.looped ? " looped" : ""}`);
+		// Out of a to b and c, and on from each to the other, which a copy from a had come into.
+		expect(rows()).toEqual(["a1", "b8", "c7", "c8", "b7"]);
+		expect(t.fabric.waiting).toBe(2);
+		// What those two send back to a waits a millisecond.
+		t.run(1);
+		expect(rows().slice(5, 7).sort()).toEqual(["a7 looped", "a8 looped"]);
 		t.run(5);
 		expect(t.taps.slice(7).every(({ e }) => e.looped)).toBe(true);
 	});
@@ -509,7 +507,7 @@ describe("a loop of cables", () => {
 			t.run(10);
 			most = Math.max(most, t.fabric.waiting);
 		}
-		expect(most).toBeLessThanOrEqual(12 * LOOPED_LIMIT);
+		expect(most).toBeLessThanOrEqual(12 * PACED_LIMIT);
 		for (const on of ["a", "b", "c", "d"] as const) {
 			const { dropped } = t.fabric.totals(t.slot(on));
 			// Three cables bring a thousand a second each, and each is to go out of the other two.
@@ -642,5 +640,407 @@ describe("a loop of cables", () => {
 		expect(t.fabric.addSwitch()).toBe(t.slot("b"));
 		expect(t.fabric.totals(t.slot("b"))).toEqual({ in: 0, delivered: 0, flooded: 0, dropped: 0 });
 		expect(t.fabric.macTable(t.slot("b"), t.now)).toEqual([]);
+	});
+});
+
+const access = (vlan: number): PortVlan => ({ mode: "access", vlan: vlan as VlanId });
+const trunk = (allowed: readonly number[] | "all", native = 1): PortVlan => ({
+	mode: "trunk",
+	allowed: allowed === "all" ? "all" : (allowed as VlanId[]),
+	native: native as VlanId,
+});
+
+/**
+ * Machines written `a1:10`: machine 1 on port 1 of switch a, in VLAN 10. A
+ * port written with no VLAN is in VLAN 1, as a new one is. Cables as `net`
+ * writes them, with each end's setting after it: `a8-b8 trunk`.
+ */
+function vlanNet(machines: readonly string[], cables: readonly (readonly [string, PortVlan?, PortVlan?])[] = []) {
+	const letters = [...new Set([...machines, ...cables.flatMap(([c]) => c.split("-"))].map((text) => text[0]))].sort();
+	const taps: { on: string; e: TapEvent }[] = [];
+	const names: string[] = [];
+	const fabric = new Fabric({ tap: (slot, e) => taps.push({ on: names[slot], e }) });
+	const slots = new Map<string, number>();
+	for (const letter of letters) {
+		const slot = fabric.addSwitch();
+		slots.set(letter, slot);
+		names[slot] = letter;
+	}
+	const at = (text: string) => ({ slot: slots.get(text[0]) as number, port: Number(text[1]) as PortNo });
+	const got = new Map<number, Uint8Array[]>();
+	const where = new Map<number, string>();
+	for (const text of machines) {
+		const [place, vlan] = text.split(":");
+		const n = Number(place[1]) + (place.charCodeAt(0) - 97) * 8;
+		got.set(n, []);
+		where.set(n, place);
+		fabric.attach(at(place).slot, at(place).port, { deliver: (f) => got.get(n)?.push(f) });
+		if (vlan) fabric.setVlan(at(place).slot, at(place).port, access(Number(vlan)));
+	}
+	for (const [cable, near, far] of cables) {
+		const [a, b] = cable.split("-");
+		fabric.cable(at(a), at(b));
+		if (near) fabric.setVlan(at(a).slot, at(a).port, near);
+		if (far ?? near) fabric.setVlan(at(b).slot, at(b).port, (far ?? near) as PortVlan);
+	}
+	let now = 0;
+	const t = {
+		fabric,
+		taps,
+		at,
+		/** Machine n, which is on port n of a, or port n - 8 of b, puts a frame on the wire. */
+		send(n: number, frame: Uint8Array) {
+			const { slot, port } = at(where.get(n) as string);
+			fabric.receive(slot, port, frame, now);
+			t.run(5);
+		},
+		run(ms: number) {
+			for (const until = now + ms; now < until; now += 1) while (fabric.drain(now, 64) > 0);
+		},
+		/** Which machines have been handed a frame, and how many. */
+		reached: () =>
+			Object.fromEntries([...got].filter(([, frames]) => frames.length > 0).map(([n, f]) => [n, f.length])),
+		last: (n: number) => got.get(n)?.at(-1),
+		clear() {
+			for (const frames of got.values()) frames.length = 0;
+			taps.length = 0;
+		},
+		storming: (letter: string) => fabric.storm(slots.get(letter) as number, now) !== null,
+		cut: (text: string) => fabric.setLink(at(text).slot, at(text).port, false),
+		table: (letter: string) =>
+			fabric
+				.macTable(slots.get(letter) as number, now)
+				.map((e) => `${e.mac.slice(-2)} vlan ${e.vlan} at ${e.port}`)
+				.sort(),
+	};
+	return t;
+}
+
+/** Machine n of b, which is on its port n. */
+const B = 8;
+
+describe("VLANs", () => {
+	test("a new port is in VLAN 1, and a broadcast on an access port reaches only the ports of its VLAN", () => {
+		const t = vlanNet(["a1:10", "a2:10", "a3:20", "a4", "a5"]);
+		t.send(1, arpRequest(1, 9));
+		expect(t.reached()).toEqual({ 2: 1 });
+		expect(t.taps.at(-1)?.e).toMatchObject({ from: 1, to: bit(2), flood: "group", vlan: 10, tagged: 0 });
+		t.clear();
+		t.send(3, arpRequest(3, 9));
+		expect(t.reached()).toEqual({});
+		t.send(4, arpRequest(4, 9));
+		expect(t.reached()).toEqual({ 5: 1 });
+		expect(t.taps.at(-1)?.e).toMatchObject({ vlan: 1 });
+	});
+
+	test("learns addresses per VLAN, so a frame for a machine of another VLAN is flooded in its own, and never reaches it", () => {
+		const t = vlanNet(["a1:10", "a2:10", "a3:20", "a4:20"]);
+		t.send(1, arpRequest(1, 3));
+		t.send(3, ping(3, 1));
+		expect(t.table("a")).toEqual(["0b vlan 10 at 1", "0d vlan 20 at 3"]);
+		expect(t.taps.at(-1)?.e).toMatchObject({ from: 3, to: bit(4), flood: "unknown", vlan: 20 });
+		expect(t.reached()).toEqual({ 2: 1, 4: 1 });
+	});
+
+	test("a port put in another VLAN forgets what the switch learned on it", () => {
+		const t = vlanNet(["a1", "a2"]);
+		t.send(1, arpRequest(1, 2));
+		t.fabric.setVlan(t.at("a1").slot, 1, access(10));
+		expect(t.table("a")).toEqual([]);
+	});
+
+	test("a trunk carries each VLAN tagged and its native one untagged, and the far switch puts each back in its VLAN, untagged to its machines", () => {
+		const t = vlanNet(["a1:10", "a2:20", "a3", "b1:10", "b2:20", "b3"], [["a8-b8", trunk("all")]]);
+		const sent = arpRequest(1, 9);
+		t.send(1, sent);
+		expect(t.reached()).toEqual({ [B + 1]: 1 });
+		expect(t.last(B + 1)).toEqual(sent);
+		expect(t.taps.map(({ on, e }) => [on, e.from, e.to, e.vlan, e.tagged])).toEqual([
+			["a", 1, bit(8), 10, bit(8)],
+			["b", 8, bit(1), 10, bit(8)],
+		]);
+		expect(t.taps.every(({ e }) => vlanTag(e.frame) === null && e.frame.length === sent.length)).toBe(true);
+		t.clear();
+		t.send(2, arpRequest(2, 9));
+		expect(t.reached()).toEqual({ [B + 2]: 1 });
+		t.clear();
+		t.send(3, arpRequest(3, 9));
+		expect(t.reached()).toEqual({ [B + 3]: 1 });
+		expect(t.taps.map(({ e }) => [e.vlan, e.tagged])).toEqual([
+			[1, 0],
+			[1, 0],
+		]);
+	});
+
+	test("puts the tag on the wire: 0x8100, then the VLAN, and the frame's own type after it", () => {
+		const frames: Uint8Array[] = [];
+		const t = vlanNet(["a1:10"]);
+		t.fabric.attach(t.at("a8").slot, 8, { deliver: (f) => frames.push(f) });
+		t.fabric.setVlan(t.at("a8").slot, 8, trunk([10, 20]));
+		const sent = arpRequest(1, 9);
+		t.send(1, sent);
+		expect(Array.from(frames[0].subarray(12, 18))).toEqual([0x81, 0x00, 0x00, 10, 0x08, 0x06]);
+		expect(frames[0].length).toBe(sent.length + 4);
+		expect(withoutTag(frames[0])).toEqual(sent);
+	});
+
+	test("a VLAN that a trunk does not allow does not cross it, whichever end leaves it out", () => {
+		const near = vlanNet(["a1:10", "a2:20", "b1:10", "b2:20"], [["a8-b8", trunk([10]), trunk("all")]]);
+		near.send(2, arpRequest(2, 9));
+		expect([near.reached(), near.fabric.waiting]).toEqual([{}, 0]);
+		near.send(1, arpRequest(1, 9));
+		expect(near.reached()).toEqual({ [B + 1]: 1 });
+
+		const far = vlanNet(["a1:10", "a2:20", "b1:10", "b2:20"], [["a8-b8", trunk("all"), trunk([10])]]);
+		far.send(2, arpRequest(2, 9));
+		expect(far.reached()).toEqual({});
+		expect(far.fabric.counters(far.at("b8").slot, 8)).toMatchObject({ rxFrames: 1, dropped: 1 });
+	});
+
+	test("a trunk takes a tag of VLAN 0, which gives only a priority, as no tag, and drops one of VLAN 4095, which is reserved", () => {
+		const t = vlanNet(["a1:20", "a2"]);
+		const { slot } = t.at("a8");
+		t.fabric.attach(slot, 8, { deliver: () => {} });
+		t.fabric.setVlan(slot, 8, trunk("all", 20));
+		const sent = arpRequest(9, 1);
+		t.fabric.receive(slot, 8, withTag(sent, 0), 0);
+		expect(t.reached()).toEqual({ 1: 1 });
+		expect(t.last(1)).toEqual(sent);
+		expect(t.taps.map(({ e }) => [e.vlan, e.tagged])).toEqual([[20, 0]]);
+		t.clear();
+		t.fabric.receive(slot, 8, withTag(sent, 4095), 0);
+		expect([t.reached(), t.taps]).toEqual([{}, []]);
+		expect(t.fabric.counters(slot, 8)).toMatchObject({ rxFrames: 2, dropped: 1 });
+	});
+
+	test("an access port takes a frame tagged with its own VLAN, or with VLAN 0, without the tag, and drops one tagged with another, as real switches do", () => {
+		const t = vlanNet(["a1:10", "a2:10", "a3:20"]);
+		const sent = arpRequest(1, 9);
+		t.send(1, withTag(sent, 10));
+		expect(t.reached()).toEqual({ 2: 1 });
+		expect(t.last(2)).toEqual(sent);
+		expect(t.taps.map(({ e }) => [e.vlan, e.tagged, e.frame.length])).toEqual([[10, bit(1), sent.length]]);
+		t.send(1, withTag(sent, 0));
+		expect(t.reached()).toEqual({ 2: 2 });
+		expect(t.last(2)).toEqual(sent);
+		t.clear();
+		t.send(1, withTag(sent, 20));
+		expect([t.reached(), t.taps]).toEqual([{}, []]);
+		expect(t.fabric.counters(t.at("a1").slot, 1)).toMatchObject({ rxFrames: 3, dropped: 1 });
+	});
+
+	test.each([
+		["of one switch", ["a1:10", "a2:10", "a3:20"], [["a7-a8", trunk("all"), access(10)]]],
+		[
+			"of another switch, beside a cable in that VLAN",
+			["a1:10", "a2:10", "a3:20"],
+			[
+				["a7-b7", trunk("all"), access(10)],
+				["a8-b8", access(10)],
+			],
+		],
+	] as const)(
+		"a cable from a trunk to an access port %s loops the port's VLAN with every frame as long as it was sent, and drops the others at the access port",
+		(_, machines, cables) => {
+			const t = vlanNet(machines, cables);
+			const far = t.at(cables[0][0].slice(3));
+			t.send(3, arpRequest(3, 9));
+			expect(t.taps.map(({ on, e }) => `${on}${e.from} vlan ${e.vlan}`)).toEqual(["a3 vlan 20"]);
+			expect(t.fabric.counters(far.slot, far.port)).toMatchObject({ rxFrames: 1, dropped: 1 });
+
+			const sent = arpRequest(1, 9);
+			t.send(1, sent);
+			t.run(1000);
+			expect(t.taps.filter(({ e }) => e.looped).length).toBeGreaterThan(900);
+			expect(Math.max(...t.taps.map(({ e }) => e.frame.length))).toBe(sent.length);
+			expect(t.last(2)).toEqual(sent);
+			expect(t.storming("a")).toBe(true);
+			t.cut("a7");
+			t.run(STORM_QUIET_MS * 2);
+			expect(t.storming("a")).toBe(false);
+		},
+	);
+
+	test("a port takes a frame of up to 1,514 bytes, or 1,518 with its tag, and drops and counts a longer one", () => {
+		const t = vlanNet(["a1:10", "b1:10"], [["a8-b8", trunk("all")]]);
+		const { slot } = t.at("a1");
+		const ofPayload = (bytes: number) => eth(BROADCAST, mac(1), 0x0800, new Uint8Array(bytes));
+		const longest = ofPayload(1500);
+		expect(longest.length).toBe(1514);
+		t.send(1, longest);
+		expect(t.last(B + 1)).toEqual(longest);
+		expect(t.taps.map(({ on, e }) => [on, e.tagged])).toEqual([
+			["a", bit(8)],
+			["b", bit(8)],
+		]);
+		t.send(1, withTag(longest, 10));
+		expect(t.reached()).toEqual({ [B + 1]: 2 });
+		expect(t.fabric.counters(slot, 1)).toMatchObject({ rxFrames: 2, dropped: 0 });
+
+		t.clear();
+		t.send(1, ofPayload(1501));
+		t.send(1, withTag(ofPayload(1501), 10));
+		expect([t.reached(), t.taps]).toEqual([{}, []]);
+		expect(t.fabric.counters(slot, 1)).toMatchObject({ rxFrames: 4, dropped: 2 });
+	});
+
+	test("a native VLAN that the trunk does not allow does not cross it untagged", () => {
+		const t = vlanNet(["a1", "b1"], [["a8-b8", trunk([10, 20])]]);
+		t.send(1, arpRequest(1, 9));
+		expect(t.reached()).toEqual({});
+	});
+
+	test("ends with different native VLANs move an untagged frame from one VLAN to the other, as real switches do", () => {
+		const t = vlanNet(["a1:10", "a2:20", "b1:10", "b2:20"], [["a8-b8", trunk("all", 10), trunk("all", 20)]]);
+		t.send(1, arpRequest(1, 9));
+		expect(t.reached()).toEqual({ [B + 2]: 1 });
+		expect(t.taps.map(({ on, e }) => [on, e.vlan, e.tagged])).toEqual([
+			["a", 10, 0],
+			["b", 20, 0],
+		]);
+	});
+
+	test("an access port on each end of a cable joins one VLAN of each switch, untagged", () => {
+		const t = vlanNet(["a1:10", "b1:30"], [["a8-b8", access(10), access(30)]]);
+		t.send(1, arpRequest(1, 9));
+		expect(t.reached()).toEqual({ [B + 1]: 1 });
+		expect(t.taps.map(({ e }) => e.tagged)).toEqual([0, 0]);
+	});
+
+	test("a loop in one VLAN storms in that VLAN alone: a broadcast of another crosses once, and is not slowed", () => {
+		const t = vlanNet(
+			["a1:10", "a2:20", "b1:10", "b2:20"],
+			[
+				["a7-b7", access(10)],
+				["a8-b8", access(10)],
+				["a6-b6", access(20)],
+			],
+		);
+		t.send(1, arpRequest(1, 9));
+		t.run(50);
+		expect(t.fabric.storm(t.at("a1").slot, 50)).not.toBeNull();
+		t.clear();
+		t.send(2, arpRequest(2, 9));
+		t.run(50);
+		expect(t.reached()).toMatchObject({ [B + 2]: 1 });
+		const crossed = t.taps.filter(({ e }) => e.vlan === 20);
+		expect(crossed.map(({ on, e }) => [on, e.from, e.looped])).toEqual([
+			["a", 2, false],
+			["b", 6, false],
+		]);
+	});
+
+	test.each([
+		["a cable between two ports of one switch", ["a1:10", "a2:20"], [["a7-a8", access(10), access(20)]], { 2: 1 }],
+		[
+			"a cable beside a trunk",
+			["a1:10", "a2:20", "b1:10", "b2:20"],
+			[
+				["a8-b8", trunk("all")],
+				["a7-b7", access(10), access(20)],
+			],
+			{ 2: 1, [B + 1]: 1, [B + 2]: 1 },
+		],
+	] as const)(
+		"a frame that %s takes into another VLAN crosses once, has not looped, and is not slowed",
+		(_, machines, cables, reached) => {
+			const t = vlanNet(machines, cables);
+			t.send(1, arpRequest(1, 9));
+			expect(t.reached()).toEqual(reached);
+			expect(t.taps.filter(({ e }) => e.looped).map(({ on, e }) => `${on}${e.from}`)).toEqual([]);
+			expect(t.storming("a")).toBe(false);
+			const learned = t.table("a");
+			t.run(STORM_QUIET_MS * 2);
+			expect(t.table("a")).toEqual(learned);
+			expect(learned).toContain("0b vlan 10 at 1");
+		},
+	);
+
+	test("one broadcast into a mesh of six switches with a cable that joins two VLANs is carried at once to each switch in each VLAN, and no further until its turn", () => {
+		const letters = ["a", "b", "c", "d", "e", "f"];
+		const free = new Map(letters.map((letter) => [letter, 1]));
+		const take = (letter: string) => {
+			const port = free.get(letter) as number;
+			free.set(letter, port + 1);
+			return `${letter}${port}`;
+		};
+		const mesh = letters.flatMap((a, i) =>
+			letters.slice(i + 1).map((b) => [`${take(a)}-${take(b)}`, trunk("all")] as const),
+		);
+		const t = vlanNet(["a6:10", "f6:20"], [...mesh, ["b7-b8", access(10), access(20)]]);
+		const from = t.at("a6");
+		t.fabric.receive(from.slot, from.port, arpRequest(6, 9), 0);
+		while (t.fabric.drain(0, 64) > 0);
+		const places = new Set(t.taps.map(({ on, e }) => `${on} in VLAN ${e.vlan}`));
+		expect(places.size).toBe(12);
+		expect(t.reached()[5 * 8 + 6]).toBeGreaterThan(0);
+		// The first copy to come into a switch in a VLAN goes on at once, to its seven cables at most.
+		expect(t.taps.length).toBeLessThanOrEqual(1 + places.size * 7);
+		t.run(20);
+		expect(letters.filter((letter) => t.storming(letter))).toEqual(letters);
+	});
+
+	test.each([
+		["frames that go by the table", () => ping(1, B + 2)],
+		["broadcasts", () => arpRequest(1, 9)],
+	] as const)(
+		"%s cross a cable from one VLAN to another, and the next cable, at once, however many there are",
+		(_, frame) => {
+			const t = vlanNet(
+				["a1:10", "b2:20"],
+				[
+					["a7-a8", access(10), access(20)],
+					["a6-b6", access(20)],
+				],
+			);
+			t.send(1, arpRequest(1, B + 2));
+			t.send(B + 2, arpReply(B + 2, 1));
+			t.clear();
+			const from = t.at("a1");
+			for (let i = 0; i < 1000; i++) {
+				t.fabric.receive(from.slot, from.port, frame(), 100);
+				while (t.fabric.drain(100, 64) > 0);
+			}
+			expect(t.reached()).toEqual({ [B + 2]: 1000 });
+			expect(t.taps.filter(({ e }) => e.looped)).toEqual([]);
+			expect([t.storming("a"), t.storming("b")]).toEqual([false, false]);
+		},
+	);
+
+	test("a loop that changes VLAN on the way round storms: one cable takes 10 to 20, and another takes 20 back to 10", () => {
+		const t = vlanNet(
+			["a1:10", "a2:20"],
+			[
+				["a7-a8", access(10), access(20)],
+				["a5-a6", access(20), access(10)],
+			],
+		);
+		t.send(1, arpRequest(1, 9));
+		// Out of 7 and 6 in VLAN 10, into 8 and 5 in 20, out of 5 and 8, and back into 6 and 7 in VLAN 10.
+		const round = t.taps.slice(0, 5).map(({ e }) => `${e.from} vlan ${e.vlan}${e.looped ? " looped" : ""}`);
+		expect(round.sort()).toEqual(["1 vlan 10", "5 vlan 20", "6 vlan 10 looped", "7 vlan 10 looped", "8 vlan 20"]);
+		expect(t.storming("a")).toBe(true);
+	});
+
+	test("a storm that ends forgets the tables of the VLANs it looped in, and keeps the others", () => {
+		const t = vlanNet(
+			["a1:10", "a2:20", "b1:10", "b2:20"],
+			[
+				["a7-b7", access(10)],
+				["a8-b8", access(10)],
+				["a6-b6", access(20)],
+			],
+		);
+		t.send(2, arpRequest(2, 9));
+		t.send(B + 2, arpReply(B + 2, 2));
+		const twenty = ["0c vlan 20 at 2", "14 vlan 20 at 6"];
+		expect(t.table("a").filter((e) => e.includes("vlan 20"))).toEqual(twenty);
+		t.send(1, arpRequest(1, 9));
+		t.run(50);
+		expect(t.storming("a")).toBe(true);
+		t.cut("a7");
+		t.run(STORM_QUIET_MS * 2);
+		expect(t.storming("a")).toBe(false);
+		expect(t.table("a")).toEqual(twenty);
 	});
 });

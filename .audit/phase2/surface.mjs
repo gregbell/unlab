@@ -25,6 +25,8 @@ const frames = await import(join(root, "test/support/frames.ts"));
 const named = "samePort" in model;
 const portOn = (port) => (named ? { switch: "switch0", port } : port);
 const selected = (select, state) => (named ? select("switch0")(state) : select(state));
+/** Whether a port carries a VLAN now. A checkout from before VLANs never asks. */
+const carriesIn = (state) => (port, vlan) => model.carries(model.vlanOf(state, port), vlan);
 
 let unreadable = 0;
 const print = (title, value) => {
@@ -189,7 +191,7 @@ for (const entry of capture.frames()) {
 		const machine = selected(model.selectPorts, lab.store.state)[(named ? ref.port : ref) - 1].machine;
 		return machine && { n: machine.n, label: machine.label };
 	};
-	print(`frame ${entry.seq}`, frameDetail(entry, { holder, severalNics: () => false, switchLabel: () => null }));
+	print(`frame ${entry.seq}`, frameDetail(entry, { holder, severalNics: () => false, switchLabel: () => null, carries: carriesIn(lab.store.state) }));
 }
 
 const labs = resolve(import.meta.dirname, "../../test/fixtures/saved-labs");
@@ -317,6 +319,7 @@ async function severalSwitches() {
 		holder: ({ switch: on, port }) => model.selectPorts(on)(lab.store.state)[port - 1].machine,
 		severalNics: () => true,
 		switchLabel: (on) => on,
+		carries: carriesIn(lab.store.state),
 	};
 	for (const entry of capture.frames()) several(`frame ${entry.seq}`, frameDetail(entry, names));
 	const tools = toolTable(lab.registry, reads);

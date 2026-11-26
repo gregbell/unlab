@@ -37,6 +37,10 @@ export interface FrameEntry {
 	readonly noReply: boolean;
 	/** It had come back to a switch that it had left, round a loop of cables. */
 	readonly looped: boolean;
+	/** The VLAN the switch carried it in. `bytes` are without its tag. */
+	readonly vlan: number;
+	/** The ports it had an 802.1Q tag on, as a mask: the one it came in by, those it went out of, or none. */
+	readonly tagged: number;
 }
 
 export interface LinkEntry extends LinkEvent {
@@ -80,6 +84,10 @@ export interface SwitchedFrame {
 	readonly flood: Flood | null;
 	readonly frame: Uint8Array;
 	readonly looped?: boolean;
+	/** Left out, VLAN 1. */
+	readonly vlan?: number;
+	/** Left out, no tag anywhere. */
+	readonly tagged?: number;
 }
 
 /** A change to a cable between two ports of switches, or to its link. */
@@ -381,7 +389,7 @@ export function createCaptureLog(opts: CaptureOptions): CaptureLog {
 			return () => listeners.delete(fn);
 		},
 
-		appendFrame({ switch: on, from, to, flood, frame, looped = false }) {
+		appendFrame({ switch: on, from, to, flood, frame, looped = false, vlan = 1, tagged = 0 }) {
 			counters.in++;
 			for (let m = to; m; m &= m - 1) counters.delivered++;
 			if (flood) counters.flooded++;
@@ -410,6 +418,8 @@ export function createCaptureLog(opts: CaptureOptions): CaptureLog {
 				names: names(),
 				noReply: false,
 				looped,
+				vlan,
+				tagged,
 			};
 			push(e);
 			if (addrs?.op === 1 && addrs.spa !== addrs.tpa) ask(e, arpKey(addrs.spa, addrs.tpa));

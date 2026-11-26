@@ -148,3 +148,47 @@ describe("a frame that has looped", () => {
 		expect(first).not.toHaveProperty("looped");
 	});
 });
+
+describe("the rows of frames in VLANs", () => {
+	const bit = (p: number) => 1 << (p - 1);
+
+	test("say which VLAN carried each, and on which ports it had its 802.1Q tag, and nothing of VLAN 1 untagged", () => {
+		const { made } = log();
+		made.appendFrame({
+			switch: lan,
+			from: 1,
+			to: bit(8),
+			flood: "group",
+			frame: arpRequest(1, 2),
+			vlan: 10,
+			tagged: bit(8),
+		});
+		made.appendFrame({
+			switch: wan,
+			from: 7,
+			to: bit(1) | bit(2),
+			flood: "group",
+			frame: arpRequest(1, 2),
+			vlan: 10,
+			tagged: bit(7) | bit(2),
+		});
+		made.appendFrame({ switch: lan, from: 2, to: bit(3), flood: null, frame: ping(2, 3), vlan: 20 });
+		made.appendFrame({ switch: lan, from: 4, to: bit(5), flood: null, frame: ping(4, 5) });
+		expect(made.tail(4).map((row) => (row.kind === "frame" ? [row.vlan, row.tagged, row.note] : null))).toEqual([
+			[10, [8], "802.1Q vlan 10 on lan port 8 · flooded to lan port 8"],
+			[10, [2, 7], "802.1Q vlan 10 on wan ports 2 and 7 · flooded to wan ports 1 and 2"],
+			[20, undefined, "vlan 20"],
+			[undefined, undefined, null],
+		]);
+		expect(made.tail(1)[0]).not.toHaveProperty("vlan");
+	});
+
+	test("are kept by a VLAN term by the VLAN that carried them", () => {
+		const { made, filtered } = log();
+		made.appendFrame({ switch: lan, from: 1, to: bit(8), flood: null, frame: ping(1, 2), vlan: 10, tagged: bit(8) });
+		made.appendFrame({ switch: wan, from: 1, to: bit(2), flood: null, frame: ping(1, 2), vlan: 20 });
+		made.appendFrame({ switch: wan, from: 3, to: bit(4), flood: null, frame: ping(3, 4) });
+		expect(filtered("vlan 10")).toEqual(["frame lan"]);
+		expect(filtered("vlan 20 or vlan 1")).toEqual(["frame wan", "frame wan"]);
+	});
+});

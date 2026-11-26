@@ -665,6 +665,9 @@ export function createEngine(deps: EngineDeps): Engine {
 				capture.appendLink({ port, machine, nic, up: false, cause, dead });
 				return;
 			}
+			case "port/vlan":
+				fabric.setVlan(switchOf(effect.port.switch).slot, effect.port.port, effect.vlan);
+				return;
 			case "pty/open": {
 				const s = sessions.get(effect.session);
 				if (!s || s.tty === "console" || s.state !== "closed") return;
