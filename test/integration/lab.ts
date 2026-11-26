@@ -1,13 +1,14 @@
 // Machines on switches, each in its own thread, for tests on real kernels in Node.
 
 import { Worker } from "node:worker_threads";
+import type { CableCounters, ConditionValues, PortNo, PortVlan } from "../../src/model/index.ts";
 import { address } from "../../src/model/testkit.ts";
-import type { PortNo, PortVlan } from "../../src/model/types.ts";
 import { addressStr, defaultAddress, ip4str, macStr, NICS, type NicNo, nodeMac } from "../../src/net/index.ts";
 import { nodeClock } from "../../src/runtime/clock.ts";
 import { Fabric, type MacEntry, type StormReading, type TapEvent } from "../../src/runtime/fabric.ts";
 import type { LinkTarget } from "../../src/runtime/machine-link.ts";
 import { createPump } from "../../src/runtime/pump.ts";
+import { conditions, seededStreams } from "../support/conditions.ts";
 import { imagePath } from "../support/images.ts";
 import type { ExecDone, FromMachine, MachineData, ToMachine } from "./vm-worker.ts";
 
@@ -52,6 +53,10 @@ export interface TestSwitch {
 	setLink(port: PortNo, up: boolean): void;
 	/** What the port carries from now on. */
 	setVlan(port: PortNo, vlan: PortVlan): void;
+	/** How the cable in the port treats frames from now on. One between switches is told at both its ports, as the lab does. */
+	setConditions(port: PortNo, values: ConditionValues): void;
+	/** What the cable in the port has carried and dropped. */
+	carried(port: PortNo): CableCounters;
 	macTable(): readonly MacEntry[];
 	/** What it has dropped at its cables to other switches, which were full. */
 	readonly dropped: number;
@@ -94,16 +99,26 @@ export async function bootLab(setups: readonly MachineSetup[], wiring: Wiring = 
 	const clock = nodeClock();
 	const frames: SwitchedTap[] = [];
 	const storms: TestLab["storms"] = [];
-	const fabric = new Fabric({
-		tap: (slot, e) => frames.push({ ...e, switch: slot, at: clock.now() }),
-		storm: (slot, _reading, over) => storms.push({ switch: slot, over, at: clock.now() }),
-	});
+	// What a cable loses and reorders is the same from run to run.
+	const fabric = new Fabric(
+		{
+			tap: (slot, e) => frames.push({ ...e, switch: slot, at: clock.now() }),
+			storm: (slot, _reading, over) => storms.push({ switch: slot, over, at: clock.now() }),
+		},
+		{ random: seededStreams() },
+	);
 	const pump = createPump(fabric, clock);
 	const switches = Array.from({ length: wiring.switches ?? 1 }, (): TestSwitch => {
 		const slot = fabric.addSwitch();
 		return {
 			setLink: (port, up) => fabric.setLink(slot, port, up),
 			setVlan: (port, vlan) => fabric.setVlan(slot, port, vlan),
+			setConditions(port, values) {
+				const far = fabric.farEnd(slot, port);
+				fabric.setConditions(slot, port, conditions(values));
+				if (far) fabric.setConditions(far.slot, far.port, conditions(values));
+			},
+			carried: (port) => fabric.carried(slot, port) ?? { delivered: 0, dropped: { loss: 0, rate: 0, mtu: 0 } },
 			macTable: () => fabric.macTable(slot, clock.now()),
 			get dropped() {
 				return fabric.totals(slot).dropped;
