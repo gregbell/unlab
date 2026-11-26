@@ -509,3 +509,21 @@ describe("a machine with a long name", () => {
 		]);
 	});
 });
+
+describe("a list that thousands of rows go through", () => {
+	it.each(["dock", "full"] as const)("has no more nodes in its %s list after them than before", async (mode) => {
+		const { element, capture, settle } = await mountCapture(mode, twelvePings);
+		await settle();
+		const track = element.querySelector(".track") as HTMLElement;
+		const before = track.childNodes.length;
+		for (let turn = 0; turn < 300; turn++) {
+			for (let i = 0; i < 5; i++) capture.frame(arpRequest(1, 2), 1, [2, 3], "group");
+			if (turn % 7 === 0) capture.link(2, "node2", turn % 2 === 0);
+			element.requestUpdate();
+			await element.updateComplete;
+		}
+		expect(track.querySelectorAll(".row.frame").length).toBeGreaterThan(5);
+		// A row or two more can be in view, and none of those that left has anything of it still there.
+		expect(track.childNodes.length).toBeLessThan(before + 30);
+	});
+});
