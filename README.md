@@ -47,6 +47,8 @@ For frame headers, capture filters, or a Wireshark download, open
 
 ![Node1 reports 100% packet loss with its peer disconnected, then 0% after reconnecting. The switch capture shows the cable events and the returning echo reply.](docs/images/desktop-lab.jpg)
 
+Next, [connect two switches](docs/labs/connect-two-switches.md) and see which cable carries the ping between them.
+
 Drag a window by its title bar, double-click to maximize it, or minimize it to
 the bottom-left dock. Right-click a title bar, a machine, a switch or the desktop
 for its actions. Returning to the lab restores your machines and desktop layout.
@@ -59,9 +61,30 @@ commands as you type and previews their effects. Run Linux commands directly in
 a guest console, or use `exec` in the bar to address a guest by name. `help` lists
 every command, and `help spawn` explains one, with its options and an example.
 
+- [Inspect the lab and get help](#inspect-the-lab-and-get-help)
+- [Create machines](#create-machines)
+- [Wire machines and switches](#wire-machines-and-switches)
+- [Run commands and open consoles](#run-commands-and-open-consoles)
+- [Start, stop, or remove machines](#start-stop-or-remove-machines)
+- [Save and restore checkpoints](#save-and-restore-checkpoints)
+- [Capture traffic](#capture-traffic)
+
+Commands that accept multiple machines can take a list (`node1,node3`), a glob
+(`node*`), or `all`. Globs and `all` select the machines that the command can act
+on, such as the ready ones for `exec` and the ones that are off or failed for `boot`.
+
+### Inspect the lab and get help
+
+| Command bar example | What it does                                                                                           |
+| ------------------- | ------------------------------------------------------------------------------------------------------ |
+| `ls`                | List machines and their disks, and each network interface's MAC, address, port, and link.              |
+| `topology`          | List every switch, every port, what is in it, whether its link is up, its VLAN, and which switches are storming. |
+| `help reboot`       | Explain a command. `help` alone lists them all.                                                        |
+
+### Create machines
+
 | Command bar example                          | What it does                                                                                                                           |
 | -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `ls`                                         | List machines and their disks, and each network interface's MAC, address, port, and link.                                              |
 | `spawn 2 alpine --mem 512 --cpus 2 --disk 8` | Add two Alpine machines with 512 MiB of RAM, two CPUs, and an 8 GiB disk each. Use `--no-net` to leave them unplugged.                 |
 | `spawn 1 lab`                                | Add an Alpine machine with network, service, and disk tools already installed.                                                         |
 | `spawn 1 alpine --extra-disk 1,4`            | Add a machine with two blank disks of 1 and 4 GiB: `/dev/wdc` and `/dev/wdd`. A machine takes up to four, of up to 64 GiB each.        |
@@ -69,32 +92,56 @@ every command, and `help spawn` explains one, with its options and an example.
 | `spawn 1 alpine --nics 2 --net switch0,none` | Add a machine with two network interfaces: `eth0` plugged in and `eth1` left unplugged. Without `--net`, each takes its own port.      |
 | `spawn 1 alpine --addr 10.1.0.1/24`          | Add a machine with an address you choose. With `--nics`, give each interface an address or `none`: `--nics 2 --addr 10.1.0.1/24,none`. |
 | `spawn 1 alpine --no-gateway`                | Add a machine on the switch but without the package gateway. DHCP on its `eth0` then goes to the other machines.                       |
-| `mkswitch lan`                               | Add a switch called `lan`. Without a name, it is the next free `switch1`. Frames pass from one switch to another only over a cable.    |
 | `spawn 1 alpine --nics 2 --net switch0,lan`  | Add a machine with one network interface on each switch. `--net lan` puts every interface on `lan`.                                    |
-| `rmswitch lan`                               | Remove a switch, after a confirmation that lists what is plugged in and its cables to other switches. The machines run on.             |
-| `cable lan wan:8`                            | Put a cable between two switches, so that their machines share a segment. `lan` alone is its lowest free port.                         |
-| `uncable lan:3`                              | Take out the cable between switches that is in port 3 of `lan`. Either of its two ports names it.                                      |
-| `topology`                                   | List every switch, every port, what is in it, whether its link is up, its VLAN, and which switches are storming.                       |
-| `vlan node2 10`                              | Put the port that node2 is in, or one named as `lan:3`, in VLAN 10. It reaches only the ports of VLAN 10. Every port starts in 1.      |
-| `trunk lan:8 --allow 10,20 --native 1`       | Make the port of a cable between switches a trunk of VLANs 10 and 20, tagged, and 1 untagged. Make the far end a trunk too.            |
-| `plug node2 lan:3`                           | Move node2's cable to port 3 of `lan`, or plug it in. `lan` alone is its lowest free port. Name one of several with `node2:eth1`.      |
-| `unplug node2:eth1`                          | Take the interface's cable out and free its port, also for later boots.                                                                |
-| `exec node1 -- ping -c 1 10.88.0.12`         | Send one ping from node1 and read the exit code from its shell.                                                                        |
-| `write node1 /etc/motd --mode 644 -- hello`  | Put a text in a file on the machine, as root, with the directories it needs. `--owner user:group` sets whose it is.                    |
-| `link down node2`                            | Cut node2's cables, whether it is on or off. Reconnect them with `link up node2`. Name one of several with `node2:eth1`.               |
-| `link down lan:3`                            | Cut the cable in that port, also one between switches. Both switches forget what they learned over it. `link up lan:3` reconnects it.  |
-| `capture arp or node2`                       | Maximise the capture with a filter for ARP or traffic involving node2. `node2:eth1` keeps one interface's frames.                      |
-| `capture lan:3 icmp`                         | Show the pings that crossed one cable, the one in port 3 of `lan`. `lan` alone is all that the switch carried.                         |
-| `sh node2`                                   | Open another shell on node2.                                                                                                           |
-| `focus node2 --max`                          | Maximise or restore its pane. Use `--main` to promote it to the main pane.                                                             |
-| `reboot node2`                               | Shut the machine down and boot it again, with its disks, name, addresses, and cables. `reboot` typed in the guest does the same.       |
-| `poweroff node2`                             | Shut the machine down and leave it off. It keeps its disks and its ports, and uses no memory.                                          |
-| `boot node2`                                 | Boot a machine that is off, or retry a failed boot.                                                                                    |
-| `checkpoint node2 before`                    | Save all of the machine's disks as they are now, under a name. The machine runs on, or is off.                                         |
-| `restore node2 before`                       | Put the disks back as they were at the checkpoint and boot, after a confirmation.                                                      |
-| `forget node2 before`                        | Delete the checkpoint and free its storage, after a confirmation.                                                                      |
-| `rm node2`                                   | Remove the machine and delete its disks and its checkpoints, after a confirmation that lists them.                                     |
-| `help reboot`                                | Explain a command. `help` alone lists them all.                                                                                        |
+
+### Wire machines and switches
+
+| Command bar example | What it does                                                                                                                          |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `mkswitch lan`      | Add a switch called `lan`. Without a name, it is the next free `switch1`. Frames pass from one switch to another only over a cable.   |
+| `rmswitch lan`      | Remove a switch, after a confirmation that lists what is plugged in and its cables to other switches. The machines run on.            |
+| `cable lan wan:8`   | Put a cable between two switches, so that their machines share a segment. `lan` alone is its lowest free port.                        |
+| `uncable lan:3`     | Take out the cable between switches that is in port 3 of `lan`. Either of its two ports names it.                                     |
+| `plug node2 lan:3`  | Move node2's cable to port 3 of `lan`, or plug it in. `lan` alone is its lowest free port. Name one of several with `node2:eth1`.     |
+| `unplug node2:eth1` | Take the interface's cable out and free its port, also for later boots.                                                               |
+| `link down node2`   | Cut node2's cables, whether it is on or off. Reconnect them with `link up node2`. Name one of several with `node2:eth1`.              |
+| `link down lan:3`   | Cut the cable in that port, also one between switches. Both switches forget what they learned over it. `link up lan:3` reconnects it. |
+| `vlan node2 10`     | Put the port that node2 is in, or one named as `lan:3`, in VLAN 10. It reaches only the ports of VLAN 10. Every port starts in 1.      |
+| `trunk lan:8 --allow 10,20 --native 1` | Make the port of a cable between switches a trunk of VLANs 10 and 20, tagged, and 1 untagged. Make the far end a trunk too. |
+
+### Run commands and open consoles
+
+| Command bar example                         | What it does                                                                                                        |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `exec node1 -- ping -c 1 10.88.0.12`        | Send one ping from node1 and read the exit code from its shell.                                                     |
+| `write node1 /etc/motd --mode 644 -- hello` | Put a text in a file on the machine, as root, with the directories it needs. `--owner user:group` sets whose it is. |
+| `sh node2`                                  | Open another shell on node2.                                                                                        |
+| `focus node2 --max`                         | Maximise or restore its pane. Use `--main` to promote it to the main pane.                                          |
+
+### Start, stop, or remove machines
+
+| Command bar example | What it does                                                                                                                     |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `reboot node2`      | Shut the machine down and boot it again, with its disks, name, addresses, and cables. `reboot` typed in the guest does the same. |
+| `poweroff node2`    | Shut the machine down and leave it off. It keeps its disks and its ports, and uses no memory.                                    |
+| `boot node2`        | Boot a machine that is off, or retry a failed boot.                                                                              |
+| `rm node2`          | Remove the machine and delete its disks and its checkpoints, after a confirmation that lists them.                               |
+
+### Save and restore checkpoints
+
+| Command bar example       | What it does                                                                                   |
+| ------------------------- | ---------------------------------------------------------------------------------------------- |
+| `checkpoint node2 before` | Save all of the machine's disks as they are now, under a name. The machine runs on, or is off. |
+| `restore node2 before`    | Put the disks back as they were at the checkpoint and boot, after a confirmation.              |
+| `forget node2 before`     | Delete the checkpoint and free its storage, after a confirmation.                              |
+
+### Capture traffic
+
+| Command bar example    | What it does                                                                                                      |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `capture arp or node2` | Maximise the capture with a filter for ARP or traffic involving node2. `node2:eth1` keeps one interface's frames. |
+| `capture lan:3 icmp`   | Show the pings that crossed one cable, the one in port 3 of `lan`. `lan` alone is all that the switch carried.    |
+| `capture vlan 10`      | Show the frames that were in VLAN 10. On a trunk, a row also gives the 802.1Q tag the frame had there.            |
 
 In a capture filter, terms that follow one another must all match, and `or`
 starts an alternative. A term is a protocol, a machine, an interface, an address,
@@ -106,10 +153,6 @@ of. A cable between two switches has a port at each end, and either names it: th
 same frames, each as the switch at that end carried it. **save .pcap** saves
 everything captured, or only the frames shown when the filter names a switch or a
 cable.
-
-Commands that accept multiple machines can take a list (`node1,node3`), a glob
-(`node*`), or `all`. Globs and `all` select the machines that the command can act
-on, such as the ready ones for `exec` and the ones that are off or failed for `boot`.
 
 ## Reach the lab from your terminal
 
