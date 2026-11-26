@@ -103,7 +103,9 @@ describe("cable", () => {
 		expect(lab.effects.filter((e) => e.type === "cable/attach")).toHaveLength(1);
 
 		// One end of it and another port is a port that is taken.
-		expect(refused(lab, "cable switch0:3 lan:4")).toBe("switch0:3 is taken by the cable to lan:2, so use switch0:4.");
+		expect(refused(lab, "cable switch0:3 lan:4")).toBe(
+			`switch0:3 is taken by the cable to lan:2, so use switch0:4.${NOTHING}`,
+		);
 		// With no port named, it is another cable.
 		expect(will(lab, "cable switch0 lan")).toBe("cable switch0 port 4 to lan port 1");
 	});

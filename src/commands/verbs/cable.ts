@@ -5,10 +5,12 @@ import {
 	isCablePlanError,
 	joined,
 	type LabState,
+	type Place,
 	type PortRef,
 	planCable,
 	portLabel,
 	portName,
+	type SwitchCable,
 	samePort,
 } from "../../model/index.ts";
 import { defineVerb, refuse } from "../define.ts";
@@ -22,7 +24,8 @@ export interface CabledSwitches {
 }
 
 export interface NewCable extends CabledSwitches {
-	readonly link: "up";
+	/** Cut only for one that was there already, cut. */
+	readonly link: SwitchCable["link"];
 	/** Whether it closed a loop of cables, so that frames now come back to the switches on it. */
 	readonly loop: boolean;
 }
@@ -36,6 +39,16 @@ export function cableLabel(lab: LabState, [a, b]: readonly [PortRef, PortRef]): 
 const cableName = ([a, b]: readonly [PortRef, PortRef]): string => `${portName(a)} to ${portName(b)}`;
 
 export const LOOP = "closes a loop, so a broadcast goes round until a cable of the loop is cut";
+
+/** The cable that is in both the named ports, from the first to the second. */
+function cableBetween(lab: LabState, from: Place, to: Place): SwitchCable | null {
+	if (from.port === null || to.port === null) return null;
+	const near = { switch: from.switch, port: from.port };
+	const held = cableAt(lab, near);
+	if (!held) return null;
+	const ends = endsFrom(held, near);
+	return samePort(ends[1], { switch: to.switch, port: to.port }) ? { ends, link: held.link } : null;
+}
 
 function cableErrorSentence(lab: LabState, error: CablePlanError): string {
 	if (error.kind === "one-port") {
@@ -60,6 +73,8 @@ export const cable = defineVerb({
 		if (from instanceof slots.Miss) return refuse(String(from.message), "from");
 		const to = slots.readPlace(a.to, lab);
 		if (to instanceof slots.Miss) return refuse(String(to.message), "to");
+		const there = cableBetween(lab, from, to);
+		if (there) return { ends: there.ends, loop: false, there: there.link };
 		const plan = planCable(lab, from, to);
 		if (isCablePlanError(plan)) {
 			const first =
@@ -69,10 +84,20 @@ export const cable = defineVerb({
 			return refuse(cableErrorSentence(lab, plan), first ? "from" : "to");
 		}
 		const [near, far] = plan.ends;
-		return { ends: plan.ends, loop: joined(lab, near.switch, far.switch) };
+		return { ends: plan.ends, loop: joined(lab, near.switch, far.switch), there: null };
 	},
-	describe: ({ ends, loop }, lab) => [`cable ${cableLabel(lab, ends)}`, ...(loop ? [LOOP] : [])].join(" · "),
-	async execute({ ends, loop }, ctx, deps) {
+	describe: ({ ends, loop, there }, lab) =>
+		there
+			? [
+					`change nothing: ${cableLabel(lab, ends)} is already cabled`,
+					...(there === "cut" ? ["it is cut and stays cut"] : []),
+				].join(" · ")
+			: [`cable ${cableLabel(lab, ends)}`, ...(loop ? [LOOP] : [])].join(" · "),
+	async execute({ ends, loop, there }, ctx, deps) {
+		if (there) {
+			const data: NewCable = { from: ends[0], to: ends[1], link: there, loop };
+			return { kind: "visible", text: `${cableName(ends)} already cabled · ${there}`, data };
+		}
 		deps.dispatch({ type: "cmd/cable", plan: { ends }, cause: ctx.source });
 		await deps.until((s) => cableAt(s, ends[0]) !== undefined, ctx.signal);
 		const data: NewCable = { from: ends[0], to: ends[1], link: "up", loop };
