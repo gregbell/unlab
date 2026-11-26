@@ -1,0 +1,4 @@
+16 machines ready 3.3 s after the reload, on 32 worker threads
+the same sixteen, on the same ports with the same hues: node1 switch0:1 10.88.0.11 hue 1, node2 switch0:2 10.88.0.12 hue 2, node3 switch0:3 10.88.0.13 hue 3, node4 switch0:4 10.88.0.14 hue 4, node5 switch0:5 10.88.0.15 hue 5, node6 switch0:6 10.88.0.16 hue 6, node7 switch0:7 10.88.0.17 hue 7, node8 switch0:8 10.88.0.18 hue 8, node9 lan:1 10.2.0.11 hue 1, node10 lan:2 10.2.0.12 hue 2, node11 lan:3 10.2.0.13 hue 3, node12 lan:4 10.2.0.14 hue 4, node13 lan:5 10.2.0.15 hue 5, node14 lan:6 10.2.0.16 hue 6, node15 lan:7 10.2.0.17 hue 7, node16 lan:8 10.2.0.18 hue 8
+node1 pings 10.88.0.18: answered, kept
+node9 pings 10.2.0.18: answered

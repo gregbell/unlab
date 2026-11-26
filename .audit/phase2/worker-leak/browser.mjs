@@ -92,13 +92,44 @@ export async function launch() {
 		return threads;
 	};
 
+	/** Every process of this browser: what it is, the memory it holds in MiB, and the CPU seconds it has used. */
+	const processes = () => {
+		const found = [];
+		const ticks = 100;
+		for (const pid of readdirSync("/proc")) {
+			if (!/^\d+$/.test(pid)) continue;
+			try {
+				const command = readFileSync(`/proc/${pid}/cmdline`, "utf8");
+				if (!command.includes(profile)) continue;
+				const rollup = readFileSync(`/proc/${pid}/smaps_rollup`, "utf8");
+				const kb = (field) => Number(new RegExp(`^${field}:\\s+(\\d+) kB`, "m").exec(rollup)?.[1] ?? 0);
+				const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
+				const fields = stat.slice(stat.lastIndexOf(")") + 2).split(" ");
+				found.push({
+					pid: Number(pid),
+					type: /--type=([a-z-]+)/.exec(command)?.[1] ?? "browser",
+					rssMiB: Math.round(kb("Rss") / 1024),
+					pssMiB: Math.round(kb("Pss") / 1024),
+					swapMiB: Math.round(kb("Swap") / 1024),
+					cpuSeconds: (Number(fields[11]) + Number(fields[12])) / ticks,
+					threads: Number(fields[17]),
+				});
+			} catch {
+				// A process that ended while it was read.
+			}
+		}
+		return found;
+	};
+
 	return {
 		send,
 		evaluate,
 		workerThreads,
+		processes,
 		async open(url) {
 			await send("Page.enable");
 			await send("Runtime.enable");
+			await send("Emulation.setDeviceMetricsOverride", { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
 			await send("Page.navigate", { url });
 		},
 		/** A line in the lab's command bar, as a person types it. */
