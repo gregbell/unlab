@@ -247,6 +247,7 @@ class Desktop extends UnlabElement {
 				before.rail !== next.rail ||
 				before.switches !== next.switches ||
 				before.switchCables !== next.switchCables ||
+				before.portVlans !== next.portVlans ||
 				before.storms !== next.storms ||
 				before.sessions !== next.sessions ||
 				before.keyboard !== next.keyboard ||
@@ -1266,3 +1267,9 @@ class Desktop extends UnlabElement {
 	}
 }
 customElements.define("unlab-desktop", Desktop);
+
+declare global {
+	interface HTMLElementTagNameMap {
+		"unlab-desktop": Desktop;
+	}
+}

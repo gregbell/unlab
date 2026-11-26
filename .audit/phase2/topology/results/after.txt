@@ -1,0 +1,185 @@
+== two switches, node1 and node2 on switch0, router eth0 on switch0 and eth1 on lan, node4 on lan
+  node Inspect switch switch0 3 / 8 ports  [described: Port 1 · node1 · up. Port 2 · node2 · up. Port 3 · router:eth0 · up]
+  node Inspect switch lan 2 / 8 ports  [described: Port 1 · node4 · up. Port 2 · router:eth1 · up]
+  node Inspect machine node1 lab  [described: eth0 · to switch0 port 1 · up]
+  node Inspect machine node2 lab  [described: eth0 · to switch0 port 2 · up]
+  node Inspect machine router lab  [described: eth0 · to switch0 port 3 · up. eth1 · to lan port 2 · up]
+  node Inspect machine node4 lab  [described: eth0 · to lan port 1 · up]
+  line switch0 -- node1 [state=up hue=1] stroke color(srgb 0.438824 0.455294 0.542745) dash none
+  line switch0 -- node2 [state=up hue=2] stroke color(srgb 0.438824 0.455294 0.542745) dash none
+  line switch0 -- router [state=up hue=3] stroke color(srgb 0.438824 0.455294 0.542745) dash none
+  line lan -- node4 [state=up hue=4] stroke color(srgb 0.438824 0.455294 0.542745) dash none
+  line lan -- router [state=up hue=3] stroke color(srgb 0.438824 0.455294 0.542745) dash none
+  words in the window: (none)
+== cable switch0 lan
+  node Inspect switch switch0 4 / 8 ports  [described: Port 1 · node1 · up. Port 2 · node2 · up. Port 3 · router:eth0 · up. Port 4 · to lan port 3 · up]
+  node Inspect switch lan 3 / 8 ports  [described: Port 1 · node4 · up. Port 2 · router:eth1 · up. Port 3 · to switch0 port 4 · up]
+  node Inspect machine node1 lab  [described: eth0 · to switch0 port 1 · up]
+  node Inspect machine node2 lab  [described: eth0 · to switch0 port 2 · up]
+  node Inspect machine router lab  [described: eth0 · to switch0 port 3 · up. eth1 · to lan port 2 · up]
+  node Inspect machine node4 lab  [described: eth0 · to lan port 1 · up]
+  line switch0 -- node1 [state=up hue=1] stroke color(srgb 0.438824 0.455294 0.542745) dash none
+  line switch0 -- node2 [state=up hue=2] stroke color(srgb 0.438824 0.455294 0.542745) dash none
+  line switch0 -- router [state=up hue=3] stroke color(srgb 0.438824 0.455294 0.542745) dash none
+  line lan -- node4 [state=up hue=4] stroke color(srgb 0.438824 0.455294 0.542745) dash none
+  line lan -- router [state=up hue=3] stroke color(srgb 0.438824 0.455294 0.542745) dash none
+  line switch0 -- lan [state=up] stroke color(srgb 0.438824 0.455294 0.542745) dash none
+  words in the window: (none)
+== plug node2 lan:5 (a moved cable)
+  node Inspect switch switch0 3 / 8 ports  [described: Port 1 · node1 · up. Port 3 · router:eth0 · up. Port 4 · to lan port 3 · up]
+  node Inspect switch lan 4 / 8 ports  [described: Port 1 · node4 · up. Port 2 · router:eth1 · up. Port 3 · to switch0 port 4 · up. Port 5 · node2 · up]
+  node Inspect machine node1 lab  [described: eth0 · to switch0 port 1 · up]
+  node Inspect machine node2 lab  [described: eth0 · to lan port 5 · up]
+  node Inspect machine router lab  [described: eth0 · to switch0 port 3 · up. eth1 · to lan port 2 · up]
+  node Inspect machine node4 lab  [described: eth0 · to lan port 1 · up]
+  line switch0 -- node1 [state=up hue=1] stroke color(srgb 0.438824 0.455294 0.542745) dash none
+  line switch0 -- router [state=up hue=3] stroke color(srgb 0.438824 0.455294 0.542745) dash none
+  line lan -- node4 [state=up hue=4] stroke color(srgb 0.438824 0.455294 0.542745) dash none
+  line lan -- router [state=up hue=3] stroke color(srgb 0.438824 0.455294 0.542745) dash none
+  line lan -- node2 [state=up hue=2] stroke color(srgb 0.438824 0.455294 0.542745) dash none
+  line switch0 -- lan [state=up] stroke color(srgb 0.438824 0.455294 0.542745) dash none
+  words in the window: (none)
+== link down router:eth1 (a cut NIC cable)
+  node Inspect switch switch0 3 / 8 ports  [described: Port 1 · node1 · up. Port 3 · router:eth0 · up. Port 4 · to lan port 3 · up]
+  node Inspect switch lan 4 / 8 ports  [described: Port 1 · node4 · up. Port 2 · router:eth1 · cut. Port 3 · to switch0 port 4 · up. Port 5 · node2 · up]
+  node Inspect machine node1 lab  [described: eth0 · to switch0 port 1 · up]
+  node Inspect machine node2 lab  [described: eth0 · to lan port 5 · up]
+  node Inspect machine router lab  [described: eth0 · to switch0 port 3 · up. eth1 · to lan port 2 · cut]
+  node Inspect machine node4 lab  [described: eth0 · to lan port 1 · up]
+  line switch0 -- node1 [state=up hue=1] stroke color(srgb 0.438824 0.455294 0.542745) dash none
+  line switch0 -- router [state=up hue=3] stroke color(srgb 0.438824 0.455294 0.542745) dash none
+  line lan -- node4 [state=up hue=4] stroke color(srgb 0.438824 0.455294 0.542745) dash none
+  line lan -- router [state=cut hue=3] stroke rgb(243, 139, 168) dash 5px, 5px
+  line lan -- node2 [state=up hue=2] stroke color(srgb 0.438824 0.455294 0.542745) dash none
+  line switch0 -- lan [state=up] stroke color(srgb 0.438824 0.455294 0.542745) dash none
+  words in the window: (none)
+== link down switch0:4 (a cut cable between switches)
+  node Inspect switch switch0 3 / 8 ports  [described: Port 1 · node1 · up. Port 3 · router:eth0 · up. Port 4 · to lan port 3 · cut]
+  node Inspect switch lan 4 / 8 ports  [described: Port 1 · node4 · up. Port 2 · router:eth1 · cut. Port 3 · to switch0 port 4 · cut. Port 5 · node2 · up]
+  node Inspect machine node1 lab  [described: eth0 · to switch0 port 1 · up]
+  node Inspect machine node2 lab  [described: eth0 · to lan port 5 · up]
+  node Inspect machine router lab  [described: eth0 · to switch0 port 3 · up. eth1 · to lan port 2 · cut]
+  node Inspect machine node4 lab  [described: eth0 · to lan port 1 · up]
+  line switch0 -- node1 [state=up hue=1] stroke color(srgb 0.438824 0.455294 0.542745) dash none
+  line switch0 -- router [state=up hue=3] stroke color(srgb 0.438824 0.455294 0.542745) dash none
+  line lan -- node4 [state=up hue=4] stroke color(srgb 0.438824 0.455294 0.542745) dash none
+  line lan -- router [state=cut hue=3] stroke rgb(243, 139, 168) dash 5px, 5px
+  line lan -- node2 [state=up hue=2] stroke color(srgb 0.438824 0.455294 0.542745) dash none
+  line switch0 -- lan [state=cut] stroke rgb(243, 139, 168) dash 5px, 5px
+  words in the window: (none)
+== link up node1 --delay 50ms --loss 10% (an impaired cable)
+  node Inspect switch switch0 3 / 8 ports · impaired  [described: Port 1 · node1 · up · delay 50 ms, loss 10%. Port 3 · router:eth0 · up. Port 4 · to lan port 3 · up]
+  node Inspect switch lan 4 / 8 ports  [described: Port 1 · node4 · up. Port 2 · router:eth1 · up. Port 3 · to switch0 port 4 · up. Port 5 · node2 · up]
+  node Inspect machine node1 lab · impaired  [described: eth0 · to switch0 port 1 · up · delay 50 ms, loss 10%]
+  node Inspect machine node2 lab  [described: eth0 · to lan port 5 · up]
+  node Inspect machine router lab  [described: eth0 · to switch0 port 3 · up. eth1 · to lan port 2 · up]
+  node Inspect machine node4 lab  [described: eth0 · to lan port 1 · up]
+  line switch0 -- node1 [state=up hue=1 conditions=delay 50 ms, loss 10%] stroke color(srgb 0.438824 0.455294 0.542745) dash none
+  line switch0 -- router [state=up hue=3] stroke color(srgb 0.438824 0.455294 0.542745) dash none
+  line lan -- node4 [state=up hue=4] stroke color(srgb 0.438824 0.455294 0.542745) dash none
+  line lan -- router [state=up hue=3] stroke color(srgb 0.438824 0.455294 0.542745) dash none
+  line lan -- node2 [state=up hue=2] stroke color(srgb 0.438824 0.455294 0.542745) dash none
+  line switch0 -- lan [state=up] stroke color(srgb 0.438824 0.455294 0.542745) dash none
+  words in the window: impaired impaired
+== vlan node4 10; trunk switch0:4 --allow 1,10
+  node Inspect switch switch0 3 / 8 ports  [described: Port 1 · node1 · up. Port 3 · router:eth0 · up. Port 4 · to lan port 3 · up · trunk of 1 and 10, native 1]
+  node Inspect switch lan 4 / 8 ports  [described: Port 1 · node4 · up · vlan 10. Port 2 · router:eth1 · up. Port 3 · to switch0 port 4 · up. Port 5 · node2 · up]
+  node Inspect machine node1 lab  [described: eth0 · to switch0 port 1 · up]
+  node Inspect machine node2 lab  [described: eth0 · to lan port 5 · up]
+  node Inspect machine router lab  [described: eth0 · to switch0 port 3 · up. eth1 · to lan port 2 · up]
+  node Inspect machine node4 lab  [described: eth0 · to lan port 1 · up · vlan 10]
+  line switch0 -- node1 [state=up hue=1] stroke color(srgb 0.438824 0.455294 0.542745) dash none
+  line switch0 -- router [state=up hue=3] stroke color(srgb 0.438824 0.455294 0.542745) dash none
+  line lan -- node4 [state=up hue=4] stroke color(srgb 0.438824 0.455294 0.542745) dash none
+  line lan -- router [state=up hue=3] stroke color(srgb 0.438824 0.455294 0.542745) dash none
+  line lan -- node2 [state=up hue=2] stroke color(srgb 0.438824 0.455294 0.542745) dash none
+  line switch0 -- lan [state=up] stroke color(srgb 0.438824 0.455294 0.542745) dash none
+  words in the window: (none)
+   topology_read says: ["switch0:1 {\"mode\":\"access\",\"vlan\":1}","switch0:2 {\"mode\":\"access\",\"vlan\":1}","switch0:3 {\"mode\":\"access\",\"vlan\":1}","switch0:4 {\"mode\":\"trunk\",\"allowed\":[1,10],\"native\":1}","switch0:5 {\"mode\":\"access\",\"vlan\":1}","switch0:6 {\"mode\":\"access\",\"vlan\":1}","switch0:7 {\"mode\":\"access\",\"vlan\":1}","switch0:8 {\"mode\":\"access\",\"vlan\":1}","lan:1 {\"mode\":\"access\",\"vlan\":10}","lan:2 {\"mode\":\"access\",\"vlan\":1}","lan:3 {\"mode\":\"access\",\"vlan\":1}","lan:4 {\"mode\":\"access\",\"vlan\":1}","lan:5 {\"mode\":\"access\",\"vlan\":1}","lan:6 {\"mode\":\"access\",\"vlan\":1}","lan:7 {\"mode\":\"access\",\"vlan\":1}","lan:8 {\"mode\":\"access\",\"vlan\":1}"]
+== cable lan lan, and a broadcast (a storm)
+  node Inspect switch switch0 3 / 8 ports · storming  [described: Port 1 · node1 · up. Port 3 · router:eth0 · up. Port 4 · to lan port 3 · up · trunk of 1, native 1]
+  node Inspect switch lan 6 / 8 ports · storming  [described: Port 1 · node4 · up. Port 2 · router:eth1 · up. Port 3 · to switch0 port 4 · up. Port 4 · to lan port 6 · up. Port 5 · node2 · up. Port 6 · to lan port 4 · up]
+  node Inspect machine node1 lab  [described: eth0 · to switch0 port 1 · up]
+  node Inspect machine node2 lab  [described: eth0 · to lan port 5 · up]
+  node Inspect machine router lab  [described: eth0 · to switch0 port 3 · up. eth1 · to lan port 2 · up]
+  node Inspect machine node4 lab  [described: eth0 · to lan port 1 · up]
+  line switch0 -- node1 [state=up hue=1] stroke color(srgb 0.438824 0.455294 0.542745) dash none
+  line switch0 -- router [state=up hue=3] stroke color(srgb 0.438824 0.455294 0.542745) dash none
+  line lan -- node4 [state=up hue=4] stroke color(srgb 0.438824 0.455294 0.542745) dash none
+  line lan -- router [state=up hue=3] stroke color(srgb 0.438824 0.455294 0.542745) dash none
+  line lan -- node2 [state=up hue=2] stroke color(srgb 0.438824 0.455294 0.542745) dash none
+  line switch0 -- lan [state=up] stroke color(srgb 0.438824 0.455294 0.542745) dash none
+  line lan -- lan [state=up] stroke color(srgb 0.438824 0.455294 0.542745) dash none
+  words in the window: storming storming
+== uncable lan:6 (the storm ends)
+  node Inspect switch switch0 3 / 8 ports  [described: Port 1 · node1 · up. Port 3 · router:eth0 · up. Port 4 · to lan port 3 · up · trunk of 1, native 1]
+  node Inspect switch lan 4 / 8 ports  [described: Port 1 · node4 · up. Port 2 · router:eth1 · up. Port 3 · to switch0 port 4 · up. Port 5 · node2 · up]
+  node Inspect machine node1 lab  [described: eth0 · to switch0 port 1 · up]
+  node Inspect machine node2 lab  [described: eth0 · to lan port 5 · up]
+  node Inspect machine router lab  [described: eth0 · to switch0 port 3 · up. eth1 · to lan port 2 · up]
+  node Inspect machine node4 lab  [described: eth0 · to lan port 1 · up]
+  line switch0 -- node1 [state=up hue=1] stroke color(srgb 0.438824 0.455294 0.542745) dash none
+  line switch0 -- router [state=up hue=3] stroke color(srgb 0.438824 0.455294 0.542745) dash none
+  line lan -- node4 [state=up hue=4] stroke color(srgb 0.438824 0.455294 0.542745) dash none
+  line lan -- router [state=up hue=3] stroke color(srgb 0.438824 0.455294 0.542745) dash none
+  line lan -- node2 [state=up hue=2] stroke color(srgb 0.438824 0.455294 0.542745) dash none
+  line switch0 -- lan [state=up] stroke color(srgb 0.438824 0.455294 0.542745) dash none
+  words in the window: (none)
+== uncable switch0:4
+  node Inspect switch switch0 2 / 8 ports  [described: Port 1 · node1 · up. Port 3 · router:eth0 · up]
+  node Inspect switch lan 3 / 8 ports  [described: Port 1 · node4 · up. Port 2 · router:eth1 · up. Port 5 · node2 · up]
+  node Inspect machine node1 lab  [described: eth0 · to switch0 port 1 · up]
+  node Inspect machine node2 lab  [described: eth0 · to lan port 5 · up]
+  node Inspect machine router lab  [described: eth0 · to switch0 port 3 · up. eth1 · to lan port 2 · up]
+  node Inspect machine node4 lab  [described: eth0 · to lan port 1 · up]
+  line switch0 -- node1 [state=up hue=1] stroke color(srgb 0.438824 0.455294 0.542745) dash none
+  line switch0 -- router [state=up hue=3] stroke color(srgb 0.438824 0.455294 0.542745) dash none
+  line lan -- node4 [state=up hue=4] stroke color(srgb 0.438824 0.455294 0.542745) dash none
+  line lan -- router [state=up hue=3] stroke color(srgb 0.438824 0.455294 0.542745) dash none
+  line lan -- node2 [state=up hue=2] stroke color(srgb 0.438824 0.455294 0.542745) dash none
+  words in the window: (none)
+== keyboard: Tab from the Topology window's title bar, 12 times
+  Tab 1: in map <button class="icon"> name "Maximize Topology" outline solid 2px rgb(137, 180, 250) pressed=null
+  Tab 2: in map <button class="icon dt-close"> name "Close Topology" outline solid 2px rgb(137, 180, 250) pressed=null
+  Tab 3: in map <button class="n-node"> name "Inspect switch switch0 4 / 8 ports" outline solid 2px rgb(137, 180, 250) pressed=false
+  Tab 4: in map <button class="n-node"> name "Inspect switch lan 3 / 8 ports" outline solid 2px rgb(137, 180, 250) pressed=false
+  Tab 5: in map <button class="n-node"> name "Inspect machine node1 lab" outline solid 2px rgb(137, 180, 250) pressed=false
+  Tab 6: in map <button class="n-node"> name "Inspect machine node2 lab" outline solid 2px rgb(137, 180, 250) pressed=false
+  Tab 7: in map <button class="n-node"> name "Inspect machine router lab" outline solid 2px rgb(137, 180, 250) pressed=false
+  Tab 8: in map <button class="n-node"> name "Inspect machine node4 lab" outline solid 2px rgb(137, 180, 250) pressed=false
+  Tab 9: outside <header class="dt-title"> name "node1terminal 10.88.0.11" outline none 0px rgb(166, 173, 200) pressed=null
+  Tab 10: outside <button class="icon"> name "Minimize node1 · terminal" outline solid 2px rgb(137, 180, 250) pressed=null
+  Tab 11: outside <button class="icon"> name "Maximize node1 · terminal" outline solid 2px rgb(137, 180, 250) pressed=null
+  Tab 12: outside <button class="icon dt-close"> name "Close node1 · terminal" outline solid 2px rgb(137, 180, 250) pressed=null
+  ArrowRight from the first node: focus on Inspect switch switch0 4 / 8 ports
+  Enter on router: windows now ["Rack manager","Topology","node1 · terminal","node2 · terminal","router · terminal","node4 · terminal","router · Configuration"]
+== the Topology window's accessibility tree
+- region "Topology":
+  - text: Topology
+  - button "Minimize Topology"
+  - button "Maximize Topology"
+  - button "Close Topology"
+  - button "Inspect switch switch0 4 / 8 ports":
+    - text: Inspect switch
+    - strong: switch0
+    - text: 4 / 8 ports
+  - button "Inspect switch lan 3 / 8 ports":
+    - text: Inspect switch
+    - strong: lan
+    - text: 3 / 8 ports
+  - button "Inspect machine node1 lab":
+    - text: Inspect machine
+    - strong: node1
+    - text: lab
+  - button "Inspect machine node2 lab":
+    - text: Inspect machine
+    - strong: node2
+    - text: lab
+  - button "Inspect machine router lab" [pressed]:
+    - text: Inspect machine
+    - strong: router
+    - text: lab
+  - button "Inspect machine node4 lab":
+    - text: Inspect machine
+    - strong: node4
+    - text: lab
