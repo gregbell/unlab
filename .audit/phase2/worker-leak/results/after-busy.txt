@@ -1,0 +1,22 @@
+spawn 8 alpine --no-net: 8 ready on 16 worker threads; power off by command, workers busy 50 ms as they end
+round 1: 0 worker threads left, 2085 ms after off
+round 2: 0 worker threads left, 2036 ms after off
+round 3: 0 worker threads left, 2018 ms after off
+round 4: 0 worker threads left, 2072 ms after off
+round 5: 0 worker threads left, 2016 ms after off
+round 6: 0 worker threads left, 2024 ms after off
+0 of 48 power-offs left their worker threads
+ms until the threads had gone, by round: 2085 2036 2018 2072 2016 2024
+spawn 4 alpine: 4 ready on 8 worker threads; power off by guest, workers busy 50 ms as they end
+round 1: 0 worker threads left, 1974 ms after off
+round 2: 0 worker threads left, 2028 ms after off
+round 3: 0 worker threads left, 2019 ms after off
+round 4: 0 worker threads left, 2015 ms after off
+round 5: 0 worker threads left, 2024 ms after off
+round 6: 0 worker threads left, 2015 ms after off
+round 7: 0 worker threads left, 2029 ms after off
+round 8: 0 worker threads left, 2021 ms after off
+round 9: 0 worker threads left, 2031 ms after off
+round 10: 0 worker threads left, 2016 ms after off
+0 of 40 power-offs left their worker threads
+ms until the threads had gone, by round: 1974 2028 2019 2015 2024 2015 2029 2021 2031 2016

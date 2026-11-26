@@ -1,0 +1,43 @@
+spawn 4 alpine: 4 ready on 8 worker threads; power off by guest
+round 1: 0 worker threads left, 4 ms after off
+round 2: 0 worker threads left, 1978 ms after off
+round 3: 0 worker threads left, 2025 ms after off
+round 4: 0 worker threads left, 1967 ms after off
+round 5: 0 worker threads left, 1965 ms after off
+round 6: 0 worker threads left, 1960 ms after off
+round 7: 0 worker threads left, 1964 ms after off
+round 8: 0 worker threads left, 1962 ms after off
+round 9: 0 worker threads left, 2015 ms after off
+round 10: 0 worker threads left, 5 ms after off
+round 11: 0 worker threads left, 2022 ms after off
+round 12: 0 worker threads left, 1970 ms after off
+round 13: 0 worker threads left, 6 ms after off
+round 14: 0 worker threads left, 1961 ms after off
+round 15: 0 worker threads left, 1971 ms after off
+round 16: 0 worker threads left, 7 ms after off
+round 17: 0 worker threads left, 1966 ms after off
+round 18: 0 worker threads left, 1964 ms after off
+round 19: 0 worker threads left, 1961 ms after off
+round 20: 0 worker threads left, 2019 ms after off
+round 21: 0 worker threads left, 1956 ms after off
+round 22: 0 worker threads left, 1968 ms after off
+round 23: 0 worker threads left, 1965 ms after off
+round 24: 0 worker threads left, 5 ms after off
+round 25: 0 worker threads left, 1963 ms after off
+0 of 100 power-offs left their worker threads
+ms until the threads had gone, by round: 4 1978 2025 1967 1965 1960 1964 1962 2015 5 2022 1970 6 1961 1971 7 1966 1964 1961 2019 1956 1968 1965 5 1963
+spawn 8 alpine --no-net: 8 ready on 16 worker threads; power off by command
+round 1: 0 worker threads left, 2031 ms after off
+round 2: 0 worker threads left, 2013 ms after off
+round 3: 0 worker threads left, 2022 ms after off
+round 4: 0 worker threads left, 1951 ms after off
+round 5: 0 worker threads left, 1960 ms after off
+round 6: 0 worker threads left, 1966 ms after off
+round 7: 0 worker threads left, 1964 ms after off
+round 8: 0 worker threads left, 1967 ms after off
+round 9: 0 worker threads left, 2022 ms after off
+round 10: 0 worker threads left, 1963 ms after off
+round 11: 0 worker threads left, 2020 ms after off
+round 12: 0 worker threads left, 1965 ms after off
+0 of 96 power-offs left their worker threads
+ms until the threads had gone, by round: 2031 2013 2022 1951 1960 1966 1964 1967 2022 1963 2020 1965
