@@ -9,8 +9,7 @@ import {
 	saveWorkspace,
 	selectNames,
 } from "../model/index.ts";
-import { compileFilter } from "../net/filter.ts";
-import { type NameBook, nodeMac } from "../net/identity.ts";
+import { compileFilter, type NameBook, nodeMac } from "../net/index.ts";
 import { createRegistry, isLineError, parseLine, VERBS } from "./index.ts";
 import { IMAGES, NO_EXEC, NO_FILES } from "./testing/lab.ts";
 import type { ListedMachine } from "./verbs/index.ts";
