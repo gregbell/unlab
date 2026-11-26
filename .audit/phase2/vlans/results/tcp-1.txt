@@ -1,0 +1,16 @@
+run 0 a7ed190 one: 585 Mbit/s, ping avg 1.735 ms, receiver took 280680048 bytes threads in a second transfer: DedicatedWorker 0.96, chromium MAIN 0.88, DedicatedWorker 0.72, ThreadPoolForeg 0.28, ThreadPoolForeg 0.21, ThreadPoolForeg 0.13
+run 0 vlans one: 591 Mbit/s, ping avg 2.023 ms, receiver took 280678794 bytes threads in a second transfer: DedicatedWorker 0.96, chromium MAIN 0.86, DedicatedWorker 0.74, ThreadPoolForeg 0.27, DedicatedWorker 0.24, ThreadPoolForeg 0.18
+run 1 a7ed190 one: 613 Mbit/s, ping avg 1.952 ms, receiver took 280679256 bytes
+run 1 vlans one: 640 Mbit/s, ping avg 2.185 ms, receiver took 280680048 bytes
+run 2 a7ed190 one: 571 Mbit/s, ping avg 1.975 ms, receiver took 280677408 bytes
+run 2 vlans one: 595 Mbit/s, ping avg 2.082 ms, receiver took 280678662 bytes
+run 3 a7ed190 one: 530 Mbit/s, ping avg 2.065 ms, receiver took 280682160 bytes
+run 3 vlans one: 601 Mbit/s, ping avg 1.938 ms, receiver took 280680048 bytes
+run 4 a7ed190 one: 659 Mbit/s, ping avg 2.126 ms, receiver took 280680378 bytes
+run 4 vlans one: 623 Mbit/s, ping avg 2.055 ms, receiver took 280679388 bytes
+run 5 a7ed190 one: 593 Mbit/s, ping avg 1.996 ms, receiver took 280679124 bytes
+run 5 vlans one: 638 Mbit/s, ping avg 2.109 ms, receiver took 280678992 bytes
+run 6 a7ed190 one: 650 Mbit/s, ping avg 1.963 ms, receiver took 280680708 bytes
+run 6 vlans one: 585 Mbit/s, ping avg 2.189 ms, receiver took 280679256 bytes
+a7ed190 one: TCP Mbit/s 593 [530-659], ping avg ms 1.98 [1.74-2.13], n=7
+vlans one: TCP Mbit/s 601 [585-640], ping avg ms 2.08 [1.94-2.19], n=7

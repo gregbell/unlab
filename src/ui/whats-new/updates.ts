@@ -14,6 +14,13 @@ export interface Update {
 export const UPDATES: readonly Update[] = [
 	{
 		date: "2026-11-26",
+		title: "Put switch ports in VLANs, and trunk them",
+		detail:
+			"Split one switch into segments with vlan, and carry several over one cable between switches with trunk. The capture shows each frame's VLAN and its 802.1Q tag, and capture vlan 10 keeps one VLAN's frames.",
+		example: "vlan node1 10",
+	},
+	{
+		date: "2026-11-26",
 		title: "Cable switches together, and make a loop",
 		detail:
 			"Join two switches with a cable, cut it, or take it out. Close a loop, as a cable from a switch to itself does, to watch a broadcast storm: each switch says how fast it runs, and the lab still answers.",

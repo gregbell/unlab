@@ -170,6 +170,7 @@ test("a cable joins two switches at the lowest free ports or those that are name
 	expect((await topology(page)).switches[0].ports[1]).toEqual({
 		port: 2,
 		cable: { to: { kind: "port", switch: "lan", port: 2 }, link: "up" },
+		vlan: { mode: "access", vlan: 1 },
 	});
 	expect(await events(page, "lan:2")).toEqual([
 		"switch0 port 2 and lan port 2 link up. Cable between them plugged in by you.",

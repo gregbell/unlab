@@ -239,7 +239,7 @@ describe("terms that say where a frame was", () => {
 		expect(scope("lan")).toEqual({ kind: "place", switch: "lan", port: null });
 		expect(scope("  lan:3 ")).toEqual({ kind: "place", switch: "lan", port: 3 });
 		for (const source of ["lan:3 icmp", "lan or wan", "arp or lan:3", "lan port:3"]) {
-			expect(scope(source), source).toEqual({ kind: "places" });
+			expect(scope(source), source).toMatchObject({ kind: "places" });
 		}
 	});
 
@@ -263,7 +263,7 @@ describe("terms that say where a frame was", () => {
 	test("a lab of one switch is told of no other", () => {
 		for (const term of ["lam:3", "lan", "bogus", "node2:3", "port:9"]) {
 			expect(refusal(term, NAMES).message, term).toBe(
-				`Capture cannot read ${term}, so use a protocol, a machine, a NIC (node2:eth1), an address, a MAC or port:N.`,
+				`Capture cannot read ${term}, so use a protocol, a machine, a NIC (node2:eth1), an address, a MAC, vlan N or port:N.`,
 			);
 		}
 		expect(refusal("switch0:9", NAMES).message).toBe("switch0:9 is no port, so use one from switch0:1 to switch0:8.");
@@ -378,7 +378,7 @@ describe("filter errors", () => {
 			start: 4,
 			end: 8,
 			message:
-				"Capture cannot read nod3, so use a protocol, a machine, a NIC (node2:eth1), an address, a MAC or port:N.",
+				"Capture cannot read nod3, so use a protocol, a machine, a NIC (node2:eth1), an address, a MAC, vlan N or port:N.",
 		});
 		expect(error("  ICMP   Bogus ")).toMatchObject({ token: "Bogus", start: 9, end: 14 });
 	});
@@ -541,4 +541,50 @@ test("the compiled predicate agrees with the filter's meaning", () => {
 		}),
 		{ numRuns: 500 },
 	);
+});
+
+describe("a VLAN term", () => {
+	const carried = (source: string, vlan: number | undefined) => {
+		const r = compileFilter(source, NAMES);
+		if (!r.ok) throw new Error(r.error.message);
+		return r.filter.matchesFrame({
+			switch: "switch0",
+			from: 1,
+			to: bit(2),
+			bytes: arpRequest(1, 2),
+			names: NAMES,
+			vlan,
+		});
+	};
+
+	test("keeps the frames that a switch carried in that VLAN, a frame with none being in VLAN 1", () => {
+		expect([carried("vlan 10", 10), carried("vlan 10", 20), carried("vlan 1", undefined)]).toEqual([true, false, true]);
+		expect([carried("VLAN 20 arp", 20), carried("vlan 20 icmp", 20), carried("vlan 10 or vlan 20", 20)]).toEqual([
+			true,
+			false,
+			true,
+		]);
+		expect(compile("vlan 10").matchesLink(3, "node3", 0)).toBe(true);
+	});
+
+	test("needs an ID from 1 to 4094 after it, and says so at the word at fault", () => {
+		const error = (source: string) => {
+			const r = compileFilter(source, NAMES);
+			return r.ok ? null : r.error;
+		};
+		expect(error("arp vlan")).toEqual({
+			token: "vlan",
+			start: 4,
+			end: 8,
+			message: "Capture needs a VLAN ID after vlan, such as vlan 10.",
+		});
+		for (const id of ["0", "4095", "ten", "or"]) {
+			expect(error(`vlan ${id}`), id).toEqual({
+				token: id,
+				start: 5,
+				end: 5 + id.length,
+				message: `${id} is no VLAN, so use one from 1 to 4094, such as vlan 10.`,
+			});
+		}
+	});
 });

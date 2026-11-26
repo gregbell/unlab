@@ -7,7 +7,7 @@ export const capture = defineVerb({
 	name: "capture",
 	about: "filter the packet capture",
 	description:
-		"Maximise the capture on the frames that match a filter. lan is what that switch carried, lan:3 is what crossed the cable in its port 3, and port:3 is that port of every switch. A machine or a NIC is matched wherever its frames went. With a switch or a cable in the filter, save .pcap saves only the frames shown. An agent reads them with capture_read.",
+		"Maximise the capture on the frames that match a filter. lan is what that switch carried, lan:3 is what crossed the cable in its port 3, port:3 is that port of every switch, and vlan 10 is what was in VLAN 10. A machine or a NIC is matched wherever its frames went. With a switch or a cable in the filter, save .pcap saves only the frames shown. An agent reads them with capture_read.",
 	danger: false,
 	grammar: { filter },
 	example: { filter: "arp or node2" },

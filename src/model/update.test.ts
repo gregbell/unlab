@@ -93,6 +93,8 @@ describe("initialState", () => {
 				switch_remove: "ask",
 				switch_cable: "run",
 				switch_uncable: "run",
+				port_vlan: "run",
+				port_trunk: "run",
 				checkpoint_save: "run",
 				checkpoint_restore: "ask",
 				checkpoint_remove: "ask",

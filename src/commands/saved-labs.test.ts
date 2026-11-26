@@ -1,6 +1,15 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, test } from "vitest";
-import { createStore, initialState, machineList, portsOf, restoreWorkspace, saveWorkspace } from "../model/index.ts";
+import {
+	createStore,
+	initialState,
+	machineList,
+	portsOf,
+	restoreWorkspace,
+	saveWorkspace,
+	selectNames,
+} from "../model/index.ts";
+import { compileFilter, type NameBook, nodeMac } from "../net/index.ts";
 import { createRegistry, isLineError, parseLine, VERBS } from "./index.ts";
 import { IMAGES, NO_EXEC, NO_FILES } from "./testing/lab.ts";
 import type { ListedMachine } from "./verbs/index.ts";
@@ -104,8 +113,75 @@ describe("a lab saved before there were cables between switches", () => {
 		expect(portsOf(on("node5") as never).map((port) => port.switch)).toEqual(["switch0", "wan", "switch0"]);
 
 		const saved = JSON.parse(saveWorkspace(state));
-		expect(saved).toMatchObject({ version: 8, switches: ["switch0", "lan", "wan"], cables: [] });
+		expect(saved).toMatchObject({ version: 9, switches: ["switch0", "lan", "wan"], cables: [], vlans: [] });
 		const again = await open(JSON.stringify(saved));
 		expect([again.cables, again.booted]).toEqual([cables, booted]);
+	});
+});
+
+describe("a lab saved before vlan was a word in the capture filter", () => {
+	const named = (was: string) => savedBy(8).replaceAll(`"${was}"`, '"vlan"');
+
+	test("version 8 opens with a switch called vlan, which a filter names by that word alone", async () => {
+		const { state } = await open(named("wan"));
+		expect(state.switches).toEqual(["switch0", "lan", "vlan"]);
+		const names = selectNames(state);
+		expect(compiled("vlan", names)).toEqual({ kind: "place", switch: "vlan", port: null });
+		expect(compiled("vlan:8", names)).toEqual({ kind: "place", switch: "vlan", port: 8 });
+		expect(compiled("vlan 10", names)).toEqual({ kind: "everywhere" });
+		const again = await open(saveWorkspace(state));
+		expect(again.state.switches).toEqual(state.switches);
+	});
+
+	test("version 8 opens with a machine called vlan, which a filter names by that word alone", async () => {
+		const { state, cables } = await open(named("switch1"));
+		expect(cables[2]).toEqual(cut("vlan"));
+		const names = selectNames(state);
+		const of = (source: string, n: number) => {
+			const r = compileFilter(source, names);
+			if (!r.ok) throw new Error(r.error.message);
+			const bytes = new Uint8Array(42);
+			bytes.set(nodeMac(n), 6);
+			return r.filter.matchesFrame({ switch: "switch0", from: 2, to: 0, bytes, names });
+		};
+		expect([of("vlan", 4), of("vlan", 1), of("vlan vlan 1", 4), of("vlan vlan 10", 4)]).toEqual([
+			true,
+			false,
+			true,
+			false,
+		]);
+	});
+});
+
+/** The filter's scope, or why it does not compile. */
+function compiled(source: string, names: NameBook) {
+	const r = compileFilter(source, names);
+	return r.ok ? r.filter.scope : r.error.message;
+}
+
+describe("a lab saved before ports had VLANs", () => {
+	test("version 8 opens with its cables between switches, cut or not, and every port in VLAN 1", async () => {
+		const { state, booted } = await open(savedBy(8));
+		expect(state.switchCables).toEqual([
+			{
+				ends: [
+					{ switch: "switch0", port: 8 },
+					{ switch: "lan", port: 7 },
+				],
+				link: "up",
+			},
+			{
+				ends: [
+					{ switch: "lan", port: 8 },
+					{ switch: "wan", port: 8 },
+				],
+				link: "cut",
+			},
+		]);
+		expect(state.portVlans).toEqual([]);
+		const saved = JSON.parse(saveWorkspace(state));
+		expect(saved).toMatchObject({ version: 9, vlans: [] });
+		const again = await open(JSON.stringify(saved));
+		expect([again.state.switchCables, again.booted]).toEqual([state.switchCables, booted]);
 	});
 });

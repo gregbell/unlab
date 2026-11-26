@@ -1,0 +1,151 @@
+--- a/src/runtime/fabric.ts
++++ b/src/runtime/fabric.ts
+@@ -142,6 +142,8 @@
+ const AGE_EVERY_MS = 1000;
+ 
+ const BROADCAST = 0xffff_ffff_ffff;
++const RULE: string = process.env.RULE ?? "c0";
++const HOPS = Number(process.env.HOPS ?? 8);
+ 
+ /** The six bytes at `at`, as one number. */
+ function macAt(f: Uint8Array, at: number): number {
+@@ -166,9 +168,24 @@
+ interface Trail {
+ 	readonly slot: number;
+ 	readonly vlan: number;
++	readonly port: number;
+ 	readonly before: Trail | null;
+ }
+ 
++interface Lineage {
++	readonly reached: Set<number>;
++}
++
++function hasLeftBy(trail: Trail | null, slot: number, vlan: number, port: number): boolean {
++	for (let at = trail; at; at = at.before) if (at.slot === slot && at.vlan === vlan && at.port === port) return true;
++	return false;
++}
++
++function hasSlot(trail: Trail | null, slot: number): boolean {
++	for (let at = trail; at; at = at.before) if (at.slot === slot) return true;
++	return false;
++}
++
+ function hasLeft(trail: Trail | null, slot: number, vlan: number): boolean {
+ 	for (let at = trail; at; at = at.before) if (at.slot === slot && at.vlan === vlan) return true;
+ 	return false;
+@@ -180,6 +197,10 @@
+ 	/** Null once it has looped, which it stays. */
+ 	readonly trail: Trail | null;
+ 	readonly looped: boolean;
++	readonly paced: boolean;
++	readonly again: boolean;
++	readonly hops: number;
++	readonly lineage: Lineage | null;
+ }
+ 
+ /** One way along a cable between two switches. */
+@@ -520,7 +541,21 @@
+ 			src.counters.dropped++;
+ 			return;
+ 		}
+-		const looped = came !== null && (came.looped || hasLeft(came.trail, slot, vlan));
++		const looped =
++			came !== null &&
++			(came.looped || (RULE === "c3b" ? hasLeftBy(came.trail, slot, vlan, from) : hasLeft(came.trail, slot, vlan)));
++		const key = slot * 4096 + vlan;
++		const hops = came ? came.hops + 1 : 0;
++		let again = false;
++		let lineage: Lineage | null = came?.lineage ?? null;
++		if (came && !looped) {
++			if (RULE === "c1" || RULE === "c1s") again = came.again || hasSlot(came.trail, slot);
++			else if (RULE === "c2") again = hops >= HOPS;
++			else if ((RULE === "c3a" || RULE === "c3b") && lineage) {
++				again = lineage.reached.has(key);
++				if (!again) lineage.reached.add(key);
++			}
++		}
+ 		// A frame that had looped waited for its turn, and is counted at it: that is what the pace holds to.
+ 		if (came && looped) this.#stormed(sw, slot, vlan, now, came.looped ? came.due : now);
+ 		const plain = tag === null ? frame : withoutTag(frame);
+@@ -536,13 +571,21 @@
+ 		let flood: Flood | null = null;
+ 		let to = 0;
+ 		let tags = tag === vlan ? 1 << (from - 1) : 0;
+-		const left = looped ? null : { slot, vlan, before: came?.trail ?? null };
++		const left = looped ? null : { slot, vlan, port: from, before: came?.trail ?? null };
++		let flooding = false;
+ 		const out = (p: number, port: Port): boolean => {
+ 			const egress = sw.modes[p];
+ 			if (!carries(egress, vlan)) return false;
+-			if (!egress.trunk || egress.vlan === vlan) return this.#send(sw, port, plain, now, left, looped);
++			if ((RULE === "c3a" || RULE === "c3b") && !looped && !lineage && flooding && port.out) {
++				lineage = { reached: new Set([key]) };
++				for (let at = came?.trail ?? null; at; at = at.before) lineage.reached.add(at.slot * 4096 + at.vlan);
++			}
++			// c1 and c2 let a frame that goes by the table go at once. c1s paces it too.
++			const paced = looped || (again && (flooding || RULE === "c1s" || RULE === "c3a" || RULE === "c3b"));
++			const next = { trail: left, looped, paced, again, hops, lineage: looped ? null : lineage };
++			if (!egress.trunk || egress.vlan === vlan) return this.#send(sw, port, plain, now, next);
+ 			tagged ??= withTag(plain, vlan);
+-			if (!this.#send(sw, port, tagged, now, left, looped)) return false;
++			if (!this.#send(sw, port, tagged, now, next)) return false;
+ 			tags |= 1 << (p - 1);
+ 			return true;
+ 		};
+@@ -558,6 +601,7 @@
+ 			}
+ 		}
+ 		if (flood) {
++			flooding = true;
+ 			src.counters.flooded++;
+ 			sw.totals.flooded++;
+ 			for (let p = 1; p <= PORTS; p++) {
+@@ -600,14 +644,14 @@
+ 		}
+ 	}
+ 
+-	#send(sw: Switch, port: Port, frame: Uint8Array, now: number, left: Trail | null, looped: boolean): boolean {
++	#send(sw: Switch, port: Port, frame: Uint8Array, now: number, next: Omit<Waiting, "due" | "frame">): boolean {
+ 		const c = port.counters;
+ 		if (!port.up) {
+ 			c.dropped++;
+ 			return false;
+ 		}
+ 		if (port.out) {
+-			if (!this.#enqueue(port.out, frame, now, left, looped)) {
++			if (!this.#enqueue(port.out, frame, now, next)) {
+ 				c.dropped++;
+ 				sw.totals.dropped++;
+ 				if (sw.storm) sw.storm.dropped++;
+@@ -630,10 +674,10 @@
+ 	}
+ 
+ 	/** False when as many as may wait there are waiting. */
+-	#enqueue(dir: Direction, frame: Uint8Array, now: number, trail: Trail | null, looped: boolean): boolean {
++	#enqueue(dir: Direction, frame: Uint8Array, now: number, next: Omit<Waiting, "due" | "frame">): boolean {
+ 		const { q } = dir;
+ 		let due = 0;
+-		if (looped) {
++		if (next.paced) {
+ 			if (dir.waitingLooped >= LOOPED_LIMIT) return false;
+ 			dir.waitingLooped++;
+ 			this.#loopedWaiting++;
+@@ -643,7 +687,7 @@
+ 		} else if (q.length - dir.head - dir.waitingLooped >= QUEUE_LIMIT) {
+ 			return false;
+ 		}
+-		const item: Waiting = { due, frame, trail, looped };
++		const item: Waiting = { due, frame, ...next };
+ 		this.#waiting++;
+ 		q.push(item);
+ 		for (let i = q.length - 1; i > dir.head && q[i - 1].due > due; i--) {
+@@ -690,7 +734,7 @@
+ 				dir.q.splice(0, dir.head);
+ 				dir.head = 0;
+ 			}
+-			if (item.looped) {
++			if (item.paced) {
+ 				dir.waitingLooped--;
+ 				this.#loopedWaiting--;
+ 			}

@@ -181,7 +181,7 @@ describe("<unlab-capture mode=dock>", () => {
 		await expect
 			.element(field)
 			.toHaveAccessibleDescription(
-				"Capture cannot read nodez, so use a protocol, a machine, a NIC (node2:eth1), an address, a MAC or port:N.",
+				"Capture cannot read nodez, so use a protocol, a machine, a NIC (node2:eth1), an address, a MAC, vlan N or port:N.",
 			);
 		expect(getComputedStyle(part(element, ".filter")).borderTopColor).toBe(tokenColor("down"));
 		expect(rows(element).map(text)).toEqual(before);

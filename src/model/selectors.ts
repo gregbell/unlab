@@ -41,6 +41,7 @@ import {
 	type SwitchName,
 } from "./types.ts";
 import { clockHz } from "./update.ts";
+import { vlanOf, vlanText } from "./vlans.ts";
 
 function memo<const Inputs extends readonly unknown[], Out>(
 	inputs: (state: LabState) => Inputs,
@@ -353,6 +354,14 @@ export interface PortHolder {
 	readonly nic: NicName | null;
 }
 
+/** What a port carries, when that is not VLAN 1. */
+export interface PortVlanView {
+	/** On the cable's tag: `v10`, or `trunk`. */
+	readonly tag: string;
+	/** `vlan 10`, `trunk of 10 and 20, native 1`. */
+	readonly text: string;
+}
+
 /** The other end of a cable between switches, and what commands call the cable from this end. */
 export interface PortCable {
 	readonly to: PortRef;
@@ -367,6 +376,8 @@ export interface PortView {
 	readonly machine: PortHolder | null;
 	/** There when the port's cable goes to another port of a switch. */
 	readonly cable?: PortCable;
+	/** There when the port is not in VLAN 1. A free port always is. */
+	readonly vlan?: PortVlanView;
 	/** The word under the socket, one of `boot`, `up`, `cut`, `stop`, `off`, `down`. An empty port shows only its number. */
 	readonly word: string | null;
 	/** What a click will do, for the button's accessible name. Null when a click does nothing. */
@@ -400,19 +411,28 @@ function portView(lab: Pick<LabState, "switches">, ref: PortRef, held: HeldPort 
 	return { port, state: "cut", machine: holder, word: "cut", actionLabel };
 }
 
+function vlanView(portVlans: LabState["portVlans"], ref: PortRef): PortVlanView | undefined {
+	const vlan = vlanOf({ portVlans }, ref);
+	if (vlan.mode === "access" && vlan.vlan === 1) return undefined;
+	return { tag: vlan.mode === "access" ? `v${vlan.vlan}` : "trunk", text: vlanText(vlan) };
+}
+
 /** A switch's eight ports, lowest first. */
 export const selectPorts = perSwitch((on) =>
 	memo(
-		(s) => [s.machines, s.rail, s.switches, s.switchCables],
-		(machines, rail, switches, switchCables): readonly PortView[] => {
+		(s) => [s.machines, s.rail, s.switches, s.switchCables, s.portVlans],
+		(machines, rail, switches, switchCables, portVlans): readonly PortView[] => {
 			const held = heldPorts({ machines, rail, switchCables }, on);
-			return PORTS.map((port) =>
-				portView(
+			return PORTS.map((port) => {
+				const ref = { switch: on, port };
+				const view = portView(
 					{ switches },
-					{ switch: on, port },
+					ref,
 					held.find((taken) => taken.port === port),
-				),
-			);
+				);
+				const vlan = vlanView(portVlans, ref);
+				return vlan ? { ...view, vlan } : view;
+			});
 		},
 	),
 );

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { testClock } from "../../test/support/clock.ts";
 import { arpRequest } from "../../test/support/frames.ts";
 import type { PortNo } from "../model/index.ts";
@@ -79,6 +79,21 @@ describe("the pump", () => {
 		t.clock.pass(100);
 		expect(t.fabric.waiting).toBe(0);
 		expect(t.got[1]).toBeGreaterThan(256);
+	});
+
+	test("carries what waits, and what comes after, when the fabric has thrown, and lets what it threw reach whoever called", () => {
+		const t = looped(0, false);
+		const thrown = new RangeError("Array buffer allocation failed");
+		vi.spyOn(t.fabric, "drain").mockImplementationOnce(() => {
+			throw thrown;
+		});
+		expect(() => t.pump.receive(0, 1, arpRequest(1, 2))).toThrow(thrown);
+		expect(t.got).toEqual([0, 0, 0]);
+		t.clock.pass(1);
+		expect(t.got).toEqual([0, 1, 1]);
+		t.pump.receive(0, 1, arpRequest(1, 2));
+		expect(t.got).toEqual([0, 2, 2]);
+		expect(t.fabric.waiting).toBe(0);
 	});
 
 	test("does nothing after it is stopped", () => {

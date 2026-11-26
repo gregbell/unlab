@@ -2,6 +2,8 @@
 // same code runs on the main thread, in a Web Worker and in Node.
 
 export const ETH_HDR = 14;
+/** The longest frame Ethernet carries, without its checksum: 1,500 bytes after the header. A tag adds `TAG_BYTES`. */
+export const ETH_MAX = ETH_HDR + 1500;
 export const ETH_ARP = 0x0806;
 export const ETH_IPV4 = 0x0800;
 export const ETH_IPV6 = 0x86dd;
@@ -54,6 +56,48 @@ export const EVERYONE = "everyone";
 
 export function ethertype(f: Uint8Array): number {
 	return f.length < ETH_HDR ? -1 : (f[12] << 8) | f[13];
+}
+
+/** The 802.1Q tag: its type where the frame's own type would be, then the VLAN ID in the low 12 bits of the next two bytes. */
+export const ETH_VLAN = 0x8100;
+export const TAG_BYTES = 4;
+/** A tag of VLAN 0 gives only a priority, so the frame is in the VLAN it would be in with no tag. */
+export const PRIORITY_ONLY = 0;
+/** No frame is in VLAN 4095. */
+export const RESERVED_VLAN = 4095;
+
+/** The VLAN ID in the frame's 802.1Q tag, or null for a frame that has none. */
+export function vlanTag(f: Uint8Array): number | null {
+	if (f.length < ETH_HDR + TAG_BYTES || f[12] !== ETH_VLAN >> 8 || f[13] !== (ETH_VLAN & 255)) return null;
+	return ((f[14] & 15) << 8) | f[15];
+}
+
+/** The frame with an 802.1Q tag for the VLAN after its addresses. */
+export function withTag(f: Uint8Array, vlan: number): Uint8Array {
+	const out = new Uint8Array(f.length + TAG_BYTES);
+	out.set(f.subarray(0, 12));
+	out[12] = ETH_VLAN >> 8;
+	out[13] = ETH_VLAN & 255;
+	out[14] = (vlan >> 8) & 15;
+	out[15] = vlan & 255;
+	out.set(f.subarray(12), 12 + TAG_BYTES);
+	return out;
+}
+
+/**
+ * A frame as it was on the wire at a port: with a tag for its VLAN when
+ * `tagged`, a mask with bit p-1 for port p, says it had one there.
+ */
+export function onWire(f: Uint8Array, vlan: number, tagged: number, port: number): Uint8Array {
+	return tagged & (1 << (port - 1)) ? withTag(f, vlan) : f;
+}
+
+/** The frame without the 802.1Q tag that `vlanTag` found. */
+export function withoutTag(f: Uint8Array): Uint8Array {
+	const out = new Uint8Array(f.length - TAG_BYTES);
+	out.set(f.subarray(0, 12));
+	out.set(f.subarray(12 + TAG_BYTES), 12);
+	return out;
 }
 
 /** Broadcast, or any multicast (low bit of the first octet). */

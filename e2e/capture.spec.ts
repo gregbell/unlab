@@ -185,7 +185,7 @@ test("a filter takes a switch or one cable, beside the other terms, the same in 
 		[
 			"bogus",
 			"bogus",
-			"Capture cannot read bogus, so use a protocol, a machine, a NIC (node2:eth1), a switch (lan), a cable (lan:3), an address, a MAC or port:N.",
+			"Capture cannot read bogus, so use a protocol, a machine, a NIC (node2:eth1), a switch (lan), a cable (lan:3), an address, a MAC, vlan N or port:N.",
 		],
 	] as const) {
 		expect(await call(page, "capture_read", { filter })).toEqual({ error: sentence });

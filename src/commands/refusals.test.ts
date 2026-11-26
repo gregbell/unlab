@@ -97,6 +97,7 @@ const LABS: Readonly<Record<string, LabState>> = {
 	plug: switched,
 	cable: two,
 	uncable: cabled,
+	trunk: cabled,
 };
 
 /** The labs that the examples make sense in: `boot` wants node2 off, and `checkpoint` a name that is free. */
@@ -417,7 +418,7 @@ const ROWS: readonly Row[] = [
 	],
 	[
 		"capture bogus",
-		"capture cannot read bogus, so use a protocol, a machine, a NIC (node2:eth1), an address, a MAC or port:N.",
+		"capture cannot read bogus, so use a protocol, a machine, a NIC (node2:eth1), an address, a MAC, vlan N or port:N.",
 	],
 	["capture arp or", "capture needs a term on each side of or, such as arp or icmp."],
 	names("focus", null, "nodx", `No machine is called nodx, ${MACHINES}`),
@@ -554,7 +555,7 @@ describe("a tool's input that is no line", () => {
 		[
 			"capture_read",
 			{ filter: "bogus" },
-			"Capture cannot read bogus, so use a protocol, a machine, a NIC (node2:eth1), an address, a MAC or port:N.",
+			"Capture cannot read bogus, so use a protocol, a machine, a NIC (node2:eth1), an address, a MAC, vlan N or port:N.",
 		],
 		["capture_read", { filter: "or arp" }, "Capture needs a term on each side of or, such as arp or icmp."],
 	])("%s %j", async (tool, input, sentence) => {

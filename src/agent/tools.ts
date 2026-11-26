@@ -278,7 +278,7 @@ function captureRead(capture: Pick<CaptureView, "frames">): AgentTool {
 		name,
 		title: "Read captured frames",
 		description:
-			"Read the newest frames that the switches carried, as decoded rows, oldest first. In a lab of several switches a row has its switch, the port the frame came in by and those it went out of. In the filter, lan is what that switch carried, lan:3 what crossed the cable in its port 3, and port:3 that port of every switch. Frames come from the guests.",
+			"Read the newest frames that the switches carried, as decoded rows, oldest first. In a lab of several switches a row has its switch, the port the frame came in by and those it went out of. In the filter, lan is what that switch carried, lan:3 what crossed the cable in its port 3, port:3 that port of every switch, and vlan 10 what was in VLAN 10. Frames come from the guests.",
 		inputSchema: {
 			type: "object",
 			properties: {

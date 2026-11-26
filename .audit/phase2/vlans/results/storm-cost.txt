@@ -1,0 +1,19 @@
+What a mesh storm costs the fabric alone, in Node: node .audit/phase2/vlans/storm-cost.mjs <fabric.ts>, five runs a side, in turn.
+0b603f2 gave each frame it sent on a record of its own and spread it into every copy. The commit after it gives every looped
+frame one shared record, and writes the fields out.
+
+0b603f2: 239995 frames in 114 ms: 17 collections, 19.3 ms in all, worst 2.22 ms
+0b603f2: 239995 frames in 85 ms: 17 collections, 16.3 ms in all, worst 2.03 ms
+0b603f2: 239995 frames in 87 ms: 17 collections, 17.1 ms in all, worst 1.95 ms
+0b603f2: 239995 frames in 90 ms: 17 collections, 16.8 ms in all, worst 1.85 ms
+0b603f2: 239995 frames in 88 ms: 17 collections, 14.8 ms in all, worst 1.65 ms
+cfd20a2: 240022 frames in 80 ms: 17 collections, 13.6 ms in all, worst 1.89 ms
+cfd20a2: 240022 frames in 62 ms: 17 collections, 11.5 ms in all, worst 1.35 ms
+cfd20a2: 240022 frames in 62 ms: 17 collections, 13.1 ms in all, worst 1.58 ms
+cfd20a2: 240022 frames in 62 ms: 17 collections, 12.9 ms in all, worst 1.56 ms
+cfd20a2: 240022 frames in 60 ms: 17 collections, 11.2 ms in all, worst 1.37 ms
+this-commit: 239995 frames in 66 ms: 18 collections, 12.3 ms in all, worst 1.61 ms
+this-commit: 239995 frames in 63 ms: 18 collections, 11.8 ms in all, worst 1.40 ms
+this-commit: 239995 frames in 67 ms: 16 collections, 10.2 ms in all, worst 1.29 ms
+this-commit: 239995 frames in 66 ms: 18 collections, 12.9 ms in all, worst 1.68 ms
+this-commit: 239995 frames in 63 ms: 18 collections, 10.8 ms in all, worst 1.24 ms
