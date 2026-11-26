@@ -78,6 +78,36 @@ describe("cable", () => {
 		});
 	});
 
+	it("changes nothing for a cable that is there already between the ports it names, either way round, and says so", async () => {
+		const lab = await wired();
+		await lab.run("cable switch0:3 lan:2");
+		const near = { switch: "switch0", port: 3 };
+		const far = { switch: "lan", port: 2 };
+		expect(will(lab, "cable switch0:3 lan:2")).toBe("change nothing: switch0 port 3 to lan port 2 is already cabled");
+		expect(await lab.run("cable switch0:3 lan:2", "agent")).toEqual({
+			kind: "visible",
+			text: "switch0:3 to lan:2 already cabled · up",
+			data: { from: near, to: far, link: "up", loop: false },
+		});
+		expect(will(lab, "cable lan:2 switch0:3")).toBe("change nothing: lan port 2 to switch0 port 3 is already cabled");
+		expect(await lab.run("cable lan:2 switch0:3", "agent")).toMatchObject({
+			text: "lan:2 to switch0:3 already cabled · up",
+			data: { from: far, to: near, link: "up", loop: false },
+		});
+		await lab.run("link down switch0:3");
+		expect(will(lab, "cable switch0:3 lan:2")).toBe(
+			"change nothing: switch0 port 3 to lan port 2 is already cabled · it is cut and stays cut",
+		);
+		expect(await lab.run("cable switch0:3 lan:2")).toMatchObject({ text: "switch0:3 to lan:2 already cabled · cut" });
+		expect(cables(lab)).toEqual(["switch0:3-lan:2 cut"]);
+		expect(lab.effects.filter((e) => e.type === "cable/attach")).toHaveLength(1);
+
+		// One end of it and another port is a port that is taken.
+		expect(refused(lab, "cable switch0:3 lan:4")).toBe("switch0:3 is taken by the cable to lan:2, so use switch0:4.");
+		// With no port named, it is another cable.
+		expect(will(lab, "cable switch0 lan")).toBe("cable switch0 port 4 to lan port 1");
+	});
+
 	it("refuses in one sentence what cannot be cabled, with the argument at fault", async () => {
 		const lab = await wired();
 		await lab.run("cable lan:3 wan:1");
