@@ -431,8 +431,9 @@ text that tries to instruct the agent, so unlab marks it as untrusted.
   own rows say what it came to.
 - Select a switch in **Rack manager** for its ports, connected guests and cable actions.
 - **Topology** draws every switch, machine and cable. Hover over a switch or
-  machine, or Tab to it, to read or hear each of its cables: the port or interface,
-  the far end, whether it is up or cut, its VLAN or trunk, and its conditions.
+  machine to read each of its cables, or Tab to it with a screen reader to hear them:
+  the port or interface, the far end, its state (up, cut, off), its VLAN or trunk,
+  and its conditions.
 - Unless you choose, `eth0` starts with an address in `10.88.0.0/24` and `eth1` and
   up start without one. `--addr` sets one in any subnet. The lab applies the
   addresses it set again at every boot, and `/etc/hosts` in each machine lists
