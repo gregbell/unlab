@@ -15,7 +15,7 @@ export const PROGRESS_MS = 5000;
 type Id = string | number;
 
 interface Incoming {
-	readonly id?: Id | null;
+	readonly id?: unknown;
 	readonly method?: unknown;
 	readonly params?: Readonly<Record<string, unknown>>;
 }
@@ -29,9 +29,6 @@ export interface McpDeps {
 	/** Resolves with what the tool replied; rejects with a sentence. */
 	call(name: string, input: unknown, signal: AbortSignal): Promise<unknown>;
 }
-
-/** The client cancelled the request, which is then not answered. */
-class Cancelled extends Error {}
 
 class Refusal extends Error {
 	constructor(
@@ -53,39 +50,48 @@ export function toolResult(reply: unknown): object {
 	return { content: [{ type: "text", text: JSON.stringify(reply ?? null) }] };
 }
 
+type Method = (params: Incoming["params"], signal: AbortSignal) => object | Promise<object>;
+
 export class McpServer {
 	readonly #deps: McpDeps;
-	readonly #calls = new Map<Id, AbortController>();
+	/** Every request not yet answered, so that a cancel that comes right behind one still finds it. */
+	readonly #requests = new Map<Id, AbortController>();
 	#initialized = false;
+	readonly #methods: ReadonlyMap<string, Method>;
+	readonly #notifications: ReadonlyMap<string, (params: Incoming["params"]) => void>;
 
 	constructor(deps: McpDeps) {
 		this.#deps = deps;
+		this.#methods = new Map<string, Method>([
+			[
+				"initialize",
+				(params) => ({
+					protocolVersion: VERSIONS.find((version) => version === params?.protocolVersion) ?? VERSIONS[0],
+					capabilities: { tools: { listChanged: true } },
+					serverInfo: { name: "unlab", version: deps.version },
+					instructions: INSTRUCTIONS,
+				}),
+			],
+			["ping", () => ({})],
+			["tools/list", () => ({ tools: deps.tools() })],
+			["tools/call", (params, signal) => this.#call(params, signal)],
+		]);
+		this.#notifications = new Map<string, (params: Incoming["params"]) => void>([
+			[
+				"notifications/initialized",
+				() => {
+					this.#initialized = true;
+				},
+			],
+			[
+				"notifications/cancelled",
+				(params) => {
+					const id = params?.requestId;
+					if (typeof id === "string" || typeof id === "number") this.#requests.get(id)?.abort(new Error("Cancelled."));
+				},
+			],
+		]);
 	}
-
-	readonly #methods: Readonly<Record<string, (params: Incoming["params"], id: Id) => object | Promise<object>>> = {
-		initialize: (params) => {
-			const asked = params?.protocolVersion;
-			return {
-				protocolVersion: VERSIONS.find((version) => version === asked) ?? VERSIONS[0],
-				capabilities: { tools: { listChanged: true } },
-				serverInfo: { name: "unlab", version: this.#deps.version },
-				instructions: INSTRUCTIONS,
-			};
-		},
-		ping: () => ({}),
-		"tools/list": () => ({ tools: this.#deps.tools() }),
-		"tools/call": (params, id) => this.#call(params, id),
-	};
-
-	readonly #notifications: Readonly<Record<string, (params: Incoming["params"]) => void>> = {
-		"notifications/initialized": () => {
-			this.#initialized = true;
-		},
-		"notifications/cancelled": (params) => {
-			const id = params?.requestId;
-			if (typeof id === "string" || typeof id === "number") this.#calls.get(id)?.abort(new Error("Cancelled."));
-		},
-	};
 
 	/** One line from the client. */
 	receive(line: string): void {
@@ -102,27 +108,41 @@ export class McpServer {
 			return;
 		}
 		const { id, method, params } = message;
-		if (typeof method !== "string") return;
-		if (id === undefined || id === null) {
-			this.#notifications[method]?.(params);
+		const isRequest = typeof id === "string" || typeof id === "number";
+		if (typeof method !== "string") {
+			// A response to a request of ours, of which there are none, or a request without a method.
+			if (isRequest && !("result" in message) && !("error" in message)) {
+				this.#deps.send({ jsonrpc: "2.0", id, error: { code: -32600, message: "Invalid request" } });
+			}
 			return;
 		}
-		const handler = Object.hasOwn(this.#methods, method) ? this.#methods[method] : undefined;
+		if (!isRequest) {
+			this.#notifications.get(method)?.(params);
+			return;
+		}
+		const handler = this.#methods.get(method);
 		if (!handler) {
 			this.#deps.send({ jsonrpc: "2.0", id, error: { code: -32601, message: `There is no method ${method}.` } });
 			return;
 		}
+		const abort = new AbortController();
+		this.#requests.set(id, abort);
 		Promise.resolve()
-			.then(() => handler(params, id))
+			.then(() => handler(params, abort.signal))
 			.then(
-				(result) => this.#deps.send({ jsonrpc: "2.0", id, result }),
+				(result) => {
+					if (!abort.signal.aborted) this.#deps.send({ jsonrpc: "2.0", id, result });
+				},
 				(error: unknown) => {
-					if (error instanceof Cancelled) return;
+					if (abort.signal.aborted) return;
 					const code = error instanceof Refusal ? error.code : -32603;
 					const text = error instanceof Error ? error.message : String(error);
 					this.#deps.send({ jsonrpc: "2.0", id, error: { code, message: text } });
 				},
-			);
+			)
+			.finally(() => {
+				if (this.#requests.get(id) === abort) this.#requests.delete(id);
+			});
 	}
 
 	/** The lab's tools changed. */
@@ -130,16 +150,14 @@ export class McpServer {
 		if (this.#initialized) this.#deps.send({ jsonrpc: "2.0", method: "notifications/tools/list_changed" });
 	}
 
-	/** Gives up every call that runs. */
+	/** Gives up every request not yet answered. */
 	close(): void {
-		for (const call of this.#calls.values()) call.abort(new Error("The MCP server closed."));
+		for (const request of this.#requests.values()) request.abort(new Error("The MCP server closed."));
 	}
 
-	async #call(params: Incoming["params"], id: Id): Promise<object> {
+	async #call(params: Incoming["params"], signal: AbortSignal): Promise<object> {
 		const name = params?.name;
 		if (typeof name !== "string") throw new Refusal(-32602, "tools/call needs the name of a tool.");
-		const abort = new AbortController();
-		this.#calls.set(id, abort);
 		const token = (params?._meta as { progressToken?: unknown } | undefined)?.progressToken;
 		let progress = 0;
 		const ticking =
@@ -154,16 +172,14 @@ export class McpServer {
 					}, PROGRESS_MS)
 				: undefined;
 		try {
-			return toolResult(await this.#deps.call(name, params?.arguments ?? {}, abort.signal));
+			return toolResult(await this.#deps.call(name, params?.arguments ?? {}, signal));
 		} catch (error) {
-			if (abort.signal.aborted) throw new Cancelled();
 			return {
 				content: [{ type: "text", text: error instanceof Error ? error.message : String(error) }],
 				isError: true,
 			};
 		} finally {
 			clearInterval(ticking);
-			this.#calls.delete(id);
 		}
 	}
 }

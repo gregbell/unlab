@@ -189,3 +189,32 @@ describe("tools", () => {
 		expect(calls[0].signal.aborted).toBe(true);
 	});
 });
+
+describe("what a client may send that it should not", () => {
+	test("a cancel right behind its call, in the same moment, still stops it", () => {
+		const { server, calls, sent } = client();
+		server.receive(JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "machines_list" } }));
+		server.receive(JSON.stringify({ jsonrpc: "2.0", method: "notifications/cancelled", params: { requestId: 1 } }));
+		return vi.waitFor(() => {
+			expect(calls).toHaveLength(1);
+			expect(calls[0].signal.aborted).toBe(true);
+			expect(sent).toEqual([]);
+		});
+	});
+
+	test("a method named for what every object has is no method, and does not throw", async () => {
+		const { server, sent, ask } = client();
+		for (const method of ["__proto__", "constructor", "toString", "hasOwnProperty"]) {
+			expect(() => server.receive(JSON.stringify({ jsonrpc: "2.0", method }))).not.toThrow();
+		}
+		expect(sent).toEqual([]);
+		expect(await ask("__proto__")).toMatchObject({ error: { code: -32601 } });
+	});
+
+	test("a request with an id and no method is invalid, and a response is ignored", () => {
+		const { server, sent } = client();
+		server.receive(JSON.stringify({ jsonrpc: "2.0", id: 4 }));
+		server.receive(JSON.stringify({ jsonrpc: "2.0", id: 5, result: {} }));
+		expect(sent).toEqual([{ jsonrpc: "2.0", id: 4, error: { code: -32600, message: "Invalid request" } }]);
+	});
+});
