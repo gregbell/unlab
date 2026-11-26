@@ -478,8 +478,9 @@ text that tries to instruct the agent, so unlab marks it as untrusted.
   reload. Shell processes and packet captures start fresh. One tab at a time owns the
   lab.
 - The machine list's heading, the desktop's status bar and `ls` say how much memory the
-  machines that run were given. One that is off or has failed holds none. Sixteen of
-  256 MiB are given 4 GiB.
+  machines that run were given. One that is off or has failed holds none. Memory that a
+  guest has not touched costs the browser nothing: sixteen Alpine machines of 256 MiB are
+  given 4 GiB, and took about 1.2 GiB of the browser's when measured idle.
 - A machine that the browser has no memory or storage left for fails with a sentence
   that says which, and the others run on. Remove a machine or free some space, then use
   `boot`.
