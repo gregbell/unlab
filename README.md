@@ -448,22 +448,25 @@ The SSH programs in [public/ssh](public/ssh/) are built from pinned releases by
 
 ### Release the CLI
 
-Only the repository's owner releases `unlab.run`, and only by hand. npm takes a release from the
-[release workflow](.github/workflows/cli-release.yml) alone, through
-[trusted publishing](https://docs.npmjs.com/trusted-publishers), so no npm token is kept anywhere, and each release
-says on npm which commit of this repository it was built from.
+Only the repository's owner releases `unlab.run`, by hand, in two steps that each need them. npm takes a release
+from the [release workflow](.github/workflows/cli-release.yml) alone, through
+[trusted publishing](https://docs.npmjs.com/trusted-publishers), so no npm token is kept anywhere. The workflow can only
+stage it, and it goes out once the owner approves it with their two-factor login. Each release says on npm which commit
+of this repository it was built from.
 
 1. Raise `version` in [cli/package.json](cli/package.json) in a pull request, and merge it.
-2. In **Actions**, choose **Release the CLI**, then **Run workflow** on `main`.
-
-It tests and builds the CLI from `main`, publishes it, and tags that commit `cli-v` and the version. It refuses a
-version that is published or tagged already, a branch other than `main`, and anyone but the owner. Check it with
-`npx unlab.run@latest --version`.
+2. In **Actions**, choose **Release the CLI**, then **Run workflow** on `main`. It tests and builds the CLI from `main`
+   and stages it. It refuses a version that is published or tagged already, a branch other than `main`, and anyone but
+   the owner.
+3. Approve the staged version on npmjs.com, or in your own terminal with `npm stage list unlab.run` and
+   `npm stage approve <stage-id>`.
+4. Tag what was released, with the command the run's summary gives, and check it with
+   `npx unlab.run@latest --version`.
 
 Set up once: in the package's settings on npmjs.com, under **Trusted publishing**, add GitHub Actions with the
-repository `gregbell/unlab`, the workflow `cli-release.yml` and the environment `npm`. Under **Publishing access**,
-choose **Require two-factor authentication and disallow tokens**. The repository's `npm` environment lets only `main`
-deploy.
+repository `gregbell/unlab`, the workflow `cli-release.yml` and the environment `npm`, and leave **Allow npm publish**
+and **Allow npm dist-tag** unticked. Under **Publishing access**, choose **Require two-factor authentication and disallow
+tokens**.
 
 ## How it works
 
