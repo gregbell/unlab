@@ -14,6 +14,7 @@ export {
 	conditionsOf,
 	conditionWords,
 	DROP_WORD,
+	droppedWords,
 	ETH_MTU,
 	hasConditions,
 	isConditionsFault,

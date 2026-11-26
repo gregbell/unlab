@@ -2,8 +2,11 @@ import "./switch.css";
 import "./mac-table.ts";
 import { html, nothing, type TemplateResult } from "lit";
 import {
+	carriedWords,
 	DEFAULT_SWITCH,
+	IMPAIRED,
 	type LabState,
+	NOTHING_CARRIED,
 	type PortView,
 	panelLabel,
 	selectLinks,
@@ -55,11 +58,16 @@ export class UnlabSwitch extends UnlabElement {
 	constructor() {
 		super();
 		this.compact = false;
-		new FollowCapture(this, (capture) => (this.#several ? capture.counters.in : 0));
+		new FollowCapture(this, (capture) => (this.#several || this.#impaired ? capture.revision : 0));
 	}
 
 	get #several(): boolean {
 		return this.#switches.value.length > 1;
+	}
+
+	/** A cable with conditions has its counts in its title, which follow the frames. */
+	get #impaired(): boolean {
+		return this.#ports.value.some((port) => port.conditions !== undefined);
 	}
 
 	override render(): TemplateResult {
@@ -125,9 +133,11 @@ export class UnlabSwitch extends UnlabElement {
 			? { name: far.switch, nic: `port ${far.port}`, label: `to ${far.switch} port ${far.port}`, hue: nothing }
 			: port.machine;
 		if (!held) return html`<div class="port" data-port=${port.port} data-state="empty">${socket}</div>`;
-		// The cable's tag says which NIC it is and what the port carries, whichever of them it needs to.
-		const tag = [held.nic, port.vlan?.tag].filter((part) => part !== null && part !== undefined).join(" ");
-		const title = port.vlan ? `${held.label} · ${port.vlan.text}` : held.label;
+		// The cable's tag says which NIC it is, what the port carries and that the cable has conditions, whichever it needs to.
+		const tag = [held.nic, port.vlan?.tag, port.conditions && IMPAIRED].filter(Boolean).join(" ");
+		const counted = this.app.switch.carried({ switch: this.#shown.value, port: port.port }) ?? NOTHING_CARRIED;
+		const carried = port.conditions ? carriedWords(counted) : [];
+		const title = [held.label, port.vlan?.text, port.conditions, ...carried].filter(Boolean).join(" · ");
 		const parts = html`<span class="name">${held.name}</span><span class="cable"></span>${
 			tag === "" ? nothing : html`<span class="nic">${tag}</span>`
 		}${socket}<span class="word"

@@ -5,6 +5,7 @@ import {
 	carriedWords,
 	conditionsAt,
 	conditionWords,
+	droppedWords,
 	type HeldPort,
 	hasConditions,
 	heldPorts,
@@ -151,8 +152,7 @@ function endLine(lab: LabState, to: CableEnd, link: string, vlan: PortVlan | nul
 
 /** `delay 100 ms · loss 20% · 804 delivered · 196 dropped (196 by loss)`. A cable as good as new that dropped nothing says none of it. */
 function cableWords(conditions: Conditions, { carried }: ListedCable): readonly string[] {
-	const dropped = Object.values(carried.dropped).some((frames) => frames > 0);
-	if (!hasConditions(conditions) && !dropped) return [];
+	if (!hasConditions(conditions) && droppedWords([carried]) === null) return [];
 	return [...conditionWords(conditions), ...carriedWords(carried)];
 }
 

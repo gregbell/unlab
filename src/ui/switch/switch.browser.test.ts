@@ -3,8 +3,9 @@ import axe from "axe-core";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { testCapture } from "../../../test/support/capture.ts";
+import { conditions } from "../../../test/support/conditions.ts";
 import { ping } from "../../../test/support/frames.ts";
-import type { LabEvent, PortRef, PortVlan, VlanId } from "../../model/index.ts";
+import type { ConditionValues, LabEvent, PortRef, PortVlan, VlanId } from "../../model/index.ts";
 import {
 	addSwitch,
 	LONG_NAME,
@@ -416,6 +417,32 @@ describe("cables between switches", () => {
 		await settle();
 		expect(part(column(7), ".nic").textContent).toBe("port 8");
 		expect(column(7).title).toBe("to lan port 8");
+	});
+
+	it("marks a cable that has conditions on its tag, a NIC's or one between switches, and says them and what it carried in its title", async () => {
+		const impair = (port: PortRef, values: ConditionValues) =>
+			({ type: "cmd/conditions", changes: [{ port, conditions: conditions(values) }] }) as const;
+		const { store, carried, settle } = await mount("unlab-switch", {
+			state: cabled(impair({ switch: lan, port: 1 }, { delay: 100, loss: 20 }), impair(ends[1], { rate: 1_000_000 })),
+		});
+		expect([".nic", ".word"].map((part) => column(1).querySelector(part)?.textContent)).toEqual(["impaired", "up"]);
+		expect(column(1).title).toBe("node1 · delay 100 ms, loss 20% · 0 delivered · 0 dropped");
+		expect(part(column(8), ".nic").textContent).toBe("port 7 impaired");
+		expect(column(8).title).toBe("to wan port 7 · rate 1 Mbit/s · 0 delivered · 0 dropped");
+
+		carried.set("lan:1", { delivered: 804, dropped: { loss: 196, rate: 0, mtu: 0 } });
+		store.dispatchCommand(impair({ switch: lan, port: 1 }, { delay: 100, loss: 20, mtu: 1400 }));
+		await settle();
+		expect(column(1).title).toBe(
+			"node1 · delay 100 ms, loss 20%, mtu 1400 · 804 delivered · 196 dropped (196 by loss)",
+		);
+
+		store.dispatchCommand(impair({ switch: lan, port: 1 }, {}));
+		store.dispatchCommand(impair(ends[0], {}));
+		await settle();
+		expect(column(1).querySelector(".nic")).toBeNull();
+		expect([column(1).title, column(8).title]).toEqual(["node1", "to wan port 7"]);
+		expect(part(column(8), ".nic").textContent).toBe("port 7");
 	});
 
 	it("draws a cut one dashed and red, and reconnects it, from either switch", async () => {

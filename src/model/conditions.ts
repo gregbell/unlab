@@ -188,12 +188,18 @@ export const DROP_WORD: Readonly<Record<DropReason, string>> = { loss: "loss", r
 
 export const NOTHING_CARRIED: CableCounters = { delivered: 0, dropped: { loss: 0, rate: 0, mtu: 0 } };
 
+/** `196 dropped (190 by loss, 6 by MTU)`, or null for cables that dropped nothing. */
+export function droppedWords(cables: readonly CableCounters[]): string | null {
+	const of = (reason: DropReason): number => cables.reduce((sum, { dropped }) => sum + dropped[reason], 0);
+	const reasons = (Object.keys(DROP_WORD) as DropReason[]).filter((reason) => of(reason) > 0);
+	if (reasons.length === 0) return null;
+	const total = reasons.reduce((sum, reason) => sum + of(reason), 0);
+	return `${total} dropped (${reasons.map((reason) => `${of(reason)} by ${DROP_WORD[reason]}`).join(", ")})`;
+}
+
 /** `804 delivered` and `196 dropped (190 by loss, 6 by MTU)`, or `0 dropped`. */
-export function carriedWords({ delivered, dropped }: CableCounters): readonly string[] {
-	const reasons = (Object.keys(DROP_WORD) as DropReason[]).filter((reason) => dropped[reason] > 0);
-	const total = reasons.reduce((sum, reason) => sum + dropped[reason], 0);
-	const by = reasons.map((reason) => `${dropped[reason]} by ${DROP_WORD[reason]}`).join(", ");
-	return [`${delivered} delivered`, total === 0 ? "0 dropped" : `${total} dropped (${by})`];
+export function carriedWords(cable: CableCounters): readonly string[] {
+	return [`${cable.delivered} delivered`, droppedWords([cable]) ?? "0 dropped"];
 }
 
 /** The conditions of the cable in the port. A port with no cable has none. */
