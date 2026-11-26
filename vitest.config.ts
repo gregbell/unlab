@@ -23,6 +23,8 @@ export default mergeConfig(
 						name: "integration",
 						include: ["test/integration/**/*.test.ts"],
 						globalSetup: ["test/integration/global-setup.ts"],
+						// Processes start here, and a loaded machine starts them slowly.
+						expect: { poll: { timeout: 15_000 } },
 						environment: "node",
 						testTimeout: 300_000,
 						hookTimeout: 300_000,

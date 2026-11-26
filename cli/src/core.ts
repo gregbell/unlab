@@ -4,11 +4,11 @@
 
 import { rmSync } from "node:fs";
 import { connect, createServer, type Server, type Socket } from "node:net";
-import type { Asking, LinkedMachine, RemoteResult, Stream } from "../../src/streams/index.ts";
+import type { Asking, LinkedMachine, Stream, ToolInfo } from "../../src/streams/index.ts";
 import { Forwards } from "./forwards.ts";
 import { type SshFiles, socketPath, sshFiles } from "./keys.ts";
 import { type Connection, joinSocket, Relay } from "./relay.ts";
-import { type Completion, LinkServer } from "./server.ts";
+import { LinkServer } from "./server.ts";
 
 export interface CoreOptions {
 	readonly port: number;
@@ -23,6 +23,8 @@ export interface Status {
 	readonly linked: boolean;
 	readonly lan: boolean;
 	readonly machines: readonly LinkedMachine[];
+	/** What an agent may call now. */
+	readonly tools: readonly ToolInfo[];
 	readonly connections: readonly Connection[];
 	readonly forwards: readonly { readonly machine: string; readonly local: number; readonly remote: number }[];
 }
@@ -34,12 +36,17 @@ export type Request =
 	| { readonly type: "wait"; readonly ms: number }
 	| { readonly type: "run"; readonly line: string }
 	| { readonly type: "complete"; readonly line: string; readonly caret: number }
+	/** An agent's call of one of the lab's tools, answered with what the tool replied. */
+	| { readonly type: "call"; readonly name: string; readonly input: unknown }
 	/** From `ssh`. Once answered, the rest of the connection is the machine's SSH server. */
 	| { readonly type: "ssh"; readonly machine: string }
 	| { readonly type: "forward"; readonly machine: string; readonly local: number; readonly remote: number }
 	| { readonly type: "unforward"; readonly local: number }
-	/** Notices, until it is closed. */
-	| { readonly type: "watch" };
+	/**
+	 * Notices, until it is closed. With tools, the agent's tools as they are and
+	 * then each change. A CLI of version 0.1 prints any notice it is sent.
+	 */
+	| { readonly type: "watch"; readonly tools?: boolean };
 
 export type Reply =
 	| { readonly type: "ok"; readonly value: unknown }
@@ -52,7 +59,8 @@ export type Notice =
 	| { readonly kind: "unlinked" }
 	| { readonly kind: "refused"; readonly message: string }
 	| { readonly kind: "ready"; readonly machines: readonly string[] }
-	| { readonly kind: "connection"; readonly text: string };
+	| { readonly kind: "connection"; readonly text: string }
+	| { readonly kind: "tools"; readonly tools: readonly ToolInfo[] };
 
 /** The lines of a socket. One that answers with a function is the last, and the function has the rest of the socket. */
 export function onLines(socket: Socket, line: (text: string) => "more" | (() => void)): void {
@@ -75,6 +83,10 @@ export function onLines(socket: Socket, line: (text: string) => "more" | (() => 
 	socket.on("data", read);
 }
 
+function tell(socket: Socket, notice: Notice): void {
+	socket.write(`${JSON.stringify({ type: "notice", notice } satisfies Reply)}\n`);
+}
+
 /** How long a single command that started the CLI waits for no one to come before it ends it. */
 const QUIET_MS = 1500;
 
@@ -87,6 +99,7 @@ export class Core {
 	readonly #forwards: Forwards;
 	readonly #files: SshFiles;
 	readonly #watching = new Set<Socket>();
+	readonly #watchingTools = new Set<Socket>();
 	/** Every connection to the socket: the prompt's, ssh's, other runs of the CLI. */
 	readonly #clients = new Set<Socket>();
 	#idle: (() => void) | undefined;
@@ -124,6 +137,7 @@ export class Core {
 				machines: (machines) => this.#machinesNow(machines),
 				refused: (message) => this.#notice({ kind: "refused", message }),
 				asked: (machine, asked) => void this.#relay.asked(machine, asked),
+				tools: (tools) => this.#notice({ kind: "tools", tools }),
 			},
 		});
 		this.#forwards = new Forwards((machine, port) => this.#server.port(machine, port));
@@ -177,8 +191,7 @@ export class Core {
 	}
 
 	#notice(notice: Notice): void {
-		for (const socket of this.#watching)
-			socket.write(`${JSON.stringify({ type: "notice", notice } satisfies Reply)}\n`);
+		for (const socket of notice.kind === "tools" ? this.#watchingTools : this.#watching) tell(socket, notice);
 	}
 
 	#status(): Status {
@@ -186,6 +199,7 @@ export class Core {
 			linked: this.#server.linked,
 			lan: this.#options.lan,
 			machines: this.#server.machines,
+			tools: this.#server.tools,
 			connections: [...this.#relay.open],
 			forwards: this.#forwards.list(),
 		};
@@ -264,7 +278,7 @@ export class Core {
 		socket: Socket,
 		ask: (asking: Asking) => Promise<boolean>,
 		signal: AbortSignal,
-	): Promise<Status | RemoteResult | Completion | string | null> {
+	): Promise<unknown> {
 		switch (request.type) {
 			case "status":
 				return this.#status();
@@ -274,6 +288,8 @@ export class Core {
 				return this.#server.run(request.line, ask, signal);
 			case "complete":
 				return this.#server.complete(request.line, request.caret);
+			case "call":
+				return this.#server.call(request.name, request.input, signal);
 			case "forward":
 				await this.#forwards.add(request.machine, request.local, request.remote, this.#server.machines);
 				return this.#status();
@@ -283,6 +299,13 @@ export class Core {
 			case "watch":
 				this.#watching.add(socket);
 				socket.once("close", () => this.#watching.delete(socket));
+				// The socket takes half a close, and a watcher that has gone sends no more than that.
+				socket.once("end", () => socket.destroy());
+				if (request.tools) {
+					this.#watchingTools.add(socket);
+					socket.once("close", () => this.#watchingTools.delete(socket));
+					tell(socket, { kind: "tools", tools: this.#server.tools });
+				}
 				return null;
 		}
 	}
@@ -329,6 +352,10 @@ export async function request<T>(
 	const socket = await open();
 	const { signal } = options;
 	const abort = () => socket.destroy();
+	if (signal?.aborted) {
+		socket.destroy();
+		throw signal.reason;
+	}
 	signal?.addEventListener("abort", abort, { once: true });
 	return new Promise<T>((resolve, reject) => {
 		socket.on("error", reject);
@@ -353,7 +380,11 @@ export async function request<T>(
 }
 
 /** Notices from the running CLI. Returns what ends it. `gone` when the CLI quits. */
-export async function watch(on: (notice: Notice) => void, gone: () => void): Promise<() => void> {
+export async function watch(
+	on: (notice: Notice) => void,
+	gone: () => void,
+	options: { readonly tools?: boolean } = {},
+): Promise<() => void> {
 	const socket = await open();
 	let ended = false;
 	socket.on("error", () => socket.destroy());
@@ -366,7 +397,7 @@ export async function watch(on: (notice: Notice) => void, gone: () => void): Pro
 		if (reply.type === "notice") on(reply.notice);
 		return "more";
 	});
-	socket.write(`${JSON.stringify({ type: "watch" } satisfies Request)}\n`);
+	socket.write(`${JSON.stringify({ type: "watch", ...options } satisfies Request)}\n`);
 	return () => {
 		ended = true;
 		socket.destroy();

@@ -52,9 +52,9 @@ const guideLink = html`<a href=${GUIDE} target="_blank" rel="noopener noreferrer
 
 function about({ webmcp, paused, calls }: LabState["agent"]): TemplateResult | string {
 	if (webmcp.kind === "absent") {
-		return html`This tab has no WebMCP, so no agent can call these yet. In Chrome or Edge 150 or later, open
-			<span class="address">${FLAG}</span>, choose Enabled and relaunch. Or let an agent
-			open the lab in its own Chrome: ${guideLink}.`;
+		return html`This tab has no WebMCP, but an agent can call these through the CLI: ${guideLink}. For an agent in
+			this browser, open <span class="address">${FLAG}</span> in Chrome or Edge 150 or later, choose Enabled and
+			relaunch.`;
 	}
 	if (webmcp.kind === "refused") {
 		return `This browser refused the tools, so an agent may not be able to call them. It said: ${webmcp.message}`;
@@ -214,7 +214,7 @@ export class UnlabAgentPanel extends UnlabElement {
 								log,
 								(call) => call.id,
 								(call) => html`<li class="call" data-status=${call.status}>
-									<span class="n">${call.id}</span><span class="line">${hued(call.line, machines)}</span>
+									<span class="n">${call.id}</span><span class="line">${hued(call.line, machines)}${call.via === "cli" ? html` <span class="via">via cli</span>` : nothing}</span>
 									<span></span><span class="result">→ ${resultText(call)}</span>
 								</li>`,
 							)}
@@ -229,7 +229,7 @@ export class UnlabAgentPanel extends UnlabElement {
 							waiting,
 							(call) => call.id,
 							(call) => html`<unlab-confirm
-								note=${`${call.id} · waiting for you`}
+								note=${`${call.id} · ${call.via === "cli" ? "via cli · " : ""}waiting for you`}
 								.heading=${call.line}
 								.detail=${call.preview ?? ""}
 								.actionLabel=${call.actionLabel ?? call.line}

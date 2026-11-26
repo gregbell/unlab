@@ -26,6 +26,8 @@ While it runs:
 - Every lab command works at its prompt, and from a shell:
   `npx unlab.run exec node1 -- uname -a`.
 - `forward <machine> 8080:80` makes a machine's port one of this computer's.
+- An AI agent works on the lab through `npx -y unlab.run mcp`, an MCP server on
+  stdio: `claude mcp add --scope user unlab -- npx -y unlab.run mcp`.
 
 [The lab's README](https://github.com/gregbell/unlab#reach-the-lab-from-your-terminal)
 has the rest. `npx unlab.run --help` lists the options.

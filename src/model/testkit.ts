@@ -233,6 +233,7 @@ export const agentCall = (id: number, at: number, overrides: Partial<AgentCall> 
 	actionLabel: null,
 	result: null,
 	at,
+	via: "webmcp",
 	...overrides,
 });
 

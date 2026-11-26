@@ -45,7 +45,8 @@ export async function complete(
 	return [inserts.filter((insert) => insert.startsWith(typed)), typed];
 }
 
-export function noticeText(notice: Notice): string {
+/** Null for one a person need not see. */
+export function noticeText(notice: Notice): string | null {
 	switch (notice.kind) {
 		case "linked":
 			return machinesLine(notice.machines);
@@ -57,6 +58,8 @@ export function noticeText(notice: Notice): string {
 			return notice.machines.map((name) => `${name} is ready.`).join("\n");
 		case "connection":
 			return notice.text;
+		case "tools":
+			return null;
 	}
 }
 
@@ -198,7 +201,10 @@ export async function prompt({ sshConfig, input, output, errors }: PromptOptions
 	};
 
 	const unwatch = await watch(
-		(notice) => show(noticeText(notice)),
+		(notice) => {
+			const text = noticeText(notice);
+			if (text !== null) show(text);
+		},
 		() => {
 			show("The CLI that was running has quit.");
 			ended.resolve();

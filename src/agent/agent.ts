@@ -28,8 +28,15 @@ export interface ToolRow {
 	readonly args: readonly string[];
 }
 
+/** A tool as an agent outside the browser is offered it, through the CLI. */
+export type OfferedTool = Omit<AgentTool, "prepare">;
+
 export interface Agent {
 	readonly tools: readonly ToolRow[];
+	/** The tools an agent may call now: none while paused, and none that are off. */
+	offered(): readonly OfferedTool[];
+	/** Runs a call that came through the CLI as WebMCP would one. Resolves with what the agent reads; rejects only when `signal` aborts. */
+	call(name: string, input: unknown, signal: AbortSignal): Promise<unknown>;
 	/** The person's answer to a waiting call. Anything else is ignored. */
 	answer(call: number, allow: boolean): void;
 	/**
@@ -80,11 +87,16 @@ export function startAgent(deps: AgentDeps): Agent {
 			signal?.addEventListener("abort", onAbort, { once: true });
 		});
 
-	async function call(tool: AgentTool, input: unknown, signal: AbortSignal | undefined): Promise<unknown> {
+	async function call(
+		tool: AgentTool,
+		input: unknown,
+		signal: AbortSignal | undefined,
+		via: AgentCall["via"],
+	): Promise<unknown> {
 		signal?.throwIfAborted();
 		const lab = store.state;
 		const id = nextId(lab);
-		const fields = { id, tool: tool.name, preview: null, actionLabel: null, result: null, at: lab.now };
+		const fields = { id, tool: tool.name, preview: null, actionLabel: null, result: null, at: lab.now, via };
 		const prepared = tool.prepare(input, lab);
 		const refused = (error: string): Failure => {
 			store.dispatchAgent({
@@ -136,6 +148,8 @@ export function startAgent(deps: AgentDeps): Agent {
 		return answer.reply;
 	}
 
+	const isOffered = (name: ToolName) => !store.state.agent.paused && store.state.agent.policies[name] !== "off";
+
 	const webTools = new Map<ToolName, WebMcpTool>(
 		table.map((tool) => [
 			tool.name,
@@ -145,7 +159,7 @@ export function startAgent(deps: AgentDeps): Agent {
 				description: tool.description,
 				inputSchema: tool.inputSchema,
 				annotations: tool.annotations,
-				execute: (input, options) => call(tool, input, options?.signal),
+				execute: (input, options) => call(tool, input, options?.signal, "webmcp"),
 			},
 		]),
 	);
@@ -187,9 +201,8 @@ export function startAgent(deps: AgentDeps): Agent {
 	function reconcile(): void {
 		if (!modelContext) return;
 		report();
-		const { policies, paused } = store.state.agent;
 		for (const [name, tool] of webTools) {
-			const wanted = !paused && policies[name] !== "off";
+			const wanted = isOffered(name);
 			const controller = registered.get(name);
 			if (wanted && !controller) {
 				const next = new AbortController();
@@ -218,6 +231,21 @@ export function startAgent(deps: AgentDeps): Agent {
 
 	return {
 		tools: table.map((tool) => ({ name: tool.name, args: Object.keys(tool.inputSchema.properties ?? {}) })),
+		offered: () =>
+			table
+				.filter((tool) => isOffered(tool.name))
+				.map(({ name, title, description, inputSchema, annotations }) => ({
+					name,
+					title,
+					description,
+					inputSchema,
+					annotations,
+				})),
+		call(name, input, signal) {
+			const tool = table.find((one) => one.name === name);
+			if (!tool) return Promise.resolve({ error: `There is no tool called ${name}.` } satisfies Failure);
+			return call(tool, input, signal, "cli");
+		},
 		answer(id, allow) {
 			const resume = waiting.get(id);
 			waiting.delete(id);

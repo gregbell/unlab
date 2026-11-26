@@ -379,6 +379,7 @@ describe("a tool set to run", () => {
 			line: "ls",
 			status: "done",
 			result: "2 machines · 2 ready",
+			via: "webmcp",
 		});
 		expect(selectRecent(store.state)[0]).toMatchObject({ line: "ls", source: "agent", outcome: "ok" });
 		expect(store.state.agent.firstCallAt).not.toBeNull();
@@ -746,5 +747,55 @@ describe("capture_read", () => {
 		await expect(call("capture_read", { filter: "arp or" })).resolves.toEqual(
 			refusal("Capture needs a term on each side of or, such as arp or icmp."),
 		);
+	});
+});
+
+describe("an agent outside the browser", () => {
+	it("is offered exactly the tools an agent in the browser would get, also where the browser has no WebMCP", async () => {
+		const { agent, store } = start(null);
+		const offered = () => agent.offered().map((tool) => tool.name);
+		expect(offered()).toEqual(ALL_TOOLS);
+		expect(agent.offered().find((tool) => tool.name === "shell_read")).toMatchObject({
+			title: expect.any(String),
+			description: expect.any(String),
+			inputSchema: { type: "object" },
+			annotations: { readOnlyHint: true, untrustedContentHint: true },
+		});
+		expect(agent.offered()[0]).not.toHaveProperty("execute");
+		store.dispatchUi({ type: "ui/policy", tool: "shell_exec", policy: "off" });
+		expect(offered()).toEqual(ALL_TOOLS.filter((name) => name !== "shell_exec"));
+		store.dispatchUi({ type: "ui/tools-paused", paused: true });
+		expect(offered()).toEqual([]);
+	});
+
+	it("calls a tool by name through the panel's policies, as WebMCP does", async () => {
+		const { agent, waiting, store } = await setup();
+		await expect(agent.call("machines_list", {}, new AbortController().signal)).resolves.toMatchObject({
+			data: [expect.objectContaining({ name: "node1" }), expect.objectContaining({ name: "node2" })],
+		});
+		const removing = agent.call("machines_remove", { names: "node2" }, new AbortController().signal);
+		await turn();
+		agent.answer(waiting()[0]?.id ?? -1, false);
+		await expect(removing).resolves.toEqual({ error: "Denied by the user." });
+		expect(store.state.machines.node2).toBeDefined();
+		expect(store.state.agent.calls.map((c) => c.via)).toEqual(["cli", "cli"]);
+	});
+
+	it("withdraws a waiting call when the agent gives up", async () => {
+		const { agent, waiting, store } = await setup();
+		const controller = new AbortController();
+		const removing = agent.call("machines_remove", { names: "node2" }, controller.signal);
+		await turn();
+		controller.abort(new Error("Stopped from the CLI."));
+		await expect(removing).rejects.toThrow("Stopped from the CLI.");
+		expect(waiting()).toEqual([]);
+		expect(store.state.agent.calls.at(-1)?.status).toBe("aborted");
+	});
+
+	it("answers a name that is no tool in a sentence", async () => {
+		const { agent } = start(null);
+		await expect(agent.call("machines_explode", {}, new AbortController().signal)).resolves.toEqual({
+			error: "There is no tool called machines_explode.",
+		});
 	});
 });

@@ -3,13 +3,14 @@
 
 import { type ChildProcess, execFile, spawn } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { createServer } from "node:net";
+import { createConnection, createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "vite";
 import { WebSocket } from "ws";
 import {
+	type Feature,
 	type FromCli,
 	type FromLab,
 	LAB_ORIGIN,
@@ -93,9 +94,33 @@ export class TestCli {
 		return new Session(child);
 	}
 
+	/** `mcp`, as an agent's client starts it. */
+	mcp(): McpSession {
+		const child = spawn(process.execPath, this.#args(["mcp"]), { env: this.#env, stdio: "pipe" });
+		this.#children.add(child);
+		return new McpSession(child);
+	}
+
 	/** One command, to its end. */
 	once(...args: string[]): Promise<Ran> {
 		return this.run(process.execPath, this.#args(args));
+	}
+
+	/**
+	 * Whether a CLI answers on the socket. Unlike a command, this never starts
+	 * one, which would race the CLI that is starting and could hold the port.
+	 */
+	answers(): Promise<boolean> {
+		return new Promise((resolve) => {
+			const socket = createConnection(join(this.dir, "cli.sock"));
+			let said = "";
+			socket.on("data", (data) => {
+				said += data;
+			});
+			socket.once("connect", () => socket.write(`${JSON.stringify({ type: "status" })}\n`));
+			socket.once("error", () => resolve(false));
+			socket.once("close", () => resolve(said.startsWith('{"type":"ok"')));
+		});
 	}
 
 	/** Any program, with the person's SSH configuration. */
@@ -172,22 +197,111 @@ export class Session {
 	}
 }
 
+/** An agent's MCP client: a line of JSON each way. */
+export class McpSession {
+	readonly child: ChildProcess;
+	/** Every message on stdout, parsed: a line that is not JSON fails the parse. */
+	readonly said: Record<string, unknown>[] = [];
+	stderr = "";
+	readonly exited: Promise<number | null>;
+	#ids = 0;
+
+	constructor(child: ChildProcess) {
+		this.child = child;
+		let held = "";
+		child.stdout?.on("data", (text) => {
+			held += text;
+			for (let end = held.indexOf("\n"); end >= 0; end = held.indexOf("\n")) {
+				this.said.push(JSON.parse(held.slice(0, end)));
+				held = held.slice(end + 1);
+			}
+		});
+		child.stderr?.on("data", (text) => {
+			this.stderr += text;
+		});
+		this.exited = new Promise((resolve) => child.once("exit", resolve));
+	}
+
+	send(message: object): void {
+		this.child.stdin?.write(`${JSON.stringify({ jsonrpc: "2.0", ...message })}\n`);
+	}
+
+	/** Sends a request and gives its id. */
+	ask(method: string, params?: object): number {
+		const id = ++this.#ids;
+		this.send({ id, method, params });
+		return id;
+	}
+
+	async answer(id: number, ms = 15_000): Promise<Record<string, unknown>> {
+		await until(
+			() => this.said.some((m) => m.id === id),
+			ms,
+			() => `no answer to ${id}: ${JSON.stringify(this.said)}`,
+		);
+		return this.said.find((m) => m.id === id) as Record<string, unknown>;
+	}
+
+	async request(method: string, params?: object): Promise<Record<string, unknown>> {
+		return this.answer(this.ask(method, params));
+	}
+
+	/** initialize, then initialized, as a client starts. */
+	async begin(): Promise<Record<string, unknown>> {
+		const answer = await this.request("initialize", {
+			protocolVersion: "2025-06-18",
+			capabilities: {},
+			clientInfo: { name: "test", version: "1" },
+		});
+		this.send({ method: "notifications/initialized" });
+		return answer;
+	}
+
+	count(method: string): number {
+		return this.said.filter((m) => m.method === method).length;
+	}
+
+	async tools(): Promise<string[]> {
+		const { result } = await this.request("tools/list");
+		return (result as { tools: { name: string }[] }).tools.map((tool) => tool.name);
+	}
+
+	/** Ends stdin, as a client that is done does. */
+	end(): void {
+		this.child.stdin?.end();
+	}
+}
+
+async function until(ready: () => boolean, ms: number, late: () => string): Promise<void> {
+	const end = performance.now() + ms;
+	while (!ready()) {
+		if (performance.now() > end) throw new Error(late());
+		await new Promise((resolve) => setTimeout(resolve, 20));
+	}
+}
+
 /** A lab's page, as the CLI sees one: it links, names its machines and gives their workers the token. */
 export class TestPage {
 	readonly #socket: WebSocket;
 	readonly linked: Promise<string>;
 	readonly refused: Promise<string>;
+	/** Everything the CLI said to it. */
+	readonly heard: FromCli[] = [];
 
-	constructor(url: string, options: { origin?: string; protocol?: number } = {}) {
+	constructor(url: string, options: { origin?: string; protocol?: number; features?: readonly Feature[] } = {}) {
 		this.#socket = new WebSocket(url + LAB_PATH, { origin: options.origin ?? LAB_ORIGIN });
 		const linked = Promise.withResolvers<string>();
 		const refused = Promise.withResolvers<string>();
 		this.linked = linked.promise;
 		this.refused = refused.promise;
 		this.#socket.on("error", (error) => refused.resolve(error.message));
-		this.#socket.on("open", () => this.say({ type: "hello", protocol: options.protocol ?? PROTOCOL }));
+		const { features } = options;
+		this.#socket.on("open", () =>
+			this.say({ type: "hello", protocol: options.protocol ?? PROTOCOL, ...(features && { features }) }),
+		);
 		this.#socket.on("message", (data) => {
 			const message = JSON.parse(String(data)) as FromCli;
+			this.heard.push(message);
 			if (message.type === "hello") linked.resolve(message.token);
 			if (message.type === "refused") refused.resolve(message.message);
 		});
@@ -199,6 +313,18 @@ export class TestPage {
 
 	machines(machines: readonly LinkedMachine[]): void {
 		this.say({ type: "machines", machines });
+	}
+
+	/** The next message of this type that it hears, from those not yet taken. */
+	async hears<T extends FromCli["type"]>(type: T, ms = 15_000): Promise<Extract<FromCli, { type: T }>> {
+		const found = (): number => this.heard.findIndex((m) => m.type === type);
+		await until(
+			() => found() >= 0,
+			ms,
+			() => `the page did not hear ${type}: ${JSON.stringify(this.heard)}`,
+		);
+		const [message] = this.heard.splice(found(), 1);
+		return message as Extract<FromCli, { type: T }>;
 	}
 
 	close(): void {
