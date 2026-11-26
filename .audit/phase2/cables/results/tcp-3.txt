@@ -1,0 +1,29 @@
+run 0 base one: 568 Mbit/s, ping avg 0.921 ms, receiver took 280679850 bytes threads in a second transfer: chromium MAIN 0.97, DedicatedWorker 0.85, DedicatedWorker 0.60, ThreadPoolForeg 0.28, ThreadPoolForeg 0.19, DedicatedWorker 0.16
+run 0 new one: 584 Mbit/s, ping avg 1.052 ms, receiver took 280680642 bytes threads in a second transfer: chromium MAIN 0.94, DedicatedWorker 0.92, DedicatedWorker 0.74, DedicatedWorker 0.31, ThreadPoolForeg 0.28, ThreadPoolForeg 0.19
+run 0 new one cable: 512 Mbit/s, ping avg 1.296 ms, receiver took 280673052 bytes threads in a second transfer: chromium MAIN 0.96, DedicatedWorker 0.85, DedicatedWorker 0.66, ThreadPoolForeg 0.32, DedicatedWorker 0.29, ThreadPoolForeg 0.16
+run 0 new two cables: 440 Mbit/s, ping avg 1.356 ms, receiver took 280671336 bytes threads in a second transfer: chromium MAIN 0.91, DedicatedWorker 0.78, DedicatedWorker 0.60, ThreadPoolForeg 0.36, ThreadPoolForeg 0.26, ThreadPoolForeg 0.13
+run 1 base one: 521 Mbit/s, ping avg 1.369 ms, receiver took 280679256 bytes
+run 1 new one: 564 Mbit/s, ping avg 1.006 ms, receiver took 280678728 bytes
+run 1 new one cable: 609 Mbit/s, ping avg 1.211 ms, receiver took 280674966 bytes
+run 1 new two cables: 415 Mbit/s, ping avg 1.25 ms, receiver took 280670940 bytes
+run 2 base one: 391 Mbit/s, ping avg 1.233 ms, receiver took 280680576 bytes
+run 2 new one: 576 Mbit/s, ping avg 1.555 ms, receiver took 280678266 bytes
+run 2 new one cable: 550 Mbit/s, ping avg 1.088 ms, receiver took 280672260 bytes
+run 2 new two cables: 492 Mbit/s, ping avg 1.245 ms, receiver took 280672788 bytes
+run 3 base one: 375 Mbit/s, ping avg 1.077 ms, receiver took 280678992 bytes
+run 3 new one: 633 Mbit/s, ping avg 1.061 ms, receiver took 280679784 bytes
+run 3 new one cable: 510 Mbit/s, ping avg 1.213 ms, receiver took 280677738 bytes
+run 3 new two cables: 464 Mbit/s, ping avg 1.049 ms, receiver took 280673514 bytes
+run 4 base one: 514 Mbit/s, ping avg 1.117 ms, receiver took 280678464 bytes
+run 4 new one: 526 Mbit/s, ping avg 1.005 ms, receiver took 280678530 bytes
+run 4 new one cable: 446 Mbit/s, ping avg 1.382 ms, receiver took 280673646 bytes
+run 4 new two cables: 445 Mbit/s, ping avg 1.415 ms, receiver took 280671138 bytes
+run 5 base one: 517 Mbit/s, ping avg 1.491 ms, receiver took 280678992 bytes
+run 5 new one: 594 Mbit/s, ping avg 1.129 ms, receiver took 280679322 bytes
+run 5 new one cable: 489 Mbit/s, ping avg 1.467 ms, receiver took 280671732 bytes
+run 5 new two cables: 455 Mbit/s, ping avg 1.296 ms, receiver took 280672326 bytes
+base one: TCP Mbit/s 517 [375-568], ping avg ms 1.23 [0.92-1.49], n=6
+new one: TCP Mbit/s 584 [526-633], ping avg ms 1.06 [1.00-1.55], n=6
+new one cable: TCP Mbit/s 512 [446-609], ping avg ms 1.30 [1.09-1.47], n=6
+new two cables: TCP Mbit/s 455 [415-492], ping avg ms 1.30 [1.05-1.42], n=6
+exit 0
