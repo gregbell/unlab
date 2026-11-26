@@ -222,7 +222,7 @@ export const link = defineVerb({
 						)
 					: refuse(
 							`${whose} reorders frames by letting them skip its delay, so keep the delay, or take both away with --delay 0 --reorder 0.`,
-							a.delay === null ? "conditions" : "delay",
+							"delay",
 						);
 			}
 			conditioned.push({ ...cable, conditions });
