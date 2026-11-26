@@ -1,6 +1,6 @@
 {
 	"name": "unlab.run",
-	"version": "0.1.2",
+	"version": "0.2.0",
 	"description": "SSH into the Linux machines of an unlab lab in your browser, and give them the internet",
 	"keywords": [
 		"linux",
