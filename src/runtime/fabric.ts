@@ -197,6 +197,9 @@ interface Sent {
 	readonly reached: Set<number> | null;
 }
 
+/** What every copy of a frame that has looped is given. */
+const LOOPED: Sent = { trail: null, looped: true, paced: true, reached: null };
+
 interface Waiting extends Sent {
 	readonly due: number;
 	readonly frame: Uint8Array;
@@ -567,12 +570,14 @@ export class Fabric {
 		const out = (p: number, port: Port): boolean => {
 			const egress = sw.modes[p];
 			if (!carries(egress, vlan)) return false;
-			sent ??= {
-				trail: looped ? null : { slot, vlan, before: came?.trail ?? null },
-				looped,
-				paced: looped || second,
-				reached: looped ? null : (came?.reached ?? (flood ? new Set() : null)),
-			};
+			sent ??= looped
+				? LOOPED
+				: {
+						trail: { slot, vlan, before: came?.trail ?? null },
+						looped,
+						paced: second,
+						reached: came?.reached ?? (flood ? new Set() : null),
+					};
 			if (!egress.trunk || egress.vlan === vlan) return this.#send(sw, port, plain, now, sent);
 			tagged ??= withTag(plain, vlan);
 			if (!this.#send(sw, port, tagged, now, sent)) return false;
@@ -676,7 +681,14 @@ export class Fabric {
 		} else if (q.length - dir.head - dir.waitingPaced >= QUEUE_LIMIT) {
 			return false;
 		}
-		const item: Waiting = { due, frame, ...sent };
+		const item: Waiting = {
+			due,
+			frame,
+			trail: sent.trail,
+			looped: sent.looped,
+			paced: sent.paced,
+			reached: sent.reached,
+		};
 		this.#waiting++;
 		q.push(item);
 		for (let i = q.length - 1; i > dir.head && q[i - 1].due > due; i--) {

@@ -232,15 +232,15 @@ export const BREAKS = [
 	{
 		name: "every copy of a frame goes on at once until it has looped",
 		file: FABRIC,
-		from: "paced: looped || second,",
-		to: "paced: looped,",
+		from: "paced: second,",
+		to: "paced: false,",
 		tests: [{ kind: "unit", files: ["src/runtime/fabric.test.ts"] }],
 	},
 	{
 		name: "every frame that came over a cable waits its turn",
 		file: FABRIC,
-		from: "paced: looped || second,",
-		to: "paced: looped || came !== null,",
+		from: "paced: second,",
+		to: "paced: came !== null,",
 		tests: [fabricUnit],
 	},
 	{
