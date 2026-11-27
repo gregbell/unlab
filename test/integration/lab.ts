@@ -1,7 +1,7 @@
 // Machines on switches, each in its own thread, for tests on real kernels in Node.
 
 import { Worker } from "node:worker_threads";
-import type { CableCounters, ConditionValues, PortNo, PortVlan } from "../../src/model/index.ts";
+import type { CableCounters, ConditionValues, PortNo, PortVlan, Tree } from "../../src/model/index.ts";
 import { address } from "../../src/model/testkit.ts";
 import { addressStr, defaultAddress, ip4str, macStr, NICS, type NicNo, nodeMac } from "../../src/net/index.ts";
 import { nodeClock } from "../../src/runtime/clock.ts";
@@ -62,6 +62,10 @@ export interface TestSwitch {
 	readonly dropped: number;
 	/** Its storm now, or null. */
 	storm(): StormReading | null;
+	/** Has it take part in the spanning tree, or take none. Of the switches of a lab, the first has the lowest address. */
+	setTree(on: boolean): void;
+	/** Its part in the spanning tree now, or null. */
+	tree(): Tree | null;
 }
 
 /** A frame as one of the switches carried it. */
@@ -80,6 +84,8 @@ export interface TestLab {
 	readonly frames: SwitchedTap[];
 	/** Each storm that began or ended, in order. */
 	readonly storms: { readonly switch: number; readonly over: boolean; readonly at: number }[];
+	/** Each change of a switch's part in the spanning tree, in order. */
+	readonly trees: { readonly switch: number; readonly tree: Tree; readonly at: number }[];
 	readonly machines: readonly TestMachine[];
 	/** ms since the lab was made, on the clock that its frames are stamped with. */
 	now(): number;
@@ -99,11 +105,13 @@ export async function bootLab(setups: readonly MachineSetup[], wiring: Wiring = 
 	const clock = nodeClock();
 	const frames: SwitchedTap[] = [];
 	const storms: TestLab["storms"] = [];
+	const trees: TestLab["trees"] = [];
 	// What a cable loses and reorders is the same from run to run.
 	const fabric = new Fabric(
 		{
 			tap: (slot, e) => frames.push({ ...e, switch: slot, at: clock.now() }),
 			storm: (slot, _reading, over) => storms.push({ switch: slot, over, at: clock.now() }),
+			tree: (slot, tree) => trees.push({ switch: slot, tree, at: clock.now() }),
 		},
 		{ random: seededStreams() },
 	);
@@ -111,7 +119,16 @@ export async function bootLab(setups: readonly MachineSetup[], wiring: Wiring = 
 	const switches = Array.from({ length: wiring.switches ?? 1 }, (): TestSwitch => {
 		const slot = fabric.addSwitch();
 		return {
-			setLink: (port, up) => fabric.setLink(slot, port, up),
+			// As the lab does after it has told the switches something: a spanning tree works it out when it is drained.
+			setLink(port, up) {
+				fabric.setLink(slot, port, up);
+				pump.wake();
+			},
+			setTree(on) {
+				fabric.setTree(slot, on ? { address: 0x0200_0000_0001 + slot } : null);
+				pump.wake();
+			},
+			tree: () => fabric.tree(slot),
 			setVlan: (port, vlan) => fabric.setVlan(slot, port, vlan),
 			setConditions(port, values) {
 				const far = fabric.farEnd(slot, port);
@@ -235,7 +252,7 @@ export async function bootLab(setups: readonly MachineSetup[], wiring: Wiring = 
 
 	try {
 		const machines = await Promise.all(setups.map(boot));
-		return { sw: switches[0], switches, frames, storms, machines, now: () => clock.now(), stop };
+		return { sw: switches[0], switches, frames, storms, trees, machines, now: () => clock.now(), stop };
 	} catch (error) {
 		await stop();
 		throw error;
