@@ -81,7 +81,20 @@ export { panelLabel, parkedPanels, visiblePanels } from "./panels.ts";
 export { capacity, gridFor, parkedPanes, visiblePanes } from "./panes.ts";
 export * from "./selectors.ts";
 export { createStore, type ReadStore, type Schedule, type Store } from "./store.ts";
-export { BLOCKED, stpOn, treePortAt, treeText, treeWord } from "./stp.ts";
+export {
+	BLOCKED,
+	bridgeText,
+	costOf,
+	parseCost,
+	parsePriority,
+	priorityOf,
+	rootOf,
+	stpOn,
+	treePortAt,
+	treeRoleText,
+	treeText,
+	treeWord,
+} from "./stp.ts";
 export { planSwitch, portLabel, portName, portText, switchLabel } from "./switches.ts";
 export { type Tile, type Tiling, tile } from "./tiling.ts";
 export * from "./types.ts";

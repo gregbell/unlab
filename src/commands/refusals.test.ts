@@ -98,6 +98,8 @@ const LABS: Readonly<Record<string, LabState>> = {
 	cable: two,
 	uncable: cabled,
 	trunk: cabled,
+	priority: switched,
+	cost: cabled,
 };
 
 /** The labs that the examples make sense in: `boot` wants node2 off, and `checkpoint` a name that is free. */
@@ -454,6 +456,36 @@ const ROWS: readonly Row[] = [
 	],
 	["stp maybe all", "stp wants on or off here, not maybe.", ["switch_stp", { stp: "maybe", switches: "all" }]],
 	["stp on switch0,", "stp wants switches such as switch0,lan or all here, not switch0,."],
+	[
+		"priority switch0 4097",
+		"4097 is no bridge priority, so use a step of 4096 from 0 to 61440, such as 4096.",
+		["switch_priority", { switches: "switch0", priority: 4097 }],
+	],
+	[
+		"priority switch0 65536",
+		"65536 is no bridge priority, so use a step of 4096 from 0 to 61440, such as 4096.",
+		["switch_priority", { switches: "switch0", priority: 65536 }],
+	],
+	[
+		"priority wan 4096",
+		"No switch is called wan, so use switch0 or all.",
+		["switch_priority", { switches: "wan", priority: 4096 }],
+	],
+	[
+		"cost node1 0",
+		"0 is no port cost, so use a whole number from 1 to 200000000.",
+		["port_cost", { port: "node1", cost: 0 }],
+	],
+	[
+		"cost node1 200000001",
+		"200000001 is no port cost, so use a whole number from 1 to 200000000.",
+		["port_cost", { port: "node1", cost: 200000001 }],
+	],
+	[
+		"cost switch0:8 2000",
+		"switch0:8 has no cable, so use switch0:1, switch0:2, switch0:3, switch0:4 or switch0:5.",
+		["port_cost", { port: "switch0:8", cost: 2000 }],
+	],
 	[
 		"capture bogus",
 		"capture cannot read bogus, so use a protocol, a machine, a NIC (node2:eth1), an address, a MAC, vlan N or port:N.",

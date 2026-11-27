@@ -22,10 +22,10 @@ import type { Result } from "../types.ts";
 export type PortVlanState = PortRef & PortVlan;
 
 /** Whatever a machine is doing, its cable holds the port. */
-const HOLDING: readonly Phase[] = ["booting", "ready", "stopping", "off", "restoring", "removing"];
+export const HOLDING: readonly Phase[] = ["booting", "ready", "stopping", "off", "restoring", "removing"];
 
 /** `node2 is in it`, or `its cable goes to wan port 1`. */
-function inIt(lab: LabState, held: HeldPort): string {
+export function inIt(lab: LabState, held: HeldPort): string {
 	return holdsNic(held)
 		? `${nicLabel(held.machine, held.nic)} is in it`
 		: `its cable goes to ${portLabel(lab, held.far)}`;

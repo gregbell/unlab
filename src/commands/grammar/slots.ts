@@ -2,9 +2,12 @@ import {
 	type Address,
 	ALL_MACHINES,
 	addressText,
+	type BridgePriority,
 	type CheckpointName,
 	type ConditionPart,
 	cableAt,
+	DEFAULT_COST,
+	DEFAULT_PRIORITY,
 	DEFAULT_SWITCH,
 	ETH_MTU,
 	type GiB,
@@ -14,13 +17,16 @@ import {
 	isNameFault,
 	type LabState,
 	lowestFreePorts,
+	MAX_COST,
 	MAX_DELAY_MS,
 	MAX_EXTRA_DISKS,
 	MAX_EXTRA_GIB,
 	MAX_NAME,
+	MAX_PRIORITY,
 	MAX_VLAN,
 	type Machine,
 	type MachineName,
+	MIN_COST,
 	MIN_MTU,
 	MIN_VLAN,
 	machineLink,
@@ -30,15 +36,19 @@ import {
 	nicLabel,
 	nicPortsOf,
 	nicsOf,
+	type PathCost,
 	type Phase,
 	type Place,
 	PORTS,
 	type PortNo,
 	type PortRef,
+	PRIORITY_STEP,
 	parseCheckpointName,
 	parseChosenName,
 	parseCondition,
+	parseCost,
 	parseGiB,
+	parsePriority,
 	parseSwitchName,
 	parseVlanId,
 	plugsOf,
@@ -800,6 +810,42 @@ export function vlanId(about: string, label = "vlan"): Value<VlanId> {
 		suggest: (_typed, { lab }) => vlansInUse(lab).map((id) => ({ insert: String(id), label: String(id) })),
 		format: String,
 		schema: { type: "integer", minimum: MIN_VLAN, maximum: MAX_VLAN },
+	};
+}
+
+/** A switch's priority in the spanning tree. */
+export function priority(): Value<BridgePriority> {
+	return {
+		kind: "positional",
+		label: "priority",
+		noun: `a step of ${PRIORITY_STEP} from 0 to ${MAX_PRIORITY}`,
+		about: `The switch's priority: a step of ${PRIORITY_STEP} from 0 to ${MAX_PRIORITY}, ${DEFAULT_PRIORITY} on a new switch. The lowest is the root.`,
+		read: (text) =>
+			parsePriority(text) ??
+			new Miss(
+				`${text} is no bridge priority, so use a step of ${PRIORITY_STEP} from 0 to ${MAX_PRIORITY}, such as 4096.`,
+				undefined,
+				false,
+			),
+		suggest: () => [0, 4096, DEFAULT_PRIORITY, MAX_PRIORITY].map((n) => ({ insert: String(n), label: String(n) })),
+		format: String,
+		schema: { type: "integer", minimum: 0, maximum: MAX_PRIORITY, multipleOf: PRIORITY_STEP },
+	};
+}
+
+/** What a port adds to the way to the root through it. */
+export function cost(): Value<PathCost> {
+	return {
+		kind: "positional",
+		label: "cost",
+		noun: `a whole number from ${MIN_COST} to ${MAX_COST}`,
+		about: `The port's cost: a whole number from ${MIN_COST} to ${MAX_COST}, ${DEFAULT_COST} on a new port.`,
+		read: (text) =>
+			parseCost(text) ??
+			new Miss(`${text} is no port cost, so use a whole number from ${MIN_COST} to ${MAX_COST}.`, undefined, false),
+		suggest: () => [DEFAULT_COST, 200_000].map((n) => ({ insert: String(n), label: String(n) })),
+		format: String,
+		schema: { type: "integer", minimum: MIN_COST, maximum: MAX_COST },
 	};
 }
 

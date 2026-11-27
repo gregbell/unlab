@@ -130,6 +130,91 @@ describe("stp", () => {
 	});
 });
 
+describe("priority", () => {
+	const told = (lab: Lab) => lab.effects.flatMap((e) => (e.type === "switch/priority" ? [[e.switch, e.priority]] : []));
+
+	it("sets the priority of one switch, several or all, and says before and after which is the root", async () => {
+		const lab = await triangle();
+		await lab.run("stp on all");
+		lab.effects.length = 0;
+		expect(will(lab, "priority wan 4096")).toBe("set the priority of wan to 4096 · the lowest priority is the root");
+		expect(await lab.run("priority wan 4096", "agent")).toEqual({
+			kind: "visible",
+			text: "priority 4096 for wan",
+			data: { switches: ["wan"], priority: 4096, already: [] },
+		});
+		expect(lab.store.state.priorities).toEqual({ wan: 4096 });
+		expect(told(lab)).toEqual([["wan", 4096]]);
+
+		expect(will(lab, "priority all 4096")).toBe(
+			"set the priority of switch0 and lan to 4096 · the lowest priority is the root · wan already had it",
+		);
+		expect(will(lab, "priority wan 4096")).toBe("change nothing: the priority of wan is already 4096");
+		await lab.run("priority all 32768");
+		expect(lab.store.state.priorities).toEqual({});
+	});
+
+	it("says that it counts once spanning tree is on, for a switch that has it off", async () => {
+		const lab = await triangle();
+		await lab.run("stp on lan");
+		expect(will(lab, "priority lan,wan 8192")).toBe(
+			"set the priority of lan and wan to 8192 · the lowest priority is the root · spanning tree is off for wan, so it counts once it is on",
+		);
+		expect(await lab.run("priority lan,wan 8192")).toMatchObject({
+			text: "priority 8192 for lan and wan · spanning tree is off for wan, so it counts once it is on",
+		});
+		expect(lab.store.state.priorities).toEqual({ lan: 8192, wan: 8192 });
+	});
+
+	it("completes the switches, and then the priorities that are worth knowing", async () => {
+		const lab = await triangle();
+		expect(offered(lab, "priority ").map(([insert]) => insert)).toEqual(["switch0", "lan", "wan", "all"]);
+		expect(offered(lab, "priority lan ").map(([insert]) => insert)).toEqual(["0", "4096", "32768", "61440"]);
+	});
+});
+
+describe("cost", () => {
+	it("sets what a port costs, by its name or by the NIC in it, and says what is in it", async () => {
+		const lab = await triangle();
+		await lab.run("stp on all");
+		lab.effects.length = 0;
+		expect(will(lab, "cost wan:8 200000")).toBe("make wan port 8 cost 200000 · its cable goes to lan port 7");
+		expect(await lab.run("cost wan:8 200000", "agent")).toEqual({
+			kind: "visible",
+			text: "wan:8 costs 200000",
+			data: { switch: "wan", port: 8, cost: 200_000 },
+		});
+		expect(lab.store.state.portCosts).toEqual([{ port: { switch: "wan", port: 8 }, cost: 200_000 }]);
+		expect(lab.effects.filter((e) => e.type === "port/cost")).toEqual([
+			{ type: "port/cost", port: { switch: "wan", port: 8 }, cost: 200_000 },
+		]);
+		expect(await lab.run("cost wan:8 200000")).toMatchObject({ text: "wan:8 already costs 200000" });
+		expect(will(lab, "cost node1 2000")).toBe("make switch0 port 1 cost 2000 · node1 is in it");
+		await lab.run("cost node1 2000");
+		expect(lab.store.state.portCosts).toHaveLength(2);
+		// Once the cable is out, the port costs what every port starts with.
+		await lab.run("uncable wan:8");
+		expect(lab.store.state.portCosts).toEqual([{ port: { switch: "switch0", port: 1 }, cost: 2000 }]);
+	});
+
+	it("says that it counts once spanning tree is on, for a port of a switch that has it off", async () => {
+		const lab = await triangle();
+		expect(await lab.run("cost lan:7 40000")).toMatchObject({
+			text: "lan:7 costs 40000 · spanning tree is off for lan, so the cost counts once it is on",
+		});
+	});
+
+	it("has examples, here and in the README", async () => {
+		const lab = await triangle();
+		const example = (verb: string) =>
+			lab.registry.commands.find(({ manual }) => manual.verb === verb)?.manual.example.line;
+		const readme = readFileSync(new URL("../../../README.md", import.meta.url), "utf8");
+		const row = (verb: string) => new RegExp(`^\\| \`(${verb} [^\`]+)\``, "m").exec(readme)?.[1];
+		expect([example("priority"), row("priority")]).toEqual(["priority lan 4096", "priority lan 4096"]);
+		expect([example("cost"), row("cost")]).toEqual(["cost lan:3 200000", "cost lan:3 200000"]);
+	});
+});
+
 describe("topology, with spanning tree", () => {
 	const listed = async (lab: Lab) => {
 		const report = await lab.run("topology");

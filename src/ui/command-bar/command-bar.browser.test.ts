@@ -195,6 +195,8 @@ describe("<unlab-command-bar> CmdOpen: just opened", () => {
 			"vlan",
 			"trunk",
 			"stp",
+			"priority",
+			"cost",
 			"topology",
 			"capture",
 			"focus",
