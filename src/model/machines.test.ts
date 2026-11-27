@@ -814,6 +814,20 @@ describe("planSpawn", () => {
 		expect(planSpawn(s, 1, ALPINE)).toEqual({ kind: "no-room", free: 0, wanted: 1, limit: "numbers" });
 	});
 
+	test("a full lab that has given out its last number says that, since removing one would not help", () => {
+		let s = emptyLab();
+		for (let round = 0; round < 28; round++) {
+			s = run(s, spawnEvent(s, 8, { net: "none" }));
+			s = run(s, remove(...s.rail), ...s.rail.map((name) => hasStopped(name)));
+		}
+		s = run(s, spawnEvent(s, 4, { net: "none" }));
+		s = run(s, remove(...s.rail), ...s.rail.map((name) => hasStopped(name)));
+		s = run(s, spawnEvent(s, 16, { net: "none" }));
+		expect(s.rail).toHaveLength(16);
+		expect(s.rail.at(-1)).toBe("node244");
+		expect(planSpawn(s, 1, ALPINE)).toEqual({ kind: "no-room", free: 0, wanted: 1, limit: "numbers" });
+	});
+
 	test("isPlanError tells a plan from an error", () => {
 		expect(isPlanError(planSpawn(labWith(8), 1, ALPINE))).toBe(true);
 		expect(isPlanError(planSpawn(emptyLab(), 1, ALPINE))).toBe(false);

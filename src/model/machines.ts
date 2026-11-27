@@ -276,7 +276,7 @@ export function planSpawn(state: LabState, count: number, request: SpawnRequest)
 			kind: "no-room",
 			free: room,
 			wanted: count,
-			limit: numbers < MAX_MACHINES - used ? "numbers" : "machines",
+			limit: numbers <= MAX_MACHINES - used ? "numbers" : "machines",
 		};
 	const names = Array.from({ length: count }, (_, i) => request.name ?? defaultName(state.nextN + i));
 	for (const [i, name] of names.entries()) {
