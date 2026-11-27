@@ -1,0 +1,121 @@
+== crowd, as the window opens (804 x 410): 24 nodes, lines 26 up, 1 blocked
+   a line across switch0's note
+   a line across lan's note
+   a line across wan's note
+   a line across dmz's note
+   a line across edge's name
+   a line across edge's note
+   a line across internal-router-east's name
+   a line across database-server-west's name
+== crowd, as the window opens, scrolled to its end (804 x 410): 24 nodes, lines 26 up, 1 blocked
+   a line across switch0's note
+   a line across lan's note
+   a line across wan's note
+   a line across dmz's note
+   a line across edge's name
+   a line across edge's note
+   a line across internal-router-east's name
+   a line across database-server-west's name
+== crowd, maximized (1440 x 840): 24 nodes, lines 26 up, 1 blocked
+   a line across switch0's note
+   a line across lan's note
+   a line across wan's note
+   a line across dmz's note
+   a line across edge's name
+   a line across edge's note
+   a line across internal-router-east's name
+== crowd, maximized, scrolled to its end (1440 x 840): 24 nodes, lines 26 up, 1 blocked
+   a line across switch0's note
+   a line across lan's note
+   a line across wan's note
+   a line across dmz's note
+   a line across edge's name
+   a line across edge's note
+   a line across internal-router-east's name
+== crowd, maximized on a screen tall enough for all of it (1440 x 2340): 24 nodes, lines 26 up, 1 blocked
+   a line across switch0's note
+   a line across lan's note
+   a line across wan's note
+   a line across dmz's note
+   a line across edge's name
+   a line across edge's note
+   a line across internal-router-east's name
+== crowd, in a browser window 480 wide (460 x 424): 24 nodes, lines 26 up, 1 blocked
+   a line across switch0's name
+   a line across switch0's note
+   a line across lan's note
+   a line across wan's note
+   a line across dmz's note
+   a line across edge's name
+   a line across edge's note
+   a line across office's note
+   a line across internal-router-east's name
+   a line across database-server-west's name
+   a line across backup-storage-south's name
+== crowd, in a browser window 480 wide, scrolled to its end (460 x 424): 24 nodes, lines 26 up, 1 blocked
+   a line across switch0's name
+   a line across switch0's note
+   a line across lan's note
+   a line across wan's note
+   a line across dmz's note
+   a line across edge's name
+   a line across edge's note
+   a line across office's note
+   a line across internal-router-east's name
+   a line across database-server-west's name
+   a line across backup-storage-south's name
+== shared, as the window opens (804 x 410): 6 nodes, lines 6 up
+   a line across router's name
+   a line across router's note
+== shared, maximized (1440 x 840): 6 nodes, lines 6 up
+   a line across router's name
+   a line across router's note
+== shared, in a browser window 480 wide (460 x 424): 6 nodes, lines 6 up
+   a line across router's name
+   a line across router's note
+== wrap, as the window opens (804 x 410): 7 nodes, lines 7 up
+   a line across internal-router-east-building-two-rack's name
+   internal-router-east-building-two-rack's name under database-server-west-building-two-x's node
+   internal-router-east-building-two-rack's note under database-server-west-building-two-x's node
+   database-server-west-building-two-x's name under backup-storage-south's node
+   database-server-west-building-two-x's note under backup-storage-south's node
+== wrap, maximized (1440 x 840): 7 nodes, lines 7 up
+   internal-router-east-building-two-rack's name under database-server-west-building-two-x's node
+   internal-router-east-building-two-rack's note under database-server-west-building-two-x's node
+   database-server-west-building-two-x's name under backup-storage-south's node
+   database-server-west-building-two-x's note under backup-storage-south's node
+== wrap, in a browser window 480 wide (460 x 424): 7 nodes, lines 7 up
+   a line across internal-router-east-building-two-rack's name
+   internal-router-east-building-two-rack's name under database-server-west-building-two-x's node
+   a line across internal-router-east-building-two-rack's note
+   internal-router-east-building-two-rack's note under database-server-west-building-two-x's node
+   a line across database-server-west-building-two-x's name
+   database-server-west-building-two-x's name under backup-storage-south's node
+   a line across database-server-west-building-two-x's note
+   database-server-west-building-two-x's note under backup-storage-south's node
+   a line across backup-storage-south's name
+== self, as the window opens (804 x 410): 5 nodes, lines 6 up
+   a line across node2's note
+== self, maximized (1440 x 840): 5 nodes, lines 6 up
+   a line across node2's note
+== self, in a browser window 480 wide (460 x 424): 5 nodes, lines 6 up
+   every name and note can be read
+== pair, as the window opens (804 x 410): 6 nodes, lines 3 up, 2 cut, 1 off, 2 blocked
+   every name and note can be read
+== pair: lan selected, and node1 with the keyboard's focus
+== pair, maximized (1440 x 840): 6 nodes, lines 3 up, 2 cut, 1 off, 2 blocked
+   every name and note can be read
+== pair, in a browser window 480 wide (460 x 424): 6 nodes, lines 3 up, 2 cut, 1 off, 2 blocked
+   every name and note can be read
+== chain, as the window opens (804 x 410): 10 nodes, lines 9 up
+   every name and note can be read
+== chain, maximized (1440 x 840): 10 nodes, lines 9 up
+   every name and note can be read
+== chain, in a browser window 480 wide (460 x 424): 10 nodes, lines 9 up
+   every name and note can be read
+== islands, as the window opens (804 x 410): 5 nodes, lines 1 up
+   every name and note can be read
+== islands, maximized (1440 x 840): 5 nodes, lines 1 up
+   every name and note can be read
+== islands, in a browser window 480 wide (460 x 424): 5 nodes, lines 1 up
+   every name and note can be read
