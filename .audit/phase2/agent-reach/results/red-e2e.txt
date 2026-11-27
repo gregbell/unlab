@@ -1,0 +1,3 @@
+macs reports every switch whichever is named | e2e e2e/switches.spec.ts "own MAC table" | exit 1 | red: a broadcast stays on its switch, and each switch has its own MAC table and counters to look at
+a narrowed capture saves every frame, so one cable's file has frames that never crossed it | e2e e2e/capture.spec.ts "narrowed to one cable" | exit 1 | red: a capture narrowed to one cable saves each of its frames once, and any other saves everything
+save .pcap stamps its frames from the lab's last tick, as it did before | e2e e2e/capture.spec.ts "narrowed to one cable" | exit 1 | red: a capture narrowed to one cable saves each of its frames once, and any other saves everything
