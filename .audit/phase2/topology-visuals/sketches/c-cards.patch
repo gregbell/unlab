@@ -1,0 +1,71 @@
+diff --git a/src/ui/desktop/topology.css b/src/ui/desktop/topology.css
+index 728eed8..8084982 100644
+--- a/src/ui/desktop/topology.css
++++ b/src/ui/desktop/topology.css
+@@ -212,4 +212,41 @@
+ 			font-size: 12px;
+ 		}
+ 	}
++	/* Sketch C: each node a card, its name beside its art, as a row of the rack has it. */
++	.n-column {
++		align-items: stretch;
++	}
++	.n-node {
++		grid-auto-flow: column;
++		justify-content: start;
++		align-items: center;
++		column-gap: 9px;
++		padding: 6px 12px 6px 6px;
++		background: var(--mantle);
++		border: 1px solid var(--line);
++		text-align: left;
++	}
++	.n-node:is(:hover, :focus-visible) {
++		background: var(--base);
++	}
++	.n-node[data-selected="true"] {
++		border-color: var(--machine-hue, var(--agent));
++		background: color-mix(in srgb, var(--machine-hue, var(--agent)) 12%, var(--mantle));
++	}
++	.n-node .n-tile {
++		width: 52px;
++		height: 30px;
++		border: 0;
++		background: none;
++	}
++	.n-node .n-tile .n-art {
++		transform: scale(0.78);
++	}
++	.n-node-label {
++		justify-items: start;
++		max-width: 150px;
++	}
++	.n-drawing {
++		--n-gap: 12px;
++	}
+ }
+diff --git a/src/ui/desktop/topology.ts b/src/ui/desktop/topology.ts
+index 77cd214..d1b857c 100644
+--- a/src/ui/desktop/topology.ts
++++ b/src/ui/desktop/topology.ts
+@@ -216,9 +216,9 @@ function path(a: Spot, b: Spot, { index, of }: Wire): string {
+ 		const down = b.y < a.y ? -1 : 1;
+ 		const out = Math.max(8, Math.min(a.room - 8, 12 + Math.abs(b.y - a.y) * 0.12 + 5 * index));
+ 		const [ax, ay, bx, by, edge, turn] = fixed(
+-			a.x,
++			a.right,
+ 			a.y - down * shift,
+-			b.x,
++			b.right,
+ 			b.y + down * shift,
+ 			a.right,
+ 			a.right + out / 0.75,
+@@ -226,7 +226,7 @@ function path(a: Spot, b: Spot, { index, of }: Wire): string {
+ 		return `M ${ax} ${ay} H ${edge} C ${turn} ${ay}, ${turn} ${by}, ${edge} ${by} H ${bx}`;
+ 	}
+ 	const [from, to] = a.x < b.x ? [a.right, b.left] : [a.left, b.right];
+-	const [ax, ay, bx, by, x1, x2, mid] = fixed(a.x, a.y + shift, b.x, b.y + shift, from, to, (from + to) / 2);
++	const [ax, ay, bx, by, x1, x2, mid] = fixed(from, a.y + shift, to, b.y + shift, from, to, (from + to) / 2);
+ 	return `M ${ax} ${ay} H ${x1} C ${mid} ${ay}, ${mid} ${by}, ${x2} ${by} H ${bx}`;
+ }
+ 
