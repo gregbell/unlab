@@ -1,5 +1,6 @@
 // Decode a frame into one tcpdump-ish line for the inspector.
 
+import { bpduText, decodeBpdu } from "./bpdu.ts";
 import {
 	arpAddrs,
 	dstMac,
@@ -100,6 +101,9 @@ export function decode(frame: Uint8Array): Decoded {
 		}
 		return { proto: `IP/${ip.proto}`, src: s, dst: d, info: `${payload} bytes` };
 	}
+
+	const bpdu = decodeBpdu(frame);
+	if (bpdu) return { proto: bpdu.rapid ? "RSTP" : "STP", src, dst, info: bpduText(bpdu) };
 
 	const label =
 		et === ETH_IPV6

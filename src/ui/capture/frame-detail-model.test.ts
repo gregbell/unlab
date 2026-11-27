@@ -13,7 +13,7 @@ import {
 } from "../../../test/support/frames.ts";
 import type { FrameEntry } from "../../capture/index.ts";
 import { type PortNo, parseSwitchName, type SwitchName } from "../../model/index.ts";
-import { NO_NAMES } from "../../net/index.ts";
+import { bridgeIdOf, encodeBpdu, NO_NAMES } from "../../net/index.ts";
 import { frameDetail, type LabNames, type Named } from "./frame-detail-model.ts";
 
 const ports = (mask: readonly PortNo[]): number => mask.reduce((m, p) => m | (1 << (p - 1)), 0);
@@ -144,6 +144,46 @@ describe("frameDetail", () => {
 				{ label: "length", value: "20", who: null },
 			],
 		});
+	});
+
+	it("decodes a spanning tree message: the length where a type would be, and its root, cost, bridge and port", () => {
+		const id = (priority: number, last: number) => bridgeIdOf(priority, 0x0200_0000_0000 + last);
+		const frame = encodeBpdu(
+			{
+				rapid: true,
+				root: id(4096, 3),
+				cost: 40_000,
+				bridge: id(32768, 2),
+				port: 0x8007,
+				role: "alternate",
+				proposal: false,
+				agreement: true,
+				learning: false,
+				forwarding: false,
+				topologyChange: false,
+				age: 2,
+				maxAge: 20,
+				hello: 2,
+				forwardDelay: 15,
+			},
+			0x0200_0000_0002,
+		);
+		const d = frameDetail(entry(frame), holder);
+		expect(d.groups[0].fields[2]).toEqual({ label: "length", value: "39", who: null });
+		expect(d.groups[1]).toEqual({
+			title: "rapid spanning tree",
+			fields: [
+				{ label: "root", value: "4096.02:00:00:00:00:03", who: null },
+				{ label: "cost", value: "40000", who: null },
+				{ label: "bridge", value: "32768.02:00:00:00:00:02", who: null },
+				{ label: "port", value: "7", who: null },
+				{ label: "role", value: "alternate", who: null },
+				{ label: "state", value: "discarding", who: null },
+				{ label: "flags", value: "agreement", who: null },
+				{ label: "message age", value: "2 s", who: null },
+			],
+		});
+		expect(d.did).toEqual([["switch0's spanning tree read it. A switch sends no bridge's message on."]]);
 	});
 
 	it("says which switch did it, and who is on that switch's ports", () => {

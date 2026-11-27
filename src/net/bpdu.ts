@@ -35,6 +35,8 @@ export function bridgeIdOf(priority: number, address: number): BridgeId {
 export const bridgePriority = (id: BridgeId): number => Number.parseInt(id.slice(0, 4), 16);
 /** The address in a bridge's ID, as a MAC is written. */
 export const bridgeAddress = (id: BridgeId): string => (id.slice(4).match(/../g) ?? []).join(":");
+/** `32768.02:00:a1:b2:c3:d4`: the priority as a command takes it, and then the address. */
+export const bridgeText = (id: BridgeId): string => `${bridgePriority(id)}.${bridgeAddress(id)}`;
 
 /** What the port that sent a message is in its switch's tree. Classic spanning tree sends only from designated ports, and says nothing. */
 export type BpduRole = "unknown" | "alternate" | "root" | "designated";
@@ -118,6 +120,27 @@ export function encodeBpdu(bpdu: Bpdu, from: number): Uint8Array {
 	putTime(frame, BPDU + 31, bpdu.hello);
 	putTime(frame, BPDU + 33, bpdu.forwardDelay);
 	return frame;
+}
+
+/** What the port that sent it does with frames, as a rapid message says. */
+export const bpduState = ({ forwarding, learning }: Bpdu): "forwarding" | "learning" | "discarding" =>
+	forwarding ? "forwarding" : learning ? "learning" : "discarding";
+
+/** `root 32768.02:00:00:00:00:01 · cost 20000 · from 32768.02:00:00:00:00:02 port 3 · designated, forwarding`. */
+export function bpduText(bpdu: Bpdu): string {
+	const flags = [
+		bpdu.role,
+		...(bpdu.rapid ? [bpduState(bpdu)] : []),
+		...(bpdu.proposal ? ["proposal"] : []),
+		...(bpdu.agreement ? ["agreement"] : []),
+		...(bpdu.topologyChange ? ["topology change"] : []),
+	];
+	return [
+		`root ${bridgeText(bpdu.root)}`,
+		`cost ${bpdu.cost}`,
+		`from ${bridgeText(bpdu.bridge)} port ${bpdu.port & 0x0fff}`,
+		flags.join(", "),
+	].join(" · ");
 }
 
 /**

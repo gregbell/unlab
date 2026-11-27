@@ -20,6 +20,7 @@
 // tests every frame the switches carry: no decoding and no strings made per frame.
 
 import { parseIp4 } from "./address.ts";
+import { isForBridges } from "./bpdu.ts";
 import { ETH_ARP, ETH_HDR, ETH_IPV4, ETH_IPV6, IP_ICMP, IP_TCP, IP_UDP } from "./frames.ts";
 import {
 	type MachineName,
@@ -159,6 +160,7 @@ const PROTOCOLS: ReadonlyMap<string, (f: Uint8Array) => boolean> = new Map([
 	["udp", (f) => ipProto(f) === IP_UDP],
 	["dhcp", (f) => l4Uses(f, IP_UDP, 67, 68)],
 	["dns", (f) => l4Uses(f, IP_UDP, 53) || l4Uses(f, IP_TCP, 53)],
+	["stp", isForBridges],
 ]);
 
 const OR = "or";

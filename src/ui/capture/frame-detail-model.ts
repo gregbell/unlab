@@ -6,7 +6,11 @@ import type { FrameEntry, RowNames } from "../../capture/index.ts";
 import { type DropReason, PORTS, type PortNo, type PortRef, portText } from "../../model/index.ts";
 import {
 	arpAddrs,
+	type Bpdu,
 	BROADCAST_MAC,
+	bpduState,
+	bridgeText,
+	decodeBpdu,
 	ETH_ARP,
 	ETH_HDR,
 	ETH_IPV4,
@@ -17,6 +21,7 @@ import {
 	IP_UDP,
 	ip4str,
 	ipAddrs,
+	isForBridges,
 	isGroupMac,
 	macStr,
 	nameOf,
@@ -178,19 +183,46 @@ function dump(e: FrameEntry, f: Uint8Array): DumpRow[] {
 	return rows;
 }
 
+/** What a bridge said, as 802.1D-2004 clause 9 lays it out. */
+function bpduGroup(bpdu: Bpdu): DetailGroup {
+	const flags = [
+		...(bpdu.proposal ? ["proposal"] : []),
+		...(bpdu.agreement ? ["agreement"] : []),
+		...(bpdu.topologyChange ? ["topology change"] : []),
+	];
+	return {
+		title: bpdu.rapid ? "rapid spanning tree" : "spanning tree",
+		fields: [
+			field("root", bridgeText(bpdu.root)),
+			field("cost", bpdu.cost),
+			field("bridge", bridgeText(bpdu.bridge)),
+			field("port", bpdu.port & 0x0fff),
+			field("role", bpdu.role),
+			...(bpdu.rapid ? [field("state", bpduState(bpdu))] : []),
+			...(flags.length === 0 ? [] : [field("flags", flags.join(", "))]),
+			field("message age", `${bpdu.age} s`),
+		],
+	};
+}
+
 function groups(e: FrameEntry, names: LabNames): DetailGroup[] {
 	const f = e.bytes;
 	const type = ethertype(f);
+	// A bridge's message is an 802.3 frame, where the type would be its length.
+	const bpdu = decodeBpdu(f);
 	const out: DetailGroup[] = [
 		{
 			title: "ethernet II",
 			fields: [
 				field("destination", macStr(f, 0), isGroupMac(f) ? { kind: "everyone" } : macWho(e, 0, names)),
 				field("source", macStr(f, 6), macWho(e, 6, names)),
-				field("type", `0x${hex(Math.max(type, 0), 4)}${ETHERTYPES[type] ? ` ${ETHERTYPES[type]}` : ""}`),
+				bpdu
+					? field("length", type)
+					: field("type", `0x${hex(Math.max(type, 0), 4)}${ETHERTYPES[type] ? ` ${ETHERTYPES[type]}` : ""}`),
 			],
 		},
 	];
+	if (bpdu) return [...out, bpduGroup(bpdu)];
 
 	if (e.tagged !== 0) {
 		const on = PORTS.filter((p) => e.tagged & (1 << (p - 1))).map((p) => portWord(e, p, names));
@@ -314,6 +346,9 @@ function did(e: FrameEntry, names: LabNames): Words[] {
 	if (lost) {
 		const cable = `The cable into ${portWord(e, e.from, names)} ${DROPPED[lost.reason]}`;
 		return [sentence(`${cable}, so ${e.switch} never had the frame.`)];
+	}
+	if (isForBridges(e.bytes)) {
+		return [sentence(`${e.switch}'s spanning tree read it. A switch sends no bridge's message on.`)];
 	}
 	return [...switched(e, names), ...dropped(e, names)];
 }
