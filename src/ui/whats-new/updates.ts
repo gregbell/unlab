@@ -14,6 +14,13 @@ export interface Update {
 export const UPDATES: readonly Update[] = [
 	{
 		date: "2026-11-27",
+		title: "Choose the root and the blocked port",
+		detail:
+			"priority makes a switch the spanning tree's root, and cost makes a port dearer, so the tree blocks it rather than another. topology and the switch's details say each switch's bridge ID, its root and each port's role. The capture decodes each BPDU's root, cost and port, and tcpdump in a guest reads them too.",
+		example: "priority lan 4096",
+	},
+	{
+		date: "2026-11-27",
 		title: "Add spare cables with spanning tree",
 		detail:
 			"Turn rapid spanning tree on with stp, and the switches block the ports that would close a loop, so a lab can have redundant cables and no storm. Cut a cable in use and the blocked port takes over. topology, the switch's faceplate and the desktop say which port is blocked.",

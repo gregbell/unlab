@@ -1867,6 +1867,12 @@ describe("cables between switches", () => {
 		t.run({ type: "port/cost", port: { switch: on, port: rootPort }, cost: 100_000 as PathCost });
 		told();
 		expect(blocked()).toEqual([`${on}:${rootPort}`]);
+
+		// A priority given while the switches take part moves the root at once.
+		t.run({ type: "switch/priority", switch: "switch0", priority: 0 as BridgePriority });
+		told();
+		expect([...parts.values()].map((tree) => tree.root)).toEqual(Array(3).fill(parts.get("switch0")?.bridge));
+		expect(parts.get("switch0")?.bridge.priority).toBe(0);
 	});
 
 	test("end with a switch that is removed while it storms: the capture says so of it, and of the others once they are quiet", () => {
