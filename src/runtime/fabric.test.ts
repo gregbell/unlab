@@ -1,8 +1,8 @@
 import { describe, expect, test } from "vitest";
 import { conditions, seededStreams } from "../../test/support/conditions.ts";
 import { arpReply, arpRequest, BROADCAST, eth, mac, ping } from "../../test/support/frames.ts";
-import type { ConditionValues, PortNo, PortVlan, VlanId } from "../model/index.ts";
-import { vlanTag, withoutTag, withTag } from "../net/index.ts";
+import type { ConditionValues, PortNo, PortVlan, Tree, VlanId } from "../model/index.ts";
+import { bridgeIdOf, decodeBpdu, encodeBpdu, isForBridges, vlanTag, withoutTag, withTag } from "../net/index.ts";
 import {
 	Fabric,
 	type FabricOptions,
@@ -15,6 +15,7 @@ import {
 	type StormReading,
 	type TapEvent,
 } from "./fabric.ts";
+import { EDGE_DELAY_MS, HELLO_MS } from "./rstp.ts";
 
 const bit = (p: number) => 1 << (p - 1);
 
@@ -230,6 +231,7 @@ type Letter = "a" | "b" | "c" | "d";
 function net(letters: readonly Letter[], cables: readonly string[], options: FabricOptions = {}) {
 	const taps: { on: Letter; at: number; e: TapEvent }[] = [];
 	const storms: { on: Letter; over: boolean; reading: StormReading }[] = [];
+	const trees: { on: Letter; reading: Tree }[] = [];
 	const slots = new Map<Letter, number>();
 	const names: Letter[] = [];
 	let now = 0;
@@ -237,6 +239,7 @@ function net(letters: readonly Letter[], cables: readonly string[], options: Fab
 		{
 			tap: (slot, e) => taps.push({ on: names[slot], at: now, e }),
 			storm: (slot, reading, over) => storms.push({ on: names[slot], over, reading }),
+			tree: (slot, reading) => trees.push({ on: names[slot], reading }),
 		},
 		options,
 	);
@@ -296,6 +299,30 @@ function net(letters: readonly Letter[], cables: readonly string[], options: Fab
 		storming: () => letters.filter((letter) => fabric.storm(slot(letter), now) !== null),
 		/** The switches that tapped a frame, in order. */
 		path: () => taps.map(({ on }) => on).join(""),
+		trees,
+		/**
+		 * Turns spanning tree on for the switches, or off. Each has an address in the order of the letters, so of the
+		 * switches of a tree the first is its root.
+		 */
+		stp(on: readonly Letter[], run = true) {
+			for (const letter of on) {
+				fabric.setTree(slot(letter), run ? { address: 0x0200_0000_0001 + letters.indexOf(letter) } : null);
+			}
+			t.drain();
+		},
+		/** `c8 alternate discarding`, for each port that a cable to a switch is in and the tree has, lowest first. */
+		ports: () =>
+			letters.flatMap((letter) =>
+				(fabric.tree(slot(letter))?.ports ?? [])
+					.filter(({ port }) => port !== 1)
+					.map(({ port, role, state }) => `${letter}${port} ${role} ${state}`),
+			),
+		/** What the machine on the switch has been handed, but for the spanning tree's messages. */
+		heard: (on: Letter) => (got.get(on) ?? []).filter((frame) => !isForBridges(frame)),
+		/** The spanning tree's messages that the machine on the switch has been handed. */
+		hellos: (on: Letter) => (got.get(on) ?? []).filter(isForBridges),
+		/** The frames that the switches took in, but for the spanning tree's messages. */
+		took: () => taps.filter(({ e }) => !isForBridges(e.frame)),
 	};
 	return t;
 }
@@ -1347,5 +1374,278 @@ describe("conditions and the rest of the fabric", () => {
 		// Two copies go round, one each way, and each takes 50 ms a lap.
 		expect(looped.length).toBeGreaterThan(30);
 		expect(looped.length).toBeLessThanOrEqual(2 * (1000 / 50) + 2);
+	});
+});
+
+describe("spanning tree", () => {
+	const ALL = ["a", "b", "c"] as const;
+	const BLOCKED = [
+		"a7 designated forwarding",
+		"a8 designated forwarding",
+		"b7 designated forwarding",
+		"b8 root forwarding",
+		"c7 root forwarding",
+		"c8 alternate discarding",
+	];
+	/**
+	 * Long enough after the switches have agreed that each port may send again at once: a port sends six messages
+	 * in a second and then one a second, and agreeing takes most of the six.
+	 */
+	const QUIET_MS = 10_000;
+	const message = (from: number) => {
+		const id = bridgeIdOf(0x8000, 0x5254_0088_0000 + 10 + from);
+		const said = { rapid: true, root: id, cost: 0, bridge: id, port: 0x8001, role: "designated" } as const;
+		const flags = { proposal: true, agreement: false, learning: false, forwarding: false, topologyChange: false };
+		return encodeBpdu(
+			{ ...said, ...flags, age: 0, maxAge: 20, hello: 2, forwardDelay: 15 },
+			0x5254_0088_0000 + 10 + from,
+		);
+	};
+
+	test("is off on a new switch, so a loop storms, and a frame for the bridges' address is dropped where it comes in", () => {
+		const t = net(ALL, TRIANGLE);
+		expect(ALL.map((on) => t.fabric.tree(t.slot(on)))).toEqual([null, null, null]);
+		expect([t.fabric.busy, t.fabric.timer()]).toEqual([false, -1]);
+		t.send("a", message(1));
+		t.run(50);
+		expect([t.taps.length, t.got("b"), t.got("c")]).toEqual([0, 0, 0]);
+		expect(t.fabric.counters(t.slot("a"), 1)?.dropped).toBe(1);
+		t.send("a", arpRequest(1, 9));
+		t.run(500);
+		expect(t.storming()).toEqual(["a", "b", "c"]);
+	});
+
+	test("blocks one port of a triangle of switches, so a broadcast reaches each machine once, and a ping goes round by the root", () => {
+		const t = net(ALL, TRIANGLE);
+		t.stp(ALL);
+		expect(t.ports()).toEqual(BLOCKED);
+		expect(t.now).toBe(0);
+
+		t.send("a", arpRequest(1, 9));
+		t.run(50);
+		expect(ALL.map((on) => t.heard(on).length)).toEqual([0, 1, 1]);
+		expect(t.took().map(({ on, e }) => `${on}${e.from}${e.looped ? " looped" : ""}`)).toEqual(["a1", "b8", "c7"]);
+		expect([t.storming(), t.storms]).toEqual([[], []]);
+		// What b floods towards c comes in by the blocked port, which drops it and counts it.
+		expect(t.fabric.counters(t.slot("c"), 8)?.dropped).toBe(1);
+
+		t.send("c", arpRequest(3, 2));
+		t.run(5);
+		t.send("b", arpReply(2, 3));
+		t.run(5);
+		const from = t.took().length;
+		t.send("b", ping(2, 3));
+		t.run(5);
+		expect(
+			t
+				.took()
+				.slice(from)
+				.map(({ on, e }) => [on, e.from, e.to, e.flood]),
+		).toEqual([
+			["b", 1, bit(8), null],
+			["a", 7, bit(8), null],
+			["c", 7, bit(1), null],
+		]);
+		expect(t.heard("c").at(-1)).toEqual(ping(2, 3));
+	});
+
+	test("has work from when a switch is told to take part, and after it a timer for the next hello", () => {
+		const t = net(["a"], []);
+		t.fabric.setTree(t.slot("a"), { address: 0x0200_0000_0001 });
+		expect([t.fabric.busy, t.fabric.next()]).toEqual([true, 0]);
+		// Until its tree has run, not even its machine's port carries a frame.
+		t.send("a", arpRequest(1, 9));
+		expect(t.taps).toEqual([]);
+		t.drain();
+		expect([t.fabric.busy, t.fabric.next(), t.fabric.timer()]).toEqual([false, -1, HELLO_MS]);
+		t.send("a", arpRequest(1, 9));
+		expect(t.taps).toHaveLength(1);
+		t.run(HELLO_MS);
+		expect(t.fabric.timer()).toBe(2 * HELLO_MS);
+	});
+
+	test("sends its messages as frames: every two seconds from each designated port, along a cable and to a machine", () => {
+		const t = net(["a", "b"], ["a8-b8"]);
+		t.stp(["a", "b"]);
+		t.run(QUIET_MS);
+		const [taps, toA, toB] = [t.taps.length, t.hellos("a").length, t.hellos("b").length];
+		t.run(5 * HELLO_MS);
+		// b's port on the cable is its way to the root, and says nothing. What a says there, b takes in and sends nowhere.
+		const crossed = t.taps.slice(taps);
+		expect(crossed.map(({ on, at, e }) => [on, at, e.from, e.to, e.frame.length])).toEqual(
+			[1, 2, 3, 4, 5].map((n) => ["b", QUIET_MS + n * HELLO_MS, 8, 0, 60]),
+		);
+		expect(decodeBpdu(crossed[0].e.frame)).toMatchObject({
+			rapid: true,
+			root: bridgeIdOf(0x8000, 0x0200_0000_0001),
+			cost: 0,
+			bridge: bridgeIdOf(0x8000, 0x0200_0000_0001),
+			port: 0x8008,
+			role: "designated",
+			forwarding: true,
+			hello: 2,
+		});
+		expect([t.hellos("a").length - toA, t.hellos("b").length - toB]).toEqual([5, 5]);
+		expect(decodeBpdu(t.hellos("b").at(-1) as Uint8Array)).toMatchObject({
+			root: bridgeIdOf(0x8000, 0x0200_0000_0001),
+			cost: 20_000,
+			bridge: bridgeIdOf(0x8000, 0x0200_0000_0002),
+			port: 0x8001,
+		});
+		expect(t.fabric.carried(t.slot("a"), 8)?.delivered).toBeGreaterThanOrEqual(5);
+	});
+
+	test("brings the blocked port into use when a cable in use is cut, and the switch that had learned the old way forgets it", () => {
+		const t = net(ALL, TRIANGLE);
+		t.stp(ALL);
+		t.run(QUIET_MS);
+		t.send("c", arpRequest(3, 2));
+		t.run(5);
+		t.send("b", arpReply(2, 3));
+		t.run(5);
+		// b has node3 by way of a, because c's port to b is blocked.
+		expect(t.table("b")).toEqual({ [NODE[2]]: 1, [NODE[3]]: 8 });
+		const cutAt = t.now;
+
+		t.cut("c7");
+		t.drain();
+		expect(t.ports()).toEqual([
+			"a7 designated forwarding",
+			"b7 designated forwarding",
+			"b8 root forwarding",
+			"c8 root forwarding",
+		]);
+		expect(t.table("b")).toEqual({ [NODE[2]]: 1 });
+		const before = t.heard("c").length;
+		t.send("b", ping(2, 3));
+		t.drain();
+		expect(t.heard("c").slice(before)).toEqual([ping(2, 3)]);
+		// No timer of the protocol had to run out.
+		expect(t.now).toBe(cutAt);
+
+		// Reconnected, the cable is in use again, and the far port is blocked as before.
+		t.cut("c7", true);
+		t.drain();
+		expect(t.ports()).toEqual(BLOCKED);
+		expect([t.storms, t.now]).toEqual([[], cutAt]);
+	});
+
+	test("ends a storm when it is turned on for the switches of the loop", () => {
+		const t = net(ALL, TRIANGLE);
+		t.send("a", arpRequest(1, 9));
+		t.run(500);
+		expect(t.storming()).toEqual(["a", "b", "c"]);
+		const onAt = t.now;
+		t.stp(ALL);
+		expect(t.ports()).toEqual(BLOCKED);
+		t.run(1000);
+		expect(t.storming()).toEqual([]);
+		const over = t.taps.filter(({ e }) => e.looped).at(-1)?.at ?? 0;
+		// What had looped is gone as soon as it comes to a port that the tree has stopped: the frames of one hop's queue.
+		expect(over - onAt).toBeLessThan(100);
+		expect(
+			t.storms
+				.filter((storm) => storm.over)
+				.map(({ on }) => on)
+				.sort(),
+		).toEqual(["a", "b", "c"]);
+
+		const [b, c] = [t.heard("b").length, t.heard("c").length];
+		t.send("a", arpRequest(1, 9));
+		t.run(200);
+		expect([t.heard("b").length - b, t.heard("c").length - c]).toEqual([1, 1]);
+		expect(t.storming()).toEqual([]);
+	});
+
+	test("sees no loop through a switch that has it off, which sends no message on: the loop storms once the ports towards that switch carry", () => {
+		const t = net(ALL, TRIANGLE);
+		t.stp(["a", "b"]);
+		const waiting = [
+			"a7 designated forwarding",
+			"a8 designated discarding",
+			"b7 designated discarding",
+			"b8 root forwarding",
+		];
+		expect(t.ports()).toEqual(waiting);
+		// Each proposes to c for three seconds, and until then the loop is open.
+		t.send("a", arpRequest(1, 9));
+		t.run(EDGE_DELAY_MS - 1);
+		expect(t.ports()).toEqual(waiting);
+		expect([t.heard("b").length, t.heard("c").length, t.storming()]).toEqual([1, 0, []]);
+		expect(t.taps.filter(({ on }) => on === "c")).toEqual([]);
+		expect(t.fabric.counters(t.slot("c"), 7)?.dropped).toBeGreaterThan(0);
+
+		t.run(1);
+		expect(t.ports()).toEqual(waiting.map((port) => port.replace("discarding", "forwarding")));
+		t.send("a", arpRequest(1, 9));
+		t.run(500);
+		expect(t.storming()).toEqual(["a", "b", "c"]);
+
+		// With it on for c too, the three find the loop and the storm ends.
+		t.stp(["c"]);
+		t.run(1000);
+		expect(t.ports()).toEqual(BLOCKED);
+		expect(t.storming()).toEqual([]);
+	});
+
+	test("turned off, lets every port carry again, so a loop that it had blocked storms", () => {
+		const t = net(ALL, TRIANGLE);
+		t.stp(ALL);
+		t.stp(ALL, false);
+		expect([t.ports(), t.fabric.timer(), t.fabric.busy]).toEqual([[], -1, false]);
+		t.send("a", arpRequest(1, 9));
+		t.run(500);
+		expect(t.storming()).toEqual(["a", "b", "c"]);
+	});
+
+	test("tells its owner each time a switch's part in the tree changes, and not at a hello that changes nothing", () => {
+		const t = net(ALL, TRIANGLE);
+		t.stp(ALL);
+		const last = (on: Letter) => t.trees.findLast((told) => told.on === on)?.reading;
+		for (const on of ALL) expect(last(on)).toEqual(t.fabric.tree(t.slot(on)));
+		expect(last("c")).toEqual({
+			bridge: { priority: 32768, address: "02:00:00:00:00:03" },
+			root: { priority: 32768, address: "02:00:00:00:00:01" },
+			cost: 20_000,
+			ports: [
+				{ port: 1, role: "designated", state: "forwarding" },
+				{ port: 7, role: "root", state: "forwarding" },
+				{ port: 8, role: "alternate", state: "discarding" },
+			],
+		});
+		const told = t.trees.length;
+		t.run(3 * HELLO_MS);
+		expect(t.trees.length).toBe(told);
+		t.cut("c7");
+		t.drain();
+		expect(last("c")?.ports).toEqual([
+			{ port: 1, role: "designated", state: "forwarding" },
+			{ port: 8, role: "root", state: "forwarding" },
+		]);
+		expect(last("c")?.cost).toBe(40_000);
+	});
+
+	test("is one tree for every VLAN: its messages cross a trunk, tagged or not, and a cable from one VLAN to another", () => {
+		const t = net(ALL, TRIANGLE);
+		const set = (at: string, vlan: PortVlan) => t.fabric.setVlan(t.end(at).slot, t.end(at).port, vlan);
+		// A trunk that carries only VLAN 10, with a native VLAN that it does not allow, so nothing crosses it untagged.
+		for (const at of ["a7", "b8", "b7", "c8"]) set(at, trunk([10], 99));
+		set("c7", access(20));
+		set("a8", access(30));
+		t.stp(ALL);
+		expect(t.ports()).toEqual(BLOCKED);
+	});
+
+	test("a machine that sends a message of its own is heard: its port is taken for a bridge's, and goes on carrying", () => {
+		const t = net(["a", "b"], ["a8-b8"]);
+		t.stp(["a", "b"]);
+		const taps = t.taps.length;
+		t.send("b", message(2));
+		t.drain();
+		expect(t.taps.slice(taps).map(({ on, e }) => [on, e.from, e.to])).toEqual([["b", 1, 0]]);
+		expect(t.got("a")).toBe(t.hellos("a").length);
+		t.send("b", arpRequest(2, 9));
+		t.drain();
+		expect(t.heard("a")).toHaveLength(1);
 	});
 });
