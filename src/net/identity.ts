@@ -56,6 +56,20 @@ export function nodeMac(n: number, nic: NicNo = 0): Uint8Array {
 	return Uint8Array.of(...MAC_PREFIX, nic, HOST_OFFSET + n);
 }
 
+/**
+ * The address a switch has in the spanning tree, as one number: 02:00 and
+ * then a hash of its name. So it is the switch's own for as long as it has the
+ * name, a reload included, and nothing has to keep it. The lowest address is
+ * the root while no priority says otherwise, which is as arbitrary here as it
+ * is among real switches.
+ */
+export function switchAddress(name: string): number {
+	// FNV-1a, in 32 bits.
+	let hash = 0x811c9dc5;
+	for (let i = 0; i < name.length; i++) hash = Math.imul(hash ^ name.charCodeAt(i), 0x01000193) >>> 0;
+	return 0x0200_0000_0000 + hash;
+}
+
 /** The machine and NIC whose MAC sits at `off` in `f`, or null. */
 export function nicOfMac(f: Uint8Array, off: number): NodeNic | null {
 	if (f.length < off + 6) return null;
