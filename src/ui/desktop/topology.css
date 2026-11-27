@@ -10,33 +10,39 @@
 		font: var(--fs-ui) / var(--lh-ui) var(--font);
 		text-align: left;
 	}
-	.n-node {
-		cursor: pointer;
-	}
-	.n-node-label strong {
-		color: var(--machine-hue, var(--text));
-	}
-	.n-node-label small {
-		color: var(--text-3);
-	}
 	.n-map-scroll {
+		--n-fade: 16px;
 		flex: 1;
 		min-height: 330px;
 		display: grid;
 		place-items: safe center;
 		overflow: auto;
-		padding: 18px 8px 36px;
+		padding: var(--n-fade) 8px;
 		background-image: radial-gradient(color-mix(in srgb, var(--text-3) 26%, transparent) 0.8px, transparent 0.9px);
 		background-size: 19px 19px;
-		mask-image: linear-gradient(to bottom, transparent, var(--crust) 5%, var(--crust) 96%, transparent);
+		/* The fade is as deep as the padding, so nothing is in it when the map is scrolled to an end. */
+		mask-image: linear-gradient(
+			to bottom,
+			transparent,
+			var(--crust) var(--n-fade),
+			var(--crust) calc(100% - var(--n-fade)),
+			transparent
+		);
 	}
+	/* A column for each step from the first switch, and between two columns a clear channel for the lines to cross in. */
 	.n-drawing {
+		--n-gap: 20px;
 		position: relative;
-		flex: none;
+		isolation: isolate;
+		display: grid;
+		grid-auto-columns: max-content minmax(56px, 180px);
+		row-gap: var(--n-gap);
+		padding-inline: 28px;
 	}
 	.n-wires {
 		position: absolute;
 		inset: 0;
+		z-index: -1;
 		width: 100%;
 		height: 100%;
 		pointer-events: none;
@@ -57,9 +63,25 @@
 		stroke: var(--down);
 		stroke-dasharray: 5 5;
 	}
+	.n-column {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: space-around;
+		gap: var(--n-gap);
+	}
 	.n-node {
-		position: absolute;
-		transform: translate(-50%, -50%);
+		display: grid;
+		justify-items: center;
+		row-gap: 5px;
+		padding: 0;
+		border: 0;
+		border-radius: var(--r-panel);
+		background: none;
+		text-align: center;
+		cursor: pointer;
+	}
+	.n-tile {
 		width: 84px;
 		height: 56px;
 		display: grid;
@@ -68,28 +90,27 @@
 		border: 1px solid var(--line);
 		border-radius: var(--r-panel);
 	}
-	.n-node:is(:hover, :focus-visible) {
+	.n-node:is(:hover, :focus-visible) .n-tile {
 		background: var(--base);
 	}
-	.n-node[data-selected="true"] {
+	.n-node[data-selected="true"] .n-tile {
 		border-color: var(--machine-hue, var(--agent));
 		background: color-mix(in srgb, var(--machine-hue, var(--agent)) 12%, var(--mantle));
 	}
 	.n-node-label {
-		position: absolute;
-		top: 100%;
-		padding-top: 5px;
 		display: grid;
 		justify-items: center;
-		width: 135px;
+		max-width: 135px;
 		line-height: 1.4;
 		overflow-wrap: anywhere;
 	}
 	.n-node-label strong {
+		color: var(--machine-hue, var(--text));
 		font-size: var(--fs-input);
 		font-weight: 500;
 	}
 	.n-node-label small {
+		color: var(--text-3);
 		font-size: 11px;
 	}
 	.n-art {
@@ -174,15 +195,18 @@
 		transform: rotate(-130deg);
 	}
 	@container (max-width: 530px) {
-		.n-node {
+		.n-drawing {
+			grid-auto-columns: max-content minmax(32px, 180px);
+		}
+		.n-tile {
 			width: 55px;
 			height: 43px;
 		}
-		.n-node .n-art {
+		.n-tile .n-art {
 			transform: scale(0.78);
 		}
 		.n-node-label {
-			width: 80px;
+			max-width: 80px;
 		}
 		.n-node-label strong {
 			font-size: 12px;
