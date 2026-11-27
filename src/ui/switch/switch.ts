@@ -47,7 +47,7 @@ const shown =
  * with how many a second and how many it has dropped. A port that the spanning
  * tree keeps out of use says so on its cable's tag, and each port's title says
  * what it is in the tree. Under the ports, a switch with spanning tree on says
- * its bridge ID and its root.
+ * its bridge ID and its root, and one with it off a priority that is set.
  */
 export class UnlabSwitch extends UnlabElement {
 	static override properties = { compact: { type: Boolean, reflect: true } };

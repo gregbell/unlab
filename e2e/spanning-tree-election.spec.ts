@@ -140,6 +140,13 @@ test("the switches exchange BPDUs that the capture decodes and a guest's tcpdump
 	await expect.poll(() => blocked(page)).toEqual(["lan:8"]);
 	expect((await switches(page)).map(({ priority }) => priority)).toEqual([undefined, undefined, 4096]);
 	expect(await dumped(page, 1)).toContain(`root-id 1000.${ADDRESS.wan}, root-pathcost 20000`);
+	// switch0 now tells lan of a root that is not itself, which the capture says apart from the bridge that sent it.
+	const passedOn = new RegExp(`^root 4096\\.${ADDRESS.wan} · cost 20000 · from 32768\\.${ADDRESS.switch0} port 7 · `);
+	await expect
+		.poll(async () =>
+			(await read(page, "stp")).some((row) => row.switch === "lan" && row.in === 8 && passedOn.test(row.info)),
+		)
+		.toBe(true);
 	await root(page, 1, "arping -c 1 -w 1 -I eth0 10.88.0.99; true");
 	await page.waitForTimeout(500);
 	expect((await read(page, "arp 10.88.0.99")).map((row) => [row.switch, Boolean(row.looped)]).sort()).toEqual([
@@ -249,7 +256,8 @@ test("the desktop's switch details say the switch's bridge ID, its root and each
 	await expect(cell("1")).toHaveText("designated port");
 	await expect(cell("2")).toHaveText("designated port");
 	await expect.poll(() => blocked(page)).toEqual(["switch0:2"]);
-	await typed(page, "cost lan:2 2000");
+	// From the tool, so that nothing but the cost changes: the keyboard stays where it was, and the tree as it is.
+	expect(await call(page, "port_cost", { port: "lan:2", cost: 2000 })).toMatchObject({ result: "lan:2 costs 2000" });
 	await expect(cell("2")).toHaveText("designated port · cost 2000");
 
 	// With spanning tree off, the priority and the cost that were set are still said.
