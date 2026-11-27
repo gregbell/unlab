@@ -165,8 +165,6 @@ export interface CaptureView {
 	readonly filter: CaptureFilter;
 	/** Every frame in the buffer, ignoring the filter. */
 	frames(): Iterable<FrameEntry>;
-	/** Every frame in the filtered view. */
-	matched(): Iterable<FrameEntry>;
 	subscribe(fn: () => void): () => void;
 }
 
@@ -384,12 +382,6 @@ export function createCaptureLog(opts: CaptureOptions): CaptureLog {
 		entry: (seq) => at(seq) ?? null,
 		get filter() {
 			return filter;
-		},
-		*matched() {
-			for (let i = 0; i < matchLen; i++) {
-				const e = at(matchAt(i));
-				if (e?.kind === "frame") yield e;
-			}
 		},
 		*frames() {
 			for (let seq = first; seq < next; seq++) {

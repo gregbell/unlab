@@ -252,7 +252,6 @@ const EMPTY_CAPTURE: CaptureView = {
 	entry: () => null,
 	filter: MATCH_ALL,
 	frames: () => [],
-	matched: () => [],
 	subscribe: () => () => {},
 };
 
