@@ -1,8 +1,9 @@
 // The gate: the recorded command set of test/fixtures/scenarios/three-subnets.md, run line by line through
-// the bar's parser, builds its network on real kernels. The tests share one lab, which the last of them
-// saves and opens again, as a reload does.
+// the bar's parser, builds its network on real kernels. The tests share one lab and run in order: the one
+// for story 1.2 adds spanning tree and a second cable, and the last saves the lab and opens it again, as a
+// reload does.
 import assert from "node:assert/strict";
-import { afterAll, beforeAll, test } from "vitest";
+import { afterAll, beforeAll, expect, test } from "vitest";
 import type { Topology } from "../../src/commands/index.ts";
 import type { PortRef, SwitchName } from "../../src/model/index.ts";
 import { dstMac, ETH_HDR, ip4, ip4str, ipAddrs, srcMac } from "../../src/net/index.ts";
@@ -33,8 +34,8 @@ beforeAll(async () => {
 afterAll(() => lab?.stop());
 
 /** How many of its echoes alice's ping sent, and how many came back. */
-async function ping(count: number): Promise<{ sent: number; received: number }> {
-	const result = await lab.run(`exec alice -- ping -c ${count} -i 0.2 -W 1 ${ip4str(BOB)}`);
+async function ping(count: number, every = 0.2): Promise<{ sent: number; received: number }> {
+	const result = await lab.run(`exec alice -- ping -c ${count} -i ${every} -W 1 ${ip4str(BOB)}`);
 	const output = (result.data as { ran: { output: string }[] }).ran[0].output;
 	const said = /(\d+) packets transmitted, (\d+) packets received/.exec(output);
 	assert.ok(said, output);
@@ -114,8 +115,13 @@ async function crossed(): Promise<void> {
 	}
 	const after = lab.carried(LOSSY);
 	const seen = acrossLossy(from);
-	assert.equal(after.delivered - before.delivered, seen.delivered, "the lossy cable counts what it delivered");
-	assert.equal(after.dropped.loss - before.dropped.loss, seen.lost, "and what it lost");
+	// A switch with spanning tree on also sends its own BPDUs down the cable, which no switch took in, so the capture has none.
+	const exact =
+		lab.state.stp.length === 0
+			? assert.equal
+			: (counted: number, captured: number, what: string) => assert.ok(counted >= captured, what);
+	exact(after.delivered - before.delivered, seen.delivered, "the lossy cable counts what it delivered");
+	exact(after.dropped.loss - before.dropped.loss, seen.lost, "and what it lost");
 	assert.ok(seen.delivered >= 2 * received, "each answered echo crossed it both ways");
 }
 
@@ -164,14 +170,91 @@ test("with the loss set to zero every ping is answered, and with it set to 100% 
 	await lab.run("link up r2:eth1 --loss 10%");
 });
 
-test("a reload brings the whole topology back, and the ping crosses it again", async () => {
+/** What topology says of a port in its line, from what topology_read has of it: the text an agent reads holds the data it is given. */
+function sayings({ port, cable, vlan, stp, cost }: Topology["switches"][number]["ports"][number]): string[] {
+	if (!cable) return [];
+	const { to, link, conditions, carried } = cable;
+	const nic = to.kind === "nic" && (to.machine === "r1" || to.machine === "r2") ? `:${to.nic}` : "";
+	const far = to.kind === "nic" ? `${to.machine}${nic}` : `${to.switch}:${to.port}`;
+	const lost = carried.dropped.loss + carried.dropped.rate + carried.dropped.mtu;
+	const carries =
+		vlan.mode === "trunk"
+			? `trunk of ${vlan.allowed === "all" ? "all" : vlan.allowed.join(" and ")}, native ${vlan.native}`
+			: vlan.vlan === 1
+				? ""
+				: `vlan ${vlan.vlan}`;
+	return [
+		`port ${port} · ${far} · ${link}`,
+		carries,
+		...Object.entries(conditions).map(([part, value]) => `${part} ${value}`),
+		...(Object.keys(conditions).length > 0 ? [`${carried.delivered} delivered`, `${lost} dropped`] : []),
+		...(stp ? [`${stp.role} port`, ...(stp.state === "discarding" ? ["blocked"] : [])] : []),
+		...(cost ? [`cost ${cost}`] : []),
+	].filter((part) => part !== "");
+}
+
+/** Reads topology, and checks that each switch's row says what topology_read has of each of its ports. */
+async function listed(): Promise<void> {
+	const report = await lab.run("topology");
+	assert.equal(report.kind, "report");
+	const data = report.data as Topology;
+	const rows = report.kind === "report" ? (report.rows ?? []) : [];
+	assert.deepEqual(
+		rows.map(({ term }) => term),
+		data.switches.map(({ name }) => name),
+		"a row for every switch",
+	);
+	for (const sw of data.switches) {
+		const lines = (rows.find(({ term }) => term === sw.name)?.text ?? "").split("\n");
+		if (sw.ports.some(({ cable }) => !cable))
+			assert.match(lines.at(-1) ?? "", / · free$/, `${sw.name} names its free ports`);
+		if (sw.stp) assert.match(lines[0], /^spanning tree on · bridge \d+\./, `${sw.name} says it takes part`);
+		for (const port of sw.ports) {
+			const [first, ...rest] = sayings(port);
+			if (!first) continue;
+			const line = lines.find((one) => one.startsWith(`${first} `) || one === first);
+			assert.ok(line, `${sw.name} has a line for ${first}`);
+			for (const part of rest) assert.ok(line.includes(part), `${sw.name}: "${line}" says ${part}`);
+		}
+	}
+}
+
+test("topology lists every switch and port, what is cabled to it, its link and conditions, its VLAN and its part in the spanning tree, and topology_read has the same as data", async () => {
+	// A second cable between the switches, in VLAN 1, closes a loop that the tree breaks at its dearer end.
+	for (const line of ["stp on core,edge", "priority core 4096", "cable core:7 edge:7", "cost edge:7 200000"]) {
+		await lab.run(line);
+	}
+	const blocked = 'edge:7 core:7 up {"mode":"access","vlan":1} {} stp alternate discarding cost 200000';
+	await expect.poll(wiring, { timeout: 5000 }).toContain(blocked);
+	await listed();
+	await lab.run("link down core:7");
+	await listed();
+	assert.deepEqual(
+		(await wiring()).filter((line) => /^(core|edge)( |:7|:8)/.test(line)),
+		[
+			"core stp on priority 4096",
+			'core:7 edge:7 cut {"mode":"access","vlan":1} {}',
+			'core:8 edge:8 up {"mode":"trunk","allowed":[10,20],"native":1} {} stp designated forwarding',
+			"edge stp on priority as new",
+			'edge:7 core:7 cut {"mode":"access","vlan":1} {} cost 200000',
+			'edge:8 core:8 up {"mode":"trunk","allowed":[10,20],"native":1} {} stp root forwarding',
+		],
+	);
+	await lab.run("link up core:7");
+	await expect.poll(wiring, { timeout: 5000 }).toContain(blocked);
+});
+
+test("a reload brings the whole topology back, spanning tree settings too, and the ping crosses it again", async () => {
 	const before = await wiring();
 	const saved = lab.saved();
 	await lab.stop();
 	lab = await commandLab(saved);
 	await lab.ready();
-	assert.deepEqual(await wiring(), before, "every switch, cable, VLAN, trunk and condition is back");
+	await expect.poll(wiring, { timeout: 10_000 }).toEqual(before);
 	// A boot forgets routes and forwarding, so the lines that set them in the guests run again, and only those.
 	await run(LINES.filter(inGuests));
 	await crossed();
+	const lossBefore = lab.carried(LOSSY).dropped.loss;
+	await ping(50, 0.05);
+	assert.ok(lab.carried(LOSSY).dropped.loss > lossBefore, "the switches were told again that the cable loses frames");
 }, 180_000);
