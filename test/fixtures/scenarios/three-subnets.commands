@@ -1,0 +1,23 @@
+# The network of three-subnets.md, one command-bar line at a time.
+# A link or exec line waits until every machine is ready, as an agent waits on ls.
+mkswitch core
+mkswitch edge
+cable core:8 edge:8
+trunk core:8 --allow 10,20
+trunk edge:8 --allow 10,20
+spawn 1 alpine --name alice --net edge --addr 10.1.0.10/24 --no-gateway
+spawn 1 alpine --name r1 --nics 2 --net core --addr 10.1.0.1/24,10.2.0.1/24 --no-gateway
+spawn 1 alpine --name r2 --nics 2 --net edge --addr 10.2.0.2/24,10.3.0.1/24 --no-gateway
+spawn 1 alpine --name bob --net edge --addr 10.3.0.10/24 --no-gateway
+vlan alice 10
+vlan r1:eth0 10
+vlan r1:eth1 20
+vlan r2:eth0 20
+vlan r2:eth1 30
+vlan bob 30
+link up r2:eth1 --loss 10%
+exec r1,r2 -- sudo sysctl -w net.ipv4.ip_forward=1
+exec alice -- sudo ip route replace default via 10.1.0.1
+exec bob -- sudo ip route replace default via 10.3.0.1
+exec r1 -- sudo ip route replace 10.3.0.0/24 via 10.2.0.2
+exec r2 -- sudo ip route replace 10.1.0.0/24 via 10.2.0.1
