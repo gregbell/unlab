@@ -129,7 +129,7 @@ test("a lab saved before machines had several NICs restores with one each, on th
 		["10.88.0.12", true],
 		["10.88.0.13", false],
 	]);
-	expect(JSON.parse(saveWorkspace(state))).toMatchObject({ version: 10, switches: ["switch0"] });
+	expect(JSON.parse(saveWorkspace(state))).toMatchObject({ version: 11, switches: ["switch0"] });
 });
 
 test("a lab saved before machines chose addresses restores with the ones they had", () => {
@@ -194,7 +194,7 @@ test("a lab saved before machines had extra disks restores with the root disk it
 	const { state } = restoreWorkspace(initialState(IMAGES, WIDE), JSON.stringify(VERSION_4));
 	expect(machine(state, state.rail[0])).toMatchObject({ name: "web", spec: { disks: { root: "16", extra: [] } } });
 	expect(JSON.parse(saveWorkspace(state))).toMatchObject({
-		version: 10,
+		version: 11,
 		nodes: [{ disks: { root: "16", extra: [] } }],
 	});
 });

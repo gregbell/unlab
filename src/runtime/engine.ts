@@ -28,6 +28,7 @@ import {
 	type StopHow,
 	type SwitchName,
 } from "../model/index.ts";
+import { switchAddress } from "../net/index.ts";
 import type { Clock } from "./clock.ts";
 import type { Fabric, FabricEvents, MacEntry, PortCounters, SwitchCounters } from "./fabric.ts";
 import type { LinkTarget } from "./machine-link.ts";
@@ -216,6 +217,10 @@ export function createEngine(deps: EngineDeps): Engine {
 			if (!name) return;
 			capture.appendStorm({ switch: name, over, looped, dropped, ms: now() - since });
 			dispatch({ type: "switch/storm", switch: name, storm: over ? null : { since, rate, dropped } });
+		},
+		tree(slot, tree) {
+			const name = slots[slot];
+			if (name) dispatch({ type: "switch/tree", switch: name, tree });
 		},
 	});
 	const pump = createPump(fabric, deps.clock);
@@ -533,6 +538,12 @@ export function createEngine(deps: EngineDeps): Engine {
 	};
 
 	function run(effect: Effect): void {
+		perform(effect);
+		// A switch that takes part in the spanning tree works out what a changed cable or link means when it is next drained.
+		if (fabric.busy) pump.wake();
+	}
+
+	function perform(effect: Effect): void {
 		switch (effect.type) {
 			case "vm/boot": {
 				const { machine, attempt, config } = effect;
@@ -674,6 +685,11 @@ export function createEngine(deps: EngineDeps): Engine {
 			case "port/conditions":
 				fabric.setConditions(switchOf(effect.port.switch).slot, effect.port.port, effect.conditions);
 				return;
+			case "switch/stp": {
+				const bridge = effect.on ? { address: switchAddress(effect.switch) } : null;
+				fabric.setTree(switchOf(effect.switch).slot, bridge);
+				return;
+			}
 			case "pty/open": {
 				const s = sessions.get(effect.session);
 				if (!s || s.tty === "console" || s.state !== "closed") return;

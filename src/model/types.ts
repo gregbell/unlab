@@ -428,6 +428,7 @@ export type ToolName =
 	| "switch_uncable"
 	| "port_vlan"
 	| "port_trunk"
+	| "switch_stp"
 	| "checkpoint_save"
 	| "checkpoint_restore"
 	| "checkpoint_remove"
@@ -529,6 +530,10 @@ export interface LabState {
 	readonly portVlans: readonly VlanPort[];
 	/** The switches that are storming now, as the runtime last said. Never saved. */
 	readonly storms: Readonly<Partial<Record<SwitchName, Storm>>>;
+	/** The switches that take part in the spanning tree, in the order of `switches`. A new switch takes none. */
+	readonly stp: readonly SwitchName[];
+	/** What each of those is in the tree, as the runtime last said, once it has. Never saved. */
+	readonly trees: Readonly<Partial<Record<SwitchName, Tree>>>;
 	readonly sessions: Readonly<Partial<Record<SessionId, Session>>>;
 	readonly panes: Panes;
 	readonly keyboard: Keyboard;
@@ -705,6 +710,8 @@ export type RuntimeEvent =
 	  }
 	/** A switch began to storm, its storm goes on with these numbers, or with null it is over. */
 	| { readonly type: "switch/storm"; readonly switch: SwitchName; readonly storm: Storm | null }
+	/** A switch's part in the spanning tree has changed. */
+	| { readonly type: "switch/tree"; readonly switch: SwitchName; readonly tree: Tree }
 	| { readonly type: "session/opened"; readonly session: SessionId }
 	| { readonly type: "session/ended"; readonly session: SessionId }
 	| { readonly type: "session/shell"; readonly session: SessionId; readonly shell: "prompt" | "running" }
@@ -729,6 +736,7 @@ export type CommandEvent =
 	| { readonly type: "cmd/cable-link"; readonly changes: readonly CableChange[]; readonly cause: Cause }
 	| { readonly type: "cmd/vlan"; readonly port: PortRef; readonly vlan: PortVlan }
 	| { readonly type: "cmd/conditions"; readonly changes: readonly ConditionsChange[] }
+	| { readonly type: "cmd/stp"; readonly switches: readonly SwitchName[]; readonly on: boolean }
 	| { readonly type: "cmd/shell"; readonly machine: MachineName }
 	| {
 			readonly type: "cmd/focus";
@@ -872,6 +880,8 @@ export type Effect =
 	| { readonly type: "port/vlan"; readonly port: PortRef; readonly vlan: PortVlan }
 	/** How the cable in the port treats frames from now on. One between switches is told at both its ports. */
 	| { readonly type: "port/conditions"; readonly port: PortRef; readonly conditions: Conditions }
+	/** The switch takes part in the spanning tree from now on, or takes none. It reports switch/tree as its part changes. */
+	| { readonly type: "switch/stp"; readonly switch: SwitchName; readonly on: boolean }
 	| { readonly type: "pty/open"; readonly session: SessionId }
 	| { readonly type: "pty/close"; readonly session: SessionId }
 	| { readonly type: "screen/create"; readonly session: SessionId }

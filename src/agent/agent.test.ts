@@ -93,6 +93,7 @@ const ALL_TOOLS: readonly ToolName[] = [
 	"switch_uncable",
 	"port_vlan",
 	"port_trunk",
+	"switch_stp",
 	"checkpoint_save",
 	"checkpoint_restore",
 	"checkpoint_remove",
@@ -210,6 +211,7 @@ describe("registration", () => {
 			"Restore a checkpoint",
 			"Run a shell command",
 			"Save a checkpoint",
+			"Turn spanning tree on or off",
 			"Unplug a NIC",
 			"Write a file",
 		]);

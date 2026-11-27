@@ -18,6 +18,7 @@ import { rm } from "./rm.ts";
 import { rmswitch } from "./rmswitch.ts";
 import { sh } from "./sh.ts";
 import { spawn } from "./spawn.ts";
+import { stp } from "./stp.ts";
 import { topology } from "./topology.ts";
 import { trunk, vlan } from "./vlan.ts";
 import { write } from "./write.ts";
@@ -34,6 +35,7 @@ export type { PowerState } from "./power.ts";
 export type { RemoveData } from "./rm.ts";
 export type { RemovedSwitch } from "./rmswitch.ts";
 export { DEFAULT_CPUS, MULTICPU_BLOCKER, type SpawnData } from "./spawn.ts";
+export type { StpState } from "./stp.ts";
 export type { Topology } from "./topology.ts";
 export type { PortVlanState } from "./vlan.ts";
 export { MAX_TEXT_BYTES, type WriteData } from "./write.ts";
@@ -56,6 +58,7 @@ export {
 	rmswitch,
 	sh,
 	spawn,
+	stp,
 	topology,
 	trunk,
 	uncable,
@@ -83,6 +86,7 @@ export const VERBS: readonly AnyVerb[] = [
 	uncable,
 	vlan,
 	trunk,
+	stp,
 	topology,
 	capture,
 	focus,

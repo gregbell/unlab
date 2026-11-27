@@ -1,8 +1,9 @@
-// Writes one saved lab for each version of the workspace before 10, with the code that wrote that version:
+// Writes one saved lab for each version of the workspace before 11, with the code that wrote that version:
 // the same lab as each version could hold it. A machine could be called switch1 from version 4 on, and
 // version 7 has two more switches, with a cable moved to one and a NIC plugged into the other. Version 8 has
 // a cable from switch0 to lan, and one from lan to wan that is cut. Version 9 has node1's port in VLAN 10, and
-// the cable from switch0 to lan as a trunk of VLANs 10 and 20.
+// the cable from switch0 to lan as a trunk of VLANs 10 and 20. Version 10 has that cable with a delay and loss, and
+// node1's cable with a rate.
 //
 //   node .audit/phase2/save-labs.mjs <empty dir for checkouts> test/fixtures/saved-labs
 
@@ -11,7 +12,7 @@ import { mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 const [checkouts, out] = process.argv.slice(2).map((path) => resolve(path));
-const COMMITS = { 1: "5fb6f93", 2: "25759b5", 3: "582cb30", 4: "1243028", 5: "443b378", 6: "24c38d9", 7: "961d670", 8: "a7ed190", 9: "af0af43" };
+const COMMITS = { 1: "5fb6f93", 2: "25759b5", 3: "582cb30", 4: "1243028", 5: "443b378", 6: "24c38d9", 7: "961d670", 8: "a7ed190", 9: "af0af43", 10: "42a808c" };
 
 function checkout(commit) {
 	const dir = join(checkouts, commit);
@@ -85,6 +86,13 @@ async function savedLab(version, dir) {
 		for (const port of [{ switch: "switch0", port: 8 }, { switch: lan, port: 7 }]) {
 			s = vlan(port, { mode: "trunk", allowed: [10, 20], native: 1 });
 		}
+	}
+	if (version >= 10) {
+		const { conditionsOf } = await from("conditions.ts");
+		const impair = (port, values) =>
+			run(s, { type: "cmd/conditions", changes: [{ port, conditions: conditionsOf(values) }] });
+		s = impair({ switch: "switch0", port: 8 }, { delay: 100, loss: 20 });
+		s = impair({ switch: kit.switchNamed("lan"), port: 3 }, { rate: 1_000_000 });
 	}
 	return saveWorkspace(s);
 }

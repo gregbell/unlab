@@ -1053,6 +1053,45 @@ export function place(): Value<string> {
 	};
 }
 
+/** The switches that a line names, each once, in the order of the lab's. */
+export interface SwitchSelection {
+	readonly switches: readonly SwitchName[];
+	readonly written: string;
+}
+
+/** `lan`, `switch0,lan` or `all`. */
+export function switches(): Value<SwitchSelection> {
+	return {
+		kind: "positional",
+		label: "switches",
+		noun: "switches such as switch0,lan or all",
+		about: "One switch (lan), a comma list (switch0,lan) or all.",
+		read(text, { lab }) {
+			if (text === ALL_MACHINES) return { switches: lab.switches, written: text };
+			const named = new Set<SwitchName>();
+			for (const { part, ...span } of listParts(text)) {
+				const on = lab.switches.find((name) => name === part);
+				if (on) named.add(on);
+				else if (part === "") return new Miss(undefined, span);
+				else
+					return new Miss(`No switch is called ${part}, so use ${list([...lab.switches, ALL_MACHINES], "or")}.`, span);
+			}
+			return { switches: lab.switches.filter((name) => named.has(name)), written: text };
+		},
+		suggest(typed, { lab }) {
+			const comma = typed.lastIndexOf(",");
+			const head = comma < 0 ? "" : typed.slice(0, comma + 1);
+			const listed = head.split(",");
+			const names = lab.switches
+				.filter((name) => !listed.includes(name))
+				.map((name) => ({ insert: head + name, label: name, detail: portsTaken(lab, name) }));
+			return head === "" ? [...names, { insert: ALL_MACHINES, label: ALL_MACHINES, detail: "every switch" }] : names;
+		},
+		format: (selection) => selection.written,
+		schema: { type: "string" },
+	};
+}
+
 /** What each NIC is plugged into: one answer for all of them, or a comma list with one for each. */
 export function networks(): Value<string> {
 	return {

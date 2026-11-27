@@ -75,11 +75,11 @@ on, such as the ready ones for `exec` and the ones that are off or failed for `b
 
 ### Inspect the lab and get help
 
-| Command bar example | What it does                                                                                                     |
-| ------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `ls`                | List machines with their memory and disks, and each network interface's MAC, address, port, and link.            |
-| `topology`          | List every switch and port, what is in it, its link and VLAN, its cable's conditions and drops, and what storms. |
-| `help reboot`       | Explain a command. `help` alone lists them all.                                                                  |
+| Command bar example | What it does                                                                                                                                                |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ls`                | List machines with their memory and disks, and each network interface's MAC, address, port, and link.                                                       |
+| `topology`          | List every switch and port, what is in it, its link and VLAN, its cable's conditions and drops, what storms, and which ports the spanning tree has blocked. |
+| `help reboot`       | Explain a command. `help` alone lists them all.                                                                                                             |
 
 ### Create machines
 
@@ -96,21 +96,22 @@ on, such as the ready ones for `exec` and the ones that are off or failed for `b
 
 ### Wire machines and switches
 
-| Command bar example                      | What it does                                                                                                                                               |
-| ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `mkswitch lan`                           | Add a switch called `lan`. Without a name, it is the next free `switch1`. Frames pass from one switch to another only over a cable.                        |
-| `rmswitch lan`                           | Remove a switch, after a confirmation that lists what is plugged in and its cables to other switches. The machines run on.                                 |
-| `cable lan wan:8`                        | Put a cable between two switches, so that their machines share a segment. `lan` alone is its lowest free port.                                             |
-| `uncable lan:3`                          | Take out the cable between switches that is in port 3 of `lan`. Either of its two ports names it.                                                          |
-| `plug node2 lan:3`                       | Move node2's cable to port 3 of `lan`, or plug it in. `lan` alone is its lowest free port. Name one of several with `node2:eth1`.                          |
-| `unplug node2:eth1`                      | Take the interface's cable out and free its port, also for later boots.                                                                                    |
-| `link down node2`                        | Cut node2's cables, whether it is on or off. Reconnect them with `link up node2`. Name one of several with `node2:eth1`.                                   |
-| `link down lan:3`                        | Cut the cable in that port, also one between switches. Both switches forget what they learned over it. `link up lan:3` reconnects it.                      |
-| `link up node2 --delay 100ms --loss 20%` | Make node2's cable a bad one, in both directions and at once: a frame takes 100 ms to cross, and one in five is lost.                                      |
-| `link up lan:3 --rate 1mbit --mtu 1400`  | Let that cable carry 1 Mbit/s, and no packet over 1,400 bytes. With a delay, `--reorder 25%` lets a quarter of the frames skip it.                         |
-| `link up node2 --loss 0`                 | Take one condition away and keep the others. `--mtu 1500` takes the MTU away, and `--clear` takes them all.                                                |
-| `vlan node2 10`                          | Put the port that node2 is in, or one named as `lan:3`, in VLAN 10. It reaches only the ports of VLAN 10. Every port starts in 1.                          |
-| `trunk lan:8 --allow 1,10,20 --native 1` | Make the port of a cable between switches a trunk of VLANs 1, 10 and 20: 10 and 20 tagged, and 1, its native VLAN, untagged. Make the far end a trunk too. |
+| Command bar example                      | What it does                                                                                                                                                                                          |
+| ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `mkswitch lan`                           | Add a switch called `lan`. Without a name, it is the next free `switch1`. Frames pass from one switch to another only over a cable.                                                                   |
+| `rmswitch lan`                           | Remove a switch, after a confirmation that lists what is plugged in and its cables to other switches. The machines run on.                                                                            |
+| `cable lan wan:8`                        | Put a cable between two switches, so that their machines share a segment. `lan` alone is its lowest free port.                                                                                        |
+| `uncable lan:3`                          | Take out the cable between switches that is in port 3 of `lan`. Either of its two ports names it.                                                                                                     |
+| `plug node2 lan:3`                       | Move node2's cable to port 3 of `lan`, or plug it in. `lan` alone is its lowest free port. Name one of several with `node2:eth1`.                                                                     |
+| `unplug node2:eth1`                      | Take the interface's cable out and free its port, also for later boots.                                                                                                                               |
+| `link down node2`                        | Cut node2's cables, whether it is on or off. Reconnect them with `link up node2`. Name one of several with `node2:eth1`.                                                                              |
+| `link down lan:3`                        | Cut the cable in that port, also one between switches. Both switches forget what they learned over it. `link up lan:3` reconnects it.                                                                 |
+| `link up node2 --delay 100ms --loss 20%` | Make node2's cable a bad one, in both directions and at once: a frame takes 100 ms to cross, and one in five is lost.                                                                                 |
+| `link up lan:3 --rate 1mbit --mtu 1400`  | Let that cable carry 1 Mbit/s, and no packet over 1,400 bytes. With a delay, `--reorder 25%` lets a quarter of the frames skip it.                                                                    |
+| `link up node2 --loss 0`                 | Take one condition away and keep the others. `--mtu 1500` takes the MTU away, and `--clear` takes them all.                                                                                           |
+| `vlan node2 10`                          | Put the port that node2 is in, or one named as `lan:3`, in VLAN 10. It reaches only the ports of VLAN 10. Every port starts in 1.                                                                     |
+| `trunk lan:8 --allow 1,10,20 --native 1` | Make the port of a cable between switches a trunk of VLANs 1, 10 and 20: 10 and 20 tagged, and 1, its native VLAN, untagged. Make the far end a trunk too.                                            |
+| `stp on all`                             | Turn spanning tree on for every switch, or for those named: `stp on lan,wan`. The switches then block the ports that would close a loop, so a spare cable makes no storm. `stp off lan` turns it off. |
 
 ### Run commands and open consoles
 
@@ -338,6 +339,7 @@ in the browser alike.
 | `switch_uncable`     | Remove a cable between switches.         | `run`    |
 | `port_vlan`          | Put a switch port in a VLAN.             | `run`    |
 | `port_trunk`         | Make a switch port a trunk.              | `run`    |
+| `switch_stp`         | Turn spanning tree on or off.            | `run`    |
 | `checkpoint_save`    | Save a machine's disks as they are now.  | `run`    |
 | `checkpoint_restore` | Go back to a checkpoint and boot.        | `ask me` |
 | `checkpoint_remove`  | Delete a checkpoint.                     | `ask me` |
@@ -391,6 +393,21 @@ text that tries to instruct the agent, so unlab marks it as untrusted.
   at the same pace. No other frame is slowed: where a frame has one way to each switch,
   nothing waits. When its storm ends, a switch forgets its MAC table for each VLAN that
   looped frames came in, so that pings work again. A mesh storms on until every loop is cut.
+- A switch takes no part in a spanning tree until `stp on` names it. Switches that have it
+  on run rapid spanning tree (RSTP, 802.1w). They send each other BPDUs, choose a root, and
+  each keeps one way to it. A port that would close a loop is blocked: it carries nothing,
+  and `topology`, the switch's faceplate and the desktop say `blocked`. The BPDUs are real
+  frames to `01:80:c2:00:00:00`, sent every two seconds, to the machines too, so `tcpdump`
+  in a guest sees them. One tree covers every VLAN. The root is the switch with the lowest
+  address, and a switch's address follows from its name, so the same port is blocked after a
+  reload. When a cable in use is cut, the blocked port takes over without waiting for a
+  timer, and the switches that learned the old way forget it. In the lab's tests on real
+  kernels the port carried within a millisecond of the cut, and a stream of fifty pings a
+  second lost none. A switch with spanning tree off sends no BPDU on, as a bridge that keeps
+  to 802.1D does. So two switches do not see a loop that runs through a third with it off,
+  and that loop storms. A port whose cable goes to such a switch carries after 3 seconds,
+  when no bridge has answered it. A port that stops hearing its neighbour waits three
+  hellos, 6 seconds, before it takes the neighbour for gone.
 - A port is in VLAN 1 until `vlan` puts it in another, and is again once nothing is in it,
   so whatever is plugged in next starts there. A cut or a reboot leaves it as it is. Each
   VLAN floods within itself, and a switch learns addresses for each VLAN apart, so a loop in
