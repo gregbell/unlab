@@ -1,0 +1,5 @@
+16 machines on 8 switches ready 8.4 s after the first command
+VLANs, trunks and conditions: lan:1 vlan 10, lan:8 trunk 1,10,20, wan:1 vlan 20, wan:8 delay 20ms, dmz:1 vlan 30, core:2 trunk 1,10,20, core:3 delay 20ms
+status bar: 16 machines 32 vCPU 4096 MiB 0 pkt/s
+Topology as it opens: 24 nodes; every name and note can be read
+Topology maximized: 24 nodes; every name and note can be read

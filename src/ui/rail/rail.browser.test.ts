@@ -214,16 +214,37 @@ describe("<unlab-machine-row> in each lifecycle and link state", () => {
 });
 
 describe("<unlab-rail>", () => {
-	it("heads the list with the machine count and names each row by what it shows", async () => {
+	it("heads the list with the machine count and the memory they were given, and names each row by what it shows", async () => {
 		await mount("unlab-rail", { state: lab(spawn(3), ready()) });
-		await expect.element(page.getByRole("heading", { name: "machines 3" })).toBeVisible();
+		await expect
+			.element(page.getByRole("heading", { name: "machines 3 768 MiB of memory", exact: true }))
+			.toBeVisible();
+		expect(document.querySelector("unlab-rail h2")?.textContent?.replace(/\s+/g, " ")).toBe(
+			"machines 3 · 768 MiB of memory",
+		);
 		expect(page.getByRole("list").getByRole("listitem").all()).toHaveLength(3);
 		await expect.element(page.getByRole("button", { name: "node1 10.88.0.11 up" })).toBeVisible();
 	});
 
+	it("counts in the memory only the machines that run, as each goes off, fails or leaves", async () => {
+		const steps: Step[] = [spawn(4)];
+		for (const [step, given] of [
+			[ready(), 1024],
+			[power("off", "node1"), 1024],
+			[stopped("node1"), 768],
+			[fail("node2"), 512],
+			[remove("node3"), 256],
+		] as const) {
+			steps.push(step);
+			const { element } = await mount("unlab-rail", { state: lab(...steps) });
+			expect(element.querySelector(".memory")?.textContent).toBe(`${given} MiB of memory`);
+			unmountAll();
+		}
+	});
+
 	it("says nothing has booted in an empty lab", async () => {
 		await mount("unlab-rail");
-		await expect.element(page.getByRole("heading", { name: "machines 0" })).toBeVisible();
+		await expect.element(page.getByRole("heading", { name: "machines 0", exact: true })).toBeVisible();
 		await expect.element(page.getByText("Nothing booted yet.")).toBeVisible();
 		expect(document.querySelector("unlab-machine-details")?.hidden).toBe(true);
 	});

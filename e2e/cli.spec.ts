@@ -352,7 +352,7 @@ test("the prompt completes with the lab's words, keeps its history, and Ctrl-C a
 test("an agent uses the lab's tools while a CLI is linked", async ({ page }) => {
 	await linkedLab(page);
 	const listed = (await call(page, "machines_list", {})) as { result: string };
-	expect(listed.result).toBe("2 machines · 2 ready");
+	expect(listed.result).toBe("2 machines · 2 ready · 512 MiB of memory");
 	await typed(page, "ls");
 	await expect(page.getByText("2 machines · 2 ready")).toBeVisible();
 });

@@ -1,0 +1,156 @@
+The first runs, at fceb68d, by the scripts that loop.mjs was made from. 4 of 209 power-offs left a worker.
+
+== 1. Playwright, spawn 2 alpine, poweroff typed in node2's console. Round 9 left a worker, and the run is cut there.
+ready: vm workers 2, threads 4, rss 651 MiB
+round 1: off in 838 ms, vm workers 1 after 1607 ms, threads 2, rss 593 MiB
+round 2: off in 823 ms, vm workers 1 after 1610 ms, threads 2, rss 605 MiB
+round 3: off in 823 ms, vm workers 1 after 0 ms, threads 2, rss 636 MiB
+round 4: off in 829 ms, vm workers 1 after 0 ms, threads 2, rss 653 MiB
+round 5: off in 831 ms, vm workers 1 after 0 ms, threads 2, rss 636 MiB
+round 6: off in 830 ms, vm workers 1 after 0 ms, threads 2, rss 636 MiB
+round 7: off in 817 ms, vm workers 1 after 0 ms, threads 2, rss 640 MiB
+round 8: off in 824 ms, vm workers 1 after 1609 ms, threads 2, rss 640 MiB
+round 9: off in 817 ms, vm workers 2 (never 1), threads 4, rss 627 MiB  <-- LEAK
+
+== 2. Playwright, spawn 1 alpine, poweroff typed in its console, stopping at the first worker left. The page's own record of the last three workers follows: what it sent (>), what it received (<) and when it called terminate(), in ms.
+ready: vm workers 1, threads 2
+round 1: vm workers 0, worker threads 0
+round 2: vm workers 0, worker threads 0
+round 3: vm workers 0, worker threads 0
+round 4: vm workers 0, worker threads 0
+round 5: vm workers 0, worker threads 0
+round 6: vm workers 0, worker threads 0
+round 7: vm workers 0, worker threads 0
+round 8: vm workers 0, worker threads 0
+round 9: vm workers 0, worker threads 0
+round 10: vm workers 0, worker threads 0
+round 11: vm workers 0, worker threads 0
+round 12: vm workers 0, worker threads 0
+round 13: vm workers 0, worker threads 0
+round 14: vm workers 0, worker threads 0
+round 15: vm workers 0, worker threads 0
+round 16: vm workers 0, worker threads 0
+round 17: vm workers 0, worker threads 0
+round 18: vm workers 0, worker threads 0
+round 19: vm workers 0, worker threads 0
+round 20: vm workers 1, worker threads 2
+LEAK. threads: [{"pid":2712297,"tid":2712663,"comm":"DedicatedWorker","state":"S","syscall":"202"},{"pid":2712297,"tid":2712665,"comm":"DedicatedWorker","state":"S","syscall":"202"}]
+{
+ "name": "unlab:node1",
+ "created": 62023,
+ "terminated": 64683,
+ "said": [
+  "62023 > boot",
+  "62288 < booted",
+  "63908 < ready",
+  "64683 < halted",
+  "64683 > release save",
+  "64683 < released true",
+  "64683 terminate()"
+ ]
+}
+{
+ "name": "unlab:node1",
+ "created": 66805,
+ "terminated": 69446,
+ "said": [
+  "66805 > boot",
+  "67072 < booted",
+  "68779 < ready",
+  "69445 < halted",
+  "69445 > release save",
+  "69446 < released true",
+  "69446 terminate()"
+ ]
+}
+{
+ "name": "unlab:node1",
+ "created": 69951,
+ "terminated": 72601,
+ "said": [
+  "69952 > boot",
+  "70219 < booted",
+  "71827 < ready",
+  "72599 < halted",
+  "72599 > release save",
+  "72601 < released true",
+  "72601 terminate()"
+ ]
+}
+all workers seen by playwright: [ 'http://localhost:4180/assets/vm-worker-Db9-8QZJ.js' ]
+vm worker says: no answer in 3 s
+20 s later: vm workers 1 threads [{"pid":2712297,"tid":2712663,"comm":"DedicatedWorker","state":"S","syscall":"202"},{"pid":2712297,"tid":2712665,"comm":"DedicatedWorker","state":"S","syscall":"202"}]
+
+== 3. Raw DevTools with no worker attached to, spawn 4 alpine --no-net, poweroff typed in each guest. No worker was left.
+ready: 4 machines, 8 worker threads, how guest, spawn 4 alpine --no-net
+   {"tid":"2716520","state":"S","syscall":"202","futexOp":137,"timeout":"0x78d873bd8c00","stackBytes":9512,"stackMapKiB":16392,"jitWords":1}
+   {"tid":"2716521","state":"S","syscall":"202","futexOp":137,"timeout":"0x78d8733d7c00","stackBytes":9512,"stackMapKiB":16392,"jitWords":0}
+   {"tid":"2716522","state":"S","syscall":"202","futexOp":137,"timeout":"0x78d7dabbec00","stackBytes":9512,"stackMapKiB":8196,"jitWords":0}
+   {"tid":"2716523","state":"S","syscall":"202","futexOp":137,"timeout":"0x78d73e3bdc00","stackBytes":9512,"stackMapKiB":8196,"jitWords":0}
+   {"tid":"2716534","state":"S","syscall":"202","futexOp":128,"timeout":"0x78d68d3a3780","stackBytes":14488,"stackMapKiB":90156,"jitWords":0}
+   {"tid":"2716535","state":"S","syscall":"202","futexOp":128,"timeout":"0x78d68cba2780","stackBytes":14488,"stackMapKiB":90156,"jitWords":0}
+   {"tid":"2716536","state":"S","syscall":"202","futexOp":128,"timeout":"0x78d66c39c780","stackBytes":14488,"stackMapKiB":8196,"jitWords":0}
+   {"tid":"2716537","state":"S","syscall":"202","futexOp":128,"timeout":"0x78d523b8c780","stackBytes":14488,"stackMapKiB":8196,"jitWords":0}
+round 1: 0 worker threads 1997 ms after off
+round 2: 0 worker threads 1948 ms after off
+round 3: 0 worker threads 2047 ms after off
+round 4: 0 worker threads 1929 ms after off
+round 5: 0 worker threads 2042 ms after off
+round 6: 0 worker threads 1933 ms after off
+round 7: 0 worker threads 1943 ms after off
+round 8: 0 worker threads 1927 ms after off
+round 9: 0 worker threads 2032 ms after off
+round 10: 0 worker threads 1929 ms after off
+round 11: 0 worker threads 2045 ms after off
+round 12: 0 worker threads 1930 ms after off
+round 13: 0 worker threads 1929 ms after off
+round 14: 0 worker threads 5 ms after off
+round 15: 0 worker threads 1921 ms after off
+round 16: 0 worker threads 2039 ms after off
+round 17: 0 worker threads 1934 ms after off
+round 18: 0 worker threads 2049 ms after off
+round 19: 0 worker threads 2053 ms after off
+round 20: 0 worker threads 60 ms after off
+round 21: 0 worker threads 5 ms after off
+round 22: 0 worker threads 1933 ms after off
+round 23: 0 worker threads 2047 ms after off
+round 24: 0 worker threads 1941 ms after off
+round 25: 0 worker threads 1938 ms after off
+0 of 100 power-offs left its worker threads (how guest)
+ms until the threads were gone, by round: 1997 1948 2047 1929 2042 1933 1943 1927 2032 1929 2045 1930 1929 5 1921 2039 1934 2049 2053 60 5 1933 2047 1941 1938
+
+== 4. The same with spawn 4 alpine, stopping at the first worker left.
+ready: 4 machines, 8 worker threads, how guest, spawn 4 alpine
+round 1: 0 worker threads 1933 ms after off
+round 2: 2 worker threads 6025 ms after off  <-- LEAK
+   {"tid":"2717785","state":"S","syscall":"202","futexOp":137,"timeout":"0x791889fddc00","stackBytes":9512,"stackMapKiB":8196,"jitWords":0}
+   {"tid":"2717791","state":"S","syscall":"202","futexOp":393,"timeout":"0x0","stackBytes":9336,"stackMapKiB":8196,"jitWords":0}
+1 of 8 power-offs left its worker threads (how guest)
+ms until the threads were gone, by round: 1933 6025
+
+== 5. The same again. Each thread that was left is printed by its stack, then again 3 s on.
+ready: 4 machines, 8 worker threads, how guest, spawn 4 alpine
+round 1: 0 worker threads 1007 ms after off
+round 2: 0 worker threads 1950 ms after off
+round 3: 0 worker threads 1934 ms after off
+round 4: 0 worker threads 1930 ms after off
+round 5: 0 worker threads 1924 ms after off
+round 6: 0 worker threads 1939 ms after off
+round 7: 0 worker threads 1940 ms after off
+round 8: 0 worker threads 1935 ms after off
+round 9: 0 worker threads 1928 ms after off
+round 10: 0 worker threads 1936 ms after off
+round 11: 0 worker threads 1933 ms after off
+round 12: 0 worker threads 2049 ms after off
+round 13: 0 worker threads 6 ms after off
+round 14: 0 worker threads 1996 ms after off
+round 15: 0 worker threads 1928 ms after off
+round 16: 0 worker threads 1918 ms after off
+round 17: 0 worker threads 1931 ms after off
+round 18: 2 worker threads 6021 ms after off  <-- LEAK
+   leaked: {"tid":"2720325","syscall":"202","futexOp":137,"timeout":"0x7d656c588c00","pc":"libc.so.6+0xa5a02","stackBytes":9512,"frames":["libc.so.6+0x9910c","libc.so.6+0x9988c","libc.so.6+0x9c500","libc.so.6+0x9c100","chromium+0xbcff7e0","libc.so.6+0xeb58d","chromium+0xbd3987d","chromium+0xbd3986b","chromium+0xbc9ccff","chromium+0xbc8eefc","chromium+0xbc33e51","chromium+0xbc33e3f","chromium+0xbc0baaa","chromium+0xbcb933c","chromium+0xbd861bc","chromium+0xbc6d1a1","chromium+0x87a7e1b","chromium+0xbc0baaa","chromium+0x87ea502","chromium+0x87ea4f7","chromium+0xbd001e4","chromium+0x3843458","libc.so.6+0x9ce53","libc.so.6+0x9cb70","libc.so.6+0x12429c","chromium+0x3843458"]}
+   leaked: {"tid":"2720331","syscall":"202","futexOp":393,"timeout":"0x0","pc":"libc.so.6+0xa5a02","stackBytes":9336,"frames":["libc.so.6+0x9910c","libc.so.6+0x9988c","chromium+0xbcb4059","libc.so.6+0x9c2ee","libc.so.6+0x9c100","chromium+0xbd39814","chromium+0xbd397c8","chromium+0xbc8eefc","chromium+0xbc33e51","chromium+0xbc33e3f","chromium+0xbc0baaa","chromium+0xbcb933c","chromium+0xbd861bc","chromium+0xbc6d1a1","chromium+0x87a7e1b","chromium+0xbc0baaa","chromium+0x87ea502","chromium+0x87ea4f7","chromium+0xbd001e4","chromium+0x3843458","libc.so.6+0x9ce53","libc.so.6+0x9cb70","libc.so.6+0x12429c","chromium+0x3843458"]}
+   3 s on: {"tid":"2720325","syscall":"202","futexOp":137,"timeout":"0x7d656c588c00","pc":"libc.so.6+0xa5a02","stackBytes":9512,"frames":["libc.so.6+0x9910c","libc.so.6+0x9988c","libc.so.6+0x9c500","libc.so.6+0x9c100","chromium+0xbcff7e0","libc.so.6+0xeb58d","chromium+0xbd3987d","chromium+0xbd3986b","chromium+0xbc9ccff","chromium+0xbc8eefc","chromium+0xbc33e51","chromium+0xbc33e3f","chromium+0xbc0baaa","chromium+0xbcb933c"]}
+   3 s on: {"tid":"2720331","syscall":"202","futexOp":393,"timeout":"0x0","pc":"libc.so.6+0xa5a02","stackBytes":9336,"frames":["libc.so.6+0x9910c","libc.so.6+0x9988c","chromium+0xbcb4059","libc.so.6+0x9c2ee","libc.so.6+0x9c100","chromium+0xbd39814","chromium+0xbd397c8","chromium+0xbc8eefc","chromium+0xbc33e51","chromium+0xbc33e3f","chromium+0xbc0baaa","chromium+0xbcb933c","chromium+0xbd861bc","chromium+0xbc6d1a1"]}
+1 of 72 power-offs left its worker threads (how guest)
+ms until the threads were gone, by round: 1007 1950 1934 1930 1924 1939 1940 1935 1928 1936 1933 2049 6 1996 1928 1918 1931 6021

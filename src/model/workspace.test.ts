@@ -78,6 +78,22 @@ test("a machine comes back with the addresses and the gateway it was given", () 
 	);
 });
 
+test("a lab of sixteen machines comes back as it was, two of them to a hue, and a saved lab of seventeen is refused", () => {
+	let s = emptyLab();
+	s = run(s, spawnEvent(s, 8));
+	s = run(s, spawnEvent(s, 8, { net: "none" }));
+	const saved = saveWorkspace(s);
+	const { state } = restoreWorkspace(initialState(IMAGES, WIDE), saved);
+	expect(state.rail).toEqual(s.rail);
+	expect(state.rail.map((name) => machine(state, name).hue)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 1, 2, 3, 4, 5, 6, 7, 8]);
+	expect(state.rail.map((name) => machine(state, name).life.phase)).toEqual(s.rail.map(() => "booting"));
+
+	const lab = JSON.parse(saved);
+	const one = { ...lab.nodes[15], n: 17, name: "node17" };
+	const seventeen = { ...lab, nextN: 18, nodes: [...lab.nodes, one], order: [...lab.order, "node17"] };
+	expect(() => restoreWorkspace(initialState(IMAGES, WIDE), JSON.stringify(seventeen))).toThrow("could not be read");
+});
+
 /** As main wrote it before a machine could have more than one NIC. */
 const VERSION_1 = {
 	version: 1,

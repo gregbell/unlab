@@ -29,6 +29,13 @@ import { copyFailure, memoryShortage, storageFailure } from "./shortage.ts";
 import { fetchSshPrograms } from "./ssh-server.ts";
 import { writeFile } from "./write-file.ts";
 
+// The kernel runs each CPU after the first in a worker of this one, and ends those workers itself when it
+// exits. Chromium keeps a worker that is ended before it has heard that a worker of its own has gone: both
+// threads stay, and the machine's memory with them, for as long as the page does. The page ends this worker
+// just after the kernel exits, so no worker is ended from here, and each goes with this one.
+// .audit/phase2/worker-leak/cause.md has the order of events and a page that shows it without a kernel.
+if (typeof Worker === "function") Worker.prototype.terminate = () => {};
+
 function post(m: FromVm, transfer: Transferable[] = []): void {
 	self.postMessage(m, transfer);
 }

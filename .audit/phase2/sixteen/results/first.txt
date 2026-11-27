@@ -1,0 +1,12 @@
+16 CPUs, 31377 MiB of memory, 6564 MiB available; spawn options: none
+run 1
+  empty lab: the browser holds 342 MiB (PSS; 1156 RSS, 0 swapped), its renderers 114 MiB, on 130 threads, 0 of them workers
+  16 ready 5.1 s after the first command, which were typed in 3.1 s
+  at ready: the browser holds 1558 MiB (PSS; 2394 RSS, 0 swapped), its renderers 1310 MiB, on 173 threads, 32 of them workers
+  booting used 5.2 CPUs, 26 CPU seconds in all
+  the host has 1437 MiB less available than before the first command
+  16 of 16 machines had an answer from each of the 7 others on their switch, in 0.2 s
+  after the pings and 20 s idle: the browser holds 1506 MiB (PSS; 2237 RSS, 0 swapped), its renderers 1263 MiB, on 165 threads, 32 of them workers
+  idle, the browser used 0.10 of a CPU
+  all off in 0.5 s, and no worker thread was left 2.5 s after the command
+  off: the browser holds 585 MiB (PSS; 1323 RSS, 0 swapped), its renderers 341 MiB, on 136 threads, 0 of them workers

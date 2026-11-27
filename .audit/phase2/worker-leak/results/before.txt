@@ -1,0 +1,28 @@
+spawn 4 alpine: 4 ready on 8 worker threads; power off by guest
+round 1: 0 worker threads left, 4 ms after off
+round 2: 0 worker threads left, 1935 ms after off
+round 3: 0 worker threads left, 1928 ms after off
+round 4: 0 worker threads left, 1932 ms after off
+round 5: 0 worker threads left, 1925 ms after off
+round 6: 0 worker threads left, 1988 ms after off
+round 7: 0 worker threads left, 4 ms after off
+round 8: 0 worker threads left, 2042 ms after off
+round 9: 0 worker threads left, 1943 ms after off
+round 10: 0 worker threads left, 1935 ms after off
+round 11: 0 worker threads left, 1939 ms after off
+round 12: 0 worker threads left, 2037 ms after off
+round 13: 0 worker threads left, 1935 ms after off
+round 14: 0 worker threads left, 2034 ms after off
+round 15: 0 worker threads left, 1915 ms after off
+round 16: 0 worker threads left, 1930 ms after off
+round 17: 0 worker threads left, 1927 ms after off
+round 18: 0 worker threads left, 1921 ms after off
+round 19: 0 worker threads left, 1935 ms after off
+round 20: 0 worker threads left, 1932 ms after off
+round 21: 0 worker threads left, 1931 ms after off
+round 22: 0 worker threads left, 1926 ms after off
+round 23: 0 worker threads left, 1927 ms after off
+round 24: 0 worker threads left, 59 ms after off
+round 25: 0 worker threads left, 2042 ms after off
+0 of 100 power-offs left their worker threads
+ms until the threads had gone, by round: 4 1935 1928 1932 1925 1988 4 2042 1943 1935 1939 2037 1935 2034 1915 1930 1927 1921 1935 1932 1931 1926 1927 59 2042

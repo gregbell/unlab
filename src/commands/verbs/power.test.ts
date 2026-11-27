@@ -32,7 +32,7 @@ describe("reboot and poweroff", () => {
 		});
 		const listed = await lab.run("ls");
 		expect(listed).toMatchObject({
-			header: "2 machines · 1 ready, 1 off",
+			header: "2 machines · 1 ready, 1 off · 256 MiB of memory",
 			data: [{ state: "ready" }, { state: "off", nics: [{ port: 2, link: "off" }] }],
 		});
 		expect(listed).toMatchObject({ blocks: [{}, { lastLine: expect.stringContaining("plugged into port 2") }] });

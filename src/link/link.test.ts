@@ -240,12 +240,12 @@ describe("a line from the CLI", () => {
 		socket.hears({ type: "run", id: 1, line: "ls" });
 		expect(await result(1)).toMatchObject({
 			ok: true,
-			text: "2 machines · 2 ready",
+			text: "2 machines · 2 ready · 512 MiB of memory",
 			blocks: [
 				{ machine: "node1", status: "ready", output: null },
 				{ machine: "node2", status: "ready", output: null },
 			],
-			reply: { result: "2 machines · 2 ready", data: [{ name: "node1" }, { name: "node2" }] },
+			reply: { result: "2 machines · 2 ready · 512 MiB of memory", data: [{ name: "node1" }, { name: "node2" }] },
 		});
 		expect(r.lab.store.state.log.at(-1)).toMatchObject({ line: "ls", source: "cli", outcome: "ok" });
 	});

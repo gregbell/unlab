@@ -13,6 +13,13 @@ export interface Update {
 /** Newest first, and only what people notice in the lab. */
 export const UPDATES: readonly Update[] = [
 	{
+		date: "2026-11-27",
+		title: "Boot sixteen machines",
+		detail:
+			"A lab now holds sixteen machines. A switch has eight ports, so add a switch for the ninth. The machine list, the desktop's status bar and ls say how much memory the running machines were given. A machine that powers off gives all of its memory back.",
+		example: "mkswitch lan",
+	},
+	{
 		date: "2026-11-26",
 		title: "Read the wiring in Topology",
 		detail:

@@ -203,6 +203,52 @@ test("a machine that is off holds no memory, keeps its ports, name and disks, an
 	);
 });
 
+/** What the worker logs each time the test has kept it from its queue. */
+const HELD = "unlab-test: held";
+
+/**
+ * Put before a machine's worker: it stays busy for a moment after it says its disks are saved, which is
+ * when the page ends it. A worker's thread is as busy by chance when it collects garbage.
+ */
+const BUSY_AS_IT_ENDS = `{
+	const post = self.postMessage.bind(self);
+	self.postMessage = (message, transfer) => {
+		post(message, transfer);
+		if (message?.type !== "released") return;
+		console.log(${JSON.stringify(HELD)});
+		const until = performance.now() + 50;
+		while (performance.now() < until);
+	};
+}`;
+
+test("no worker is left by machines that power off while their workers are busy", async ({ page }) => {
+	// Chromium keeps a worker that is ended before it has heard that a worker of its own has gone, and a
+	// machine's second CPU runs in one that its kernel ends: .audit/phase2/worker-leak. One power-off in
+	// six met that order while the kernel still ended its own workers, so this takes twenty-four.
+	const machines = 8;
+	const rounds = 3;
+	let held = 0;
+	page.on("console", (message) => {
+		if (message.text() === HELD) held++;
+	});
+	await page.route("**/assets/vm-worker-*.js", async (route) => {
+		const response = await route.fetch();
+		await route.fulfill({ response, body: `${BUSY_AS_IT_ENDS}\n${await response.text()}` });
+	});
+	await openLab(page);
+	await typed(page, `spawn ${machines} alpine --no-net`);
+	for (let round = 1; round <= rounds; round++) {
+		if (round > 1) await typed(page, "boot all");
+		await status(page, `${machines} of ${machines} ready`);
+		expect(workers(page)).toBe(machines);
+		await typed(page, "poweroff all");
+		await status(page, `0 of ${machines} ready, ${machines} off`);
+		// Chromium takes two seconds to end a thread that sleeps in the kernel.
+		await expect.poll(() => workers(page), { message: `round ${round}`, timeout: 10_000 }).toBe(0);
+	}
+	expect(held).toBe(machines * rounds);
+});
+
 test("what a disk had taken is kept by a guest that powers off or reboots without shutting down", async ({ page }) => {
 	await openLab(page);
 	await typed(page, "spawn 1 alpine --no-net --extra-disk 1,1");

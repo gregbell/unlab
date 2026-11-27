@@ -125,14 +125,14 @@ describe("<unlab-spawn-form> stepper", () => {
 
 describe("<unlab-spawn-form> preview", () => {
 	it("shows the bar's refusal and will not boot when the lab is full", async () => {
-		await mountForm(opened(lab(spawn(8), ready())));
+		await mountForm(opened(lab(spawn(8), spawn(8, "none"), ready())));
 		expect(text(".count")).toBe("1");
 		await expect.element(button("One fewer")).toBeDisabled();
 		await expect.element(button("One more")).toBeDisabled();
 		await expect.element(button("Boot 1 machine")).toBeDisabled();
 		await expect
 			.element(page.getByRole("alert"))
-			.toHaveTextContent("The lab has no room for another machine, so remove one with rm first. Nothing was changed.");
+			.toHaveTextContent("The lab has all 16 machines that it can, so remove one with rm first. Nothing was changed.");
 		expect(rows()).toEqual([]);
 	});
 });

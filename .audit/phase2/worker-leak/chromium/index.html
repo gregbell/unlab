@@ -1,0 +1,23 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>A worker ended before it hears that its own worker has gone</title>
+<script>
+// One round. Worker A has a worker B of its own. A ends B, tells the page, and the page ends A.
+//   wait   what B does meanwhile: "idle", "forever" (asleep in Atomics.wait), "timed" or "spin"
+//   first  false when A leaves B alone, so that B is ended only with A
+//   busy   ms that A stays busy after it has told the page
+//   delay  ms that the page waits before it ends A
+window.round = ({ wait = "idle", first = true, busy = 0, delay = 0 } = {}) =>
+	new Promise((resolve) => {
+		const a = new Worker("a.js");
+		a.onmessage = (event) => {
+			if (event.data === "started") a.postMessage({ go: true, first, busy });
+			if (event.data === "told")
+				setTimeout(() => {
+					a.terminate();
+					resolve();
+				}, delay);
+		};
+		a.postMessage({ wait });
+	});
+</script>

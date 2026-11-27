@@ -115,7 +115,7 @@
 		width: 14px;
 		color: var(--hue-1);
 	}
-	:where(.dt-status) > :where(span:nth-child(3)) .dt-icon,
+	:where(.dt-status) > :where(span:last-child) .dt-icon,
 	.dt-spark {
 		color: var(--hue-2);
 	}

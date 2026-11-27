@@ -45,6 +45,15 @@ jobs:
         env:
           TAILCAT_BIN: ${{ runner.temp }}/tailcat
           TAILCAT_TEST_RELAY: ${{ runner.temp }}/unlab-test-relay
+      - name: Say how long sixteen machines took, and the memory they held
+        if: always()
+        run: cat test-results/sixteen-machines.txt 2>/dev/null || echo "The test of sixteen machines did not get that far."
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sixteen-machines
+          path: test-results/sixteen-machines.txt
+          if-no-files-found: ignore
       - uses: actions/upload-artifact@v4
         if: failure()
         with:

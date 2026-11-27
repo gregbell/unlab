@@ -21,14 +21,15 @@ describe("spawn", () => {
 
 	it("refuses more machines than the lab has room for, under the count", async () => {
 		const lab = storeLab();
-		await lab.lab(7);
-		expect(lab.parsed("spawn 2 alpine").validate(lab.store.state)).toEqual({
-			message: "The lab has room for 1 more machine, not 2. Nothing was changed.",
+		await lab.lab(8);
+		await lab.run("spawn 7 alpine --no-net");
+		expect(lab.parsed("spawn 2 alpine --no-net").validate(lab.store.state)).toEqual({
+			message: "The lab holds 16 machines and has room for 1 more, not 2. Nothing was changed.",
 			token: 1,
 		});
-		await lab.lab(1);
-		expect(lab.parsed("spawn 1 alpine").validate(lab.store.state)).toEqual({
-			message: "The lab has no room for another machine, so remove one with rm first. Nothing was changed.",
+		await lab.run("spawn 1 alpine --no-net");
+		expect(lab.parsed("spawn 1 alpine --no-net").validate(lab.store.state)).toEqual({
+			message: "The lab has all 16 machines that it can, so remove one with rm first. Nothing was changed.",
 			token: 1,
 		});
 	});
