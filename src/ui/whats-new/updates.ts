@@ -17,7 +17,7 @@ export const UPDATES: readonly Update[] = [
 		title: "Choose the root and the blocked port",
 		detail:
 			"priority makes a switch the spanning tree's root, and cost makes a port dearer, so the tree blocks it rather than another. topology and the switch's details say each switch's bridge ID, its root and each port's role. The capture decodes each BPDU's root, cost and port, and tcpdump in a guest reads them too.",
-		example: "priority lan 4096",
+		example: "priority switch0 4096",
 	},
 	{
 		date: "2026-11-27",
