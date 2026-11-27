@@ -48,12 +48,14 @@ import {
 } from "./testkit.ts";
 import {
 	BOOT_TIMEOUT_MS,
+	type BridgePriority,
 	type CommandEvent,
 	type LabEvent,
 	type LabState,
 	type MachineName,
 	type MachineSpec,
 	type NicSpec,
+	type PathCost,
 	type Phase,
 	type RuntimeEvent,
 	type VlanId,
@@ -143,6 +145,8 @@ const TABLE: Readonly<Record<Phase, Readonly<Record<Column, Outcome>>>> = {
 		"cmd/conditions": "booting",
 		"switch/storm": "untouched",
 		"cmd/stp": "untouched",
+		"cmd/priority": "untouched",
+		"cmd/cost": "untouched",
 		"switch/tree": "ignored",
 		"cmd/shell": "ignored",
 		"cmd/focus": "untouched",
@@ -184,6 +188,8 @@ const TABLE: Readonly<Record<Phase, Readonly<Record<Column, Outcome>>>> = {
 		"cmd/conditions": "ready",
 		"switch/storm": "untouched",
 		"cmd/stp": "untouched",
+		"cmd/priority": "untouched",
+		"cmd/cost": "untouched",
 		"switch/tree": "ignored",
 		"cmd/shell": "ready",
 		"cmd/focus": "untouched",
@@ -225,6 +231,8 @@ const TABLE: Readonly<Record<Phase, Readonly<Record<Column, Outcome>>>> = {
 		"cmd/conditions": "stopping",
 		"switch/storm": "untouched",
 		"cmd/stp": "untouched",
+		"cmd/priority": "untouched",
+		"cmd/cost": "untouched",
 		"switch/tree": "ignored",
 		"cmd/shell": "ignored",
 		"cmd/focus": "untouched",
@@ -266,6 +274,8 @@ const TABLE: Readonly<Record<Phase, Readonly<Record<Column, Outcome>>>> = {
 		"cmd/conditions": "off",
 		"switch/storm": "untouched",
 		"cmd/stp": "untouched",
+		"cmd/priority": "untouched",
+		"cmd/cost": "untouched",
 		"switch/tree": "ignored",
 		"cmd/shell": "ignored",
 		"cmd/focus": "untouched",
@@ -307,6 +317,8 @@ const TABLE: Readonly<Record<Phase, Readonly<Record<Column, Outcome>>>> = {
 		"cmd/conditions": "restoring",
 		"switch/storm": "untouched",
 		"cmd/stp": "untouched",
+		"cmd/priority": "untouched",
+		"cmd/cost": "untouched",
 		"switch/tree": "ignored",
 		"cmd/shell": "ignored",
 		"cmd/focus": "untouched",
@@ -348,6 +360,8 @@ const TABLE: Readonly<Record<Phase, Readonly<Record<Column, Outcome>>>> = {
 		"cmd/conditions": "ignored",
 		"switch/storm": "untouched",
 		"cmd/stp": "untouched",
+		"cmd/priority": "untouched",
+		"cmd/cost": "untouched",
 		"switch/tree": "ignored",
 		"cmd/shell": "ignored",
 		"cmd/focus": "untouched",
@@ -389,6 +403,8 @@ const TABLE: Readonly<Record<Phase, Readonly<Record<Column, Outcome>>>> = {
 		"cmd/conditions": "ignored",
 		"switch/storm": "untouched",
 		"cmd/stp": "untouched",
+		"cmd/priority": "untouched",
+		"cmd/cost": "untouched",
 		"switch/tree": "ignored",
 		"cmd/shell": "ignored",
 		"cmd/focus": "untouched",
@@ -475,6 +491,10 @@ function eventFor(column: Column, s: LabState, name: MachineName, attempt: numbe
 			return { type: "switch/storm", switch: "switch0", storm: { since: s.now, rate: 100, dropped: 0 } };
 		case "cmd/stp":
 			return { type: "cmd/stp", switches: ["switch0"], on: true };
+		case "cmd/priority":
+			return { type: "cmd/priority", switches: ["switch0"], priority: 4096 as BridgePriority };
+		case "cmd/cost":
+			return { type: "cmd/cost", port: { switch: "switch0", port: 1 }, cost: 2000 as PathCost };
 		case "switch/tree": {
 			// Of a switch that takes no part, so it is not kept.
 			const bridge = { priority: 32768, address: "02:00:00:00:00:01" };
@@ -521,6 +541,8 @@ const ADDRESSED = COLUMNS.filter(
 			"cmd/conditions",
 			"switch/storm",
 			"cmd/stp",
+			"cmd/priority",
+			"cmd/cost",
 			"switch/tree",
 			"cmd/capture",
 			"cmd/logged",

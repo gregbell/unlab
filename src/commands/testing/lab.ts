@@ -128,6 +128,8 @@ export function labWith(fixtures: readonly MachineFixture[], images: readonly Im
 		machines,
 		rail,
 		departed: {},
+		priorities: {},
+		portCosts: [],
 		departedSwitches: [],
 		switches: [DEFAULT_SWITCH],
 		shownSwitch: DEFAULT_SWITCH,

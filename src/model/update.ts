@@ -46,7 +46,7 @@ import {
 	visiblePanes,
 } from "./panes.ts";
 import { later, patch, step } from "./step.ts";
-import { setStp, settleStp, tree } from "./stp.ts";
+import { setCost, setPriority, setStp, settleStp, tree } from "./stp.ts";
 import { addSwitch, removeSwitch, showSwitch } from "./switches.ts";
 import {
 	type AgentCall,
@@ -93,6 +93,8 @@ export const DEFAULT_POLICIES: Readonly<Record<ToolName, Policy>> = {
 	port_vlan: "run",
 	port_trunk: "run",
 	switch_stp: "run",
+	switch_priority: "run",
+	port_cost: "run",
 	checkpoint_save: "run",
 	checkpoint_restore: "ask",
 	checkpoint_remove: "ask",
@@ -125,6 +127,8 @@ export function initialState(
 		storms: {},
 		stp: [],
 		trees: {},
+		priorities: {},
+		portCosts: [],
 		sessions: {},
 		panes: emptyPanes(gridFor(area.width, area.height)),
 		keyboard: NOWHERE,
@@ -239,6 +243,10 @@ function reduce(state: LabState, event: LabEvent): Step {
 			return setConditions(state, event.changes);
 		case "cmd/stp":
 			return setStp(state, event.switches, event.on);
+		case "cmd/priority":
+			return setPriority(state, event.switches, event.priority);
+		case "cmd/cost":
+			return setCost(state, event.port, event.cost);
 		case "cmd/shell":
 			return shell(state, event.machine);
 		case "cmd/focus":

@@ -6,11 +6,13 @@ import { createCaptureLog } from "../capture/index.ts";
 import type { FileOutcome, GuestFile } from "../commands/index.ts";
 import {
 	type BootConfig,
+	type BridgePriority,
 	type DiskCopy,
 	type Effect,
 	type HostEntry,
 	identity,
 	type MachineName,
+	type PathCost,
 	type PortNo,
 	type PortRef,
 	parseCheckpointName,
@@ -1827,6 +1829,44 @@ describe("cables between switches", () => {
 				.sort(),
 		).toEqual(["lan", "switch0", "wan"]);
 		expect(events.filter((e) => e.type === "switch/tree" && e.switch === wan)).toEqual([]);
+	});
+
+	test("that make a loop are steered by a switch's priority and a port's cost, which the store is told the tree of", () => {
+		const t = three();
+		const loop = [
+			cable,
+			[
+				{ switch: lan, port: 8 },
+				{ switch: wan, port: 7 },
+			],
+			[
+				{ switch: wan, port: 8 },
+				{ switch: "switch0", port: 7 },
+			],
+		] as const;
+		for (const ends of loop) t.run(...up(ends));
+		// Set before the switches take part, as a saved lab has it.
+		t.run({ type: "switch/priority", switch: wan, priority: 4096 as BridgePriority });
+		for (const name of ["switch0", lan, wan] as const) t.run({ type: "switch/stp", switch: name, on: true });
+		const parts = new Map<SwitchName, Tree>();
+		const told = () => {
+			for (const e of t.take()) if (e.type === "switch/tree") parts.set(e.switch, e.tree);
+		};
+		told();
+		expect(parts.get("switch0")?.root).toEqual(parts.get(wan)?.bridge);
+		expect(parts.get(wan)?.bridge.priority).toBe(4096);
+		const blocked = () =>
+			[...parts].flatMap(([name, tree]) =>
+				tree.ports.flatMap(({ port, state }) => (state === "discarding" ? [`${name}:${port}`] : [])),
+			);
+		const [before] = blocked();
+		expect(blocked()).toHaveLength(1);
+		// The blocked port's switch finds its own way to the root dearer than the way round, and blocks it instead.
+		const [on] = before.split(":") as [SwitchName];
+		const rootPort = parts.get(on)?.ports.find(({ role }) => role === "root")?.port as PortNo;
+		t.run({ type: "port/cost", port: { switch: on, port: rootPort }, cost: 100_000 as PathCost });
+		told();
+		expect(blocked()).toEqual([`${on}:${rootPort}`]);
 	});
 
 	test("end with a switch that is removed while it storms: the capture says so of it, and of the others once they are quiet", () => {

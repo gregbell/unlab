@@ -295,7 +295,7 @@ describe("a saved lab", () => {
 		expect(state.switchCables).toEqual(s.switchCables);
 		expect(state.storms).toEqual({});
 		expect(JSON.parse(saveWorkspace(s))).toMatchObject({
-			version: 11,
+			version: 12,
 			cables: [
 				{ ends: [at(lan, 8), at(wan, 7)], cut: false },
 				{ ends: [at(wan, 1), port0(3)], cut: true },
