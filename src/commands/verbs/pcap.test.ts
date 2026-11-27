@@ -3,7 +3,7 @@ import { NAMES, ping } from "../../../test/support/frames.ts";
 import type { PortNo } from "../../model/index.ts";
 import { type CapturedFrame, PCAP_TYPE } from "../../net/index.ts";
 import { storeLab } from "../testing/store.ts";
-import { MAX_PCAP_BYTES, type PcapData } from "./pcap.ts";
+import { MAX_PCAP_BYTES, narrowerThan, type PcapData } from "./pcap.ts";
 
 const carried = (on: string, bytes: Uint8Array, t: number, from = 1 as PortNo, to = 2 as PortNo): CapturedFrame => ({
 	switch: on,
@@ -89,5 +89,14 @@ describe("pcap", () => {
 		expect(lab.store.state.log.at(-1)).toMatchObject({ line: "pcap", source: "agent", outcome: "failed" });
 		expect(await lab.run("pcap")).toMatchObject({ kind: "visible", data: { frames } });
 		expect(lab.downloads[0]?.bytes.length).toBeGreaterThan(MAX_PCAP_BYTES);
+	});
+
+	it("suggests only a filter that is narrower than the one that was too big", () => {
+		expect(narrowerThan("", false, "switch0")).toBe("switch0:1");
+		expect(narrowerThan("node3", false, "switch0")).toBe("switch0:1");
+		expect(narrowerThan("lan", true, "switch0")).toBe("lan icmp");
+		expect(narrowerThan("switch0:1", true, "switch0")).toBe("switch0:1 icmp");
+		expect(narrowerThan("switch0:1 icmp", true, "switch0")).toBeNull();
+		expect(narrowerThan("switch0:1 icmp or lan:2 icmp", true, "switch0")).toBeNull();
 	});
 });

@@ -37,6 +37,15 @@ function base64(bytes: Uint8Array): string {
 
 const filter = slots.frameFilter();
 
+/**
+ * A filter that is surely narrower than the one whose file was too big: one cable when it named no switch or cable,
+ * and the same with icmp when it does not name icmp yet. Null when no single term would narrow it.
+ */
+export function narrowerThan(source: string, narrowed: boolean, first: string): string | null {
+	if (!narrowed) return `${first}:1`;
+	return /\bicmp\b/.test(source) ? null : `${source.trim()} icmp`;
+}
+
 export const pcap = defineVerb({
 	name: "pcap",
 	about: "save the capture as a .pcap",
@@ -66,9 +75,12 @@ export const pcap = defineVerb({
 			return { kind: "visible", text: `saved ${file.name} to downloads · ${frames}`, data };
 		}
 		if (file.bytes.length > MAX_PCAP_BYTES) {
-			const narrower = narrows(filter) ? `${source} icmp` : `${switches[0]}:1`;
+			const narrower = narrowerThan(source, narrows(filter), switches[0]);
 			const too = `${file.name} would hold ${frames}, more than fit in the ${MAX_TEXT} that capture_save returns`;
-			return { kind: "failed", error: lineError(`${too}, so narrow the filter, such as to ${narrower}.`) };
+			const fix = narrower
+				? `narrow the filter, such as to ${narrower}`
+				: "a person can save it with save .pcap in the capture panel";
+			return { kind: "failed", error: lineError(`${too}, so ${fix}.`) };
 		}
 		return { kind: "visible", text: `${file.name} · ${frames}`, data: { ...data, bytes: base64(file.bytes) } };
 	},
