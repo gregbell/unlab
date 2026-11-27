@@ -64,6 +64,7 @@ function recordedRun(services: AppServices): CommandService["run"] {
 			until: (predicate, signal) => services.store.until(predicate, signal),
 			now: () => clock,
 			carried: () => undefined,
+			switches: { macTable: () => [], totals: () => ({ in: 0, delivered: 0, flooded: 0 }), now: () => 0 },
 			files: { write: () => Promise.reject(new Error("This test has no file port.")) },
 			exec: {
 				inject: async (session) => {
@@ -198,6 +199,7 @@ describe("<unlab-command-bar> CmdOpen: just opened", () => {
 			"priority",
 			"cost",
 			"topology",
+			"macs",
 			"capture",
 			"focus",
 			"boot",

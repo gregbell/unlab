@@ -21,6 +21,7 @@ function storeLab() {
 			until: store.until,
 			now: () => store.state.now,
 			carried: () => undefined,
+			switches: { macTable: () => [], totals: () => ({ in: 0, delivered: 0, flooded: 0 }), now: () => 0 },
 			exec: { inject: () => Promise.reject(new Error("This test has no exec port.")) },
 			files: { write: () => Promise.reject(new Error("This test has no file port.")) },
 		},

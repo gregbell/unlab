@@ -206,6 +206,11 @@ export async function commandLab(saved: string | null = null): Promise<Commanded
 			until: store.until,
 			now: () => clock.now(),
 			carried: (port) => fabric.carried(slotOf(port.switch), port.port),
+			switches: {
+				macTable: (of) => fabric.macTable(slotOf(of), clock.now()),
+				totals: (of) => fabric.totals(slotOf(of)),
+				now: () => clock.now(),
+			},
 			exec,
 			files: { write: () => Promise.reject(new Error("This lab writes no files.")) },
 		},

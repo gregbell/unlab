@@ -19,6 +19,10 @@ interface Topology {
 	readonly switches: readonly { readonly name: string; readonly ports: readonly Port[] }[];
 	readonly unplugged: readonly { readonly machine: string; readonly nic: string }[];
 }
+interface MacsRead {
+	readonly counters: { readonly in: number; readonly delivered: number; readonly flooded: number };
+	readonly macs: readonly { readonly mac: string; readonly port: number; readonly machine?: string }[];
+}
 interface Row {
 	readonly kind: string;
 	readonly switch?: string;
@@ -142,6 +146,22 @@ test("a broadcast stays on its switch, and each switch has its own MAC table and
 	const [lanIn] = await counters();
 	expect(lanIn).toBeGreaterThan(0);
 	expect(lanIn).not.toBe(await captured("switch0"));
+
+	// An agent reads the same table and counters.
+	const agentSees = async () => {
+		const { data } = (await call(page, "switch_macs", { switches: "lan" })) as { data: MacsRead[] };
+		const [{ counters: c, macs }] = data;
+		return { counters: [c.in, c.delivered, c.flooded], rows: macs.map((m) => [m.mac, String(m.port), m.machine]) };
+	};
+	const panelSees = async () => ({
+		counters: await counters(),
+		rows: await page
+			.locator("unlab-mac-table tbody tr")
+			.evaluateAll((rows) =>
+				rows.map((row) => [...row.querySelectorAll("td")].slice(0, 3).map((td) => td.textContent)),
+			),
+	});
+	await expect(async () => expect(await agentSees()).toEqual(await panelSees())).toPass({ timeout: 15_000 });
 	const axe = await new AxeBuilder({ page }).include("unlab-switch").analyze();
 	expect(axe.violations.map((v) => v.id)).toEqual([]);
 	if (shots) await page.screenshot({ path: `${shots}/switch-lan-maximised.png` });

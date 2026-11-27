@@ -438,6 +438,7 @@ export type ToolName =
 	| "lab_help"
 	| "machines_list"
 	| "topology_read"
+	| "switch_macs"
 	| "machines_spawn"
 	| "machines_boot"
 	| "machines_reboot"

@@ -197,6 +197,7 @@ export function fakeDeps(initial: LabState, exec: ExecPort = NO_EXEC) {
 		},
 		now: () => clock++,
 		carried: () => undefined,
+		switches: { macTable: () => [], totals: () => ({ in: 0, delivered: 0, flooded: 0 }), now: () => 0 },
 		exec,
 		files: NO_FILES,
 	};

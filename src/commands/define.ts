@@ -2,6 +2,7 @@ import type {
 	CableCounters,
 	CommandEvent,
 	LabState,
+	LearnedMac,
 	Machine,
 	MachineName,
 	Phase,
@@ -9,6 +10,8 @@ import type {
 	PortRef,
 	SessionId,
 	Source,
+	SwitchName,
+	SwitchTotals,
 	ToolName,
 } from "../model/index.ts";
 import type { Approval } from "./approval.ts";
@@ -80,6 +83,14 @@ export interface FilePort {
 	write(machine: MachineName, file: GuestFile, signal: AbortSignal): Promise<FileOutcome>;
 }
 
+/** What each switch has learned and counted, which the lab's state does not hold. The switch panel reads the same. */
+export interface SwitchReads {
+	macTable(of: SwitchName): readonly LearnedMac[];
+	totals(of: SwitchName): SwitchTotals;
+	/** The switches' clock, which a learned address's `seen` is on. */
+	now(): number;
+}
+
 /** What a command needs from the lab. The store satisfies it; tests pass a fake. */
 export interface CommandDeps {
 	state(): LabState;
@@ -89,6 +100,7 @@ export interface CommandDeps {
 	now(): number;
 	/** What the cable in the port has carried and dropped, which the switches count and the lab's state does not hold. */
 	carried(port: PortRef): CableCounters | undefined;
+	readonly switches: SwitchReads;
 	readonly exec: ExecPort;
 	readonly files: FilePort;
 }

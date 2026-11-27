@@ -29,6 +29,7 @@ async function open(saved: string) {
 			until: store.until,
 			now: () => 0,
 			carried: () => undefined,
+			switches: { macTable: () => [], totals: () => ({ in: 0, delivered: 0, flooded: 0 }), now: () => 0 },
 			exec: NO_EXEC,
 			files: NO_FILES,
 		},

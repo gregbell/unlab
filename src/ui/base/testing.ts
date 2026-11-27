@@ -267,6 +267,14 @@ export async function mount<K extends keyof HTMLElementTagNameMap>(
 	const links: boolean[] = [];
 	const counters = new Map<PortNo, Counters>(options.counters);
 	const carried = new Map<string, CableCounters>();
+	const readout: SwitchReadout = {
+		macTable: () => [],
+		totals: () => ({ in: 0, delivered: 0, flooded: 0 }),
+		now: () => 0,
+		...options.switch,
+		counters: ({ switch: on, port }) => (on === DEFAULT_SWITCH ? counters.get(port) : undefined),
+		carried: (port) => carried.get(portName(port)),
+	};
 	const registry = createRegistry(
 		{
 			state: () => store.state,
@@ -274,6 +282,7 @@ export async function mount<K extends keyof HTMLElementTagNameMap>(
 			until: (predicate, signal) => store.until(predicate, signal),
 			now: () => store.state.now,
 			carried: (port) => carried.get(portName(port)),
+			switches: readout,
 			exec: { inject: () => Promise.reject(new Error("This fixture has no runtime.")) },
 			files: { write: () => Promise.reject(new Error("This fixture has no runtime.")) },
 		},
@@ -294,14 +303,7 @@ export async function mount<K extends keyof HTMLElementTagNameMap>(
 			},
 		},
 		capture: options.capture ?? EMPTY_CAPTURE,
-		switch: {
-			macTable: () => [],
-			totals: () => ({ in: 0, delivered: 0, flooded: 0 }),
-			now: () => 0,
-			...options.switch,
-			counters: ({ switch: on, port }) => (on === DEFAULT_SWITCH ? counters.get(port) : undefined),
-			carried: (port) => carried.get(portName(port)),
-		},
+		switch: readout,
 		terminals: options.terminals ?? { host: () => null },
 		agent: {
 			tools: toolRows(registry),

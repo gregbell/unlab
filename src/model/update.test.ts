@@ -85,6 +85,7 @@ describe("initialState", () => {
 				lab_help: "run",
 				machines_list: "run",
 				topology_read: "run",
+				switch_macs: "run",
 				machines_spawn: "ask",
 				machines_boot: "run",
 				machines_reboot: "run",

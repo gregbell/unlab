@@ -9,6 +9,7 @@ import { forget } from "./forget.ts";
 import { helpFor } from "./help.ts";
 import { link } from "./link.ts";
 import { ls } from "./ls.ts";
+import { macs } from "./macs.ts";
 import { mkswitch } from "./mkswitch.ts";
 import { plug, unplug } from "./plug.ts";
 import { poweroff } from "./poweroff.ts";
@@ -29,6 +30,7 @@ export type { ExecData, ExecRun } from "./exec.ts";
 export type { ForgetData } from "./forget.ts";
 export type { CableState, SwitchCableState } from "./link.ts";
 export type { ListedMachine } from "./ls.ts";
+export type { ListedMac, SwitchMacs } from "./macs.ts";
 export type { SwitchData } from "./mkswitch.ts";
 export type { PluggedCable } from "./plug.ts";
 export type { PowerState } from "./power.ts";
@@ -50,6 +52,7 @@ export {
 	forget,
 	link,
 	ls,
+	macs,
 	mkswitch,
 	plug,
 	poweroff,
@@ -92,6 +95,7 @@ export const VERBS: readonly AnyVerb[] = [
 	priority,
 	cost,
 	topology,
+	macs,
 	capture,
 	focus,
 	boot,
