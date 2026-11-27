@@ -477,7 +477,8 @@ text that tries to instruct the agent, so unlab marks it as untrusted.
   machine to read each of its cables, or Tab to it with a screen reader to hear them:
   the port or interface, the far end, its state (up, cut, off), its VLAN or trunk,
   and its conditions. A cut cable is dashed and red, one that the spanning tree
-  blocks is dash-dotted, and one to a machine that is off or booting is dotted.
+  blocks is dash-dotted, one still learning after a change is long-dashed, and one to
+  a machine that is off or booting is dotted.
   The switch or machine you selected has a thicker frame and a bolder name.
 - Unless you choose, `eth0` starts with an address in `10.88.0.0/24` and `eth1` and
   up start without one. `--addr` sets one in any subnet. The lab applies the

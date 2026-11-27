@@ -100,7 +100,7 @@
 	.n-node:is(:hover, :focus-visible) .n-tile {
 		background: var(--base);
 	}
-	/* The selected node has a frame twice as thick and a heavier name, as the active window has a heavier title. */
+	/* The selected node has a frame twice as thick and a heavier name, as the active window and the focused pane do. */
 	.n-node[data-selected="true"] .n-tile {
 		border-color: var(--machine-hue, var(--agent));
 		background: color-mix(in srgb, var(--machine-hue, var(--agent)) 12%, var(--mantle));
