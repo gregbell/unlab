@@ -1,0 +1,33 @@
+What test/integration/spanning-tree.test.ts measured on real kernels under Node, by the clock that the lab's frames are stamped with:
+npx vitest run --project integration test/integration/spanning-tree.test.ts, alone on 16 cores. One lab of three machines for the four tests.
+
+At 73b2478:
+three switches agreed on a triangle 0.3 ms after its last cable went in
+round 1: the blocked port carried 0.4 ms after the cut, a ping was answered 4.9 ms after it and 21.0 ms after the one before, and 0 of 100 pings were lost
+round 2: the blocked port carried 0.3 ms after the cut, a ping was answered 14.6 ms after it and 20.9 ms after the one before, and 0 of 100 pings were lost
+round 3: the blocked port carried 0.3 ms after the cut, a ping was answered 17.7 ms after it and 21.9 ms after the one before, and 0 of 100 pings were lost
+round 4: the blocked port carried 0.4 ms after the cut, a ping was answered 15.1 ms after it and 21.4 ms after the one before, and 0 of 100 pings were lost
+round 5: the blocked port carried 0.3 ms after the cut, a ping was answered 16.7 ms after it and 20.3 ms after the one before, and 0 of 100 pings were lost
+cut to the first answered ping over 5 cuts: median 15.1 ms, from 4.9 to 17.7 ms. Cut to the blocked port carrying: 0.3 to 0.4 ms
+turned on in a storm: the last looped frame came 3.5 ms after, and every storm was over in 109 ms
+a loop through a switch with spanning tree off was whole 3001 ms after its cable went in
+
+At 8f50630, before a port took an agreement only from a bridge that names its own root:
+three switches agreed on a triangle 0.2 ms after its last cable went in
+round 1: the blocked port carried 0.6 ms after the cut, a ping was answered 13.7 ms after it and 20.7 ms after the one before, and 0 of 100 pings were lost
+round 2: the blocked port carried 0.4 ms after the cut, a ping was answered 15.9 ms after it and 20.4 ms after the one before, and 0 of 100 pings were lost
+round 3: the blocked port carried 0.4 ms after the cut, a ping was answered 18.5 ms after it and 22.2 ms after the one before, and 0 of 100 pings were lost
+round 4: the blocked port carried 0.4 ms after the cut, a ping was answered 14.3 ms after it and 21.0 ms after the one before, and 0 of 100 pings were lost
+round 5: the blocked port carried 0.3 ms after the cut, a ping was answered 2.5 ms after it and 20.8 ms after the one before, and 0 of 100 pings were lost
+cut to the first answered ping over 5 cuts: median 14.3 ms, from 2.5 to 18.5 ms. Cut to the blocked port carrying: 0.3 to 0.6 ms
+turned on in a storm: the last looped frame came 3.5 ms after, and every storm was over in 109 ms
+a loop through a switch with spanning tree off was whole 3000 ms after its cable went in
+
+A cut is of the cable that carries a stream of pings from node3 to node1, fifty a second. The blocked port carries when its switch says
+that the port is its way to the root and forwards, which is a few turns of the fabric after the cut. A ping is answered when the next one
+is sent, so the answer after the cut comes one interval of 20 ms after the answer before it, and none is lost: the stream bounds that
+number, and the protocol does not.
+
+Earlier runs, when each test booted a lab of its own and a stream was 150 pings: the port carried 0.3 to 0.6 ms after the cut and the
+first answer came 5.1 to 12.7 ms after it at c9ba895, and 0.3 to 1.0 ms and 3.3 to 20.4 ms at 96b13f6, with no ping lost in any of
+twenty cuts. Then the tree was turned on with the triangle whole, and the three had agreed 2.9 to 21.5 ms after.

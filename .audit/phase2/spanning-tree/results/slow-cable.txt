@@ -1,0 +1,26 @@
+A triangle of switches with spanning tree on, where the cable between the two that are not the root has a delay, at c9ba895:
+node .audit/phase2/spanning-tree/slow-cable.mjs <delay in ms>. One broadcast goes in every 200 ms. Each port is its number, its role (r, d, a)
+and whether it carries (f) or not (d).
+
+4000 ms:
+0 a:7df,8df b:7dd,8rf c:7rf,8dd looped 0 storming 0
+2900 a:7df,8df b:7dd,8rf c:7rf,8dd looped 0 storming 0
+3100 a:7df,8df b:7df,8rf c:7rf,8df looped 0 storming 0
+4100 a:7df,8df b:7df,8rf c:7rf,8ad looped 0 storming 0
+8200 a:7df,8df b:7df,8rf c:7rf,8ad looped 12 storming 0
+20000 a:7df,8df b:7df,8rf c:7rf,8ad looped 12 storming 0
+frames looped from 7001 to 8002 ms
+
+1000 ms:
+0 a:7df,8df b:7dd,8rf c:7rf,8dd looped 0 storming 0
+2900 a:7df,8df b:7df,8rf c:7rf,8ad looped 0 storming 0
+3100 a:7df,8df b:7df,8rf c:7rf,8ad looped 0 storming 0
+4100 a:7df,8df b:7df,8rf c:7rf,8ad looped 0 storming 0
+8200 a:7df,8df b:7df,8rf c:7rf,8ad looped 0 storming 0
+20000 a:7df,8df b:7df,8rf c:7rf,8ad looped 0 storming 0
+no frame looped
+
+A port proposes for 3 s and then takes its cable to end at no bridge. Over a cable of 4 s both ends carried from 3 s until each heard the
+other at 4 s, and the broadcasts of that second came round once, as they left the slow cable four seconds later. A frame that comes
+round is marked as looped, so a switch says that it storms while they come in, and no longer: at 8.2 s none did. Over a cable of 1 s
+nothing looped.

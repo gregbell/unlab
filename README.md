@@ -403,11 +403,15 @@ text that tries to instruct the agent, so unlab marks it as untrusted.
   reload. When a cable in use is cut, the blocked port takes over without waiting for a
   timer, and the switches that learned the old way forget it. In the lab's tests on real
   kernels the port carried within a millisecond of the cut, and a stream of fifty pings a
-  second lost none. A switch with spanning tree off sends no BPDU on, as a bridge that keeps
-  to 802.1D does. So two switches do not see a loop that runs through a third with it off,
-  and that loop storms. A port whose cable goes to such a switch carries after 3 seconds,
-  when no bridge has answered it. A port that stops hearing its neighbour waits three
-  hellos, 6 seconds, before it takes the neighbour for gone.
+  second lost none. A switch says what it has heard at once. A real one sends no more than
+  six BPDUs a second from a port, and held to that, a ring that loses its root can take
+  seconds to settle. A frame that is on a cable in the instant the tree changes can come back
+  to a switch once. The lab reports that as a storm, which is over a tenth of a second later.
+  A switch with spanning tree off sends no BPDU on, as a bridge that
+  keeps to 802.1D does. So two switches do not see a loop that runs through a third with it
+  off, and that loop storms. A port whose cable goes to such a switch carries after 3
+  seconds, when no bridge has answered it. A port that stops hearing its neighbour waits
+  three hellos, 6 seconds, before it takes the neighbour for gone.
 - A port is in VLAN 1 until `vlan` puts it in another, and is again once nothing is in it,
   so whatever is plugged in next starts there. A cut or a reboot leaves it as it is. Each
   VLAN floods within itself, and a switch learns addresses for each VLAN apart, so a loop in

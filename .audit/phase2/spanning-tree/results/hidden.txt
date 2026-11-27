@@ -1,0 +1,27 @@
+The spanning tree's timers while the lab's tab is hidden, in headless Chromium on the built app of 96b13f6:
+node .audit/phase2/spanning-tree/hidden.mjs <dist> 45, and again for 150 s. Two switches with two cables between them, and no machine.
+In the first run Chromium held the page's own timers to one a second. In the second it went on to one a minute, which the script has it
+do after ten seconds where a browser waits five minutes. The tree's hellos crossed each cable every two seconds in both, to the 10 ms that
+the capture writes a time to, and the port that was blocked stayed the one that is blocked.
+
+45 s hidden:
+spanning tree on for switch0 and lan
+visible: visible, blocked: lan:2 alternate discarding, 18 messages so far
+the tab is hidden
+after 45 s the tab is hidden, blocked: lan:2 alternate discarding
+a page timer of 100 ms came every 969 to 1001 ms while hidden (45 times in 45 s)
+lan:1 took in 22 messages while hidden, 2000 to 2010 ms apart
+lan:2 took in 22 messages while hidden, 2000 to 2010 ms apart
+storms: 0
+the same one port was blocked before and after
+
+150 s hidden:
+spanning tree on for switch0 and lan
+visible: visible, blocked: lan:2 alternate discarding, 18 messages so far
+the tab is hidden
+after 150 s the tab is hidden, blocked: lan:2 alternate discarding
+a page timer of 100 ms came every 202 to 60000 ms while hidden (62 times in 150 s)
+lan:1 took in 74 messages while hidden, 2000 to 2010 ms apart
+lan:2 took in 74 messages while hidden, 2000 to 2010 ms apart
+storms: 0
+the same one port was blocked before and after

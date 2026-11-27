@@ -1,0 +1,62 @@
+Random wirings of switches that all take part in the spanning tree: node .audit/phase2/spanning-tree/fuzz.mjs <labs> <seed>
+
+With a port held to six messages in a second, as 802.1D-2004 has it and as 96b13f6 had it:
+
+20000 labs of 2 to 6 switches, 60 steps each, seed 20261127, in 27.0 s
+16101 labs ended with a loop of cables, 75356 cables up in all and 32323 ports blocked
+a frame looped or a switch stormed in 5, a broadcast missed a machine or came twice in 0, and 0 threw
+the first, lab 2914: broadcast 3: 2 looped frames, and a storm
+  pass 21; pass 11; cable 1:4-1:8; pass 17; uncable 1:4; pass 251; pass 22; pass 22; pass 18; pass 13; pass 24; cable 4:2-3:2; uncable 4:2; cable 0:7-3:5; cable 2:4-3:2; cut 2:4; cut 0:7; cable 3:4-4:7; broadcast 4; pass 10; pass 25; reconnect 2:4; cut 2:4; pass 15; cable 3:3-3:7; reconnect 0:7; pass 5928; cable 4:2-2:7; cable 2:6-4:5; cut 0:7; cut 4:2; cable 0:3-1:6; pass 21; cable 1:8-2:3; broadcast 3
+20000 labs of 2 to 6 switches, 60 steps each, seed 7, in 27.1 s
+16047 labs ended with a loop of cables, 75496 cables up in all and 32185 ports blocked
+a frame looped or a switch stormed in 8, a broadcast missed a machine or came twice in 0, and 0 threw
+
+With the bound that the lab has now:
+20000 labs of 2 to 6 switches, 60 steps each, seed 20261127, in 29.0 s
+16121 labs ended with a loop of cables, 75427 cables up in all and 32357 ports blocked
+a frame looped or a switch stormed in 0, a broadcast missed a machine or came twice in 0, and 0 threw
+20000 labs of 2 to 6 switches, 60 steps each, seed 7, in 29.2 s
+16036 labs ended with a loop of cables, 75405 cables up in all and 32218 ports blocked
+a frame looped or a switch stormed in 0, a broadcast missed a machine or came twice in 0, and 0 threw
+100000 labs of 2 to 6 switches, 60 steps each, seed 3, in 146.3 s
+80773 labs ended with a loop of cables, 378014 cables up in all and 162173 ports blocked
+a frame looped or a switch stormed in 0, a broadcast missed a machine or came twice in 0, and 0 threw
+
+And with a port that the tree has blocked still sending frames, which is the break 'a blocked port goes on sending frames', on a copy of the source:
+300 labs of 2 to 6 switches, 60 steps each, seed 20261127
+a frame looped or a switch stormed in 259, a broadcast missed a machine or came twice in 20, and 0 threw
+
+With an agreement taken only from a bridge that names the port's own root, which the lab has now:
+10000 labs of 2 to 6 switches, 60 steps each, seed 21, in 22.5 s
+8044 labs ended with a loop of cables, 37724 cables up in all and 16146 ports blocked
+a frame looped or a switch stormed in 0, a broadcast missed a machine or came twice in 0, and 0 threw
+10000 labs of 2 to 6 switches, 60 steps each, seed 22, in 20.8 s
+8057 labs ended with a loop of cables, 37473 cables up in all and 16130 ports blocked
+a frame looped or a switch stormed in 0, a broadcast missed a machine or came twice in 0, and 0 threw
+10000 labs of 2 to 6 switches, 60 steps each, seed 23, in 22.2 s
+8057 labs ended with a loop of cables, 38148 cables up in all and 16322 ports blocked
+a frame looped or a switch stormed in 0, a broadcast missed a machine or came twice in 0, and 0 threw
+10000 labs of 2 to 6 switches, 60 steps each, seed 24, in 22.4 s
+8070 labs ended with a loop of cables, 38225 cables up in all and 16465 ports blocked
+a frame looped or a switch stormed in 0, a broadcast missed a machine or came twice in 0, and 0 threw
+
+And with busy: every machine sends a broadcast in the instant of each change to a cable, before the switches have said a
+word about it. A frame that is on a cable while the tree changes can come to a switch that it had left: in the one
+lab that was read through, it went by the tree that was, and then by the cable that the tree took into use. The
+fabric begins a storm with the first such frame. None went on: no storm was still on 150 ms after a change.
+10000 labs of 2 to 6 switches, 60 steps each, seed 11, in 18.9 s
+8126 labs ended with a loop of cables, 38069 cables up in all and 16482 ports blocked
+with a broadcast from each machine in the instant of each change: a frame came round after 5569 of 282210 changes, in 3297 labs, 10095 frames in all
+a storm went on in 0, a broadcast missed a machine or came twice in 0, and 0 threw
+10000 labs of 2 to 6 switches, 60 steps each, seed 12, in 19.2 s
+8103 labs ended with a loop of cables, 37964 cables up in all and 16333 ports blocked
+with a broadcast from each machine in the instant of each change: a frame came round after 5667 of 283539 changes, in 3363 labs, 10563 frames in all
+a storm went on in 0, a broadcast missed a machine or came twice in 0, and 0 threw
+10000 labs of 2 to 6 switches, 60 steps each, seed 13, in 19.2 s
+8093 labs ended with a loop of cables, 37928 cables up in all and 16278 ports blocked
+with a broadcast from each machine in the instant of each change: a frame came round after 5617 of 282883 changes, in 3313 labs, 10517 frames in all
+a storm went on in 0, a broadcast missed a machine or came twice in 0, and 0 threw
+10000 labs of 2 to 6 switches, 60 steps each, seed 14, in 18.8 s
+8067 labs ended with a loop of cables, 37575 cables up in all and 16060 ports blocked
+with a broadcast from each machine in the instant of each change: a frame came round after 5522 of 282367 changes, in 3324 labs, 10284 frames in all
+a storm went on in 0, a broadcast missed a machine or came twice in 0, and 0 threw
