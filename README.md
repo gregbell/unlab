@@ -75,11 +75,12 @@ on, such as the ready ones for `exec` and the ones that are off or failed for `b
 
 ### Inspect the lab and get help
 
-| Command bar example | What it does                                                                                                                                                |
-| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ls`                | List machines with their memory and disks, and each network interface's MAC, address, port, and link.                                                       |
-| `topology`          | List every switch and port, what is in it, its link and VLAN, its cable's conditions and drops, what storms, and which ports the spanning tree has blocked. |
-| `help reboot`       | Explain a command. `help` alone lists them all.                                                                                                             |
+| Command bar example | What it does                                                                                                                                                                 |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ls`                | List machines with their memory and disks, and each network interface's MAC, address, port, and link.                                                                        |
+| `topology`          | List every switch and port, what is in it, its link and VLAN, its cable's conditions and drops, what storms, and which ports the spanning tree has blocked.                  |
+| `macs lan`          | List the MAC addresses that `lan` has learned, each with its port, VLAN, machine and age, and the frames it took in, delivered and flooded. `macs` alone lists every switch. |
+| `help reboot`       | Explain a command. `help` alone lists them all.                                                                                                                              |
 
 ### Create machines
 
@@ -149,6 +150,7 @@ on, such as the ready ones for `exec` and the ones that are off or failed for `b
 | `capture lan:3 icmp`   | Show the pings that crossed one cable, the one in port 3 of `lan`. `lan` alone is all that the switch carried.    |
 | `capture vlan 10`      | Show the frames that were in VLAN 10. On a trunk, a row also gives the 802.1Q tag the frame had there.            |
 | `capture lan:3`        | See what a bad cable did: a frame that it dropped says so in its row, with the reason: loss, rate or MTU.         |
+| `pcap lan:3`           | Download what crossed that cable as a `.pcap`, the file that **save .pcap** gives with the same filter.           |
 
 In a capture filter, terms that follow one another must all match, and `or`
 starts an alternative. A term is a protocol, a machine, an interface, an address,
@@ -159,7 +161,8 @@ each row says which one carried the frame and the ports it came in by and went o
 of. A cable between two switches has a port at each end, and either names it: the
 same frames, each as the switch at that end carried it. **save .pcap** saves
 everything captured, or only the frames shown when the filter names a switch or a
-cable.
+cable. `pcap` saves the same file with the filter you give it, so `pcap lan:3`
+holds each frame that crossed that cable once.
 
 ## SSH into a guest from another computer
 
@@ -330,6 +333,7 @@ in the browser alike.
 | `lab_help`           | Explain the commands and the tools.      | `run`    |
 | `machines_list`      | List machines, addresses, links, disks.  | `run`    |
 | `topology_read`      | List switches, ports and cables.         | `run`    |
+| `switch_macs`        | Read switches' MAC tables and counters.  | `run`    |
 | `machines_spawn`     | Boot machines.                           | `ask me` |
 | `machines_boot`      | Boot machines that are off or failed.    | `run`    |
 | `machines_reboot`    | Reboot machines.                         | `run`    |
@@ -354,6 +358,7 @@ in the browser alike.
 | `cable_plug`         | Plug a NIC in, or move its cable.        | `run`    |
 | `cable_unplug`       | Unplug a NIC and free its port.          | `run`    |
 | `capture_read`       | Read captured frames from the switches.  | `run`    |
+| `capture_save`       | Get the capture as a `.pcap`, in base64. | `run`    |
 
 Commands run inside the guests, not on your computer. Guest output can contain
 text that tries to instruct the agent, so unlab marks it as untrusted.
