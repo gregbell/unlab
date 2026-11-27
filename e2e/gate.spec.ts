@@ -153,6 +153,14 @@ test("the recorded command set, typed into the bar, builds three subnets and two
 	const wired = wiringOf(await topology(page));
 	await crossed(page);
 	const carried = await lossy(page);
+	await page.locator("unlab-switch").getByRole("combobox", { name: "Switch" }).selectOption("edge");
+	const table = page.locator("unlab-mac-table");
+	await page.getByRole("button", { name: "Maximise switches" }).click();
+	await expect(table.locator("tbody .machine")).toHaveText(
+		["alice", "r2:eth0", "r2:eth1", "bob", "r1:eth0", "r1:eth1"],
+		{ useInnerText: true },
+	);
+	await page.keyboard.press("Escape");
 
 	// Box 4: a reload, which boots every machine again with all that the lab held.
 	await page.reload();
@@ -160,6 +168,9 @@ test("the recorded command set, typed into the bar, builds three subnets and two
 	await allReady(page);
 	await expect.poll(async () => wiringOf(await topology(page))).toEqual(wired);
 	expect((await lossy(page)).delivered).toBeLessThan(carried.delivered);
+	await page.getByRole("button", { name: "Maximise switches" }).click();
+	await expect(table).toContainText("Nothing learned yet.");
+	await page.keyboard.press("Escape");
 	// A boot forgets routes and forwarding, so the lines that set them in the guests run again, and only those.
 	for (const line of LINES.filter(inGuests)) await run(page, line);
 	await crossed(page);
