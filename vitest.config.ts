@@ -1,3 +1,4 @@
+import { availableParallelism } from "node:os";
 import { playwright } from "@vitest/browser-playwright";
 import { configDefaults, defineConfig, mergeConfig } from "vitest/config";
 import { chromiumExecutable } from "./test/support/chromium.ts";
@@ -29,8 +30,10 @@ export default mergeConfig(
 						testTimeout: 300_000,
 						hookTimeout: 300_000,
 						// A file's machines have a thread each, and some tests time what the switches do. With a file for
-						// every processor those tests ran late: on 16 processors, one more file had most runs fail.
-						maxWorkers: 8,
+						// every processor but one, which is what the runner takes when it is told nothing, those tests ran
+						// late: on 16 processors, one more file had most runs fail. A number here is taken as it is, so
+						// the least of the two keeps a small machine at what it had.
+						maxWorkers: Math.min(8, Math.max(1, availableParallelism() - 1)),
 					},
 				},
 				{
