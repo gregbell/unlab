@@ -445,6 +445,53 @@ describe("cables between switches", () => {
 		expect(part(column(8), ".nic").textContent).toBe("port 7");
 	});
 
+	it("says on its tag and in its title that the spanning tree has blocked a port, and is as before for one that carries", async () => {
+		const stp = { type: "cmd/stp", switches: [lan], on: true } as const;
+		const bridge = { priority: 32768, address: "02:00:00:00:00:02" };
+		const says = (state: "discarding" | "learning" | "forwarding"): LabEvent => ({
+			type: "switch/tree",
+			switch: lan,
+			tree: {
+				bridge,
+				root: { ...bridge, address: "02:00:00:00:00:01" },
+				cost: 20_000,
+				ports: [
+					{ port: 1, role: "designated", state: "forwarding" },
+					{ port: 8, role: "alternate", state },
+				],
+			},
+		});
+		const { store, settle } = await mount("unlab-switch", { state: cabled(stp, says("discarding")) });
+		expect([".nic", ".word"].map((part) => column(8).querySelector(part)?.textContent)).toEqual([
+			"port 7 blocked",
+			"up",
+		]);
+		expect(column(8).title).toBe("to wan port 7 · blocked by spanning tree");
+		// The cable is whole, so it is drawn as one that is up, and the button still cuts it.
+		expect(column(8).dataset.state).toBe("up");
+		await expect
+			.element(page.getByRole("button", { name: "Cut the cable from lan port 8 to wan port 7" }))
+			.toBeVisible();
+		// A port that carries says nothing of the tree.
+		expect(column(1).querySelector(".nic")).toBeNull();
+		expect(column(1).title).toBe("node1");
+
+		(store.dispatchRuntime as (event: LabEvent) => void)(says("learning"));
+		await settle();
+		expect(part(column(8), ".nic").textContent).toBe("port 7 learning");
+		expect(column(8).title).toBe("to wan port 7 · learning");
+
+		(store.dispatchRuntime as (event: LabEvent) => void)(says("forwarding"));
+		await settle();
+		expect(part(column(8), ".nic").textContent).toBe("port 7");
+		expect(column(8).title).toBe("to wan port 7");
+
+		(store.dispatchRuntime as (event: LabEvent) => void)(says("discarding"));
+		store.dispatchCommand({ type: "cmd/stp", switches: [lan], on: false });
+		await settle();
+		expect(part(column(8), ".nic").textContent).toBe("port 7");
+	});
+
 	it("draws a cut one dashed and red, and reconnects it, from either switch", async () => {
 		const cut = { type: "cmd/cable-link", changes: [{ port: ends[1], up: false }], cause: "bar" } as const;
 		const { element, store, runs, settle } = await mount("unlab-switch", { state: cabled(cut) });

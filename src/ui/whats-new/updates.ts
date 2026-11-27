@@ -14,6 +14,13 @@ export interface Update {
 export const UPDATES: readonly Update[] = [
 	{
 		date: "2026-11-27",
+		title: "Add spare cables with spanning tree",
+		detail:
+			"Turn rapid spanning tree on with stp, and the switches block the ports that would close a loop, so a lab can have redundant cables and no storm. Cut a cable in use and the blocked port takes over. topology, the switch's faceplate and the desktop say which port is blocked.",
+		example: "stp on all",
+	},
+	{
+		date: "2026-11-27",
 		title: "Boot sixteen machines",
 		detail:
 			"A lab now holds sixteen machines. A switch has eight ports, so add a switch for the ninth. The machine list, the desktop's status bar and ls say how much memory the running machines were given. A machine that powers off gives all of its memory back.",

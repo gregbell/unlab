@@ -13,6 +13,8 @@ import {
 	selectPorts,
 	selectStorm,
 	selectSubnets,
+	treeText,
+	treeWord,
 } from "../../model/index.ts";
 import { Select, UnlabElement, windowButtons } from "../base/index.ts";
 import { FollowCapture } from "../capture/follow.ts";
@@ -41,7 +43,8 @@ const shown =
  * title is where one is chosen, and it counts that switch's frames. A cable to
  * another port of a switch is drawn as a machine's is, under that switch's
  * name. While looped frames come into the switch, it says so above its ports,
- * with how many a second and how many it has dropped.
+ * with how many a second and how many it has dropped. A port that the spanning
+ * tree keeps out of use says so on its cable's tag.
  */
 export class UnlabSwitch extends UnlabElement {
 	static override properties = { compact: { type: Boolean, reflect: true } };
@@ -133,11 +136,14 @@ export class UnlabSwitch extends UnlabElement {
 			? { name: far.switch, nic: `port ${far.port}`, label: `to ${far.switch} port ${far.port}`, hue: nothing }
 			: port.machine;
 		if (!held) return html`<div class="port" data-port=${port.port} data-state="empty">${socket}</div>`;
-		// The cable's tag says which NIC it is, what the port carries and that the cable has conditions, whichever it needs to.
-		const tag = [held.nic, port.vlan?.tag, port.conditions && IMPAIRED].filter(Boolean).join(" ");
+		// The cable's tag says which NIC it is, what the port carries, that the cable has conditions and that the spanning
+		// tree has blocked the port, whichever it needs to.
+		const tag = [held.nic, port.vlan?.tag, port.conditions && IMPAIRED, treeWord(port.tree)].filter(Boolean).join(" ");
 		const counted = this.app.switch.carried({ switch: this.#shown.value, port: port.port }) ?? NOTHING_CARRIED;
 		const carried = port.conditions ? carriedWords(counted) : [];
-		const title = [held.label, port.vlan?.text, port.conditions, ...carried].filter(Boolean).join(" · ");
+		const title = [held.label, treeText(port.tree), port.vlan?.text, port.conditions, ...carried]
+			.filter(Boolean)
+			.join(" · ");
 		const parts = html`<span class="name">${held.name}</span><span class="cable"></span>${
 			tag === "" ? nothing : html`<span class="nic">${tag}</span>`
 		}${socket}<span class="word"

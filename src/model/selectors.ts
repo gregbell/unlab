@@ -21,6 +21,7 @@ import {
 	savingOf,
 } from "./machines.ts";
 import { keyboardHolder, parkedPanes, visiblePanes } from "./panes.ts";
+import { treePortAt } from "./stp.ts";
 import { portLabel, portName, switchLabel } from "./switches.ts";
 import { type Tiling, tile } from "./tiling.ts";
 import {
@@ -40,6 +41,7 @@ import {
 	type PortRef,
 	type Storm,
 	type SwitchName,
+	type TreePort,
 } from "./types.ts";
 import { clockHz } from "./update.ts";
 import { vlanOf, vlanText } from "./vlans.ts";
@@ -398,6 +400,8 @@ export interface PortView {
 	readonly vlan?: PortVlanView;
 	/** The conditions of the cable in it, there when it has some: `delay 100 ms, loss 20%`. */
 	readonly conditions?: string;
+	/** What it is in its switch's spanning tree, there while the switch has spanning tree on and the port's link is up. */
+	readonly tree?: TreePort;
 	/** The word under the socket, one of `boot`, `up`, `cut`, `stop`, `off`, `down`. An empty port shows only its number. */
 	readonly word: string | null;
 	/** What a click will do, for the button's accessible name. Null when a click does nothing. */
@@ -450,8 +454,8 @@ function vlanView(portVlans: LabState["portVlans"], ref: PortRef): PortVlanView 
 /** A switch's eight ports, lowest first. */
 export const selectPorts = perSwitch((on) =>
 	memo(
-		(s) => [s.machines, s.rail, s.switches, s.switchCables, s.portVlans],
-		(machines, rail, switches, switchCables, portVlans): readonly PortView[] => {
+		(s) => [s.machines, s.rail, s.switches, s.switchCables, s.portVlans, s.trees],
+		(machines, rail, switches, switchCables, portVlans, trees): readonly PortView[] => {
 			const held = heldPorts({ machines, rail, switchCables }, on);
 			return PORTS.map((port) => {
 				const ref = { switch: on, port };
@@ -461,7 +465,8 @@ export const selectPorts = perSwitch((on) =>
 					held.find((taken) => taken.port === port),
 				);
 				const vlan = vlanView(portVlans, ref);
-				return vlan ? { ...view, vlan } : view;
+				const tree = treePortAt({ trees }, ref);
+				return { ...view, ...(vlan ? { vlan } : {}), ...(tree ? { tree } : {}) };
 			});
 		},
 	),

@@ -219,6 +219,57 @@ describe("the Topology window", () => {
 		expect(document.querySelector("unlab-desktop")).toBe(element);
 	});
 
+	it("follows the spanning tree without a reload: a blocked port is in its node's words and on its line, and gone when the port carries", async () => {
+		const { store, settle, lines, note, described, titled } = await topology(wired());
+		const step = async (...steps: Step[]) => {
+			send(store, ...steps);
+			await settle();
+		};
+		const bridge = { priority: 32768, address: "02:00:00:00:00:02" };
+		const says = (state: "discarding" | "learning" | "forwarding"): LabEvent => ({
+			type: "switch/tree",
+			switch: lan,
+			tree: {
+				bridge,
+				root: { ...bridge, address: "02:00:00:00:00:01" },
+				cost: 20_000,
+				ports: [
+					{ port: 1, role: "designated", state: "forwarding" },
+					{ port: 2, role: "designated", state: "forwarding" },
+					{ port: 8, role: "alternate", state },
+				],
+			},
+		});
+		const before = [note("lan"), note("switch0")];
+
+		await step({ type: "cmd/stp", switches: [DEFAULT_SWITCH, lan], on: true }, says("discarding"));
+		expect(lines()).toContain("switch0 lan blocked");
+		expect(titled("lan")).toContain("Port 8 · to switch0 port 8 · up · blocked");
+		await expect
+			.element(described("lan"))
+			.toHaveAccessibleDescription(expect.stringContaining("Port 8 · to switch0 port 8 · up · blocked"));
+		// The far end of the cable carries, and says only that its link is up. The lines to machines are as they were.
+		expect(titled("switch0")).toContain("Port 8 · to lan port 8 · up");
+		expect(titled("switch0")).not.toContain("blocked");
+		expect(lines()).toContain("lan node4 up");
+		expect(titled("node4")).toBe("eth0 · to lan port 2 · up");
+		// A node's note says no more than it did.
+		expect([note("lan"), note("switch0")]).toEqual(before);
+
+		await step(says("learning"));
+		expect(lines()).toContain("switch0 lan learning");
+		expect(titled("lan")).toContain("Port 8 · to switch0 port 8 · up · learning");
+
+		await step(says("forwarding"));
+		expect(lines()).toContain("switch0 lan up");
+		expect(titled("lan")).toContain("Port 8 · to switch0 port 8 · up");
+		expect(titled("lan")).not.toMatch(/blocked|learning/);
+
+		await step(says("discarding"), { type: "cmd/stp", switches: [lan], on: false });
+		expect(lines()).toContain("switch0 lan up");
+		expect(titled("lan")).not.toContain("blocked");
+	});
+
 	it("can be used by keyboard, and says in words what a line shows by its colour", async () => {
 		const { map, store, settle, described } = await topology(wired());
 		send(store, link("down", node(2)));

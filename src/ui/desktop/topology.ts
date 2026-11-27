@@ -10,6 +10,7 @@ import {
 	type SwitchName,
 	selectPorts,
 	selectStorm,
+	treeWord,
 } from "../../model/index.ts";
 import { type NicName, nicName } from "../../net/index.ts";
 
@@ -26,11 +27,14 @@ interface End {
 	nic?: NicName;
 	/** What the port carries, when that is not VLAN 1. */
 	vlan?: PortVlanView;
+	/** `blocked` for a port that the spanning tree keeps out of use, or `learning` for one on its way into it. */
+	tree?: string | null;
 }
 interface Edge {
 	ends: readonly [End, End];
 	hue?: PortHolder["hue"];
-	state: string;
+	/** Its link, or what its machine is doing. */
+	link: string;
 	/** Its conditions, when it has some. */
 	conditions?: string;
 }
@@ -54,16 +58,17 @@ const sidesAt = (edges: readonly Edge[], name: string): Side[] =>
 		})
 		.filter(({ end }) => end.name === name)
 		.sort((x, y) => (x.end.port ?? 0) - (y.end.port ?? 0) || (x.end.nic ?? "").localeCompare(y.end.nic ?? ""));
-/** What the port at this side carries: its own, or for a NIC the switch port's. */
-const vlanAt = ({ end, other }: Side) => (end.port === undefined ? other.vlan : end.vlan);
-/** `eth1 · to lan port 2 · up · vlan 10`, or `Port 2 · router:eth1 · cut`, as the rack says a port. */
+/** The switch port at this side: its own, or for a NIC the one its cable is in. */
+const portAt = ({ end, other }: Side) => (end.port === undefined ? other : end);
+/** `eth1 · to lan port 2 · up · vlan 10`, `Port 8 · to lan port 7 · up · blocked`, or `Port 2 · router:eth1 · cut`, as the rack says a port. */
 const sideWords = (side: Side) =>
 	[
 		side.end.port === undefined
 			? `${side.end.nic} · to ${side.other.label}`
 			: `Port ${side.end.port} · ${side.other.port === undefined ? "" : "to "}${side.other.label}`,
-		side.edge.state,
-		vlanAt(side)?.text,
+		side.edge.link,
+		portAt(side).tree,
+		portAt(side).vlan?.text,
 		side.edge.conditions,
 	]
 		.filter(Boolean)
@@ -77,7 +82,8 @@ export function topologyMap(lab: LabState, selected: Selection | null, pick: (s:
 	];
 	const at = (ref: PortRef): End => {
 		const view = selectPorts(ref.switch)(lab).find((p) => p.port === ref.port);
-		return { name: ref.switch, label: `${ref.switch} port ${ref.port}`, port: ref.port, vlan: view?.vlan };
+		const tree = treeWord(view?.tree);
+		return { name: ref.switch, label: `${ref.switch} port ${ref.port}`, port: ref.port, vlan: view?.vlan, tree };
 	};
 	const edges: Edge[] = [
 		...lab.switches.flatMap((on) =>
@@ -90,7 +96,7 @@ export function topologyMap(lab: LabState, selected: Selection | null, pick: (s:
 									{ name: p.machine.name, label: p.machine.label, nic: p.machine.nic ?? nicName(0) },
 								] as const,
 								hue: p.machine.hue,
-								state: p.state,
+								link: p.state,
 								conditions: p.conditions,
 							},
 						]
@@ -99,7 +105,7 @@ export function topologyMap(lab: LabState, selected: Selection | null, pick: (s:
 		),
 		...lab.switchCables.map(({ ends: [a, b], link }) => ({
 			ends: [at(a), at(b)] as const,
-			state: link,
+			link,
 			conditions: selectPorts(a.switch)(lab).find((p) => p.port === a.port)?.conditions,
 		})),
 	];
@@ -157,7 +163,9 @@ export function topologyMap(lab: LabState, selected: Selection | null, pick: (s:
 					edge.ends[0].name === edge.ends[1].name
 						? `M ${a.x - 14} ${a.y} C ${a.x - 34} ${a.y - rise}, ${a.x + 34} ${a.y - rise}, ${a.x + 14} ${a.y}`
 						: `M ${a.x} ${a.y + offset} C ${middle} ${a.y + offset}, ${middle} ${b.y + offset}, ${b.x} ${b.y + offset}`;
-				return svg`<path class="wire" data-state=${edge.state} data-conditions=${edge.conditions ?? nothing} data-hue=${edge.hue ?? nothing} data-selected=${related} d=${d}/>`;
+				// A cable that is whole and has an end that the spanning tree blocks carries nothing, and says so here.
+				const state = (edge.link === "up" && edge.ends.find((end) => end.tree)?.tree) || edge.link;
+				return svg`<path class="wire" data-state=${state} data-conditions=${edge.conditions ?? nothing} data-hue=${edge.hue ?? nothing} data-selected=${related} d=${d}/>`;
 			},
 		)}</svg>
 		${devices.map((d) => {
