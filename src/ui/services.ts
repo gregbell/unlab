@@ -2,12 +2,13 @@ import type { CaptureView } from "../capture/index.ts";
 import type { CommandService } from "../commands/index.ts";
 import type {
 	CableCounters,
+	LearnedMac,
 	MachineName,
-	PortNo,
 	PortRef,
 	ReadStore,
 	SessionId,
 	SwitchName,
+	SwitchTotals,
 	ToolName,
 	UiEvent,
 } from "../model/index.ts";
@@ -66,13 +67,8 @@ export interface SwitchReadout {
 	/** What the cable in the port has carried and dropped, both ways. */
 	carried(port: PortRef): CableCounters | undefined;
 	/** The whole switch's, since it was added. */
-	totals(of: SwitchName): { readonly in: number; readonly delivered: number; readonly flooded: number };
-	macTable(of: SwitchName): readonly {
-		readonly mac: string;
-		readonly port: PortNo;
-		readonly seen: number;
-		readonly flushed: boolean;
-	}[];
+	totals(of: SwitchName): SwitchTotals;
+	macTable(of: SwitchName): readonly LearnedMac[];
 	/** The switch clock, for `seen 1 s ago`. */
 	now(): number;
 }

@@ -1,7 +1,6 @@
 import "./mac-table.css";
 import { html, nothing, type TemplateResult } from "lit";
-import { selectNames, severalNics, switchLabel } from "../../model/index.ts";
-import { nameOf, nicLabel, nicOfMac, parseMac } from "../../net/index.ts";
+import { macRows, macSeen, selectNames, switchLabel } from "../../model/index.ts";
 import { Select, UnlabElement } from "../base/index.ts";
 import { FollowCapture } from "../capture/follow.ts";
 
@@ -13,13 +12,13 @@ import { FollowCapture } from "../capture/follow.ts";
  */
 export class UnlabMacTable extends UnlabElement {
 	readonly #machines = new Select(this, (s) => s.machines);
-	readonly #names = new Select(this, selectNames);
 	readonly #shown = new Select(this, (s) => s.shownSwitch);
 	readonly #label = new Select(this, (s) => switchLabel(s, s.shownSwitch));
 
 	constructor() {
 		super();
 		new Select(this, (s) => s.now);
+		new Select(this, selectNames);
 		// Paused or not, every frame the switch accepts can teach it an address.
 		new FollowCapture(this, (capture) => capture.counters.in);
 	}
@@ -27,9 +26,7 @@ export class UnlabMacTable extends UnlabElement {
 	override render(): TemplateResult {
 		const now = this.app.switch.now();
 		const label = this.#label.value;
-		const entries = [...this.app.switch.macTable(this.#shown.value)].sort(
-			(a, b) => a.port - b.port || a.mac.localeCompare(b.mac),
-		);
+		const entries = macRows(this.app.store.state, this.app.switch.macTable(this.#shown.value), now);
 		const learned = entries.filter((e) => !e.flushed).length;
 		return html`<div class="header">
 				<h2 class="title">${label === null ? "" : `${label} `}mac address table</h2>
@@ -42,18 +39,12 @@ export class UnlabMacTable extends UnlabElement {
 					</thead>
 					<tbody>
 						${entries.map((e) => {
-							const at = nicOfMac(parseMac(e.mac), 0);
-							const machines = this.#machines.value;
-							const name = at && nameOf(this.#names.value, at.n);
-							const hue = name === null ? undefined : machines[name]?.hue;
-							const label = !at || name === null ? "" : nicLabel(name, at.nic, severalNics({ machines }, name));
+							const hue = e.machine === null ? undefined : this.#machines.value[e.machine]?.hue;
 							return html`<tr data-flushed=${e.flushed}>
 								<td class="mac">${e.mac}</td>
 								<td>${e.port}</td>
-								<td class="machine" title=${label || nothing} data-hue=${e.flushed ? nothing : (hue ?? nothing)}>${label}</td>
-								<td class="seen">
-									${e.flushed ? "flushed, link down" : `${Math.max(0, Math.floor((now - e.seen) / 1000))} s ago`}
-								</td>
+								<td class="machine" title=${e.label || nothing} data-hue=${e.flushed ? nothing : (hue ?? nothing)}>${e.label}</td>
+								<td class="seen">${macSeen(e)}</td>
 							</tr>`;
 						})}
 					</tbody>

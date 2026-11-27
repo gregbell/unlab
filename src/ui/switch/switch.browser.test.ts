@@ -257,7 +257,7 @@ describe("a lab with several switches", () => {
 			capture: capture.log,
 			switch: {
 				totals: (of) => totals.get(of) ?? { in: 0, delivered: 0, flooded: 0 },
-				macTable: (of) => (of === lan ? [{ mac: "52:54:00:88:00:0c", port: 1, seen: 0, flushed: false }] : []),
+				macTable: (of) => (of === lan ? [{ vlan: 1, mac: "52:54:00:88:00:0c", port: 1, seen: 0, flushed: false }] : []),
 			},
 		});
 		const counters = () => part(element, ".counters").textContent;

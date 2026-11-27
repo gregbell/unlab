@@ -13,6 +13,7 @@ import {
 	selectPorts,
 	selectStorm,
 	selectSubnets,
+	totalsText,
 	treeSummary,
 	treeText,
 	treeWord,
@@ -104,7 +105,7 @@ export class UnlabSwitch extends UnlabElement {
 
 	#counters(): TemplateResult {
 		const counters = this.app.switch.totals(this.#shown.value);
-		return html`<p class="counters">${counters.in} in · ${counters.delivered} delivered · ${counters.flooded} flooded</p>`;
+		return html`<p class="counters">${totalsText(counters)}</p>`;
 	}
 
 	#stormLine(): TemplateResult | typeof nothing {

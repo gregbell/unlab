@@ -77,6 +77,7 @@ export {
 	severalNics,
 	takenPorts,
 } from "./machines.ts";
+export { type LearnedMac, type MacRow, macRows, macSeen, type SwitchTotals, totalsText } from "./macs.ts";
 export { panelLabel, parkedPanels, visiblePanels } from "./panels.ts";
 export { capacity, gridFor, parkedPanes, visiblePanes } from "./panes.ts";
 export * from "./selectors.ts";
