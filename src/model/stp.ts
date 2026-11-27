@@ -193,6 +193,24 @@ export function rootOf({ switches, trees }: Pick<LabState, "switches" | "trees">
 /** `32768.02:00:a1:b2:c3:d4`: a bridge's priority as a command takes it, and then its address. */
 export const bridgeText = ({ priority, address }: BridgeRef): string => `${priority}.${address}`;
 
+/**
+ * What a switch is in the spanning tree, after the words `spanning tree`: `on · bridge 32768.02:00:… · root lan at
+ * cost 20000`, `on · bridge 4096.02:00:… · the root`, `on` until it has said, `off · priority 4096` for one that
+ * takes no part with a priority set, and null for one that takes none with none.
+ */
+export function treeSummary(
+	state: Pick<LabState, "switches" | "trees" | "stp" | "priorities">,
+	on: SwitchName,
+): string | null {
+	if (!stpOn(state, on)) return on in state.priorities ? `off · priority ${priorityOf(state, on)}` : null;
+	const reading = state.trees[on];
+	if (!reading) return "on";
+	const { bridge, root, cost } = reading;
+	const name = rootOf(state, on);
+	const rooted = sameBridge(bridge, root) ? "the root" : `root ${name ?? bridgeText(root)} at cost ${cost}`;
+	return ["on", `bridge ${bridgeText(bridge)}`, rooted].join(" · ");
+}
+
 /** What the port is in its switch's tree, or undefined for a port with no link, or of a switch that takes no part. */
 export function treePortAt({ trees }: Pick<LabState, "trees">, { switch: on, port }: PortRef): TreePort | undefined {
 	return trees[on]?.ports.find((held) => held.port === port);

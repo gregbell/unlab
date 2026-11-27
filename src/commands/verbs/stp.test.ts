@@ -250,9 +250,9 @@ describe("topology, with spanning tree", () => {
 			[
 				"wan",
 				[
-					"spanning tree on",
-					"port 7 · switch0:8 · up",
-					"port 8 · lan:7 · up · blocked",
+					"spanning tree on · bridge 32768.02:00:00:00:00:03 · root 32768.02:00:00:00:00:01 at cost 20000",
+					"port 7 · switch0:8 · up · root port",
+					"port 8 · lan:7 · up · alternate port · blocked",
 					"ports 1, 2, 3, 4, 5 and 6 · free",
 				],
 			],
@@ -273,6 +273,40 @@ describe("topology, with spanning tree", () => {
 		lab.runtime(says("wan", { ...WAN, ports: [WAN.ports[0], { port: 8, role: "designated", state: "learning" }] }));
 		const later = await listed(lab);
 		expect(later.header).toBe("3 switches · 7 of 24 ports taken");
-		expect(later.rows?.[2].text).toContain("port 8 · lan:7 · up · learning");
+		expect(later.rows?.[2].text).toContain("port 8 · lan:7 · up · designated port · learning");
+	});
+
+	it("says each switch's bridge ID and its root by name once the root has said what it is, the root's own as the root, and a priority and a cost that are set", async () => {
+		const lab = await triangle();
+		await lab.run("stp on all");
+		await lab.run("priority switch0 4096");
+		await lab.run("cost wan:8 200000");
+		const root = { priority: 4096, address: "02:00:00:00:00:01" };
+		lab.runtime(
+			says("switch0", { bridge: root, root, cost: 0, ports: [] }),
+			says("wan", { ...WAN, root, ports: WAN.ports }),
+		);
+		const { rows, data } = await listed(lab);
+		const lines = rows?.map(({ text }) => text.split("\n")) ?? [];
+		expect(lines.map(([first]) => first)).toEqual([
+			"spanning tree on · bridge 4096.02:00:00:00:00:01 · the root",
+			"spanning tree on",
+			"spanning tree on · bridge 32768.02:00:00:00:00:03 · root switch0 at cost 20000",
+		]);
+		expect(lines[2]).toContain("port 8 · lan:7 · up · alternate port · blocked · cost 200000");
+		expect(data.switches.map(({ priority, tree }) => [priority, tree?.root])).toEqual([
+			[4096, { ...root, switch: "switch0" }],
+			[undefined, undefined],
+			[undefined, { ...root, switch: "switch0" }],
+		]);
+		expect(data.switches[2].tree).toEqual({ bridge: WAN.bridge, root: { ...root, switch: "switch0" }, cost: 20_000 });
+		expect([data.switches[2].ports[7].cost, "cost" in data.switches[2].ports[6]]).toEqual([200_000, false]);
+
+		// With it off, a priority that is set is still said, and so is a cost.
+		await lab.run("stp off switch0");
+		const off = await listed(lab);
+		expect(off.rows?.[0].text.split("\n")[0]).toBe("spanning tree off · priority 4096");
+		await lab.run("cost node1 2000");
+		expect((await listed(lab)).rows?.[0].text).toContain("port 1 · node1 · up · cost 2000");
 	});
 });

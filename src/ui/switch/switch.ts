@@ -13,6 +13,7 @@ import {
 	selectPorts,
 	selectStorm,
 	selectSubnets,
+	treeSummary,
 	treeText,
 	treeWord,
 } from "../../model/index.ts";
@@ -44,7 +45,9 @@ const shown =
  * another port of a switch is drawn as a machine's is, under that switch's
  * name. While looped frames come into the switch, it says so above its ports,
  * with how many a second and how many it has dropped. A port that the spanning
- * tree keeps out of use says so on its cable's tag.
+ * tree keeps out of use says so on its cable's tag, and each port's title says
+ * what it is in the tree. Under the ports, a switch with spanning tree on says
+ * its bridge ID and its root.
  */
 export class UnlabSwitch extends UnlabElement {
 	static override properties = { compact: { type: Boolean, reflect: true } };
@@ -57,6 +60,7 @@ export class UnlabSwitch extends UnlabElement {
 	readonly #subnets = new Select(this, shown(selectSubnets));
 	readonly #storm = new Select(this, shown(selectStorm));
 	readonly #storms = new Select(this, (s) => s.storms);
+	readonly #tree = new Select(this, (s) => treeSummary(s, s.shownSwitch));
 
 	constructor() {
 		super();
@@ -92,6 +96,7 @@ export class UnlabSwitch extends UnlabElement {
 					<div class="ports">${this.#ports.value.map((port) => this.#column(port))}</div>
 					<p class="note">Click a cable to cut or reconnect it.</p>
 					${this.#several ? this.#counters() : nothing}
+					${this.#tree.value === null ? nothing : html`<p class="counters">spanning tree ${this.#tree.value}</p>`}
 				</div>
 				${this.compact ? nothing : html`<unlab-mac-table></unlab-mac-table>`}
 			</div>`;
@@ -141,7 +146,9 @@ export class UnlabSwitch extends UnlabElement {
 		const tag = [held.nic, port.vlan?.tag, port.conditions && IMPAIRED, treeWord(port.tree)].filter(Boolean).join(" ");
 		const counted = this.app.switch.carried({ switch: this.#shown.value, port: port.port }) ?? NOTHING_CARRIED;
 		const carried = port.conditions ? carriedWords(counted) : [];
-		const title = [held.label, treeText(port.tree), port.vlan?.text, port.conditions, ...carried]
+		const role = port.tree && `${port.tree.role} port`;
+		const cost = port.cost && `cost ${port.cost}`;
+		const title = [held.label, role, treeText(port.tree), cost, port.vlan?.text, port.conditions, ...carried]
 			.filter(Boolean)
 			.join(" · ");
 		const parts = html`<span class="name">${held.name}</span><span class="cable"></span>${

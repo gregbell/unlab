@@ -92,6 +92,7 @@ export {
 	stpOn,
 	treePortAt,
 	treeRoleText,
+	treeSummary,
 	treeText,
 	treeWord,
 } from "./stp.ts";

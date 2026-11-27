@@ -1,10 +1,15 @@
 import {
 	andList,
+	type BridgePriority,
+	type BridgeRef,
 	type CableCounters,
 	type Conditions,
 	carriedWords,
 	conditionsAt,
 	conditionWords,
+	costOf,
+	DEFAULT_COST,
+	DEFAULT_PRIORITY,
 	droppedWords,
 	type HeldPort,
 	hasConditions,
@@ -17,6 +22,7 @@ import {
 	NOTHING_CARRIED,
 	nicLabel,
 	nicPortsOf,
+	type PathCost,
 	type Phase,
 	PORTS,
 	type PortNo,
@@ -24,11 +30,14 @@ import {
 	type PortVlan,
 	plugsOf,
 	portName,
+	priorityOf,
+	rootOf,
 	type SwitchName,
 	stpOn,
 	type TreePort,
 	treePortAt,
-	treeWord,
+	treeRoleText,
+	treeSummary,
 	vlanOf,
 	vlanText,
 	type WrittenConditions,
@@ -87,6 +96,18 @@ export interface ListedPort {
 	 * state is discarding carries nothing: the tree has blocked it.
 	 */
 	readonly stp?: Pick<TreePort, "role" | "state">;
+	/** What it adds to the way to the root through it, there when it is not 20000. */
+	readonly cost?: PathCost;
+}
+
+/** A switch's part in the spanning tree, as its messages with its neighbours left it. */
+export interface ListedTree {
+	/** Its own bridge ID: its priority, and then its address. */
+	readonly bridge: BridgeRef;
+	/** The bridge it takes for the root, with the switch's name once that switch has said what it is. */
+	readonly root: BridgeRef & { readonly switch?: SwitchName };
+	/** What its way to the root costs: 0 for the root. */
+	readonly cost: number;
 }
 
 export interface ListedSwitch {
@@ -97,6 +118,10 @@ export interface ListedSwitch {
 	readonly storm?: ListedStorm;
 	/** There while it has spanning tree on. */
 	readonly stp?: "on";
+	/** Its priority in the spanning tree, there when it is not 32768. */
+	readonly priority?: BridgePriority;
+	/** There while it has spanning tree on, once it has said what it is in the tree. */
+	readonly tree?: ListedTree;
 }
 
 /** The lab's wiring as `topology_read` returns it. */
@@ -123,11 +148,20 @@ function cable(held: HeldPort, carried: CableCounters): ListedCable {
 	return { to: end(machine, nic), link: cut ? "cut" : life.phase === "ready" ? "up" : "down", ...its };
 }
 
+function listedTree(lab: LabState, name: SwitchName): ListedTree | undefined {
+	const reading = lab.trees[name];
+	if (!reading) return undefined;
+	const root = rootOf(lab, name);
+	return { bridge: reading.bridge, root: { ...reading.root, ...(root ? { switch: root } : {}) }, cost: reading.cost };
+}
+
 function topologyOf(lab: LabState, carried: (port: PortRef) => CableCounters | undefined): Topology {
 	return {
 		switches: lab.switches.map((name): ListedSwitch => {
 			const held = heldPorts(lab, name);
 			const storm = lab.storms[name];
+			const priority = priorityOf(lab, name);
+			const tree = listedTree(lab, name);
 			return {
 				name,
 				ports: PORTS.map((port): ListedPort => {
@@ -135,15 +169,19 @@ function topologyOf(lab: LabState, carried: (port: PortRef) => CableCounters | u
 					const ref = { switch: name, port };
 					const counted = carried(ref) ?? NOTHING_CARRIED;
 					const tree = treePortAt(lab, ref);
+					const cost = costOf(lab, ref);
 					return {
 						port,
 						cable: holder ? cable(holder, counted) : null,
 						vlan: vlanOf(lab, ref),
 						...(tree ? { stp: { role: tree.role, state: tree.state } } : {}),
+						...(cost === DEFAULT_COST ? {} : { cost }),
 					};
 				}),
 				...(storm ? { storm: { rate: storm.rate, dropped: storm.dropped } } : {}),
 				...(stpOn(lab, name) ? { stp: "on" as const } : {}),
+				...(priority === DEFAULT_PRIORITY ? {} : { priority }),
+				...(tree ? { tree } : {}),
 			};
 		}),
 		unplugged: machineList(lab).flatMap((machine) => {
@@ -162,14 +200,15 @@ function endText(lab: LabState, to: CableEnd): string {
 }
 
 /**
- * `node3 · down · booting`, `wan:8 · up · blocked`. A ready machine's state goes without saying, and so do VLAN 1
- * and a port that the spanning tree has in use.
+ * `node3 · down · booting`, `wan:8 · up · alternate port · blocked · cost 200000`. A ready machine's state goes
+ * without saying, and so do VLAN 1, a cost of 20000 and a port that the spanning tree has in use.
  */
-function endLine(lab: LabState, to: CableEnd, link: string, { vlan, stp }: Partial<ListedPort> = {}): string {
+function endLine(lab: LabState, to: CableEnd, link: string, { vlan, stp, cost }: Partial<ListedPort> = {}): string {
 	const state = to.kind === "port" || to.state === "ready" ? [] : [to.state];
-	const tree = treeWord(stp);
+	const tree = treeRoleText(stp);
 	const carried = !vlan || (vlan.mode === "access" && vlan.vlan === 1) ? [] : [vlanText(vlan)];
-	return [endText(lab, to), link, ...state, ...(tree ? [tree] : []), ...carried].join(" · ");
+	const costs = cost === undefined ? [] : [`cost ${cost}`];
+	return [endText(lab, to), link, ...state, ...(tree ? [tree] : []), ...costs, ...carried].join(" · ");
 }
 
 /** `delay 100 ms · loss 20% · 804 delivered · 196 dropped (196 by loss)`. A cable as good as new that dropped nothing says none of it. */
@@ -187,7 +226,8 @@ const stormLine = ({ rate, dropped }: ListedStorm): string =>
 	`storming · ${rate} looped frames a second · ${dropped} dropped`;
 
 function rows(lab: LabState, { switches, unplugged }: Topology): readonly ReportRow[] {
-	const listed = switches.map(({ name, ports: all, storm, stp }): ReportRow => {
+	const listed = switches.map(({ name, ports: all, storm }): ReportRow => {
+		const tree = treeSummary(lab, name);
 		const taken = all.flatMap((held) => {
 			const { port, cable } = held;
 			if (!cable) return [];
@@ -197,7 +237,7 @@ function rows(lab: LabState, { switches, unplugged }: Topology): readonly Report
 		const free = all.flatMap(({ port, cable }) => (cable ? [] : [port]));
 		const lines = [
 			...(storm ? [stormLine(storm)] : []),
-			...(stp ? ["spanning tree on"] : []),
+			...(tree ? [`spanning tree ${tree}`] : []),
 			...taken,
 			...(free.length === 0 ? [] : [`${ports(free)} · free`]),
 		];
@@ -212,7 +252,7 @@ export const topology = defineVerb({
 	name: "topology",
 	about: "list switches, their ports and what is plugged in",
 	description:
-		"List the wiring: every switch with its eight ports, what each port's cable goes to, its link (up, cut, or down while the machine at its end is not ready), its conditions, what it delivered and dropped, and what the port carries: a VLAN, or a trunk's VLANs and native one. A cable between switches is at both its ports. With spanning tree on, a switch has stp, and each port its role and state: discarding is blocked. A storming switch has storm. Then the NICs in no switch. Port 3 of lan is lan:3.",
+		"List the wiring: each switch's eight ports, what each port's cable goes to, its link (up, cut, or down while its machine is not ready), conditions, what it delivered and dropped, and its VLAN or a trunk's VLANs. A cable between switches is at both its ports. With spanning tree on, a switch has stp, and tree: its bridge ID, root and root cost. Each port has its role and state: discarding is blocked. priority and cost are there when set. A storming switch has storm. Then the NICs in no switch.",
 	danger: false,
 	grammar: {},
 	example: {},
