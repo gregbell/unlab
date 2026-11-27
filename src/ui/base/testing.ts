@@ -244,6 +244,7 @@ const EMPTY_CAPTURE: CaptureView = {
 	matchCount: 0,
 	matchedFrames: 0,
 	counters: { in: 0, delivered: 0, flooded: 0 },
+	startedAt: 0,
 	tail: () => [],
 	window: () => [],
 	indexOf: () => -1,

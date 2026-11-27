@@ -152,6 +152,8 @@ export interface CaptureView {
 	readonly matchedFrames: number;
 	/** Since the log was created. Clear does not reset them. */
 	readonly counters: CaptureCounters;
+	/** The wall clock, in ms since 1970, when the log's clock read 0: what a .pcap stamps each frame from. */
+	readonly startedAt: number;
 	/** The newest k rows of the filtered view, oldest first. */
 	tail(k: number, on?: SwitchName): readonly CaptureRow[];
 	/** Rows [from, from + count) of the filtered view. */
@@ -238,6 +240,8 @@ export function createCaptureLog(opts: CaptureOptions): CaptureLog {
 	let paused = false;
 	let revision = 0;
 	const counters = { in: 0, delivered: 0, flooded: 0 };
+	// Once, so that every .pcap of the same frames has the same times.
+	const startedAt = Date.now() - now();
 
 	// Requests in arrival order, and what they asked. Only those still in the ring, so there are never more than it
 	// holds: a sweep can be a minute away, and a storm would fill the page's memory with the others.
@@ -336,6 +340,7 @@ export function createCaptureLog(opts: CaptureOptions): CaptureLog {
 	};
 
 	return {
+		startedAt,
 		get revision() {
 			return revision;
 		},

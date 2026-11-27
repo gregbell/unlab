@@ -3,10 +3,10 @@ import "./frame-detail.ts";
 import { html, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { live } from "lit/directives/live.js";
 import { createRef, type Ref, ref } from "lit/directives/ref.js";
-import type { CaptureRow, CaptureView, EventRow, FrameEntry, FrameRow, RouteEnd } from "../../capture/index.ts";
+import type { CaptureRow, EventRow, FrameRow, RouteEnd } from "../../capture/index.ts";
 import { andList, type SwitchName, selectNames, type UiEvent } from "../../model/index.ts";
-import { compileFilter, EVERYONE, type FilterPlace, onWire, type PcapFrame, toPcap } from "../../net/index.ts";
-import { clearIcon, pauseIcon, resumeIcon, Select, UnlabElement, windowButtons } from "../base/index.ts";
+import { compileFilter, EVERYONE, narrows, PCAP_TYPE, pcapOf } from "../../net/index.ts";
+import { clearIcon, download, pauseIcon, resumeIcon, Select, UnlabElement, windowButtons } from "../base/index.ts";
 import { FollowCapture } from "./follow.ts";
 
 export type CaptureMode = "dock" | "full";
@@ -28,45 +28,6 @@ function endText(end: RouteEnd): string {
 		case "machine":
 			return end.nic ? `${end.name}:${end.nic}` : end.name;
 	}
-}
-
-/** What to save of the capture, and under what name. */
-interface Saved {
-	readonly frames: Iterable<PcapFrame>;
-	readonly name: string;
-	/** What the button adds to its name, when it is not all that was captured. */
-	readonly title: string | null;
-}
-
-/**
- * Each as it was on the wire: at a port of its switch that the filter names a
- * cable by, or else as it came into the switch, with its tag if it had one there.
- */
-function* wired(frames: Iterable<FrameEntry>, places: readonly FilterPlace[]) {
-	for (const e of frames) {
-		const at = places.find(
-			({ switch: on, port }) =>
-				on === e.switch && port !== null && (e.from === port || (e.to & (1 << (port - 1))) !== 0),
-		);
-		yield { t: e.t, bytes: onWire(e.bytes, e.vlan, e.tagged, at?.port ?? e.from) };
-	}
-}
-
-/**
- * A filter that names a switch or a cable says where to look, so what is saved
- * is what it shows, and one cable's file has each frame once. Any other filter
- * is for reading, and every frame is saved, once for each switch that carried it.
- */
-function saved(capture: CaptureView, switches: readonly SwitchName[]): Saved {
-	const { scope } = capture.filter;
-	if (scope.kind === "everywhere") {
-		const [first, ...others] = switches;
-		const name = others.length === 0 ? `unlab-${first}.pcap` : "unlab.pcap";
-		return { frames: wired(capture.frames(), []), name, title: null };
-	}
-	const what = scope.kind === "places" ? "filtered" : scope.switch + (scope.port === null ? "" : `-port${scope.port}`);
-	const places = scope.kind === "places" ? scope.places : [scope];
-	return { frames: wired(capture.matched(), places), name: `unlab-${what}.pcap`, title: "Save the frames shown" };
 }
 
 /** `On lan, in by port 3 and out of ports 4 and 5.` */
@@ -164,7 +125,7 @@ export class UnlabCapture extends UnlabElement {
 				<button type="button" class="button" title="Clear" @click=${() => this.#dispatch({ type: "ui/capture-clear" })}>
 					${clearIcon}<span class="label">clear</span>
 				</button>
-				${full ? html`<button type="button" class="button" title=${saved(capture, this.#switches.value).title ?? nothing} @click=${this.#save}>save .pcap</button>` : nothing}
+				${full ? html`<button type="button" class="button" title=${narrows(capture.filter) ? "Save the frames shown" : nothing} @click=${this.#save}>save .pcap</button>` : nothing}
 				<span class="window">${windowButtons("capture", full, {
 					maximise: () => this.#dispatch({ type: "ui/panel-maximised", panel: "capture" }),
 					park: () => this.#dispatch({ type: "ui/panel-parked", panel: "capture" }),
@@ -342,16 +303,11 @@ export class UnlabCapture extends UnlabElement {
 		this.#dispatch({ type: "ui/frame-selected", seq });
 	}
 
-	/** Timestamped on the wall clock. */
+	/** Stamped from when the capture began, so every save of the same frames is the same file. */
 	readonly #save = (): void => {
-		const { frames, name } = saved(this.app.capture, this.#switches.value);
-		const bytes = toPcap(frames, Date.now() - this.app.store.state.now);
-		const url = URL.createObjectURL(new Blob([new Uint8Array(bytes)], { type: "application/vnd.tcpdump.pcap" }));
-		const link = document.createElement("a");
-		link.href = url;
-		link.download = name;
-		link.click();
-		setTimeout(() => URL.revokeObjectURL(url), 10_000);
+		const { capture } = this.app;
+		const file = pcapOf(capture.frames(), capture.filter, this.#switches.value, capture.startedAt);
+		download(file.name, PCAP_TYPE, file.bytes);
 	};
 
 	readonly #onScroll = (event: Event): void => {
