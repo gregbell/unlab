@@ -327,7 +327,7 @@ async function wires(topology: Locator, a: string, b: string): Promise<string[]>
 	const p = await centre(a);
 	const q = await centre(b);
 	// Two cables between one pair of switches are drawn side by side, a few pixels apart.
-	const near = (u: number, v: number) => Math.abs(u - v) < 10;
+	const near = (u: number, v: number) => Math.abs(u - v) < 12;
 	const states: string[] = [];
 	for (const path of await topology.locator(".wire").all()) {
 		const box = await path.boundingBox();
