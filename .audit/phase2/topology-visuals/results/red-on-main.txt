@@ -1,0 +1,14 @@
+the map as at origin/main (5a25194) | browser src/ui/desktop/topology.browser.test.ts | exit 1 | 13 of 21 red:
+    the Topology window can be used by keyboard: Tab reaches every node in the order they are drawn, each shows that it has the focus, and Enter and Space select it
+    the Topology window says a selected node and each line's state by more than its colour
+    every name and note in the Topology window can be read as it opens with two cabled nodes in one column
+    every name and note in the Topology window can be read as it opens with names that wrap to two, three and more lines
+    every name and note in the Topology window can be read as it opens with a switch cabled to itself twice, each cable a loop of its own
+    every name and note in the Topology window can be read as it opens with 16 machines and eight switches, long names, VLANs, a trunk, a delayed cable, storms and a blocked port
+    every name and note in the Topology window can be read maximized with two cabled nodes in one column
+    every name and note in the Topology window can be read maximized with names that wrap to two, three and more lines
+    every name and note in the Topology window can be read maximized with a switch cabled to itself twice, each cable a loop of its own
+    every name and note in the Topology window can be read maximized with 16 machines and eight switches, long names, VLANs, a trunk, a delayed cable, storms and a blocked port
+    every name and note in the Topology window can be read in a narrow browser window with two cabled nodes in one column
+    every name and note in the Topology window can be read in a narrow browser window with names that wrap to two, three and more lines
+    every name and note in the Topology window can be read in a narrow browser window with 16 machines and eight switches, long names, VLANs, a trunk, a delayed cable, storms and a blocked port
