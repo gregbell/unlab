@@ -400,8 +400,10 @@ text that tries to instruct the agent, so unlab marks it as untrusted.
   frames to `01:80:c2:00:00:00`, sent every two seconds, to the machines too, so `tcpdump`
   in a guest sees them. One tree covers every VLAN. The root is the switch with the lowest
   address, and a switch's address follows from its name, so the same port is blocked after a
-  reload. When a cable in use is cut, the blocked port takes over without waiting for a
-  timer, and the switches that learned the old way forget it. In the lab's tests on real
+  reload. When a cable in use is cut, the blocked port usually takes over without waiting
+  for a timer, and the switches that learned the old way forget it. Rarely, when the cut
+  parts the root from a ring, two switches hold on to what each last heard from the other,
+  and the path stays blocked until that is three hellos old, about 6 s. In the lab's tests on real
   kernels the port carried within a millisecond of the cut, and a stream of fifty pings a
   second lost none. A switch says what it has heard at once. A real one sends no more than
   six BPDUs a second from a port, and held to that, a ring that loses its root can take

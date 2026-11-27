@@ -34,6 +34,8 @@ export default mergeConfig(
 						// late: on 16 processors, one more file had most runs fail. A number here is taken as it is, so
 						// the least of the two keeps a small machine at what it had.
 						maxWorkers: Math.min(8, Math.max(1, availableParallelism() - 1)),
+						// Vitest runs projects with their own worker count in a group of their own, after the others.
+						sequence: { groupOrder: 1 },
 					},
 				},
 				{
