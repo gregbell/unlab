@@ -40,12 +40,14 @@ test("an agent lists, asks to remove node2, and node2 goes once the person click
 		"machines_reboot",
 		"machines_remove",
 		"machines_spawn",
+		"port_cost",
 		"port_trunk",
 		"port_vlan",
 		"shell_exec",
 		"shell_read",
 		"switch_add",
 		"switch_cable",
+		"switch_priority",
 		"switch_remove",
 		"switch_stp",
 		"switch_uncable",
@@ -131,7 +133,7 @@ test("deny, abort, off and pause, each as the handoff says", async ({ page }) =>
 	await expect.poll(() => registered(page)).toEqual([]);
 	await expect(page.getByText("webmcp: paused")).toBeVisible();
 	await panel.getByRole("button", { name: "resume tools" }).click();
-	await expect.poll(() => registered(page)).toHaveLength(24);
+	await expect.poll(() => registered(page)).toHaveLength(26);
 	expect(errors).toEqual([]);
 });
 
@@ -202,7 +204,7 @@ for (const [where, width, height] of [
 		await page.setViewportSize({ width, height });
 		await page.goto("/?layout=classic");
 		await expect(page.getByRole("heading", { name: "Your Linux lab in a tab." })).toBeVisible();
-		await expect.poll(() => registered(page)).toHaveLength(25);
+		await expect.poll(() => registered(page)).toHaveLength(27);
 
 		await start(page, "spawn", "machines_spawn", { count: 1, image: "alpine" });
 		const boot = page.locator("unlab-agent-panel").getByRole("button", { name: "Boot node1", exact: true });
