@@ -186,6 +186,7 @@ describe("the artboards, replayed", () => {
 			"uncable",
 			"vlan",
 			"trunk",
+			"stp",
 			"topology",
 			"capture",
 			"focus",

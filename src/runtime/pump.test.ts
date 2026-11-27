@@ -4,6 +4,7 @@ import { arpRequest } from "../../test/support/frames.ts";
 import type { PortNo } from "../model/index.ts";
 import { Fabric, STORM_QUIET_MS, type TapEvent } from "./fabric.ts";
 import { createPump } from "./pump.ts";
+import { HELLO_MS } from "./rstp.ts";
 
 /** Three switches in a loop, a to b to c to a, each with a machine on port 1, and the loop's last cable cut or not. */
 function looped(tick = 0, closed = true) {
@@ -94,6 +95,37 @@ describe("the pump", () => {
 		t.pump.receive(0, 1, arpRequest(1, 2));
 		expect(t.got).toEqual([0, 2, 2]);
 		expect(t.fabric.waiting).toBe(0);
+	});
+
+	test("runs a spanning tree when it is woken, and then sets one timer for each hello, however far off that is", () => {
+		const t = looped(0, false);
+		for (const slot of [0, 1, 2]) t.fabric.setTree(slot, { address: 0x0200_0000_0001 + slot });
+		expect(t.fabric.tree(1)?.ports).toEqual([]);
+		t.pump.wake();
+		expect(t.fabric.tree(1)?.ports.map(({ port, state }) => [port, state])).toEqual([
+			[1, "forwarding"],
+			[7, "forwarding"],
+			[8, "forwarding"],
+		]);
+		// The switches agreed with no timer, and in no task of their own. The one timer is for the hello.
+		expect([t.clock.waits, t.clock.tasks]).toEqual([[HELLO_MS], 0]);
+		// For three seconds a port that began to forward says so, its way to the root too. Then only designated ports speak.
+		t.clock.pass(2 * HELLO_MS);
+		const settled = t.taps.length;
+		t.clock.pass(10 * HELLO_MS);
+		expect(t.clock.waits).toEqual(new Array(13).fill(HELLO_MS));
+		// Two cables are whole, and the designated port of each says what it knows at every hello.
+		expect(t.taps.length - settled).toBe(20);
+
+		// A frame that waits its turn in a storm is still waited for to the millisecond.
+		for (const slot of [0, 1, 2]) t.fabric.setTree(slot, null);
+		t.fabric.setLink(2, 7, true);
+		t.pump.wake();
+		const quiet = t.clock.waits.length;
+		t.clock.pass(HELLO_MS);
+		expect(t.clock.waits.length).toBe(quiet);
+		t.pump.receive(0, 1, arpRequest(1, 9));
+		expect(t.clock.waits.at(-1)).toBe(1);
 	});
 
 	test("does nothing after it is stopped", () => {

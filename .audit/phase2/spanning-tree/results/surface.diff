@@ -1,0 +1,162 @@
+14c14
+<   "header": "25 verbs",
+---
+>   "header": "26 verbs",
+77a78,81
+>     "term": "stp",
+>     "text": "turn spanning tree on or off for switches"
+>    },
+>    {
+194a199,203
+>     "verb": "stp",
+>     "about": "turn spanning tree on or off for switches",
+>     "tool": "switch_stp"
+>    },
+>    {
+1934a1944,2043
+> == help stp
+> {
+>  "line": "help stp",
+>  "assumed": [],
+>  "preview": {
+>   "will": "explain stp",
+>   "assumed": null,
+>   "tone": "plain"
+>  },
+>  "refused": null,
+>  "confirm": null,
+>  "result": {
+>   "kind": "report",
+>   "header": "stp <on | off> <switches>",
+>   "blocks": [],
+>   "rows": [
+>    {
+>     "term": "does",
+>     "text": "Turn rapid spanning tree (RSTP) on or off for switches: lan, switch0,lan or all. It is off on a new switch, where a loop of cables storms. Switches with it on send each other BPDUs, choose a root, and block the ports that would close a loop, so a lab can have spare cables. When a cable in use is cut, a blocked port takes over. A switch with it off passes no BPDU on, so a loop through it still storms, and a port towards it carries after 3 seconds. topology has each port's role and state."
+>    },
+>    {
+>     "term": "<on | off>",
+>     "text": "on to take part in the spanning tree, off to take none."
+>    },
+>    {
+>     "term": "<switches>",
+>     "text": "One switch (lan), a comma list (switch0,lan) or all."
+>    },
+>    {
+>     "term": "example",
+>     "text": "stp on all"
+>    },
+>    {
+>     "term": "agent tool",
+>     "text": "switch_stp"
+>    }
+>   ],
+>   "data": {
+>    "verb": "stp",
+>    "about": "turn spanning tree on or off for switches",
+>    "tool": "switch_stp",
+>    "usage": "stp <on | off> <switches>",
+>    "description": "Turn rapid spanning tree (RSTP) on or off for switches: lan, switch0,lan or all. It is off on a new switch, where a loop of cables storms. Switches with it on send each other BPDUs, choose a root, and block the ports that would close a loop, so a lab can have spare cables. When a cable in use is cut, a blocked port takes over. A switch with it off passes no BPDU on, so a loop through it still storms, and a port towards it carries after 3 seconds. topology has each port's role and state.",
+>    "arguments": [
+>     {
+>      "field": "stp",
+>      "written": "<on | off>",
+>      "about": "on to take part in the spanning tree, off to take none.",
+>      "required": true,
+>      "default": null
+>     },
+>     {
+>      "field": "switches",
+>      "written": "<switches>",
+>      "about": "One switch (lan), a comma list (switch0,lan) or all.",
+>      "required": true,
+>      "default": null
+>     }
+>    ],
+>    "example": {
+>     "line": "stp on all",
+>     "input": {
+>      "stp": "on",
+>      "switches": "all"
+>     }
+>    }
+>   }
+>  }
+> }
+> == manual stp
+> {
+>  "verb": "stp",
+>  "about": "turn spanning tree on or off for switches",
+>  "tool": "switch_stp",
+>  "usage": "stp <on | off> <switches>",
+>  "description": "Turn rapid spanning tree (RSTP) on or off for switches: lan, switch0,lan or all. It is off on a new switch, where a loop of cables storms. Switches with it on send each other BPDUs, choose a root, and block the ports that would close a loop, so a lab can have spare cables. When a cable in use is cut, a blocked port takes over. A switch with it off passes no BPDU on, so a loop through it still storms, and a port towards it carries after 3 seconds. topology has each port's role and state.",
+>  "arguments": [
+>   {
+>    "field": "stp",
+>    "written": "<on | off>",
+>    "about": "on to take part in the spanning tree, off to take none.",
+>    "required": true,
+>    "default": null
+>   },
+>   {
+>    "field": "switches",
+>    "written": "<switches>",
+>    "about": "One switch (lan), a comma list (switch0,lan) or all.",
+>    "required": true,
+>    "default": null
+>   }
+>  ],
+>  "example": {
+>   "line": "stp on all",
+>   "input": {
+>    "stp": "on",
+>    "switches": "all"
+>   }
+>  }
+> }
+1953c2062
+<     "text": "List the wiring: every switch with its eight ports, what each port's cable goes to, its link (up, cut, or down while the machine at its end is not ready), its conditions, what it delivered and dropped (by loss, rate or MTU), and what the port carries: a VLAN, or a trunk's VLANs and its native one. A cable between switches is at both its ports. A storming switch has storm: its looped frames in the last second, and what it dropped. Then the NICs in no switch. Port 3 of lan is lan:3."
+---
+>     "text": "List the wiring: every switch with its eight ports, what each port's cable goes to, its link (up, cut, or down while the machine at its end is not ready), its conditions, what it delivered and dropped, and what the port carries: a VLAN, or a trunk's VLANs and native one. A cable between switches is at both its ports. With spanning tree on, a switch has stp, and each port its role and state: discarding is blocked. A storming switch has storm. Then the NICs in no switch. Port 3 of lan is lan:3."
+1969c2078
+<    "description": "List the wiring: every switch with its eight ports, what each port's cable goes to, its link (up, cut, or down while the machine at its end is not ready), its conditions, what it delivered and dropped (by loss, rate or MTU), and what the port carries: a VLAN, or a trunk's VLANs and its native one. A cable between switches is at both its ports. A storming switch has storm: its looped frames in the last second, and what it dropped. Then the NICs in no switch. Port 3 of lan is lan:3.",
+---
+>    "description": "List the wiring: every switch with its eight ports, what each port's cable goes to, its link (up, cut, or down while the machine at its end is not ready), its conditions, what it delivered and dropped, and what the port carries: a VLAN, or a trunk's VLANs and native one. A cable between switches is at both its ports. With spanning tree on, a switch has stp, and each port its role and state: discarding is blocked. A storming switch has storm. Then the NICs in no switch. Port 3 of lan is lan:3.",
+1984c2093
+<  "description": "List the wiring: every switch with its eight ports, what each port's cable goes to, its link (up, cut, or down while the machine at its end is not ready), its conditions, what it delivered and dropped (by loss, rate or MTU), and what the port carries: a VLAN, or a trunk's VLANs and its native one. A cable between switches is at both its ports. A storming switch has storm: its looped frames in the last second, and what it dropped. Then the NICs in no switch. Port 3 of lan is lan:3.",
+---
+>  "description": "List the wiring: every switch with its eight ports, what each port's cable goes to, its link (up, cut, or down while the machine at its end is not ready), its conditions, what it delivered and dropped, and what the port carries: a VLAN, or a trunk's VLANs and native one. A cable between switches is at both its ports. With spanning tree on, a switch has stp, and each port its role and state: discarding is blocked. A storming switch has storm. Then the NICs in no switch. Port 3 of lan is lan:3.",
+2822c2931
+<  "description": "List the wiring: every switch with its eight ports, what each port's cable goes to, its link (up, cut, or down while the machine at its end is not ready), its conditions, what it delivered and dropped (by loss, rate or MTU), and what the port carries: a VLAN, or a trunk's VLANs and its native one. A cable between switches is at both its ports. A storming switch has storm: its looped frames in the last second, and what it dropped. Then the NICs in no switch. Port 3 of lan is lan:3.",
+---
+>  "description": "List the wiring: every switch with its eight ports, what each port's cable goes to, its link (up, cut, or down while the machine at its end is not ready), its conditions, what it delivered and dropped, and what the port carries: a VLAN, or a trunk's VLANs and native one. A cable between switches is at both its ports. With spanning tree on, a switch has stp, and each port its role and state: discarding is blocked. A storming switch has storm. Then the NICs in no switch. Port 3 of lan is lan:3.",
+3145a3255,3283
+>   ],
+>   "additionalProperties": false
+>  },
+>  "annotations": {}
+> }
+> == tool switch_stp
+> {
+>  "name": "switch_stp",
+>  "title": "Turn spanning tree on or off",
+>  "description": "Turn rapid spanning tree (RSTP) on or off for switches: lan, switch0,lan or all. It is off on a new switch, where a loop of cables storms. Switches with it on send each other BPDUs, choose a root, and block the ports that would close a loop, so a lab can have spare cables. When a cable in use is cut, a blocked port takes over. A switch with it off passes no BPDU on, so a loop through it still storms, and a port towards it carries after 3 seconds. topology has each port's role and state.",
+>  "inputSchema": {
+>   "type": "object",
+>   "properties": {
+>    "stp": {
+>     "type": "string",
+>     "enum": [
+>      "on",
+>      "off"
+>     ],
+>     "description": "on to take part in the spanning tree, off to take none."
+>    },
+>    "switches": {
+>     "type": "string",
+>     "description": "One switch (lan), a comma list (switch0,lan) or all."
+>    }
+>   },
+>   "required": [
+>    "stp",
+>    "switches"

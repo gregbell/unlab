@@ -115,7 +115,7 @@ describe("a lab saved before there were cables between switches", () => {
 		expect(portsOf(on("node5") as never).map((port) => port.switch)).toEqual(["switch0", "wan", "switch0"]);
 
 		const saved = JSON.parse(saveWorkspace(state));
-		expect(saved).toMatchObject({ version: 10, switches: ["switch0", "lan", "wan"], cables: [], vlans: [] });
+		expect(saved).toMatchObject({ version: 11, switches: ["switch0", "lan", "wan"], cables: [], vlans: [], stp: [] });
 		const again = await open(JSON.stringify(saved));
 		expect([again.cables, again.booted]).toEqual([cables, booted]);
 	});
@@ -182,7 +182,7 @@ describe("a lab saved before ports had VLANs", () => {
 		]);
 		expect(state.portVlans).toEqual([]);
 		const saved = JSON.parse(saveWorkspace(state));
-		expect(saved).toMatchObject({ version: 10, vlans: [] });
+		expect(saved).toMatchObject({ version: 11, vlans: [] });
 		const again = await open(JSON.stringify(saved));
 		expect([again.state.switchCables, again.booted]).toEqual([state.switchCables, booted]);
 	});
@@ -200,7 +200,7 @@ describe("a lab saved before cables had conditions", () => {
 		expect(held).toHaveLength(10);
 		expect(held.map(({ conditions }) => conditions)).toEqual(held.map(() => ({})));
 		const saved = JSON.parse(saveWorkspace(state));
-		expect(saved.version).toBe(10);
+		expect(saved.version).toBe(11);
 		expect(saved.cables.map((cable: { conditions: unknown }) => cable.conditions)).toEqual([{}, {}]);
 		const nics = saved.nodes.flatMap((node: { nics: { conditions: unknown }[] }) => node.nics);
 		expect(nics.map((nic: { conditions: unknown }) => nic.conditions)).toEqual(nics.map(() => ({})));
@@ -210,5 +210,22 @@ describe("a lab saved before cables had conditions", () => {
 			state.portVlans,
 			booted,
 		]);
+	});
+});
+
+describe("a lab saved before switches could take part in a spanning tree", () => {
+	test("version 10 opens with its cables' conditions as they were, and no switch takes part", async () => {
+		const { state, booted } = await open(savedBy(10));
+		expect(state.stp).toEqual([]);
+		expect(state.switchCables[0]).toMatchObject({ link: "up", conditions: { delay: 100, loss: 20 } });
+		const impaired = state.switches.flatMap((on) =>
+			heldPorts(state, on).flatMap((held) => (Object.keys(held.conditions).length > 0 ? [`${on}:${held.port}`] : [])),
+		);
+		expect(impaired).toEqual(["switch0:8", "lan:3", "lan:7"]);
+		expect(state.portVlans).toHaveLength(3);
+		const saved = JSON.parse(saveWorkspace(state));
+		expect(saved).toMatchObject({ version: 11, stp: [] });
+		const again = await open(JSON.stringify(saved));
+		expect([again.state.switchCables, again.state.stp, again.booted]).toEqual([state.switchCables, [], booted]);
 	});
 });

@@ -14,6 +14,7 @@ import { FIRST_SETS, MAX_EXTRA_DISKS, parseGiB } from "./disks.ts";
 import { identity, isNameFault, parseCheckpointName, parseMachineName, parseSwitchName } from "./identity.ts";
 import { type BootNode, bootMachines, machineList, plugsOf, samePort } from "./machines.ts";
 import { addPanes, focusPane, keyboardHolder, parkPane, toggleMaximise } from "./panes.ts";
+import { stpEffects } from "./stp.ts";
 import {
 	type Checkpoint,
 	type ConditionPart,
@@ -86,6 +87,7 @@ export function saveWorkspace(state: LabState): string {
 				? { port, vlan: vlan.vlan }
 				: { port, trunk: { allowed: vlan.allowed, native: vlan.native } },
 		),
+		stp: state.stp,
 		nodes,
 		panels: state.panels.open,
 		order: state.panes.order,
@@ -153,6 +155,13 @@ function readCable(saved: unknown, switches: LabState["switches"]): SwitchCable 
 
 function readCables(saved: unknown, switches: LabState["switches"]): readonly SwitchCable[] {
 	return Array.isArray(saved) ? saved.map((cable: unknown) => readCable(cable, switches)) : invalid();
+}
+
+/** The switches that take part in the spanning tree, each once, in the order of the lab's switches. */
+function readStp(saved: unknown, switches: LabState["switches"]): readonly SwitchName[] {
+	if (!Array.isArray(saved) || new Set(saved).size !== saved.length) return invalid();
+	const names = saved.map((name: unknown) => readSwitch(name, switches));
+	return switches.filter((name) => names.includes(name));
 }
 
 function readVlanId(saved: unknown): VlanId {
@@ -298,6 +307,8 @@ const UPGRADES: readonly ((lab: SavedLab) => SavedLab)[] = [
 			? lab.cables.map((cable: unknown) => (record(cable) ? { ...cable, conditions: {} } : invalid()))
 			: invalid(),
 	}),
+	// No switch took part in a spanning tree.
+	(lab) => ({ ...lab, stp: [] }),
 ];
 const VERSION = UPGRADES.length + 1;
 
@@ -333,6 +344,7 @@ export function restoreWorkspace(base: LabState, raw: string | null): Step {
 	const switches = readSwitches(saved.switches);
 	const switchCables = readCables(saved.cables, switches);
 	const vlans = readVlans(saved.vlans, switches);
+	const stp = readStp(saved.stp, switches);
 	const nodes: BootNode[] = [];
 	const taken: PortRef[] = switchCables.flatMap(({ ends }) => ends);
 	if (taken.some((port, i) => taken.findIndex((other) => samePort(other, port)) !== i)) return invalid();
@@ -386,12 +398,19 @@ export function restoreWorkspace(base: LabState, raw: string | null): Step {
 	)
 		return invalid();
 	const shownSwitch = switches.find((name) => name === saved.shown) ?? DEFAULT_SWITCH;
-	const wired: LabState = { ...base, switches, shownSwitch, switchCables };
+	const wired: LabState = { ...base, switches, shownSwitch, switchCables, stp };
 	const booted = bootMachines(wired, nodes, saved.nextN, 0);
 	// A machine that failed holds no port, so the one it held is in VLAN 1.
 	const state = { ...booted.state, portVlans: heldVlans(booted.state, vlans) };
-	// The cables, what their ports carry and how they treat frames first, so a machine's first frame crosses them.
-	const effects = [...cableEffects(wired), ...vlanEffects(state), ...conditionEffects(state), ...booted.effects];
+	// The spanning tree first, so no cable carries a frame before its switches have agreed on it. Then the cables, what
+	// their ports carry and how they treat frames, so a machine's first frame crosses them.
+	const effects = [
+		...stpEffects(wired),
+		...cableEffects(wired),
+		...vlanEffects(state),
+		...conditionEffects(state),
+		...booted.effects,
+	];
 	const order = Array.isArray(saved.order) ? saved.order : [];
 	const sorted = [...state.rail].sort((a, b) => order.indexOf(a) - order.indexOf(b));
 	let panes = addPanes(base.panes, sorted);

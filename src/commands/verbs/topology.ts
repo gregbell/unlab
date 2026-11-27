@@ -25,6 +25,10 @@ import {
 	plugsOf,
 	portName,
 	type SwitchName,
+	stpOn,
+	type TreePort,
+	treePortAt,
+	treeWord,
 	vlanOf,
 	vlanText,
 	type WrittenConditions,
@@ -78,6 +82,11 @@ export interface ListedPort {
 	readonly cable: ListedCable | null;
 	/** What it carries. A free port is an access port of VLAN 1. */
 	readonly vlan: PortVlan;
+	/**
+	 * What it is in the spanning tree, there while its switch has spanning tree on and its link is up. A port whose
+	 * state is discarding carries nothing: the tree has blocked it.
+	 */
+	readonly stp?: Pick<TreePort, "role" | "state">;
 }
 
 export interface ListedSwitch {
@@ -86,6 +95,8 @@ export interface ListedSwitch {
 	readonly ports: readonly ListedPort[];
 	/** There while it storms. */
 	readonly storm?: ListedStorm;
+	/** There while it has spanning tree on. */
+	readonly stp?: "on";
 }
 
 /** The lab's wiring as `topology_read` returns it. */
@@ -123,9 +134,16 @@ function topologyOf(lab: LabState, carried: (port: PortRef) => CableCounters | u
 					const holder = held.find((other) => other.port === port);
 					const ref = { switch: name, port };
 					const counted = carried(ref) ?? NOTHING_CARRIED;
-					return { port, cable: holder ? cable(holder, counted) : null, vlan: vlanOf(lab, ref) };
+					const tree = treePortAt(lab, ref);
+					return {
+						port,
+						cable: holder ? cable(holder, counted) : null,
+						vlan: vlanOf(lab, ref),
+						...(tree ? { stp: { role: tree.role, state: tree.state } } : {}),
+					};
 				}),
 				...(storm ? { storm: { rate: storm.rate, dropped: storm.dropped } } : {}),
+				...(stpOn(lab, name) ? { stp: "on" as const } : {}),
 			};
 		}),
 		unplugged: machineList(lab).flatMap((machine) => {
@@ -143,11 +161,15 @@ function endText(lab: LabState, to: CableEnd): string {
 	return record && no !== undefined ? nicLabel(record, no) : `${machine}:${nic}`;
 }
 
-/** `node3 · down · booting`. A ready machine's state goes without saying, and so does VLAN 1. */
-function endLine(lab: LabState, to: CableEnd, link: string, vlan: PortVlan | null = null): string {
+/**
+ * `node3 · down · booting`, `wan:8 · up · blocked`. A ready machine's state goes without saying, and so do VLAN 1
+ * and a port that the spanning tree has in use.
+ */
+function endLine(lab: LabState, to: CableEnd, link: string, { vlan, stp }: Partial<ListedPort> = {}): string {
 	const state = to.kind === "port" || to.state === "ready" ? [] : [to.state];
-	const carried = vlan === null || (vlan.mode === "access" && vlan.vlan === 1) ? [] : [vlanText(vlan)];
-	return [endText(lab, to), link, ...state, ...carried].join(" · ");
+	const tree = treeWord(stp);
+	const carried = !vlan || (vlan.mode === "access" && vlan.vlan === 1) ? [] : [vlanText(vlan)];
+	return [endText(lab, to), link, ...state, ...(tree ? [tree] : []), ...carried].join(" · ");
 }
 
 /** `delay 100 ms · loss 20% · 804 delivered · 196 dropped (196 by loss)`. A cable as good as new that dropped nothing says none of it. */
@@ -165,15 +187,17 @@ const stormLine = ({ rate, dropped }: ListedStorm): string =>
 	`storming · ${rate} looped frames a second · ${dropped} dropped`;
 
 function rows(lab: LabState, { switches, unplugged }: Topology): readonly ReportRow[] {
-	const listed = switches.map(({ name, ports: all, storm }): ReportRow => {
-		const taken = all.flatMap(({ port, cable, vlan }) => {
+	const listed = switches.map(({ name, ports: all, storm, stp }): ReportRow => {
+		const taken = all.flatMap((held) => {
+			const { port, cable } = held;
 			if (!cable) return [];
 			const words = cableWords(conditionsAt(lab, { switch: name, port }), cable);
-			return [[`port ${port}`, endLine(lab, cable.to, cable.link, vlan), ...words].join(" · ")];
+			return [[`port ${port}`, endLine(lab, cable.to, cable.link, held), ...words].join(" · ")];
 		});
 		const free = all.flatMap(({ port, cable }) => (cable ? [] : [port]));
 		const lines = [
 			...(storm ? [stormLine(storm)] : []),
+			...(stp ? ["spanning tree on"] : []),
 			...taken,
 			...(free.length === 0 ? [] : [`${ports(free)} · free`]),
 		];
@@ -188,7 +212,7 @@ export const topology = defineVerb({
 	name: "topology",
 	about: "list switches, their ports and what is plugged in",
 	description:
-		"List the wiring: every switch with its eight ports, what each port's cable goes to, its link (up, cut, or down while the machine at its end is not ready), its conditions, what it delivered and dropped (by loss, rate or MTU), and what the port carries: a VLAN, or a trunk's VLANs and its native one. A cable between switches is at both its ports. A storming switch has storm: its looped frames in the last second, and what it dropped. Then the NICs in no switch. Port 3 of lan is lan:3.",
+		"List the wiring: every switch with its eight ports, what each port's cable goes to, its link (up, cut, or down while the machine at its end is not ready), its conditions, what it delivered and dropped, and what the port carries: a VLAN, or a trunk's VLANs and native one. A cable between switches is at both its ports. With spanning tree on, a switch has stp, and each port its role and state: discarding is blocked. A storming switch has storm. Then the NICs in no switch. Port 3 of lan is lan:3.",
 	danger: false,
 	grammar: {},
 	example: {},
@@ -199,10 +223,12 @@ export const topology = defineVerb({
 		const all = data.switches.flatMap(({ ports }) => ports);
 		const taken = all.filter(({ cable }) => cable !== null).length;
 		const storming = data.switches.flatMap(({ name, storm }) => (storm ? [name] : []));
+		const blocked = all.filter(({ stp }) => stp?.state === "discarding").length;
 		const header = [
 			count(data.switches.length, "switch", "switches"),
 			`${taken} of ${all.length} ports taken`,
 			...(storming.length === 0 ? [] : [`${andList(storming)} storming`]),
+			...(blocked === 0 ? [] : [`${count(blocked, "port")} blocked`]),
 			...(impaired(lab) === 0 ? [] : [`${count(impaired(lab), "cable")} with conditions`]),
 		].join(" · ");
 		return { kind: "report", header, blocks: [], rows: rows(lab, data), data };

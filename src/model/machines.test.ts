@@ -142,6 +142,8 @@ const TABLE: Readonly<Record<Phase, Readonly<Record<Column, Outcome>>>> = {
 		"cmd/vlan": "ignored",
 		"cmd/conditions": "booting",
 		"switch/storm": "untouched",
+		"cmd/stp": "untouched",
+		"switch/tree": "ignored",
 		"cmd/shell": "ignored",
 		"cmd/focus": "untouched",
 		"cmd/capture": "untouched",
@@ -181,6 +183,8 @@ const TABLE: Readonly<Record<Phase, Readonly<Record<Column, Outcome>>>> = {
 		"cmd/vlan": "ignored",
 		"cmd/conditions": "ready",
 		"switch/storm": "untouched",
+		"cmd/stp": "untouched",
+		"switch/tree": "ignored",
 		"cmd/shell": "ready",
 		"cmd/focus": "untouched",
 		"cmd/capture": "untouched",
@@ -220,6 +224,8 @@ const TABLE: Readonly<Record<Phase, Readonly<Record<Column, Outcome>>>> = {
 		"cmd/vlan": "ignored",
 		"cmd/conditions": "stopping",
 		"switch/storm": "untouched",
+		"cmd/stp": "untouched",
+		"switch/tree": "ignored",
 		"cmd/shell": "ignored",
 		"cmd/focus": "untouched",
 		"cmd/capture": "untouched",
@@ -259,6 +265,8 @@ const TABLE: Readonly<Record<Phase, Readonly<Record<Column, Outcome>>>> = {
 		"cmd/vlan": "ignored",
 		"cmd/conditions": "off",
 		"switch/storm": "untouched",
+		"cmd/stp": "untouched",
+		"switch/tree": "ignored",
 		"cmd/shell": "ignored",
 		"cmd/focus": "untouched",
 		"cmd/capture": "untouched",
@@ -298,6 +306,8 @@ const TABLE: Readonly<Record<Phase, Readonly<Record<Column, Outcome>>>> = {
 		"cmd/vlan": "ignored",
 		"cmd/conditions": "restoring",
 		"switch/storm": "untouched",
+		"cmd/stp": "untouched",
+		"switch/tree": "ignored",
 		"cmd/shell": "ignored",
 		"cmd/focus": "untouched",
 		"cmd/capture": "untouched",
@@ -337,6 +347,8 @@ const TABLE: Readonly<Record<Phase, Readonly<Record<Column, Outcome>>>> = {
 		"cmd/vlan": "ignored",
 		"cmd/conditions": "ignored",
 		"switch/storm": "untouched",
+		"cmd/stp": "untouched",
+		"switch/tree": "ignored",
 		"cmd/shell": "ignored",
 		"cmd/focus": "untouched",
 		"cmd/capture": "untouched",
@@ -376,6 +388,8 @@ const TABLE: Readonly<Record<Phase, Readonly<Record<Column, Outcome>>>> = {
 		"cmd/vlan": "ignored",
 		"cmd/conditions": "ignored",
 		"switch/storm": "untouched",
+		"cmd/stp": "untouched",
+		"switch/tree": "ignored",
 		"cmd/shell": "ignored",
 		"cmd/focus": "untouched",
 		"cmd/capture": "untouched",
@@ -459,6 +473,13 @@ function eventFor(column: Column, s: LabState, name: MachineName, attempt: numbe
 			return { type: "cmd/conditions", changes: [{ port: port0(1), conditions: conditions({ delay: 100 }) }] };
 		case "switch/storm":
 			return { type: "switch/storm", switch: "switch0", storm: { since: s.now, rate: 100, dropped: 0 } };
+		case "cmd/stp":
+			return { type: "cmd/stp", switches: ["switch0"], on: true };
+		case "switch/tree": {
+			// Of a switch that takes no part, so it is not kept.
+			const bridge = { priority: 32768, address: "02:00:00:00:00:01" };
+			return { type: "switch/tree", switch: "switch0", tree: { bridge, root: bridge, cost: 0, ports: [] } };
+		}
 		case "cmd/shell":
 			return { type: "cmd/shell", machine: name };
 		case "cmd/focus":
@@ -499,6 +520,8 @@ const ADDRESSED = COLUMNS.filter(
 			"cmd/vlan",
 			"cmd/conditions",
 			"switch/storm",
+			"cmd/stp",
+			"switch/tree",
 			"cmd/capture",
 			"cmd/logged",
 		].includes(column),

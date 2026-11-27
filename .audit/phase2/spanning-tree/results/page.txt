@@ -1,0 +1,16 @@
+What e2e/spanning-tree.spec.ts measured on the page, in Chromium on the built app, by the clock of the test's own process:
+from when a command was sent to when the lab's tool said that the effect was there. 16 cores.
+
+At c9ba895:
+a storm in a triangle was over 124 ms after stp on all was typed
+a ping from lan to switch0 was answered 45 ms after the cable at lan:8 was cut
+a loop through a switch with spanning tree off stormed 11688 ms after its cable went in
+
+At 96b13f6, in three runs, before a port was let say what it has heard at once:
+a storm in a triangle was over 116, 149 and 138 ms after stp on all was typed
+a ping from lan to switch0 was answered 62 and 67 ms after the cable at lan:8 was cut
+a loop through a switch with spanning tree off stormed 9733 and 9719 ms after its cable went in
+
+The ping is one ping -c 1 that an agent's tool runs after the cut, so its time is that of the command and its answer. The first ping
+was answered each time. The loop through wan is whole once switch0 and lan have stopped hearing wan, which had taken part until then:
+three hellos, 6 s, and then the 3 s that a port proposes for, and the test sends one broadcast a second to find it.

@@ -218,7 +218,7 @@ describe("a saved lab", () => {
 	test("has each cable's conditions as they were, and tells the switches before its machines boot", () => {
 		const bad = run(lab(), set(port0(1), BAD), set(port0(8), SLOW));
 		const saved = JSON.parse(saveWorkspace(bad));
-		expect(saved.version).toBe(10);
+		expect(saved.version).toBe(11);
 		expect(saved.nodes[0].nics[0].conditions).toEqual({ delay: 100, loss: 20 });
 		expect(saved.nodes[1].nics[0].conditions).toEqual({});
 		expect(saved.cables[0].conditions).toEqual({ rate: 1_000_000, mtu: 1400 });

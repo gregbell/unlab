@@ -46,6 +46,7 @@ import {
 	visiblePanes,
 } from "./panes.ts";
 import { later, patch, step } from "./step.ts";
+import { setStp, settleStp, tree } from "./stp.ts";
 import { addSwitch, removeSwitch, showSwitch } from "./switches.ts";
 import {
 	type AgentCall,
@@ -91,6 +92,7 @@ export const DEFAULT_POLICIES: Readonly<Record<ToolName, Policy>> = {
 	switch_uncable: "run",
 	port_vlan: "run",
 	port_trunk: "run",
+	switch_stp: "run",
 	checkpoint_save: "run",
 	checkpoint_restore: "ask",
 	checkpoint_remove: "ask",
@@ -121,6 +123,8 @@ export function initialState(
 		switchCables: [],
 		portVlans: [],
 		storms: {},
+		stp: [],
+		trees: {},
 		sessions: {},
 		panes: emptyPanes(gridFor(area.width, area.height)),
 		keyboard: NOWHERE,
@@ -185,6 +189,8 @@ function reduce(state: LabState, event: LabEvent): Step {
 			return restored(state, event.machine, event.attempt, event.set, event.at);
 		case "switch/storm":
 			return storm(state, event.switch, event.storm);
+		case "switch/tree":
+			return tree(state, event.switch, event.tree);
 		case "session/opened":
 			return sessionOpened(state, event.session);
 		case "session/ended":
@@ -231,6 +237,8 @@ function reduce(state: LabState, event: LabEvent): Step {
 			return setVlan(state, event.port, event.vlan);
 		case "cmd/conditions":
 			return setConditions(state, event.changes);
+		case "cmd/stp":
+			return setStp(state, event.switches, event.on);
 		case "cmd/shell":
 			return shell(state, event.machine);
 		case "cmd/focus":
@@ -303,12 +311,14 @@ function reduce(state: LabState, event: LabEvent): Step {
  * last machine is gone, or it would hide the next one. The keyboard is on a
  * visible pane whenever there is one. A port that nothing is in is in VLAN 1,
  * and the switches treat each cable's frames as the lab has its conditions.
+ * A switch takes part in the spanning tree only while it is there and told to.
  * The clock runs fast only while something boots.
  */
 function settle(before: LabState, reduced: Step): Step {
 	const vlans = settleVlans(before, reduced.state);
-	const state = settleKeyboard(followMachines(vlans.state));
-	const effects = [...reduced.effects, ...vlans.effects, ...settleConditions(before, state)];
+	const stp = settleStp(before, vlans.state);
+	const state = settleKeyboard(followMachines(stp.state));
+	const effects = [...reduced.effects, ...vlans.effects, ...stp.effects, ...settleConditions(before, state)];
 	const hz = clockHz(state);
 	return hz === clockHz(before) ? step(state, effects) : step(state, [...effects, { type: "clock", hz }]);
 }

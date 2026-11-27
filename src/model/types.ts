@@ -137,6 +137,41 @@ export interface Storm {
 	readonly dropped: number;
 }
 
+/**
+ * What a port is in its switch's spanning tree: its way to the root, a way
+ * from the root to whatever is on its cable, or a spare of either, which
+ * carries nothing: an alternate to the root port, or a backup to another port
+ * of its own switch.
+ */
+export type TreeRole = "root" | "designated" | "alternate" | "backup";
+
+/** What a port of a switch with spanning tree on does with frames: drops them, drops them and learns from them, or carries them. */
+export type TreeState = "discarding" | "learning" | "forwarding";
+
+export interface TreePort {
+	readonly port: PortNo;
+	readonly role: TreeRole;
+	readonly state: TreeState;
+}
+
+/** A switch as the spanning tree knows it. The lower priority wins, and then the lower address. */
+export interface BridgeRef {
+	readonly priority: number;
+	/** As a MAC is written. */
+	readonly address: string;
+}
+
+/** A switch's part in the spanning tree, as its messages with its neighbours left it. */
+export interface Tree {
+	readonly bridge: BridgeRef;
+	/** The switch that every one of the tree counts its way to. Its own, for the root. */
+	readonly root: BridgeRef;
+	/** What its way to the root costs: 0 for the root. */
+	readonly cost: number;
+	/** The ports whose link is up, lowest first. */
+	readonly ports: readonly TreePort[];
+}
+
 // ───────────────────────────── machines ─────────────────────────────
 
 export type Source = "bar" | "button" | "agent" | "cli";
@@ -393,6 +428,7 @@ export type ToolName =
 	| "switch_uncable"
 	| "port_vlan"
 	| "port_trunk"
+	| "switch_stp"
 	| "checkpoint_save"
 	| "checkpoint_restore"
 	| "checkpoint_remove"
@@ -494,6 +530,10 @@ export interface LabState {
 	readonly portVlans: readonly VlanPort[];
 	/** The switches that are storming now, as the runtime last said. Never saved. */
 	readonly storms: Readonly<Partial<Record<SwitchName, Storm>>>;
+	/** The switches that take part in the spanning tree, in the order of `switches`. A new switch takes none. */
+	readonly stp: readonly SwitchName[];
+	/** What each of those is in the tree, as the runtime last said, once it has. Never saved. */
+	readonly trees: Readonly<Partial<Record<SwitchName, Tree>>>;
 	readonly sessions: Readonly<Partial<Record<SessionId, Session>>>;
 	readonly panes: Panes;
 	readonly keyboard: Keyboard;
@@ -670,6 +710,8 @@ export type RuntimeEvent =
 	  }
 	/** A switch began to storm, its storm goes on with these numbers, or with null it is over. */
 	| { readonly type: "switch/storm"; readonly switch: SwitchName; readonly storm: Storm | null }
+	/** A switch's part in the spanning tree has changed. */
+	| { readonly type: "switch/tree"; readonly switch: SwitchName; readonly tree: Tree }
 	| { readonly type: "session/opened"; readonly session: SessionId }
 	| { readonly type: "session/ended"; readonly session: SessionId }
 	| { readonly type: "session/shell"; readonly session: SessionId; readonly shell: "prompt" | "running" }
@@ -694,6 +736,7 @@ export type CommandEvent =
 	| { readonly type: "cmd/cable-link"; readonly changes: readonly CableChange[]; readonly cause: Cause }
 	| { readonly type: "cmd/vlan"; readonly port: PortRef; readonly vlan: PortVlan }
 	| { readonly type: "cmd/conditions"; readonly changes: readonly ConditionsChange[] }
+	| { readonly type: "cmd/stp"; readonly switches: readonly SwitchName[]; readonly on: boolean }
 	| { readonly type: "cmd/shell"; readonly machine: MachineName }
 	| {
 			readonly type: "cmd/focus";
@@ -837,6 +880,8 @@ export type Effect =
 	| { readonly type: "port/vlan"; readonly port: PortRef; readonly vlan: PortVlan }
 	/** How the cable in the port treats frames from now on. One between switches is told at both its ports. */
 	| { readonly type: "port/conditions"; readonly port: PortRef; readonly conditions: Conditions }
+	/** The switch takes part in the spanning tree from now on, or takes none. It reports switch/tree as its part changes. */
+	| { readonly type: "switch/stp"; readonly switch: SwitchName; readonly on: boolean }
 	| { readonly type: "pty/open"; readonly session: SessionId }
 	| { readonly type: "pty/close"; readonly session: SessionId }
 	| { readonly type: "screen/create"; readonly session: SessionId }

@@ -40,6 +40,15 @@
 // NIC's cable with conditions is a queue in each direction too, and is a call
 // again once it has none and nothing waits in it.
 //
+// A switch can take part in a spanning tree, which is one protocol for every
+// VLAN. It then sends and reads the protocol's messages as frames along its
+// cables, to machines too, and a port that the tree keeps out of use takes
+// and sends nothing else. `rstp.ts` is the protocol. Its timers run when
+// `drain` is called, and `timer` says when the next of them is due. A frame for
+// the bridges' own address is never sent on: a switch with spanning tree off
+// drops it, as a bridge that keeps to 802.1D does, so two switches do not
+// hear each other through a third that takes no part.
+//
 // Addresses are numbers here. They are text only where someone reads a table.
 
 import {
@@ -51,8 +60,10 @@ import {
 	hasConditions,
 	type PortNo,
 	type PortVlan,
+	type Tree,
 } from "../model/index.ts";
 import {
+	BRIDGE_GROUP,
 	ETH_HDR,
 	ETH_MAX,
 	type Flood,
@@ -63,6 +74,7 @@ import {
 	withoutTag,
 	withTag,
 } from "../net/index.ts";
+import { Bridge } from "./rstp.ts";
 
 export interface PortCounters {
 	rxFrames: number;
@@ -141,6 +153,16 @@ export interface FabricEvents {
 	tap?(slot: number, e: TapEvent): void;
 	/** A switch began to storm, or its storm is over: the reading is then what it came to. */
 	storm?(slot: number, reading: StormReading, over: boolean): void;
+	/** A switch's part in the spanning tree has changed: its root, or what one of its ports is or does. */
+	tree?(slot: number, reading: Tree): void;
+}
+
+/** A switch as the spanning tree is to know it. */
+export interface BridgeConfig {
+	/** Its MAC as one number, which no other switch of the lab has. */
+	readonly address: number;
+	/** Left out, 32768. */
+	readonly priority?: number;
 }
 
 export interface FabricOptions {
@@ -413,6 +435,10 @@ class Switch {
 	/** When a looped frame last came in. */
 	loopedAt = 0;
 	storm: Storm | null = null;
+	/** Its part in the spanning tree, or null while it takes none. */
+	tree: Bridge | null = null;
+	/** The reading of its tree that its owner was last told, by its version. */
+	treeTold = 0;
 }
 
 function tableOf(sw: Switch, vlan: number): Map<number, Learned> {
@@ -474,6 +500,8 @@ export class Fabric {
 	#waiting = 0;
 	/** Those of them that wait their turn. */
 	#pacedWaiting = 0;
+	/** How many switches take part in a spanning tree. */
+	#trees = 0;
 
 	constructor(events: FabricEvents = {}, options: FabricOptions = {}) {
 		this.#events = events;
@@ -500,6 +528,7 @@ export class Fabric {
 		if (!sw) return;
 		for (let port = 1; port <= PORTS; port++) this.detach(slot, port as PortNo);
 		this.#switches[slot] = undefined;
+		if (sw.tree) this.#trees--;
 		if (!sw.storm) return;
 		this.#storming--;
 		this.#events.storm?.(slot, readingOf(sw.storm, now), true);
@@ -509,6 +538,7 @@ export class Fabric {
 	attach(slot: number, port: PortNo, sink: SwitchPort): void {
 		this.#free(slot, port)[port] = { up: true, sink, out: null, in: null, counters: newCounters(), tally: newTally() };
 		this.#fit(slot, port);
+		this.#switches[slot]?.tree?.enable(port, true);
 	}
 
 	/** A NIC's cable that has conditions is a queue in each direction, from then on. */
@@ -536,6 +566,7 @@ export class Fabric {
 		portsA[a.port] = { ...end, out: ab, counters: newCounters() };
 		portsB[b.port] = { ...end, out: ba, counters: newCounters() };
 		this.#dirs.push(ab, ba);
+		for (const { slot, port } of [a, b]) this.#switches[slot]?.tree?.enable(port, false);
 	}
 
 	#free(slot: number, port: PortNo): (Port | undefined)[] {
@@ -572,6 +603,44 @@ export class Fabric {
 	#unplug(sw: Switch, port: number): void {
 		sw.ports[port] = undefined;
 		forget(sw, port);
+		sw.tree?.disable(port as PortNo);
+	}
+
+	/**
+	 * The switch takes part in the spanning tree as this bridge from now on, or with null takes none, and every port
+	 * of it carries frames again. One that begins forgets what it learned, and no port of it carries a frame until
+	 * `drain` has run its tree: a machine's then does at once, and a cable to a switch when the two have agreed.
+	 */
+	setTree(slot: number, bridge: BridgeConfig | null): void {
+		const sw = this.#switches[slot];
+		if (!sw) return;
+		if (sw.tree) this.#trees--;
+		sw.tree = null;
+		if (!bridge) return;
+		const tree = new Bridge(
+			bridge.address,
+			{
+				send: (p, frame, now) => {
+					const port = sw.ports[p];
+					if (port) this.#send(sw, p, port, frame, now, FRESH);
+				},
+				flush: (p) => forget(sw, p),
+			},
+			bridge.priority,
+		);
+		this.#trees++;
+		sw.tree = tree;
+		sw.treeTold = 0;
+		sw.tables.clear();
+		for (let p = 1; p <= PORTS; p++) {
+			const port = sw.ports[p];
+			if (port?.up) tree.enable(p as PortNo, port.sink !== null);
+		}
+	}
+
+	/** The switch's part in the spanning tree, or null for one that takes none. */
+	tree(slot: number): Tree | null {
+		return this.#switches[slot]?.tree?.reading() ?? null;
 	}
 
 	/** What the port carries from now on. The switch forgets what it had learned on it. */
@@ -615,6 +684,10 @@ export class Fabric {
 	}
 
 	#setEnd(sw: Switch, port: number, held: Port, up: boolean): void {
+		if (held.up !== up) {
+			if (up) sw.tree?.enable(port as PortNo, held.sink !== null);
+			else sw.tree?.disable(port as PortNo);
+		}
 		held.up = up;
 		for (const dir of [held.out, held.in]) {
 			if (!dir) continue;
@@ -678,9 +751,65 @@ export class Fabric {
 		return this.#waiting;
 	}
 
-	/** Whether `drain` has anything to do, now or later. */
+	/** Whether `drain` has anything to do, now or later, but for the spanning tree's timers, which `timer` has. */
 	get busy(): boolean {
-		return this.#waiting > 0 || this.#storming > 0;
+		return this.#waiting > 0 || this.#storming > 0 || this.#treePending();
+	}
+
+	/** Whether a switch's tree was told something that it has not yet worked out. */
+	#treePending(): boolean {
+		if (this.#trees === 0) return false;
+		for (const sw of this.#switches) if (sw?.tree?.pending) return true;
+		return false;
+	}
+
+	/**
+	 * When a spanning tree timer next runs out, or -1 with none. The protocol counts in seconds, so whoever calls
+	 * `drain` then needs to be no more exact than a timer is.
+	 */
+	timer(): number {
+		let at = Number.POSITIVE_INFINITY;
+		if (this.#trees > 0) for (const sw of this.#switches) if (sw?.tree && sw.tree.due < at) at = sw.tree.due;
+		return Number.isFinite(at) ? at : -1;
+	}
+
+	#runTree(sw: Switch, slot: number, now: number): void {
+		const { tree } = sw;
+		if (!tree) return;
+		tree.run(now);
+		if (tree.version === sw.treeTold) return;
+		sw.treeTold = tree.version;
+		this.#events.tree?.(slot, tree.reading());
+	}
+
+	/**
+	 * A frame for the bridges' own address goes to the switch's tree and no further. The tap has it as a frame that
+	 * went to no port, in the first VLAN, which a row leaves unsaid: it is in none.
+	 */
+	#toBridge(sw: Switch, slot: number, from: PortNo, src: Port, frame: Uint8Array, now: number): void {
+		const { tree } = sw;
+		if (!tree) {
+			src.counters.dropped++;
+			return;
+		}
+		sw.totals.in++;
+		try {
+			const snapshot = frame.slice();
+			this.#events.tap?.(slot, {
+				from,
+				to: 0,
+				flood: null,
+				frame: snapshot,
+				looped: false,
+				vlan: 1,
+				tagged: 0,
+				dropped: NO_DROPS,
+			});
+		} catch {
+			// A broken inspector must never break the wire.
+		}
+		tree.receive(from, frame, now);
+		this.#runTree(sw, slot, now);
 	}
 
 	/** A machine put a frame on the wire. */
@@ -725,6 +854,10 @@ export class Fabric {
 			return;
 		}
 		src.tally.delivered++;
+		if (frame[0] & 1 && macAt(frame, 0) === BRIDGE_GROUP) {
+			this.#toBridge(sw, slot, from as PortNo, src, frame, now);
+			return;
+		}
 
 		// An access port reads a tag as a trunk does, so it takes a frame tagged with its own VLAN and no other.
 		const mode = sw.modes[from];
@@ -733,6 +866,13 @@ export class Fabric {
 		const longest = tag === null ? ETH_MAX : ETH_MAX + TAG_BYTES;
 		if (vlan === RESERVED_VLAN || !carries(mode, vlan) || frame.length > longest) {
 			src.counters.dropped++;
+			return;
+		}
+		// A port that the spanning tree keeps out of use takes no frame, and one on its way into use only learns from it.
+		const { tree } = sw;
+		if (tree && !tree.forwards(from)) {
+			src.counters.dropped++;
+			if (tree.learns(from)) this.#learn(sw, tableOf(sw, vlan), macAt(frame, 6), from, now);
 			return;
 		}
 		const looped = came !== null && (came.looped || hasLeft(came.trail, slot, vlan));
@@ -760,7 +900,7 @@ export class Fabric {
 		let dropped = NO_DROPS;
 		const out = (p: number, port: Port): boolean => {
 			const egress = sw.modes[p];
-			if (!carries(egress, vlan)) return false;
+			if (!carries(egress, vlan) || (tree && !tree.forwards(p))) return false;
 			sent ??= looped
 				? LOOPED
 				: {
@@ -944,11 +1084,19 @@ export class Fabric {
 
 	/**
 	 * Carry up to `most` frames that are due across their cables, one from each
-	 * direction in turn, and end the storms that have gone quiet. Returns how
-	 * many turns it took: zero when nothing was due.
+	 * direction in turn, and end the storms that have gone quiet. Before that,
+	 * run each spanning tree that was told something or has a timer that ran
+	 * out, so that what it sends is carried in the same call. Returns how many
+	 * turns it took: zero when no frame was due.
 	 */
 	drain(now: number, most: number): number {
 		this.#settle(now);
+		if (this.#trees > 0) {
+			for (let slot = 0; slot < SLOTS; slot++) {
+				const sw = this.#switches[slot];
+				if (sw?.tree && (sw.tree.pending || sw.tree.due <= now)) this.#runTree(sw, slot, now);
+			}
+		}
 		for (const dir of this.#dirs) this.#arm(dir, now);
 		let turns = 0;
 		for (; turns < most && this.#readyHead < this.#ready.length; turns++) {
@@ -1048,9 +1196,9 @@ export class Fabric {
 		}
 	}
 
-	/** When `drain` next has something to do: 0 for now, or -1 when nothing waits. */
+	/** When `drain` next has something to do, but for a spanning tree's timer: 0 for now, or -1 when nothing waits. */
 	next(): number {
-		if (this.#readyHead < this.#ready.length) return 0;
+		if (this.#readyHead < this.#ready.length || this.#treePending()) return 0;
 		let at = -1;
 		for (const dir of this.#dirs) {
 			if (dir.head === dir.q.length) continue;

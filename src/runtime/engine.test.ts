@@ -20,9 +20,10 @@ import {
 	type SessionId,
 	type StopHow,
 	type SwitchName,
+	type Tree,
 } from "../model/index.ts";
 
-import { defaultAddress } from "../net/index.ts";
+import { defaultAddress, isForBridges } from "../net/index.ts";
 import { createEngine, ExecRefused } from "./engine.ts";
 import { Fabric } from "./fabric.ts";
 import type { CopyJob, CopyReport } from "./protocol.ts";
@@ -1770,6 +1771,62 @@ describe("cables between switches", () => {
 		expect(vm2.sent.length).toBe(sent);
 		t.intervals[0].fn();
 		expect(t.take().filter((e) => e.type === "switch/storm")).toEqual([]);
+	});
+
+	test("that make a loop do not storm once their switches take part in the spanning tree: the store is told each one's part, the machines get its messages, and a switch that stops lets the loop storm", () => {
+		const t = three();
+		const [vm1, vm2, vm3] = t.vms;
+		const loop = [
+			cable,
+			[
+				{ switch: lan, port: 8 },
+				{ switch: wan, port: 7 },
+			],
+			[
+				{ switch: wan, port: 8 },
+				{ switch: "switch0", port: 7 },
+			],
+		] as const;
+		for (const ends of loop) t.run(...up(ends));
+		t.take();
+		for (const name of ["switch0", lan, wan] as const) t.run({ type: "switch/stp", switch: name, on: true });
+
+		/** What the store was last told of each switch. */
+		const parts = new Map<SwitchName, Tree>();
+		for (const e of t.take()) if (e.type === "switch/tree") parts.set(e.switch, e.tree);
+		expect([...parts.keys()].sort()).toEqual(["lan", "switch0", "wan"]);
+		expect(new Set([...parts.values()].map((tree) => tree.root.address)).size).toBe(1);
+		const ports = [...parts].flatMap(([name, tree]) =>
+			tree.ports.map(({ port, role, state }) => `${name}:${port} ${role} ${state}`),
+		);
+		expect(ports).toHaveLength(9);
+		// Of the six ports that the three cables are in, one is kept out of use, with no timer run.
+		expect(ports.filter((port) => !port.endsWith(" forwarding"))).toEqual([
+			expect.stringMatching(/:[78] alternate discarding$/),
+		]);
+		expect(parts.get("switch0")?.bridge).toEqual({ priority: 32768, address: expect.stringMatching(/^02:00:/) });
+
+		const heard = (vm: (typeof t.vms)[number]) => vm.sent.filter(([, , frame]) => !isForBridges(frame as Uint8Array));
+		vm1.sink.frame(vm1.ref, 0, arpRequest(1, 9));
+		t.clock.pass(2500);
+		expect([heard(vm2), heard(vm3)]).toEqual([[["deliver", 0, arpRequest(1, 9)]], [["deliver", 0, arpRequest(1, 9)]]]);
+		expect(t.take().filter((e) => e.type === "switch/storm" || e.type === "switch/tree")).toEqual([]);
+		// Each machine was told the tree at the hello, as a frame.
+		expect(vm2.sent.filter(([, , frame]) => isForBridges(frame as Uint8Array))).not.toEqual([]);
+
+		// wan stops. The others stop hearing it, and take their ports towards it into use: the loop is whole again.
+		t.run({ type: "switch/stp", switch: wan, on: false });
+		t.clock.pass(10_000);
+		vm1.sink.frame(vm1.ref, 0, arpRequest(1, 9));
+		t.clock.pass(500);
+		const events = t.take();
+		expect(
+			events
+				.filter((e) => e.type === "switch/storm")
+				.map((e) => e.switch)
+				.sort(),
+		).toEqual(["lan", "switch0", "wan"]);
+		expect(events.filter((e) => e.type === "switch/tree" && e.switch === wan)).toEqual([]);
 	});
 
 	test("end with a switch that is removed while it storms: the capture says so of it, and of the others once they are quiet", () => {

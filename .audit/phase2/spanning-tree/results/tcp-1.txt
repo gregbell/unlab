@@ -1,0 +1,60 @@
+TCP between two guests with spanning tree off, on one switch and across one cable between two switches, sides in turn:
+ONLY="one,one cable" node .audit/phase2/cables/drive.mjs tcp 6 42a808c=<dist> c9ba895=<dist>
+42a808c is main. c9ba895 is this slice. 16 cores, load average 0.9 before the run. Each run sends 256 MiB after 16 MiB to warm up, and
+fails on a short transfer. The first run of each also has the cores that the busiest threads used in a second transfer: the page's own
+thread is at 0.92 to 0.95 of a core, which is what bounds the rate.
+
+run 0 42a808c one: 740 Mbit/s, ping avg 1.363 ms, receiver took 280680114 bytes threads in a second transfer: chromium MAIN 0.95, DedicatedWorker 0.92, DedicatedWorker 0.69, ThreadPoolForeg 0.28, ThreadPoolForeg 0.12, DedicatedWorker 0.09
+run 0 42a808c one cable: 590 Mbit/s, ping avg 1.503 ms, receiver took 280672458 bytes threads in a second transfer: chromium MAIN 0.93, DedicatedWorker 0.88, DedicatedWorker 0.60, ThreadPoolForeg 0.34, ThreadPoolForeg 0.13, ThreadPoolForeg 0.10
+run 0 c9ba895 one: 713 Mbit/s, ping avg 1.338 ms, receiver took 280678992 bytes threads in a second transfer: chromium MAIN 0.95, DedicatedWorker 0.92, DedicatedWorker 0.69, ThreadPoolForeg 0.28, ThreadPoolForeg 0.16, ThreadPoolForeg 0.10
+run 0 c9ba895 one cable: 597 Mbit/s, ping avg 1.466 ms, receiver took 280672128 bytes threads in a second transfer: chromium MAIN 0.92, DedicatedWorker 0.91, DedicatedWorker 0.62, ThreadPoolForeg 0.31, ThreadPoolForeg 0.19, ThreadPoolForeg 0.16
+run 1 42a808c one: 722 Mbit/s, ping avg 1.332 ms, receiver took 280679256 bytes
+run 1 42a808c one cable: 604 Mbit/s, ping avg 1.469 ms, receiver took 280673712 bytes
+run 1 c9ba895 one: 739 Mbit/s, ping avg 1.281 ms, receiver took 280680444 bytes
+run 1 c9ba895 one cable: 589 Mbit/s, ping avg 1.446 ms, receiver took 280672392 bytes
+run 2 42a808c one: 743 Mbit/s, ping avg 1.233 ms, receiver took 280679982 bytes
+run 2 42a808c one cable: 589 Mbit/s, ping avg 1.463 ms, receiver took 280672392 bytes
+run 2 c9ba895 one: 719 Mbit/s, ping avg 1.184 ms, receiver took 280680708 bytes
+run 2 c9ba895 one cable: 582 Mbit/s, ping avg 1.34 ms, receiver took 280681170 bytes
+run 3 42a808c one: 724 Mbit/s, ping avg 1.173 ms, receiver took 280680246 bytes
+run 3 42a808c one cable: 621 Mbit/s, ping avg 1.411 ms, receiver took 280673910 bytes
+run 3 c9ba895 one: 667 Mbit/s, ping avg 1.375 ms, receiver took 280682622 bytes
+run 3 c9ba895 one cable: 577 Mbit/s, ping avg 1.528 ms, receiver took 280673910 bytes
+run 4 42a808c one: 728 Mbit/s, ping avg 1.146 ms, receiver took 280679520 bytes
+run 4 42a808c one cable: 597 Mbit/s, ping avg 1.231 ms, receiver took 280673316 bytes
+run 4 c9ba895 one: 703 Mbit/s, ping avg 1.237 ms, receiver took 280678926 bytes
+run 4 c9ba895 one cable: 573 Mbit/s, ping avg 2.071 ms, receiver took 280671204 bytes
+run 5 42a808c one: 694 Mbit/s, ping avg 1.215 ms, receiver took 280679256 bytes
+run 5 42a808c one cable: 604 Mbit/s, ping avg 1.343 ms, receiver took 280672590 bytes
+run 5 c9ba895 one: 734 Mbit/s, ping avg 1.336 ms, receiver took 280679784 bytes
+run 5 c9ba895 one cable: 601 Mbit/s, ping avg 1.461 ms, receiver took 280673118 bytes
+42a808c one: TCP Mbit/s 728 [694-743], ping avg ms 1.23 [1.15-1.36], n=6
+42a808c one cable: TCP Mbit/s 604 [589-621], ping avg ms 1.46 [1.23-1.50], n=6
+c9ba895 one: TCP Mbit/s 719 [667-739], ping avg ms 1.34 [1.18-1.38], n=6
+c9ba895 one cable: TCP Mbit/s 589 [573-601], ping avg ms 1.47 [1.34-2.07], n=6
+
+Across the cable the slice's median was 2.5% under main's, with ranges that overlap (rank sum U = 6 of 36, p about 0.07). What the slice adds
+to a frame's way is three calls that return at once while no switch takes part in a tree, against some 15 microseconds a frame, so the
+run was made again for the cable alone, with the slice first in each round and eight runs a side:
+ONLY="one cable" node .audit/phase2/cables/drive.mjs tcp 8 c9ba895=<dist> 42a808c=<dist>
+
+run 0 c9ba895 one cable: 588 Mbit/s, ping avg 1.351 ms, receiver took 280671534 bytes threads in a second transfer: chromium MAIN 0.97, DedicatedWorker 0.84, DedicatedWorker 0.68, ThreadPoolForeg 0.35, DedicatedWorker 0.21, ThreadPoolForeg 0.17
+run 0 42a808c one cable: 604 Mbit/s, ping avg 1.451 ms, receiver took 280673448 bytes threads in a second transfer: chromium MAIN 0.92, DedicatedWorker 0.82, DedicatedWorker 0.70, DedicatedWorker 0.46, ThreadPoolForeg 0.37, ThreadPoolForeg 0.20
+run 1 c9ba895 one cable: 619 Mbit/s, ping avg 1.479 ms, receiver took 280675626 bytes
+run 1 42a808c one cable: 597 Mbit/s, ping avg 1.405 ms, receiver took 280671072 bytes
+run 2 c9ba895 one cable: 660 Mbit/s, ping avg 1.444 ms, receiver took 280677804 bytes
+run 2 42a808c one cable: 604 Mbit/s, ping avg 1.605 ms, receiver took 280671468 bytes
+run 3 c9ba895 one cable: 609 Mbit/s, ping avg 1.618 ms, receiver took 280671600 bytes
+run 3 42a808c one cable: 595 Mbit/s, ping avg 1.406 ms, receiver took 280671270 bytes
+run 4 c9ba895 one cable: 583 Mbit/s, ping avg 1.596 ms, receiver took 280674108 bytes
+run 4 42a808c one cable: 596 Mbit/s, ping avg 1.418 ms, receiver took 280671204 bytes
+run 5 c9ba895 one cable: 613 Mbit/s, ping avg 1.506 ms, receiver took 280672656 bytes
+run 5 42a808c one cable: 630 Mbit/s, ping avg 1.569 ms, receiver took 280674108 bytes
+run 6 c9ba895 one cable: 583 Mbit/s, ping avg 1.374 ms, receiver took 280673316 bytes
+run 6 42a808c one cable: 590 Mbit/s, ping avg 1.406 ms, receiver took 280672062 bytes
+run 7 c9ba895 one cable: 602 Mbit/s, ping avg 1.577 ms, receiver took 280673712 bytes
+run 7 42a808c one cable: 612 Mbit/s, ping avg 1.67 ms, receiver took 280673844 bytes
+c9ba895 one cable: TCP Mbit/s 609 [583-660], ping avg ms 1.51 [1.35-1.62], n=8
+42a808c one cable: TCP Mbit/s 604 [590-630], ping avg ms 1.45 [1.41-1.67], n=8
+
+No measurable difference: the side that runs second in a round is the slower by a little, whichever it is.

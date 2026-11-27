@@ -1,0 +1,26 @@
+A root that is cut off from a ring of three switches, with one broadcast into the ring every 100 ms: node .audit/phase2/spanning-tree/root-cut.mjs <checkout>
+Each port is its number, its role (r, d, a) and whether it carries (f) or not (d).
+
+With a port held to six messages in a second, as 802.1D-2004 has it and as 96b13f6 had it:
+before a:2df b:2rf,7df,8df c:7df,8rf d:7rf,8ad
+at the cut a: b:7dd,8rf c:7df,8rf d:7dd,8rf
+100 ms after a: b:7dd,8rf c:7df,8rf d:7dd,8rf looped 0
+1000 ms after a: b:7df,8df c:7dd,8rf d:7df,8rf looped 0
+3000 ms after a: b:7df,8rf c:7df,8rf d:7dd,8rf looped 0
+6000 ms after a: b:7df,8df c:7df,8rf d:7dd,8rf looped 0
+12000 ms after a: b:7df,8df c:7df,8rf d:7rf,8ad looped 0
+29999 ms after a: b:7df,8df c:7df,8rf d:7rf,8ad looped 0
+no frame looped, and no switch stormed
+messages after the cut: 127, ages up to 20
+
+With the bound that the lab has now:
+before a:2df b:2rf,7df,8df c:7df,8rf d:7rf,8ad
+at the cut a: b:7df,8df c:7df,8rf d:7rf,8ad
+100 ms after a: b:7df,8df c:7df,8rf d:7rf,8ad looped 0
+1000 ms after a: b:7df,8df c:7df,8rf d:7rf,8ad looped 0
+3000 ms after a: b:7df,8df c:7df,8rf d:7rf,8ad looped 0
+6000 ms after a: b:7df,8df c:7df,8rf d:7rf,8ad looped 0
+12000 ms after a: b:7df,8df c:7df,8rf d:7rf,8ad looped 0
+29999 ms after a: b:7df,8df c:7df,8rf d:7rf,8ad looped 0
+no frame looped, and no switch stormed
+messages after the cut: 145, ages up to 20

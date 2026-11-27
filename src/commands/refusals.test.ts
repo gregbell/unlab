@@ -446,6 +446,14 @@ const ROWS: readonly Row[] = [
 		"unplug takes one NIC at a time, such as node2 or node2:eth1, not node*.",
 		["cable_unplug", { nic: "node*" }],
 	],
+	["stp on wan", "No switch is called wan, so use switch0 or all.", ["switch_stp", { stp: "on", switches: "wan" }]],
+	[
+		"stp off switch0,nope",
+		"No switch is called nope, so use switch0 or all.",
+		["switch_stp", { stp: "off", switches: "switch0,nope" }],
+	],
+	["stp maybe all", "stp wants on or off here, not maybe.", ["switch_stp", { stp: "maybe", switches: "all" }]],
+	["stp on switch0,", "stp wants switches such as switch0,lan or all here, not switch0,."],
 	[
 		"capture bogus",
 		"capture cannot read bogus, so use a protocol, a machine, a NIC (node2:eth1), an address, a MAC, vlan N or port:N.",
