@@ -1387,10 +1387,7 @@ describe("spanning tree", () => {
 		"c7 root forwarding",
 		"c8 alternate discarding",
 	];
-	/**
-	 * Long enough after the switches have agreed that each port may send again at once: a port sends six messages
-	 * in a second and then one a second, and agreeing takes most of the six.
-	 */
+	/** Long enough after the switches have agreed: for three seconds a port that began to carry says that the topology changed. */
 	const QUIET_MS = 10_000;
 	const message = (from: number) => {
 		const id = bridgeIdOf(0x8000, 0x5254_0088_0000 + 10 + from);
@@ -1498,7 +1495,6 @@ describe("spanning tree", () => {
 	test("brings the blocked port into use when a cable in use is cut, and the switch that had learned the old way forgets it", () => {
 		const t = net(ALL, TRIANGLE);
 		t.stp(ALL);
-		t.run(QUIET_MS);
 		t.send("c", arpRequest(3, 2));
 		t.run(5);
 		t.send("b", arpReply(2, 3));

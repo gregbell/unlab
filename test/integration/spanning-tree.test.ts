@@ -132,8 +132,6 @@ test("cutting a cable in use brings the blocked port into use, and pings resume 
 		await agreed(lab);
 		assert.ok(await pings(lab, 2, "node1"), "node3 reaches node1 by the cable between their switches");
 		assert.ok(await pings(lab, 1, "node3"), "and node2 reaches node3 by the root");
-		// Long enough that each port may send at once again: agreeing took most of the six messages a second allows.
-		await wait(3 * HELLO_MS);
 
 		// With node3 silent, the cable is cut. Switch 1 has node3 by way of the root, and node2 has its address, so node2's
 		// ping is one frame for node3 and no question to everyone: it arrives only if switch 1 was told to forget.
@@ -145,7 +143,6 @@ test("cutting a cable in use brings the blocked port into use, and pings resume 
 		assert.equal(asked(lab, "10.88.0.13").filter((e) => e.at >= quietAt).length, 0, "and node2 asked nobody for node3");
 		lab.switches[2].setLink(7, true);
 		await until(() => ports(lab).join() === BLOCKED.join(), 2000, "the cable is back in use");
-		await wait(3 * HELLO_MS);
 
 		// node3 pings node1 fifty times a second, and the cable that carries them is cut.
 		const gaps: number[] = [];
@@ -178,7 +175,6 @@ test("cutting a cable in use brings the blocked port into use, and pings resume 
 			await until(() => ports(lab).join() === BLOCKED.join(), 2000, "the cable is back in use");
 			assert.equal(lab.storms.length, 0, "with no storm");
 			assert.ok(await pings(lab, 2, "node1", 1), "and it carries node3's pings again");
-			await wait(3 * HELLO_MS);
 		}
 		const sorted = [...gaps].sort((a, b) => a - b);
 		measured(

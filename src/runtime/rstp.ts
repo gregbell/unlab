@@ -9,6 +9,8 @@
 // out: a port that is shared by more than two bridges, a dispute over a cable
 // that carries one way only, and sending classic spanning tree to a bridge
 // that speaks no other. A classic message is read, as a designated port's.
+// One number is not the standard's: how many messages a port may send in a
+// second, which `TX_HOLD` says why.
 //
 // A port is safe from the moment it is enabled: it neither learns nor forwards
 // until the procedures have said that it may.
@@ -32,8 +34,14 @@ export const FORWARD_DELAY_MS = 15_000;
 const MAX_AGE_S = 20;
 /** How long a port that proposes waits for another bridge to answer before it takes its cable to end at none. */
 export const EDGE_DELAY_MS = 3000;
-/** Messages a port sends in a second. More wait for the next. */
-export const TX_HOLD = 6;
+/**
+ * Messages a port sends in a second, after which it sends one a second. The standard has six, to spare a bridge's
+ * processor. Here that would hold a handshake back whenever cables change in quick succession, and when a ring
+ * loses its root, word of the old one goes round until it has crossed twenty bridges: at six a second that takes
+ * up to twelve seconds, in which two cables between a pair of switches can both carry. So this is only a bound on
+ * a mistake, far above what the protocol needs.
+ */
+export const TX_HOLD = 1000;
 export const DEFAULT_PRIORITY = 0x8000;
 /** What a gigabit port costs. */
 export const DEFAULT_COST = 20_000;

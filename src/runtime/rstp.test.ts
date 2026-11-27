@@ -13,7 +13,8 @@ type Cable = readonly [a: number, portA: PortNo, b: number, portB: PortNo];
  */
 function wired(count: number, cables: readonly Cable[] = []) {
 	let now = 0;
-	const up = new Set<Cable>();
+	/** By their ends, so that a cable that is written out twice is one cable. */
+	const up = new Map<string, Cable>();
 	const waiting: { to: number; port: PortNo; frame: Uint8Array }[] = [];
 	const sent: { from: number; port: PortNo; bpdu: Bpdu; at: number }[] = [];
 	const flushed: string[] = [];
@@ -26,7 +27,7 @@ function wired(count: number, cables: readonly Cable[] = []) {
 				send(port, frame) {
 					const bpdu = decodeBpdu(frame);
 					if (bpdu) sent.push({ from: i, port, bpdu, at: now });
-					for (const [a, portA, b, portB] of up) {
+					for (const [a, portA, b, portB] of up.values()) {
 						if (a === i && portA === port) waiting.push({ to: b, port: portB, frame });
 						if (b === i && portB === port) waiting.push({ to: a, port: portA, frame });
 					}
@@ -35,7 +36,7 @@ function wired(count: number, cables: readonly Cable[] = []) {
 			}),
 	);
 	const carrying = (): Cable[] =>
-		[...up].filter(([a, portA, b, portB]) => bridges[a].forwards(portA) && bridges[b].forwards(portB));
+		[...up.values()].filter(([a, portA, b, portB]) => bridges[a].forwards(portA) && bridges[b].forwards(portB));
 	const looped = (): number => {
 		const group = bridges.map((_, i) => i);
 		const find = (i: number): number => (group[i] === i ? i : find(group[i]));
@@ -70,14 +71,14 @@ function wired(count: number, cables: readonly Cable[] = []) {
 		},
 		plug(cable: Cable) {
 			const [a, portA, b, portB] = cable;
-			up.add(cable);
+			up.set(cable.join(), cable);
 			bridges[a].enable(portA, false);
 			bridges[b].enable(portB, false);
 			settle();
 		},
 		cut(cable: Cable) {
 			const [a, portA, b, portB] = cable;
-			up.delete(cable);
+			up.delete(cable.join());
 			bridges[a].disable(portA);
 			bridges[b].disable(portB);
 			settle();
@@ -153,7 +154,7 @@ describe("a bridge", () => {
 		expect([bridge.learns(1), bridge.forwards(1)]).toEqual([false, false]);
 	});
 
-	test("says what it knows on each designated port once a hello, and no more than six times a second", () => {
+	test("says what it knows on each designated port once a hello, and answers a lesser bridge each time, up to its bound for a second", () => {
 		const t = wired(1);
 		t.machine(0, 1);
 		const before = t.sent.length;
@@ -163,11 +164,17 @@ describe("a bridge", () => {
 		expect(hellos.every(({ bpdu }) => bpdu.role === "designated" && bpdu.forwarding && bpdu.cost === 0)).toBe(true);
 		expect(hellos.map(({ at }) => at)).toEqual(Array.from({ length: 10 }, (_, i) => (i + 1) * HELLO_MS));
 
-		// A lesser bridge that proposes twenty times in one moment is answered six times, and again after the second.
+		// A lesser bridge that proposes over and over in one moment is answered each time, until the bound that is there
+		// for a mistake. One more answer goes after the second.
 		const lesser = deaf((frame) => t.bridges[0].receive(1, frame, t.now));
 		t.pass(1000);
 		const from = t.sent.length;
 		for (let i = 0; i < 20; i++) {
+			lesser.propose(t.now);
+			t.settle();
+		}
+		expect(t.sent.length - from).toBe(20);
+		for (let i = 20; i < TX_HOLD + 20; i++) {
 			lesser.propose(t.now);
 			t.settle();
 		}
@@ -289,6 +296,55 @@ describe("a line of four bridges", () => {
 		]);
 		expect(t.bridges[3].reading().cost).toBe(20_000);
 		expect([t.loops, t.now]).toEqual([0, 0]);
+	});
+});
+
+describe("a ring of bridges that loses its root", () => {
+	// The root hangs off b, and b, c and d are a ring.
+	const ROOT: Cable = [0, 2, 1, 2];
+	const RING: Cable[] = [
+		[1, 7, 2, 8],
+		[2, 7, 3, 8],
+		[3, 7, 1, 8],
+	];
+
+	test("settles at once on a root of its own, though word of the old one goes round it until it is too old to be believed", () => {
+		const t = wired(4, [ROOT, ...RING]);
+		expect(t.ports()).toContain("d8 alternate discarding");
+		const from = t.sent.length;
+		t.cut(ROOT);
+		expect(t.roots().slice(1)).toEqual(["02", "02", "02"]);
+		expect(t.ports()).toEqual([
+			"b7 designated forwarding",
+			"b8 designated forwarding",
+			"c7 designated forwarding",
+			"c8 root forwarding",
+			"d7 root forwarding",
+			"d8 alternate discarding",
+		]);
+		expect([t.loops, t.now]).toEqual([0, 0]);
+		// Each bridge of the ring had the old root from its neighbour, which had it from the next: counting to infinity.
+		const stale = t.sent.slice(from).filter(({ bpdu }) => bpdu.root.endsWith("01"));
+		expect(stale.length).toBeGreaterThan(10);
+		expect(Math.max(...stale.map(({ bpdu }) => bpdu.age))).toBe(20);
+	});
+
+	test("and so does a pair of bridges on two cables, which at no moment both carry", () => {
+		const pair: Cable[] = [
+			[1, 7, 2, 8],
+			[1, 6, 2, 6],
+		];
+		const t = wired(3, [ROOT, ...pair]);
+		expect(t.carrying()).toHaveLength(2);
+		t.cut(ROOT);
+		expect(t.roots().slice(1)).toEqual(["02", "02"]);
+		expect(t.ports()).toEqual([
+			"b6 designated forwarding",
+			"b7 designated forwarding",
+			"c6 root forwarding",
+			"c8 alternate discarding",
+		]);
+		expect([t.carrying().length, t.loops, t.now]).toEqual([1, 0, 0]);
 	});
 });
 
