@@ -1,3 +1,4 @@
+import "./topology.css";
 import { html, nothing, svg } from "lit";
 import {
 	IMPAIRED,
@@ -13,6 +14,7 @@ import {
 	treeWord,
 } from "../../model/index.ts";
 import { type NicName, nicName } from "../../net/index.ts";
+import { UnlabElement } from "../base/index.ts";
 
 export type Device = { kind: "switch"; name: SwitchName } | { kind: "machine"; name: MachineName };
 export type Selection = Device | { kind: "port"; name: SwitchName; port: PortNo };
@@ -74,8 +76,20 @@ const sideWords = (side: Side) =>
 		.filter(Boolean)
 		.join(" · ");
 
-/** Breadth-first columns, one row group per connected component. Every drawn line is a held port or a cable between switches. */
-export function topologyMap(lab: LabState, selected: Selection | null, pick: (s: Selection) => void) {
+/** A drawn line, and which it is of the lines between its two nodes. */
+interface Wire {
+	edge: Edge;
+	index: number;
+	of: number;
+}
+/** The map before the browser lays it out. Every drawn line is a held port or a cable between switches. */
+interface Plan {
+	/** One row group per connected component, each its breadth-first columns, so a line joins one column or two neighbours. */
+	groups: readonly (readonly (readonly Device[])[])[];
+	wires: readonly Wire[];
+}
+
+function plan(lab: LabState): Plan {
 	const devices: Device[] = [
 		...lab.switches.map((name) => ({ kind: "switch" as const, name })),
 		...lab.rail.map((name) => ({ kind: "machine" as const, name })),
@@ -109,78 +123,209 @@ export function topologyMap(lab: LabState, selected: Selection | null, pick: (s:
 			conditions: selectPorts(a.switch)(lab).find((p) => p.port === a.port)?.conditions,
 		})),
 	];
-	const layers = new Map<string, number>();
-	const points = new Map<string, { x: number; y: number }>();
-	let rows = 0,
-		columns = 1;
+	const named = new Map(devices.map((device) => [device.name as string, device]));
+	const seen = new Set<string>();
+	const groups: Device[][][] = [];
 	for (const root of devices) {
-		if (layers.has(root.name)) continue;
-		const groups: string[][] = [];
-		const queue: string[] = [root.name];
-		layers.set(root.name, 0);
-		for (const name of queue) {
-			const depth = layers.get(name) ?? 0;
-			groups[depth] ??= [];
-			groups[depth].push(name);
+		if (seen.has(root.name)) continue;
+		const columns: Device[][] = [];
+		const queue: { name: string; depth: number }[] = [{ name: root.name, depth: 0 }];
+		seen.add(root.name);
+		for (const { name, depth } of queue) {
+			const device = named.get(name);
+			if (device) {
+				columns[depth] ??= [];
+				columns[depth].push(device);
+			}
 			for (const edge of edges) {
 				const next = far(edge, name);
-				if (next && !layers.has(next)) {
-					layers.set(next, depth + 1);
-					queue.push(next);
+				if (next && !seen.has(next)) {
+					seen.add(next);
+					queue.push({ name: next, depth: depth + 1 });
 				}
 			}
 		}
-		const height = Math.max(...groups.map((group) => group.length));
-		for (const [col, group] of groups.entries()) {
-			for (const [i, name] of group.entries())
-				points.set(name, { x: col, y: rows + ((i + 0.5) * height) / group.length });
+		groups.push(columns);
+	}
+	const wires = edges.map((edge) => {
+		const beside = edges.filter((other) => pair(other) === pair(edge));
+		return { edge, index: beside.indexOf(edge), of: beside.length };
+	});
+	return { groups, wires };
+}
+
+/** How far above its switch's tile the first cable from a switch to itself rises, and how much further each next one does. */
+const LOOP = { lift: 14, step: 9, clear: 4 };
+
+/** Where a node's tile is in the drawing, the column it stands in, and how much is clear to the right of that. */
+interface Spot {
+	x: number;
+	y: number;
+	half: number;
+	left: number;
+	right: number;
+	room: number;
+}
+
+function spots(drawing: HTMLElement): Map<string, Spot> {
+	const columns = [...drawing.querySelectorAll<HTMLElement>(".n-column")];
+	const starts = [...new Set(columns.map((column) => column.offsetLeft))].sort((a, b) => a - b);
+	const found = new Map<string, Spot>();
+	for (const column of columns) {
+		const left = column.offsetLeft;
+		const right = left + column.offsetWidth;
+		const room = (starts.find((start) => start >= right) ?? drawing.clientWidth) - right;
+		for (const node of column.querySelectorAll<HTMLElement>(".n-node")) {
+			const tile = node.querySelector<HTMLElement>(".n-tile");
+			if (!tile) continue;
+			found.set(node.dataset.machine ?? node.dataset.switch ?? "", {
+				x: tile.offsetLeft + tile.offsetWidth / 2,
+				y: tile.offsetTop + tile.offsetHeight / 2,
+				half: tile.offsetHeight / 2,
+				left,
+				right,
+				room,
+			});
 		}
-		columns = Math.max(columns, groups.length);
-		rows += height;
 	}
-	const width = Math.max(600, columns * 152),
-		height = Math.max(280, rows * 116);
-	function point(name: string) {
-		const p = points.get(name);
-		if (!p) throw Error(`No layout for ${name}`);
-		return { x: ((p.x + 0.5) * width) / columns, y: (p.y / rows) * height - 12 };
+	return found;
+}
+
+/**
+ * A line from one tile's centre to the other's. Names stand under tiles, so inside a column a line runs level with
+ * its own tile, where no name is, and changes height only in the clear space between columns.
+ */
+function path(a: Spot, b: Spot, { index, of }: Wire): string {
+	const fixed = (...numbers: number[]) => numbers.map((n) => Math.round(n * 10) / 10);
+	if (a === b) {
+		const [left, right, x1, x2, y, top] = fixed(
+			a.x - 14,
+			a.x + 14,
+			a.x - 34,
+			a.x + 34,
+			a.y,
+			a.y - (a.half + LOOP.lift + LOOP.step * index) / 0.75,
+		);
+		return `M ${left} ${y} C ${x1} ${top}, ${x2} ${top}, ${right} ${y}`;
 	}
-	return html`<div class="n-map-scroll"><div class="n-drawing" style=${`width:clamp(${columns * 84}px, 97%, ${width * 1.55}px);height:${height}px`}>
-		<svg class="n-wires" preserveAspectRatio="none" viewBox=${`0 0 ${width} ${height}`} aria-hidden="true">${edges.map(
-			(edge) => {
-				const a = point(edge.ends[0].name),
-					b = point(edge.ends[1].name);
-				const related = edge.ends.some(
-					(end) => selected?.name === end.name && (selected.kind !== "port" || selected.port === end.port),
-				);
-				const sibling = edges.filter((e) => pair(e) === pair(edge));
-				const index = sibling.indexOf(edge);
-				const offset = 8 * (index - (sibling.length - 1) / 2);
-				const middle = (a.x + b.x) / 2;
-				// A cable from a switch to itself loops over its node.
-				const rise = 56 + 12 * index;
-				const d =
-					edge.ends[0].name === edge.ends[1].name
-						? `M ${a.x - 14} ${a.y} C ${a.x - 34} ${a.y - rise}, ${a.x + 34} ${a.y - rise}, ${a.x + 14} ${a.y}`
-						: `M ${a.x} ${a.y + offset} C ${middle} ${a.y + offset}, ${middle} ${b.y + offset}, ${b.x} ${b.y + offset}`;
-				// A cable that is whole and has an end that the spanning tree blocks carries nothing, and says so here.
-				const state = (edge.link === "up" && edge.ends.find((end) => end.tree)?.tree) || edge.link;
-				return svg`<path class="wire" data-state=${state} data-conditions=${edge.conditions ?? nothing} data-hue=${edge.hue ?? nothing} data-selected=${related} d=${d}/>`;
-			},
-		)}</svg>
-		${devices.map((d) => {
-			const p = point(d.name),
-				m = d.kind === "machine" ? lab.machines[d.name] : null;
-			// A wire has no words of its own, so each end of a cable with conditions says so.
-			const impaired = edges.some((edge) => edge.conditions && edge.ends.some((end) => end.name === d.name));
-			const marked = impaired ? ` · ${IMPAIRED}` : "";
-			const meta =
-				d.kind === "switch"
-					? `${selectPorts(d.name)(lab).filter((port) => port.state !== "empty").length} / 8 ports${selectStorm(d.name)(lab) ? " · storming" : ""}${marked}`
-					: `${m?.spec.image ?? ""}${marked}`;
-			// Rows are a fixed 116px apart, so the note says no more than it did, and each cable is in the title and description.
-			const words = sidesAt(edges, d.name).map(sideWords);
-			return html`<button class="n-node" data-machine=${d.kind === "machine" ? d.name : nothing} data-switch=${d.kind === "switch" ? d.name : nothing} data-hue=${m?.hue ?? nothing} aria-pressed=${selected?.name === d.name} data-selected=${selected?.name === d.name} aria-description=${words.length ? words.join(". ") : nothing} title=${words.length ? words.join("\n") : nothing} style=${`left:${(100 * p.x) / width}%;top:${p.y}px`} @click=${() => pick(d)}>
-				<span class="visually-hidden">Inspect ${d.kind} </span>${art(d.kind)}<span class="n-node-label"><strong>${d.name}</strong> <small>${meta}</small></span></button>`;
-		})}</div></div>`;
+	// Lines between one pair run side by side, within their tiles' height.
+	const shift = (index - (of - 1) / 2) * Math.min(8, (a.half * 1.2) / Math.max(1, of - 1));
+	if (a.left === b.left) {
+		// Two nodes of one column: round the outside of it, further out the further apart they are.
+		const down = b.y < a.y ? -1 : 1;
+		const out = Math.max(8, Math.min(a.room - 8, 12 + Math.abs(b.y - a.y) * 0.12 + 5 * index));
+		const [ax, ay, bx, by, edge, turn] = fixed(
+			a.x,
+			a.y - down * shift,
+			b.x,
+			b.y + down * shift,
+			a.right,
+			a.right + out / 0.75,
+		);
+		return `M ${ax} ${ay} H ${edge} C ${turn} ${ay}, ${turn} ${by}, ${edge} ${by} H ${bx}`;
+	}
+	const [from, to] = a.x < b.x ? [a.right, b.left] : [a.left, b.right];
+	const [ax, ay, bx, by, x1, x2, mid] = fixed(a.x, a.y + shift, b.x, b.y + shift, from, to, (from + to) / 2);
+	return `M ${ax} ${ay} H ${x1} C ${mid} ${ay}, ${mid} ${by}, ${x2} ${by} H ${bx}`;
+}
+
+function mapOf({ groups, wires }: Plan, lab: LabState, selected: Selection | null, pick: (s: Selection) => void) {
+	const edges = wires.map(({ edge }) => edge);
+	const node = (d: Device) => {
+		const m = d.kind === "machine" ? lab.machines[d.name] : null;
+		// A wire has no words of its own, so each end of a cable with conditions says so.
+		const impaired = edges.some((edge) => edge.conditions && edge.ends.some((end) => end.name === d.name));
+		const marked = impaired ? ` · ${IMPAIRED}` : "";
+		const meta =
+			d.kind === "switch"
+				? `${selectPorts(d.name)(lab).filter((port) => port.state !== "empty").length} / 8 ports${selectStorm(d.name)(lab) ? " · storming" : ""}${marked}`
+				: `${m?.spec.image ?? ""}${marked}`;
+		const words = sidesAt(edges, d.name).map(sideWords);
+		const loops = edges.filter((edge) => edge.ends.every((end) => end.name === d.name)).length;
+		return html`<button class="n-node" data-machine=${d.kind === "machine" ? d.name : nothing} data-switch=${d.kind === "switch" ? d.name : nothing} data-hue=${m?.hue ?? nothing} aria-pressed=${selected?.name === d.name} data-selected=${selected?.name === d.name} aria-description=${words.length ? words.join(". ") : nothing} title=${words.length ? words.join("\n") : nothing} style=${loops ? `padding-top:${LOOP.lift + LOOP.step * (loops - 1) + LOOP.clear}px` : nothing} @click=${() => pick(d)}>
+			<span class="visually-hidden">Inspect ${d.kind} </span><span class="n-tile">${art(d.kind)}</span><span class="n-node-label"><strong>${d.name}</strong> <small>${meta}</small></span></button>`;
+	};
+	return html`<div class="n-map-scroll"><div class="n-drawing">
+		<svg class="n-wires" aria-hidden="true">${wires.map(({ edge }) => {
+			const related = edge.ends.some(
+				(end) => selected?.name === end.name && (selected.kind !== "port" || selected.port === end.port),
+			);
+			// A cable that is whole and has an end that the spanning tree blocks carries nothing, and says so here.
+			const state = (edge.link === "up" && edge.ends.find((end) => end.tree)?.tree) || edge.link;
+			return svg`<path class="wire" data-state=${state} data-conditions=${edge.conditions ?? nothing} data-hue=${edge.hue ?? nothing} data-selected=${related}/>`;
+		})}</svg>
+		${groups.map((columns, row) =>
+			columns.map(
+				(devices, column) =>
+					html`<div class="n-column" style=${`grid-area:${row + 1}/${2 * column + 1}`}>${devices.map(node)}</div>`,
+			),
+		)}</div></div>`;
+}
+
+/**
+ * The lab as a map. The browser lays the nodes out, so a name of any length has the room it takes, and the lines are
+ * then drawn to where the nodes are, again whenever one of them changes size.
+ */
+export class UnlabTopology extends UnlabElement {
+	static override properties = {
+		lab: { attribute: false },
+		selected: { attribute: false },
+		pick: { attribute: false },
+	};
+	declare lab: LabState;
+	declare selected: Selection | null;
+	declare pick: (selection: Selection) => void;
+
+	#plan: Plan = { groups: [], wires: [] };
+	readonly #resized = new ResizeObserver(() => this.#draw());
+
+	override connectedCallback(): void {
+		super.connectedCallback();
+		this.#watch();
+	}
+
+	override disconnectedCallback(): void {
+		this.#resized.disconnect();
+		super.disconnectedCallback();
+	}
+
+	protected override willUpdate(): void {
+		this.#plan = plan(this.lab);
+	}
+
+	override render() {
+		return mapOf(this.#plan, this.lab, this.selected, this.pick);
+	}
+
+	protected override updated(): void {
+		this.#watch();
+		this.#draw();
+	}
+
+	/** A node that changes size moves the others of its column, and the drawing's width moves every column. */
+	#watch(): void {
+		this.#resized.disconnect();
+		for (const box of this.querySelectorAll(".n-drawing, .n-node")) this.#resized.observe(box);
+	}
+
+	#draw(): void {
+		const drawing = this.querySelector<HTMLElement>(".n-drawing");
+		if (!drawing) return;
+		const at = spots(drawing);
+		for (const [i, line] of [...drawing.querySelectorAll(".wire")].entries()) {
+			const wire = this.#plan.wires[i];
+			const a = wire && at.get(wire.edge.ends[0].name);
+			const b = wire && at.get(wire.edge.ends[1].name);
+			const d = a && b && path(a, b, wire);
+			if (d && line.getAttribute("d") !== d) line.setAttribute("d", d);
+		}
+	}
+}
+
+customElements.define("unlab-topology", UnlabTopology);
+
+declare global {
+	interface HTMLElementTagNameMap {
+		"unlab-topology": UnlabTopology;
+	}
 }

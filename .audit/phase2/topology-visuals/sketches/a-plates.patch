@@ -1,0 +1,46 @@
+diff --git a/src/ui/desktop/topology.css b/src/ui/desktop/topology.css
+index b044476..319dd60 100644
+--- a/src/ui/desktop/topology.css
++++ b/src/ui/desktop/topology.css
+@@ -188,4 +188,10 @@
+ 			font-size: 12px;
+ 		}
+ 	}
++	/* Sketch A: a plate behind each name and note, as the tag on a faceplate's cable has, so a line passes behind it. */
++	.n-node-label :is(strong, small) {
++		padding: 0 3px;
++		border-radius: var(--r-port);
++		background: var(--crust);
++	}
+ }
+diff --git a/src/ui/desktop/topology.ts b/src/ui/desktop/topology.ts
+index ae22def..aa51aa8 100644
+--- a/src/ui/desktop/topology.ts
++++ b/src/ui/desktop/topology.ts
+@@ -138,8 +138,14 @@ export function topologyMap(lab: LabState, selected: Selection | null, pick: (s:
+ 		columns = Math.max(columns, groups.length);
+ 		rows += height;
+ 	}
++	const noteOf = (d: Device) =>
++		d.kind === "switch" ? "8 / 8 ports · storming · impaired" : `${lab.machines[d.name]?.spec.image ?? ""} · impaired`;
++	const pitch = Math.max(
++		116,
++		...devices.map((d) => 56 + 5 + Math.ceil(d.name.length / 14) * 19.6 + Math.ceil(noteOf(d).length / 20) * 15.4 + 20),
++	);
+ 	const width = Math.max(600, columns * 152),
+-		height = Math.max(280, rows * 116);
++		height = Math.max(280, rows * pitch);
+ 	function point(name: string) {
+ 		const p = points.get(name);
+ 		if (!p) throw Error(`No layout for ${name}`);
+@@ -162,7 +168,9 @@ export function topologyMap(lab: LabState, selected: Selection | null, pick: (s:
+ 				const d =
+ 					edge.ends[0].name === edge.ends[1].name
+ 						? `M ${a.x - 14} ${a.y} C ${a.x - 34} ${a.y - rise}, ${a.x + 34} ${a.y - rise}, ${a.x + 14} ${a.y}`
+-						: `M ${a.x} ${a.y + offset} C ${middle} ${a.y + offset}, ${middle} ${b.y + offset}, ${b.x} ${b.y + offset}`;
++						: a.x === b.x
++							? `M ${a.x} ${a.y + offset} C ${a.x + 150} ${a.y + offset}, ${a.x + 150} ${b.y + offset}, ${b.x} ${b.y + offset}`
++							: `M ${a.x} ${a.y + offset} C ${middle} ${a.y + offset}, ${middle} ${b.y + offset}, ${b.x} ${b.y + offset}`;
+ 				// A cable that is whole and has an end that the spanning tree blocks carries nothing, and says so here.
+ 				const state = (edge.link === "up" && edge.ends.find((end) => end.tree)?.tree) || edge.link;
+ 				return svg`<path class="wire" data-state=${state} data-conditions=${edge.conditions ?? nothing} data-hue=${edge.hue ?? nothing} data-selected=${related} d=${d}/>`;

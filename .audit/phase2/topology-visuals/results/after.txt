@@ -1,0 +1,51 @@
+== crowd, as the window opens (804 x 410): 24 nodes, lines 26 up, 1 blocked
+   every name and note can be read
+== crowd, as the window opens, scrolled to its end (804 x 410): 24 nodes, lines 26 up, 1 blocked
+   every name and note can be read
+== crowd, maximized (1440 x 840): 24 nodes, lines 26 up, 1 blocked
+   every name and note can be read
+== crowd, maximized, scrolled to its end (1440 x 840): 24 nodes, lines 26 up, 1 blocked
+   every name and note can be read
+== crowd, maximized on a screen tall enough for all of it (1440 x 2340): 24 nodes, lines 26 up, 1 blocked
+   every name and note can be read
+== crowd, in a browser window 480 wide (460 x 424): 24 nodes, lines 26 up, 1 blocked
+   every name and note can be read
+== crowd, in a browser window 480 wide, scrolled to its end (460 x 424): 24 nodes, lines 26 up, 1 blocked
+   every name and note can be read
+== shared, as the window opens (804 x 410): 6 nodes, lines 6 up
+   every name and note can be read
+== shared, maximized (1440 x 840): 6 nodes, lines 6 up
+   every name and note can be read
+== shared, in a browser window 480 wide (460 x 424): 6 nodes, lines 6 up
+   every name and note can be read
+== wrap, as the window opens (804 x 410): 7 nodes, lines 7 up
+   every name and note can be read
+== wrap, maximized (1440 x 840): 7 nodes, lines 7 up
+   every name and note can be read
+== wrap, in a browser window 480 wide (460 x 424): 7 nodes, lines 7 up
+   every name and note can be read
+== self, as the window opens (804 x 410): 5 nodes, lines 6 up
+   every name and note can be read
+== self, maximized (1440 x 840): 5 nodes, lines 6 up
+   every name and note can be read
+== self, in a browser window 480 wide (460 x 424): 5 nodes, lines 6 up
+   every name and note can be read
+== pair, as the window opens (804 x 410): 6 nodes, lines 3 up, 2 cut, 1 off, 2 blocked
+   every name and note can be read
+== pair: lan selected, and node1 with the keyboard's focus
+== pair, maximized (1440 x 840): 6 nodes, lines 3 up, 2 cut, 1 off, 2 blocked
+   every name and note can be read
+== pair, in a browser window 480 wide (460 x 424): 6 nodes, lines 3 up, 2 cut, 1 off, 2 blocked
+   every name and note can be read
+== chain, as the window opens (804 x 410): 10 nodes, lines 9 up
+   every name and note can be read
+== chain, maximized (1440 x 840): 10 nodes, lines 9 up
+   every name and note can be read
+== chain, in a browser window 480 wide (460 x 424): 10 nodes, lines 9 up
+   every name and note can be read
+== islands, as the window opens (804 x 410): 5 nodes, lines 1 up
+   every name and note can be read
+== islands, maximized (1440 x 840): 5 nodes, lines 1 up
+   every name and note can be read
+== islands, in a browser window 480 wide (460 x 424): 5 nodes, lines 1 up
+   every name and note can be read

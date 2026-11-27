@@ -679,7 +679,6 @@
 	}
 	.dt-map .n-map-scroll {
 		min-height: 0;
-		padding: 6px 8px 10px;
 		max-height: none;
 		height: 100%;
 	}

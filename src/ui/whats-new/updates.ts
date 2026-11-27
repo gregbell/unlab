@@ -14,6 +14,13 @@ export interface Update {
 export const UPDATES: readonly Update[] = [
 	{
 		date: "2026-11-27",
+		title: "Read every name in Topology",
+		detail:
+			"Topology gives each name the room it takes, so a long name wraps and no line or node covers it, in a lab of sixteen machines and eight switches too. Each cable's state has its own dashes as well as its colour: cut is dashed, blocked by the spanning tree is dash-dotted, one still learning after a change is long-dashed, and a machine that is off or booting is dotted. The selected node has a thicker frame and a bolder name, and Tab goes through the nodes as they are drawn.",
+		example: "spawn 1 alpine --name internal-router-east",
+	},
+	{
+		date: "2026-11-27",
 		title: "Read MAC tables and save a .pcap from a command",
 		detail:
 			"macs lists what each switch has learned, with its port, VLAN, machine and age, and the frames it took in, delivered and flooded, as the switch panel shows them. pcap saves the capture as save .pcap does, so pcap lan:3 downloads one cable's frames. An agent reads them too, with switch_macs and capture_save.",

@@ -9,17 +9,19 @@ test.use({
 	launchOptions: { executablePath: chromiumExecutable(), args: ["--enable-features=WebMCP"] },
 });
 
-/** The state of the line drawn from the centre of one node to the other's, or null when none is. */
+/** The state of the line drawn from the centre of one node's picture to the other's, or null when none is. */
 async function wire(topology: Locator, a: string, b: string): Promise<string | null> {
 	const centre = async (name: string) => {
-		const box = await topology.locator(`.n-node[data-switch="${name}"], .n-node[data-machine="${name}"]`).boundingBox();
+		const box = await topology
+			.locator(`.n-node[data-switch="${name}"] .n-tile, .n-node[data-machine="${name}"] .n-tile`)
+			.boundingBox();
 		if (!box) throw new Error(`${name} is not drawn`);
 		return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
 	};
 	const p = await centre(a),
 		q = await centre(b);
 	// A box takes in the stroke, which a selected line has wider.
-	const near = (u: number, v: number) => Math.abs(u - v) < 10;
+	const near = (u: number, v: number) => Math.abs(u - v) < 12;
 	for (const path of await topology.locator(".wire").all()) {
 		const box = await path.boundingBox();
 		if (

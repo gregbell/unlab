@@ -45,8 +45,8 @@ import {
 	resized,
 	startupBoxes,
 } from "./layout.ts";
-import { type Device, type Selection, topologyMap } from "./topology.ts";
-import "./topology.css";
+import "./topology.ts";
+import type { Device, Selection } from "./topology.ts";
 import "./desktop.css";
 import "./machine-wizard.ts";
 
@@ -134,6 +134,9 @@ class Desktop extends UnlabElement {
 	private context: { target: ContextTarget; anchor: HTMLElement; position: Point } | null = null;
 	private patchOrigin = "";
 	private picked: Selection | null = null;
+	private readonly pickOnMap = (picked: Selection) => {
+		if (picked.kind !== "port") this.inspect(picked);
+	};
 	private source = "";
 	private destination = "";
 	private notice = "";
@@ -1139,9 +1142,7 @@ class Desktop extends UnlabElement {
 			})}</tbody></table></div>`;
 	}
 	private topologyBody() {
-		return html`<div class="dt-map n-network">${topologyMap(this.lab, this.picked, (device) => {
-			if (device.kind !== "port") this.inspect(device);
-		})}</div>`;
+		return html`<unlab-topology class="dt-map n-network" .lab=${this.lab} .selected=${this.picked} .pick=${this.pickOnMap}></unlab-topology>`;
 	}
 	private patchForm() {
 		const nics = this.lab.rail.flatMap((n) => this.lab.machines[n]?.spec.nics.map((_, i) => `${n}:eth${i}`) ?? []);

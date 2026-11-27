@@ -320,14 +320,14 @@ test("cutting a cable in use brings the blocked port into use and pings resume, 
 /** The state of each line drawn between the two switches, in the order they are drawn in. */
 async function wires(topology: Locator, a: string, b: string): Promise<string[]> {
 	const centre = async (name: string) => {
-		const box = await topology.locator(`.n-node[data-switch="${name}"]`).boundingBox();
+		const box = await topology.locator(`.n-node[data-switch="${name}"] .n-tile`).boundingBox();
 		if (!box) throw new Error(`${name} is not drawn`);
 		return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
 	};
 	const p = await centre(a);
 	const q = await centre(b);
 	// Two cables between one pair of switches are drawn side by side, a few pixels apart.
-	const near = (u: number, v: number) => Math.abs(u - v) < 10;
+	const near = (u: number, v: number) => Math.abs(u - v) < 12;
 	const states: string[] = [];
 	for (const path of await topology.locator(".wire").all()) {
 		const box = await path.boundingBox();

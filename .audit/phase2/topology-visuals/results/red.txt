@@ -1,0 +1,81 @@
+a line runs straight from one tile to the other, across the names between | browser src/ui/desktop/topology.browser.test.ts "names that wrap" | exit 1 | 2 of 3 red:
+    every name and note in the Topology window can be read as it opens with names that wrap to two, three and more lines
+    every name and note in the Topology window can be read in a narrow browser window with names that wrap to two, three and more lines
+a line runs straight from one tile to the other, across the names between | browser src/ui/desktop/topology.browser.test.ts "16 machines and eight switches" | exit 1 | 3 of 3 red:
+    every name and note in the Topology window can be read as it opens with 16 machines and eight switches, long names, VLANs, a trunk, a delayed cable, storms and a blocked port
+    every name and note in the Topology window can be read maximized with 16 machines and eight switches, long names, VLANs, a trunk, a delayed cable, storms and a blocked port
+    every name and note in the Topology window can be read in a narrow browser window with 16 machines and eight switches, long names, VLANs, a trunk, a delayed cable, storms and a blocked port
+two nodes of one column are joined by a straight line | browser src/ui/desktop/topology.browser.test.ts "two cabled nodes in one column" | exit 1 | 3 of 3 red:
+    every name and note in the Topology window can be read as it opens with two cabled nodes in one column
+    every name and note in the Topology window can be read maximized with two cabled nodes in one column
+    every name and note in the Topology window can be read in a narrow browser window with two cabled nodes in one column
+two nodes of one column are joined by a straight line | browser src/ui/desktop/topology.browser.test.ts "16 machines and eight switches" | exit 1 | 3 of 3 red:
+    every name and note in the Topology window can be read as it opens with 16 machines and eight switches, long names, VLANs, a trunk, a delayed cable, storms and a blocked port
+    every name and note in the Topology window can be read maximized with 16 machines and eight switches, long names, VLANs, a trunk, a delayed cable, storms and a blocked port
+    every name and note in the Topology window can be read in a narrow browser window with 16 machines and eight switches, long names, VLANs, a trunk, a delayed cable, storms and a blocked port
+a tall name has no more room than a short one | browser src/ui/desktop/topology.browser.test.ts "names that wrap" | exit 1 | 3 of 3 red:
+    every name and note in the Topology window can be read as it opens with names that wrap to two, three and more lines
+    every name and note in the Topology window can be read maximized with names that wrap to two, three and more lines
+    every name and note in the Topology window can be read in a narrow browser window with names that wrap to two, three and more lines
+a cable from a switch to itself has no room above its tile | browser src/ui/desktop/topology.browser.test.ts "cabled to itself twice" | exit 1 | 3 of 3 red:
+    every name and note in the Topology window can be read as it opens with a switch cabled to itself twice, each cable a loop of its own
+    every name and note in the Topology window can be read maximized with a switch cabled to itself twice, each cable a loop of its own
+    every name and note in the Topology window can be read in a narrow browser window with a switch cabled to itself twice, each cable a loop of its own
+every cable from a switch to itself is the one loop | browser src/ui/desktop/topology.browser.test.ts "cabled to itself twice" | exit 1 | 3 of 3 red:
+    every name and note in the Topology window can be read as it opens with a switch cabled to itself twice, each cable a loop of its own
+    every name and note in the Topology window can be read maximized with a switch cabled to itself twice, each cable a loop of its own
+    every name and note in the Topology window can be read in a narrow browser window with a switch cabled to itself twice, each cable a loop of its own
+the cables between one pair are the one line | browser src/ui/desktop/topology.browser.test.ts "four cables between one pair" | exit 1 | 3 of 3 red:
+    every name and note in the Topology window can be read as it opens with four cables between one pair of switches, each a line of its own
+    every name and note in the Topology window can be read maximized with four cables between one pair of switches, each a line of its own
+    every name and note in the Topology window can be read in a narrow browser window with four cables between one pair of switches, each a line of its own
+the lines stay where they were when a node or the window changes size | browser src/ui/desktop/topology.browser.test.ts "two cabled nodes in one column" | exit 1 | 1 of 3 red:
+    every name and note in the Topology window can be read in a narrow browser window with two cabled nodes in one column
+the lines stay where they were when a node or the window changes size | browser src/ui/desktop/topology.browser.test.ts "names that wrap" | exit 1 | 2 of 3 red:
+    every name and note in the Topology window can be read maximized with names that wrap to two, three and more lines
+    every name and note in the Topology window can be read in a narrow browser window with names that wrap to two, three and more lines
+the lines stay where they were when a node or the window changes size | browser src/ui/desktop/topology.browser.test.ts "cabled to itself twice" | exit 1 | 1 of 3 red:
+    every name and note in the Topology window can be read in a narrow browser window with a switch cabled to itself twice, each cable a loop of its own
+the lines stay where they were when a node or the window changes size | browser src/ui/desktop/topology.browser.test.ts "four cables between one pair" | exit 1 | 1 of 3 red:
+    every name and note in the Topology window can be read in a narrow browser window with four cables between one pair of switches, each a line of its own
+the lines stay where they were when a node or the window changes size | browser src/ui/desktop/topology.browser.test.ts "16 machines and eight switches" | exit 1 | 2 of 3 red:
+    every name and note in the Topology window can be read maximized with 16 machines and eight switches, long names, VLANs, a trunk, a delayed cable, storms and a blocked port
+    every name and note in the Topology window can be read in a narrow browser window with 16 machines and eight switches, long names, VLANs, a trunk, a delayed cable, storms and a blocked port
+a long name is cut short with an ellipsis | browser src/ui/desktop/topology.browser.test.ts "names that wrap" | exit 1 | 3 of 3 red:
+    every name and note in the Topology window can be read as it opens with names that wrap to two, three and more lines
+    every name and note in the Topology window can be read maximized with names that wrap to two, three and more lines
+    every name and note in the Topology window can be read in a narrow browser window with names that wrap to two, three and more lines
+a long name is cut short with an ellipsis | browser src/ui/desktop/topology.browser.test.ts "16 machines and eight switches" | exit 1 | 3 of 3 red:
+    every name and note in the Topology window can be read as it opens with 16 machines and eight switches, long names, VLANs, a trunk, a delayed cable, storms and a blocked port
+    every name and note in the Topology window can be read maximized with 16 machines and eight switches, long names, VLANs, a trunk, a delayed cable, storms and a blocked port
+    every name and note in the Topology window can be read in a narrow browser window with 16 machines and eight switches, long names, VLANs, a trunk, a delayed cable, storms and a blocked port
+a map taller than its window is centred in it, its top above where scrolling reaches | browser src/ui/desktop/topology.browser.test.ts "16 machines and eight switches" | exit 1 | 3 of 3 red:
+    every name and note in the Topology window can be read as it opens with 16 machines and eight switches, long names, VLANs, a trunk, a delayed cable, storms and a blocked port
+    every name and note in the Topology window can be read maximized with 16 machines and eight switches, long names, VLANs, a trunk, a delayed cable, storms and a blocked port
+    every name and note in the Topology window can be read in a narrow browser window with 16 machines and eight switches, long names, VLANs, a trunk, a delayed cable, storms and a blocked port
+the selected node's frame is as thin as any other's | browser src/ui/desktop/topology.browser.test.ts "by more than its colour" | exit 1 | 1 of 1 red:
+    the Topology window says a selected node and each line's state by more than its colour
+the selected node's name is as light as any other's | browser src/ui/desktop/topology.browser.test.ts "by more than its colour" | exit 1 | 1 of 1 red:
+    the Topology window says a selected node and each line's state by more than its colour
+a selected node's lines are as thin as the others | browser src/ui/desktop/topology.browser.test.ts "by more than its colour" | exit 1 | 1 of 1 red:
+    the Topology window says a selected node and each line's state by more than its colour
+a cut cable is drawn only in red | browser src/ui/desktop/topology.browser.test.ts "by more than its colour" | exit 1 | 1 of 1 red:
+    the Topology window says a selected node and each line's state by more than its colour
+a blocked cable is drawn as one in use | browser src/ui/desktop/topology.browser.test.ts "by more than its colour" | exit 1 | 1 of 1 red:
+    the Topology window says a selected node and each line's state by more than its colour
+a learning port's cable is dashed as a cut one | browser src/ui/desktop/topology.browser.test.ts "by more than its colour" | exit 1 | 1 of 1 red:
+    the Topology window says a selected node and each line's state by more than its colour
+an off machine's cable is drawn as one in use | browser src/ui/desktop/topology.browser.test.ts "by more than its colour" | exit 1 | 1 of 1 red:
+    the Topology window says a selected node and each line's state by more than its colour
+Tab passes the map's nodes by | browser src/ui/desktop/topology.browser.test.ts "can be used by keyboard" | exit 1 | 1 of 1 red:
+    the Topology window can be used by keyboard: Tab reaches every node in the order they are drawn, each shows that it has the focus, and Enter and Space select it
+Tab goes up each column while the eye goes down it | browser src/ui/desktop/topology.browser.test.ts "can be used by keyboard" | exit 1 | 1 of 1 red:
+    the Topology window can be used by keyboard: Tab reaches every node in the order they are drawn, each shows that it has the focus, and Enter and Space select it
+a node with the focus looks as one without | browser src/ui/desktop/topology.browser.test.ts "can be used by keyboard" | exit 1 | 1 of 1 red:
+    the Topology window can be used by keyboard: Tab reaches every node in the order they are drawn, each shows that it has the focus, and Enter and Space select it
+Enter and Space on a node do nothing | browser src/ui/desktop/topology.browser.test.ts "can be used by keyboard" | exit 1 | 1 of 1 red:
+    the Topology window can be used by keyboard: Tab reaches every node in the order they are drawn, each shows that it has the focus, and Enter and Space select it
+no node says that it is the selected one | browser src/ui/desktop/topology.browser.test.ts "can be used by keyboard" | exit 1 | 1 of 1 red:
+    the Topology window can be used by keyboard: Tab reaches every node in the order they are drawn, each shows that it has the focus, and Enter and Space select it
+no node says that it is the selected one | browser src/ui/desktop/topology.browser.test.ts "by more than its colour" | exit 1 | 1 of 1 red:
+    the Topology window says a selected node and each line's state by more than its colour
