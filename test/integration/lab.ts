@@ -1,7 +1,15 @@
 // Machines on switches, each in its own thread, for tests on real kernels in Node.
 
 import { Worker } from "node:worker_threads";
-import type { CableCounters, ConditionValues, PortNo, PortVlan, Tree } from "../../src/model/index.ts";
+import type {
+	BridgePriority,
+	CableCounters,
+	ConditionValues,
+	PathCost,
+	PortNo,
+	PortVlan,
+	Tree,
+} from "../../src/model/index.ts";
 import { address } from "../../src/model/testkit.ts";
 import { addressStr, defaultAddress, ip4str, macStr, NICS, type NicNo, nodeMac } from "../../src/net/index.ts";
 import { nodeClock } from "../../src/runtime/clock.ts";
@@ -66,6 +74,10 @@ export interface TestSwitch {
 	setTree(on: boolean): void;
 	/** Its part in the spanning tree now, or null. */
 	tree(): Tree | null;
+	/** Its priority in the spanning tree from now on, whether or not it takes part. */
+	setPriority(priority: BridgePriority): void;
+	/** What the port adds to the way to the root through it from now on. */
+	setCost(port: PortNo, cost: PathCost): void;
 }
 
 /** A frame as one of the switches carried it. */
@@ -129,6 +141,14 @@ export async function bootLab(setups: readonly MachineSetup[], wiring: Wiring = 
 				pump.wake();
 			},
 			tree: () => fabric.tree(slot),
+			setPriority(priority) {
+				fabric.setPriority(slot, priority);
+				pump.wake();
+			},
+			setCost(port, cost) {
+				fabric.setCost(slot, port, cost);
+				pump.wake();
+			},
 			setVlan: (port, vlan) => fabric.setVlan(slot, port, vlan),
 			setConditions(port, values) {
 				const far = fabric.farEnd(slot, port);

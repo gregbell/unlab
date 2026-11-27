@@ -1456,6 +1456,38 @@ describe("spanning tree", () => {
 		expect(t.heard("c").at(-1)).toEqual(ping(2, 3));
 	});
 
+	test("is one tree for every VLAN: trunks that carry no untagged VLAN still carry its messages, and the port it blocks drops every VLAN's frames", () => {
+		const t = net(ALL, TRIANGLE);
+		// Each cable is a trunk of VLANs 10 and 20 whose native VLAN it does not carry, and each machine is in VLAN 10.
+		for (const end of ["a7", "a8", "b7", "b8", "c7", "c8"])
+			t.fabric.setVlan(t.end(end).slot, t.end(end).port, trunk([10, 20]));
+		for (const on of ALL) t.fabric.setVlan(t.slot(on), 1, access(10));
+		t.stp(ALL);
+		expect(t.ports()).toEqual(BLOCKED);
+		// The messages crossed the trunks untagged, where no VLAN goes untagged.
+		const said = t.taps.filter(({ e }) => isForBridges(e.frame));
+		expect(said.some(({ on, e }) => on === "c" && e.from === 8)).toBe(true);
+		expect(said.every(({ e }) => vlanTag(e.frame) === null)).toBe(true);
+
+		t.send("a", arpRequest(1, 9));
+		t.run(50);
+		expect(ALL.map((on) => t.heard(on).length)).toEqual([0, 1, 1]);
+		expect(t.took().map(({ on, e }) => `${on}${e.from} vlan ${e.vlan}`)).toEqual([
+			"a1 vlan 10",
+			"b8 vlan 10",
+			"c7 vlan 10",
+		]);
+		// What b floods towards c is tagged with VLAN 10, and the blocked port drops it all the same.
+		expect(t.fabric.counters(t.slot("c"), 8)?.dropped).toBe(1);
+		expect([t.storming(), t.storms]).toEqual([[], []]);
+
+		// With the tree off, the same broadcast goes round in VLAN 10.
+		t.stp(ALL, false);
+		t.send("a", arpRequest(1, 9));
+		t.run(200);
+		expect(t.storming()).toEqual(["a", "b", "c"]);
+	});
+
 	test("keeps a switch's priority and its ports' costs while it takes no part, gives them to its tree when it does, and changes the tree with them at once", () => {
 		const t = net(ALL, TRIANGLE);
 		t.fabric.setPriority(t.slot("c"), 4096 as BridgePriority);

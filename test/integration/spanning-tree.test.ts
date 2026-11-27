@@ -5,7 +5,16 @@
 import assert from "node:assert/strict";
 import { appendFileSync, mkdirSync } from "node:fs";
 import { afterAll, beforeAll, test } from "vitest";
-import { arpAddrs, decodeBpdu, ETH_HDR, ip4, ipAddrs, isForBridges } from "../../src/net/index.ts";
+import {
+	type BridgePriority,
+	DEFAULT_COST,
+	DEFAULT_PRIORITY,
+	type PathCost,
+	type PortNo,
+	type PortVlan,
+	type VlanId,
+} from "../../src/model/index.ts";
+import { arpAddrs, decode, decodeBpdu, ETH_HDR, ip4, ipAddrs, isForBridges } from "../../src/net/index.ts";
 import { EDGE_DELAY_MS, HELLO_MS } from "../../src/runtime/rstp.ts";
 import { bootLab, type SwitchedTap, type TestLab } from "./lab.ts";
 
@@ -79,9 +88,13 @@ const BLOCKED = [
 ];
 const blocked = (what: string) => until(() => ports().join() === BLOCKED.join(), 2000, what);
 
-/** Every switch takes part and every cable is in, whatever the test before left. */
+/** Every switch takes part at the priority it starts with, each port at its first cost, and every cable is in, whatever the test before left. */
 async function agreed(): Promise<void> {
-	for (const sw of lab.switches) if (!sw.tree()) sw.setTree(true);
+	for (const sw of lab.switches) {
+		if (!sw.tree()) sw.setTree(true);
+		sw.setPriority(DEFAULT_PRIORITY);
+		for (const port of [1, 7, 8] as const) sw.setCost(port, DEFAULT_COST);
+	}
 	lab.switches[2].setLink(7, true);
 	await blocked("the three agree");
 }
@@ -275,4 +288,123 @@ test("a cable to a switch with spanning tree off still makes a loop, and that lo
 	await until(() => storming() === 0, 2000, "the storm ends");
 	assert.deepEqual(ports(), BLOCKED);
 	assert.ok(await pings(1, "node1", 1), "and pings work");
+});
+
+/** What a guest's tcpdump makes of the next of the switch's messages that its eth0 hears. */
+const dumped = (machine: number) => lab.machines[machine].run("timeout 10 tcpdump -vnni eth0 -c 1 stp 2>/dev/null");
+
+test("a guest's tcpdump reads the root and its cost in the switch's messages, the capture decodes them, and a priority or a cost moves the root or the blocked port", async () => {
+	await agreed();
+	const since = lab.now();
+	// node3's port is one of switch 2's, which is a bridge from the root.
+	const heard = await dumped(2);
+	measured(`node3's tcpdump of a message from switch 2: ${heard.replace(/\s+/g, " ")}`);
+	assert.match(heard, /802\.1w|Rapid STP/, heard);
+	assert.match(heard, /bridge-id 8000\.02:00:00:00:00:03\.8001/, heard);
+	assert.match(heard, /root-id 8000\.02:00:00:00:00:01, root-pathcost 20000/, heard);
+	// What switch 1 says to switch 2 on their cable, as the capture has it: the blocked port reads it.
+	const told = lab.frames.find((e) => e.at >= since && e.switch === 2 && e.from === 8 && isForBridges(e.frame));
+	assert.ok(told, "switch 2 took in a message by its blocked port");
+	const row = decode(told.frame);
+	assert.equal(row.proto, "RSTP");
+	assert.match(
+		row.info,
+		/^root 32768\.02:00:00:00:00:01 · cost 20000 · from 32768\.02:00:00:00:00:02 port 7 · designated, forwarding/,
+	);
+
+	// Switch 2 is made the root. Switches 0 and 1 each reach it by their own cable, and the cable between them is
+	// blocked at switch 1, whose address is the higher.
+	const ROOTED = [
+		"0:7 designated forwarding",
+		"0:8 root forwarding",
+		"1:7 root forwarding",
+		"1:8 alternate discarding",
+		"2:7 designated forwarding",
+		"2:8 designated forwarding",
+	];
+	const setAt = lab.now();
+	lab.switches[2].setPriority(4096 as BridgePriority);
+	await until(() => ports().join() === ROOTED.join(), 2000, "switch 2 is the root");
+	assert.deepEqual(
+		lab.switches.map((sw) => sw.tree()?.root),
+		Array(3).fill({ priority: 4096, address: "02:00:00:00:00:03" }),
+	);
+	assert.match(await dumped(0), /root-id 1000\.02:00:00:00:00:03, root-pathcost 20000/, "node1 hears of the new root");
+	await ask("10.88.0.94");
+	await wait(500);
+	assert.deepEqual(
+		asked("10.88.0.94")
+			.map((e) => [e.switch, e.looped])
+			.sort(),
+		[
+			[0, false],
+			[1, false],
+			[2, false],
+		],
+		"a broadcast is carried once by each switch",
+	);
+	assert.ok(await pings(0, "node2"), "node1 reaches node2, round by the new root");
+	assert.ok(await pings(1, "node3"), "node2 reaches node3");
+	assert.ok(await pings(2, "node1"), "node3 reaches node1");
+	assert.equal(lab.storms.filter((storm) => storm.at >= setAt).length, 0, "and nothing stormed");
+
+	lab.switches[2].setPriority(DEFAULT_PRIORITY);
+	await blocked("switch 0 is the root again");
+
+	// Switch 2's own cable to the root is made dearer than the way round by switch 1, so it is the one blocked.
+	const COSTLY = [
+		"0:7 designated forwarding",
+		"0:8 designated forwarding",
+		"1:7 designated forwarding",
+		"1:8 root forwarding",
+		"2:7 alternate discarding",
+		"2:8 root forwarding",
+	];
+	lab.switches[2].setCost(7, 100_000 as PathCost);
+	await until(() => ports().join() === COSTLY.join(), 2000, "the cost moves the blocked port");
+	assert.equal(lab.switches[2].tree()?.cost, 40_000);
+	const costAt = lab.now();
+	assert.ok(await pings(2, "node1"), "node3 reaches node1, by switch 1");
+	const crossed = lab.frames.filter((e) => e.at > costAt && e.switch === 2 && e.from === 7 && !isForBridges(e.frame));
+	assert.equal(crossed.length, 0, "no frame but the tree's own came in by the port that the cost blocked");
+	lab.switches[2].setCost(7, DEFAULT_COST);
+	await blocked("the cost is back");
+});
+
+test("one tree covers every VLAN: across trunks that carry VLANs 10 and 20 and nothing untagged, the same port blocks, a broadcast in VLAN 10 reaches each machine once, and pings work", async () => {
+	await agreed();
+	const access = (vlan: number): PortVlan => ({ mode: "access", vlan: vlan as VlanId });
+	const trunk: PortVlan = { mode: "trunk", allowed: [10, 20] as VlanId[], native: 1 as VlanId };
+	const cables = [0, 1, 2].flatMap((sw) => [7, 8].map((port) => [sw, port as PortNo] as const));
+	try {
+		for (const [sw, port] of cables) lab.switches[sw].setVlan(port, trunk);
+		for (const sw of lab.switches) sw.setVlan(1, access(10));
+		// Each switch starts again, so that what they agree on is what the trunks carried.
+		const since = lab.now();
+		for (const sw of lab.switches) sw.setTree(false);
+		for (const sw of lab.switches) sw.setTree(true);
+		await blocked("the three agree across the trunks");
+		const said = lab.frames.filter((e) => e.at >= since && isForBridges(e.frame));
+		assert.ok(said.length > 0, "the switches heard each other's messages over the trunks");
+
+		await ask("10.88.0.93");
+		await wait(500);
+		assert.deepEqual(
+			asked("10.88.0.93").map((e) => [e.switch, e.from, e.vlan, e.looped]),
+			[
+				[0, 1, 10, false],
+				[1, 8, 10, false],
+				[2, 7, 10, false],
+			],
+			"each switch carried the request in VLAN 10 once, and none of it came round",
+		);
+		assert.equal(lab.storms.filter((storm) => storm.at >= since).length, 0, "and nothing stormed");
+		assert.ok(await pings(0, "node3"), "node1 reaches node3 in VLAN 10");
+		assert.ok(await pings(1, "node3"), "node2 reaches node3, round by the root");
+		const crossed = lab.frames.filter((e) => e.at > since && e.switch === 2 && e.from === 8 && !isForBridges(e.frame));
+		assert.equal(crossed.length, 0, "no tagged frame came in by the blocked port");
+	} finally {
+		for (const [sw, port] of cables) lab.switches[sw].setVlan(port, access(1));
+		for (const sw of lab.switches) sw.setVlan(1, access(1));
+	}
 });
