@@ -28,6 +28,9 @@ export default mergeConfig(
 						environment: "node",
 						testTimeout: 300_000,
 						hookTimeout: 300_000,
+						// A file's machines have a thread each, and some tests time what the switches do. With a file for
+						// every processor those tests ran late: on 16 processors, one more file had most runs fail.
+						maxWorkers: 8,
 					},
 				},
 				{
