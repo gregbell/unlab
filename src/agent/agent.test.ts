@@ -229,6 +229,18 @@ describe("registration", () => {
 		expect(long).toEqual([]);
 	});
 
+	it("says in capture_read each filter term that help capture explains, and takes the filter in help capture's words", async () => {
+		const { context, lab } = await setup();
+		const capture = lab.registry.find("capture")?.manual;
+		const tool = context.tools.get("capture_read");
+		for (const term of ["lan", "lan:3", "port:3", "vlan 10", "stp"]) {
+			const explained = new RegExp(`(^|[ ,])${term} (is )?(what|the|that)`);
+			expect(capture?.description, `help capture says ${term}`).toMatch(explained);
+			expect(tool?.description, `capture_read says ${term}`).toMatch(explained);
+		}
+		expect(tool?.inputSchema.properties?.filter.description).toBe(capture?.arguments[0].about);
+	});
+
 	it("lists the tools in the handoff's order with their arguments", async () => {
 		const { agent } = await setup();
 		expect(agent.tools.map((t) => t.name)).toEqual(ALL_TOOLS);
