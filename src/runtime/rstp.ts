@@ -9,8 +9,10 @@
 // out: a port that is shared by more than two bridges, a dispute over a cable
 // that carries one way only, and sending classic spanning tree to a bridge
 // that speaks no other. A classic message is read, as a designated port's.
-// One number is not the standard's: how many messages a port may send in a
-// second, which `TX_HOLD` says why.
+// Two things are not the standard's. One is how many messages a port may send
+// in a second, which `TX_HOLD` says why. The other is that a port takes an
+// agreement only from a bridge that names the port's own root, where the
+// standard takes any that is no better than what the port holds.
 //
 // A port is safe from the moment it is enabled: it neither learns nor forwards
 // until the procedures have said that it may.
@@ -357,8 +359,11 @@ export class Bridge {
 		}
 		// A root or alternate port answers a proposal with what it holds, which is no better than what was proposed.
 		if (message.role !== "unknown" && said.key >= port.held.key) {
-			port.agreed = message.agreement;
-			if (message.agreement) port.proposing = false;
+			// A bridge that answers what this port said has this port's root. One that names another answered what the
+			// port said before, and that answer was on its way while word of a root that is gone went round.
+			const answers = message.agreement && said.root === port.held.root;
+			port.agreed = answers;
+			if (answers) port.proposing = false;
 			if (message.topologyChange) port.rcvdTc = true;
 		}
 	}
