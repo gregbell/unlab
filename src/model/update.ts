@@ -106,6 +106,7 @@ export const DEFAULT_POLICIES: Readonly<Record<ToolName, Policy>> = {
 	cable_plug: "run",
 	cable_unplug: "run",
 	capture_read: "run",
+	capture_save: "run",
 };
 
 const NOWHERE: Keyboard = { kind: "none" };

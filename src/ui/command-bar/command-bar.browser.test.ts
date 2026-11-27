@@ -65,6 +65,8 @@ function recordedRun(services: AppServices): CommandService["run"] {
 			now: () => clock,
 			carried: () => undefined,
 			switches: { macTable: () => [], totals: () => ({ in: 0, delivered: 0, flooded: 0 }), now: () => 0 },
+			capture: { frames: () => [], startedAt: 0 },
+			download: () => {},
 			files: { write: () => Promise.reject(new Error("This test has no file port.")) },
 			exec: {
 				inject: async (session) => {
@@ -201,6 +203,7 @@ describe("<unlab-command-bar> CmdOpen: just opened", () => {
 			"topology",
 			"macs",
 			"capture",
+			"pcap",
 			"focus",
 			"boot",
 			"reboot",

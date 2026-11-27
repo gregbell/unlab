@@ -42,6 +42,7 @@ import { isAddressFault, MATCH_ALL, parseAddress } from "../../net/index.ts";
 import type { AgentService, AppServices, SwitchReadout, TerminalService } from "../services.ts";
 import { createShareService } from "../share-ssh/service.ts";
 import { servicesContext } from "./context.ts";
+import { download } from "./download.ts";
 
 const TEST_IMAGES = [{ name: "alpine", label: "alpine 3.24" }] as const;
 
@@ -284,6 +285,8 @@ export async function mount<K extends keyof HTMLElementTagNameMap>(
 			now: () => store.state.now,
 			carried: (port) => carried.get(portName(port)),
 			switches: readout,
+			capture: options.capture ?? EMPTY_CAPTURE,
+			download,
 			exec: { inject: () => Promise.reject(new Error("This fixture has no runtime.")) },
 			files: { write: () => Promise.reject(new Error("This fixture has no runtime.")) },
 		},

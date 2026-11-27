@@ -2,10 +2,12 @@
 // link as the lab does. No machine is needed: the page answers for the tools.
 
 import { execFileSync } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
 import { createServer } from "node:net";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, test } from "vitest";
+import { MAX_PCAP_BYTES, type PcapData } from "../../src/commands/index.ts";
 import { PROTOCOL, type ToolInfo } from "../../src/streams/index.ts";
 import { freePort, type McpSession, TestCli, TestPage } from "../support/cli.ts";
 
@@ -107,6 +109,21 @@ test("a call reaches the lab as it was made, and its answer comes back: a reply 
 	expect(isError(no)).toBe(true);
 	expect(text(no)).toBe("Denied by the user.");
 	expect(mcp.stderr).toBe("");
+});
+
+test("a reply as large as capture_save gives, a .pcap of the most it returns, comes to the agent whole", async () => {
+	const mcp = await started();
+	const page = await lab();
+	await expect.poll(() => mcp.tools()).toHaveLength(2);
+	const file = randomBytes(MAX_PCAP_BYTES);
+	const data: PcapData = { name: "unlab.pcap", frames: 1384, size: file.length, bytes: file.toString("base64") };
+	const id = mcp.ask("tools/call", { name: "shell_read", arguments: { machine: "node1" } });
+	const call = await page.hears("call");
+	page.say({ type: "reply", id: call.id, reply: { result: "unlab.pcap · 1384 frames", data } });
+	const answer = await mcp.answer(id, 30_000);
+	expect(isError(answer), text(answer).slice(0, 200)).toBe(false);
+	const read = JSON.parse(text(answer)) as { data: PcapData };
+	expect(Buffer.from(read.data.bytes ?? "", "base64").equals(file)).toBe(true);
 });
 
 test("a call the client cancels is stopped in the lab", async () => {

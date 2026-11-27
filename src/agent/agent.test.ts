@@ -40,6 +40,8 @@ function storeLab(files: FilePort = { write: () => Promise.reject(new Error("Thi
 			now: () => store.state.now,
 			carried: () => undefined,
 			switches: { macTable: () => [], totals: () => ({ in: 0, delivered: 0, flooded: 0 }), now: () => 0 },
+			capture: { frames: () => [], startedAt: 0 },
+			download: () => {},
 			exec: { inject: () => Promise.reject(new Error("This test has no exec port.")) },
 			files,
 		},
@@ -108,6 +110,7 @@ const ALL_TOOLS: readonly ToolName[] = [
 	"cable_plug",
 	"cable_unplug",
 	"capture_read",
+	"capture_save",
 ];
 
 /** An agent over an empty lab, in a browser whose modelContext the test brings. */
@@ -216,6 +219,7 @@ describe("registration", () => {
 			"Restore a checkpoint",
 			"Run a shell command",
 			"Save a checkpoint",
+			"Save captured frames as a .pcap",
 			"Set a switch port's spanning tree cost",
 			"Set a switch's spanning tree priority",
 			"Turn spanning tree on or off",

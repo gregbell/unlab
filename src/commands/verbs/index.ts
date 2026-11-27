@@ -11,6 +11,7 @@ import { link } from "./link.ts";
 import { ls } from "./ls.ts";
 import { macs } from "./macs.ts";
 import { mkswitch } from "./mkswitch.ts";
+import { pcap } from "./pcap.ts";
 import { plug, unplug } from "./plug.ts";
 import { poweroff } from "./poweroff.ts";
 import { reboot } from "./reboot.ts";
@@ -32,6 +33,7 @@ export type { CableState, SwitchCableState } from "./link.ts";
 export type { ListedMachine } from "./ls.ts";
 export type { ListedMac, SwitchMacs } from "./macs.ts";
 export type { SwitchData } from "./mkswitch.ts";
+export { MAX_PCAP_BYTES, type PcapData } from "./pcap.ts";
 export type { PluggedCable } from "./plug.ts";
 export type { PowerState } from "./power.ts";
 export type { RemoveData } from "./rm.ts";
@@ -54,6 +56,7 @@ export {
 	ls,
 	macs,
 	mkswitch,
+	pcap,
 	plug,
 	poweroff,
 	priority,
@@ -97,6 +100,7 @@ export const VERBS: readonly AnyVerb[] = [
 	topology,
 	macs,
 	capture,
+	pcap,
 	focus,
 	boot,
 	reboot,

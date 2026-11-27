@@ -462,7 +462,8 @@ export type ToolName =
 	| "link_set"
 	| "cable_plug"
 	| "cable_unplug"
-	| "capture_read";
+	| "capture_read"
+	| "capture_save";
 
 export interface AgentCall {
 	readonly id: number;

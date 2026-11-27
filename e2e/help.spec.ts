@@ -65,13 +65,13 @@ test("help lists and explains the verbs, and lab_help and the tools themselves s
 	await openLab(page);
 	const all = await helped(page, "help");
 	expect(all.rows.map(([verb]) => verb)).toEqual(
-		"spawn rm ls exec write sh link plug unplug mkswitch rmswitch cable uncable vlan trunk stp priority cost topology macs capture focus boot reboot poweroff checkpoint restore forget help".split(
+		"spawn rm ls exec write sh link plug unplug mkswitch rmswitch cable uncable vlan trunk stp priority cost topology macs capture pcap focus boot reboot poweroff checkpoint restore forget help".split(
 			" ",
 		),
 	);
-	expect(all.header).toBe("29 verbs");
+	expect(all.header).toBe("30 verbs");
 	expect(await call(page, "lab_help", {})).toMatchObject({
-		result: "29 verbs",
+		result: "30 verbs",
 		data: all.rows.map(([verb, about]) => ({ verb, about })),
 	});
 
@@ -240,7 +240,7 @@ test("what cannot run is refused in one sentence, the same in the bar and throug
 			"help spwan",
 			"lab_help",
 			{ verb: "spwan" },
-			"No verb is called spwan, so use spawn, rm, ls, exec, write, sh, link, plug, unplug, mkswitch, rmswitch, cable, uncable, vlan, trunk, stp, priority, cost, topology, macs, capture, focus, boot, reboot, poweroff, checkpoint, restore, forget or help.",
+			"No verb is called spwan, so use spawn, rm, ls, exec, write, sh, link, plug, unplug, mkswitch, rmswitch, cable, uncable, vlan, trunk, stp, priority, cost, topology, macs, capture, pcap, focus, boot, reboot, poweroff, checkpoint, restore, forget or help.",
 		],
 	];
 	for (const [line, tool, input, sentence] of rows) {

@@ -30,6 +30,8 @@ async function open(saved: string) {
 			now: () => 0,
 			carried: () => undefined,
 			switches: { macTable: () => [], totals: () => ({ in: 0, delivered: 0, flooded: 0 }), now: () => 0 },
+			capture: { frames: () => [], startedAt: 0 },
+			download: () => {},
 			exec: NO_EXEC,
 			files: NO_FILES,
 		},

@@ -110,6 +110,7 @@ describe("initialState", () => {
 				cable_plug: "run",
 				cable_unplug: "run",
 				capture_read: "run",
+				capture_save: "run",
 			},
 			paused: false,
 			calls: [],

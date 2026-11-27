@@ -211,6 +211,10 @@ export async function commandLab(saved: string | null = null): Promise<Commanded
 				totals: (of) => fabric.totals(slotOf(of)),
 				now: () => clock.now(),
 			},
+			capture: { frames: () => [], startedAt: 0 },
+			download: () => {
+				throw new Error("This lab saves no files.");
+			},
 			exec,
 			files: { write: () => Promise.reject(new Error("This lab writes no files.")) },
 		},

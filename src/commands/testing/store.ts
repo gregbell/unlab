@@ -12,6 +12,7 @@ import {
 	type SwitchName,
 	type SwitchTotals,
 } from "../../model/index.ts";
+import type { CapturedFrame } from "../../net/index.ts";
 import type { CommandDeps, ExecOutcome, ExecPort, FilePort, ParsedLine } from "../define.ts";
 import { createRegistry, parseLine } from "../index.ts";
 import { isLineError, type LineError } from "../types.ts";
@@ -31,6 +32,9 @@ export function storeLab(exec: ExecPort = NO_EXEC, files: FilePort = NO_FILES) {
 	/** What each switch has learned, and its counters, by its name. */
 	const learned = new Map<SwitchName, readonly LearnedMac[]>();
 	const totals = new Map<SwitchName, SwitchTotals>();
+	/** The frames the capture holds, oldest first, and the files a person was given to save. */
+	const captured: CapturedFrame[] = [];
+	const downloads: { readonly name: string; readonly type: string; readonly bytes: Uint8Array }[] = [];
 	const store = createStore(initialState(IMAGES, { width: 1300, height: 500 }), (effect) => {
 		effects.push(effect);
 		if (effect.type === "vm/stop") {
@@ -51,6 +55,10 @@ export function storeLab(exec: ExecPort = NO_EXEC, files: FilePort = NO_FILES) {
 			macTable: (of) => learned.get(of) ?? [],
 			totals: (of) => totals.get(of) ?? { in: 0, delivered: 0, flooded: 0 },
 			now: () => clock,
+		},
+		capture: { frames: () => captured, startedAt: 0 },
+		download(name, type, bytes) {
+			downloads.push({ name, type, bytes });
 		},
 		exec,
 		files,
@@ -76,6 +84,8 @@ export function storeLab(exec: ExecPort = NO_EXEC, files: FilePort = NO_FILES) {
 		counted,
 		learned,
 		totals,
+		captured,
+		downloads,
 		signal,
 		advance(ms: number) {
 			clock += ms;

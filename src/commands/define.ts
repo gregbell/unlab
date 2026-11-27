@@ -14,6 +14,7 @@ import type {
 	SwitchTotals,
 	ToolName,
 } from "../model/index.ts";
+import type { CapturedFrame } from "../net/index.ts";
 import type { Approval } from "./approval.ts";
 import { complete } from "./grammar/complete.ts";
 import { format as formatLine, type Shown, shown, signature as signatureOf } from "./grammar/format.ts";
@@ -91,6 +92,13 @@ export interface SwitchReads {
 	now(): number;
 }
 
+/** The frames the switches carried, as the capture keeps them, which the lab's state does not hold. */
+export interface CaptureReads {
+	frames(): Iterable<CapturedFrame>;
+	/** The wall clock, in ms since 1970, when a frame's `t` would have been 0. */
+	readonly startedAt: number;
+}
+
 /** What a command needs from the lab. The store satisfies it; tests pass a fake. */
 export interface CommandDeps {
 	state(): LabState;
@@ -101,6 +109,9 @@ export interface CommandDeps {
 	/** What the cable in the port has carried and dropped, which the switches count and the lab's state does not hold. */
 	carried(port: PortRef): CableCounters | undefined;
 	readonly switches: SwitchReads;
+	readonly capture: CaptureReads;
+	/** Gives the browser a file to save where the person keeps downloads. */
+	download(name: string, type: string, bytes: Uint8Array): void;
 	readonly exec: ExecPort;
 	readonly files: FilePort;
 }

@@ -24,6 +24,7 @@ import {
 } from "./model/index.ts";
 import { createRuntime, type DistroManifest, type Engine, sweepDisks } from "./runtime/index.ts";
 import { startTailcat } from "./runtime/tailcat.ts";
+import { download } from "./ui/base/download.ts";
 import type { AppServices, TerminalHost } from "./ui/services.ts";
 import { createShareService } from "./ui/share-ssh/service.ts";
 
@@ -156,6 +157,8 @@ async function main(): Promise<void> {
 			now,
 			carried: engine.reads.carried,
 			switches,
+			capture,
+			download,
 			exec: engine.exec,
 			files: engine.files,
 		},
