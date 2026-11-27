@@ -1,7 +1,17 @@
 import { describe, expect, test } from "vitest";
 import { conditions, seededStreams } from "../../test/support/conditions.ts";
 import { arpReply, arpRequest, BROADCAST, eth, mac, ping } from "../../test/support/frames.ts";
-import type { ConditionValues, PortNo, PortVlan, Tree, VlanId } from "../model/index.ts";
+import {
+	type BridgePriority,
+	type ConditionValues,
+	DEFAULT_COST,
+	DEFAULT_PRIORITY,
+	type PathCost,
+	type PortNo,
+	type PortVlan,
+	type Tree,
+	type VlanId,
+} from "../model/index.ts";
 import { bridgeIdOf, decodeBpdu, encodeBpdu, isForBridges, vlanTag, withoutTag, withTag } from "../net/index.ts";
 import {
 	Fabric,
@@ -1444,6 +1454,51 @@ describe("spanning tree", () => {
 			["c", 7, bit(1), null],
 		]);
 		expect(t.heard("c").at(-1)).toEqual(ping(2, 3));
+	});
+
+	test("keeps a switch's priority and its ports' costs while it takes no part, gives them to its tree when it does, and changes the tree with them at once", () => {
+		const t = net(ALL, TRIANGLE);
+		t.fabric.setPriority(t.slot("c"), 4096 as BridgePriority);
+		t.stp(ALL);
+		expect(t.fabric.tree(t.slot("a"))?.root).toEqual({ priority: 4096, address: "02:00:00:00:00:03" });
+		expect(t.ports()).toEqual([
+			"a7 designated forwarding",
+			"a8 root forwarding",
+			"b7 root forwarding",
+			"b8 alternate discarding",
+			"c7 designated forwarding",
+			"c8 designated forwarding",
+		]);
+
+		// b's own cable to c is dearer than the way round by a.
+		t.fabric.setCost(t.slot("b"), 7, 100_000 as PathCost);
+		t.drain();
+		expect(t.ports()).toEqual([
+			"a7 designated forwarding",
+			"a8 root forwarding",
+			"b7 alternate discarding",
+			"b8 root forwarding",
+			"c7 designated forwarding",
+			"c8 designated forwarding",
+		]);
+		expect(t.fabric.tree(t.slot("b"))?.cost).toBe(40_000);
+
+		// b's costs are changed while it takes no part, and its new tree has them. With c's old priority, a is the root.
+		t.stp(["b"], false);
+		t.fabric.setCost(t.slot("b"), 7, DEFAULT_COST);
+		t.fabric.setCost(t.slot("b"), 8, 100_000 as PathCost);
+		t.fabric.setPriority(t.slot("c"), DEFAULT_PRIORITY);
+		t.stp(["b"]);
+		t.run(10);
+		expect(t.ports()).toEqual([
+			"a7 designated forwarding",
+			"a8 designated forwarding",
+			"b7 root forwarding",
+			"b8 alternate discarding",
+			"c7 root forwarding",
+			"c8 designated forwarding",
+		]);
+		expect([t.storming(), t.storms]).toEqual([[], []]);
 	});
 
 	test("has work from when a switch is told to take part, and after it a timer for the next hello", () => {

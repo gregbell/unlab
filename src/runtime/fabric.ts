@@ -52,12 +52,16 @@
 // Addresses are numbers here. They are text only where someone reads a table.
 
 import {
+	type BridgePriority,
 	type CableCounters,
 	type CableDrop,
 	type Conditions,
+	DEFAULT_COST,
+	DEFAULT_PRIORITY,
 	type DropReason,
 	ETH_MTU,
 	hasConditions,
+	type PathCost,
 	type PortNo,
 	type PortVlan,
 	type Tree,
@@ -161,8 +165,6 @@ export interface FabricEvents {
 export interface BridgeConfig {
 	/** Its MAC as one number, which no other switch of the lab has. */
 	readonly address: number;
-	/** Left out, 32768. */
-	readonly priority?: number;
 }
 
 export interface FabricOptions {
@@ -437,6 +439,10 @@ class Switch {
 	storm: Storm | null = null;
 	/** Its part in the spanning tree, or null while it takes none. */
 	tree: Bridge | null = null;
+	/** Its priority in the spanning tree, kept while it takes no part, as each port's cost is. */
+	priority: BridgePriority = DEFAULT_PRIORITY;
+	/** What each port adds to the way to the root through it. */
+	readonly costs: PathCost[] = new Array<PathCost>(PORTS + 1).fill(DEFAULT_COST);
 	/** The reading of its tree that its owner was last told, by its version. */
 	treeTold = 0;
 }
@@ -626,16 +632,33 @@ export class Fabric {
 				},
 				flush: (p) => forget(sw, p),
 			},
-			bridge.priority,
+			sw.priority,
 		);
 		this.#trees++;
 		sw.tree = tree;
 		sw.treeTold = 0;
 		sw.tables.clear();
 		for (let p = 1; p <= PORTS; p++) {
+			tree.setCost(p as PortNo, sw.costs[p]);
 			const port = sw.ports[p];
 			if (port?.up) tree.enable(p as PortNo, port.sink !== null);
 		}
+	}
+
+	/** The switch's priority in the spanning tree from now on, whether or not it takes part. */
+	setPriority(slot: number, priority: BridgePriority): void {
+		const sw = this.#switches[slot];
+		if (!sw) return;
+		sw.priority = priority;
+		sw.tree?.setPriority(priority);
+	}
+
+	/** What the port adds to the way to the root through it from now on, whether or not its switch takes part. */
+	setCost(slot: number, port: PortNo, cost: PathCost): void {
+		const sw = this.#switches[slot];
+		if (!sw) return;
+		sw.costs[port] = cost;
+		sw.tree?.setCost(port, cost);
 	}
 
 	/** The switch's part in the spanning tree, or null for one that takes none. */

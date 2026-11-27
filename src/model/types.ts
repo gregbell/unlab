@@ -161,6 +161,21 @@ export interface BridgeRef {
 	readonly address: string;
 }
 
+declare const bridgePriority: unique symbol;
+/** A switch's priority in the spanning tree: a step of 4096 from 0 to 61440, as 802.1D-2004 has it. The lower wins. */
+export type BridgePriority = number & { readonly [bridgePriority]: true };
+export const PRIORITY_STEP = 4096;
+export const MAX_PRIORITY = 61_440;
+export const DEFAULT_PRIORITY = 32_768 as BridgePriority;
+
+declare const pathCost: unique symbol;
+/** What a port adds to the way to the root through it: from 1 to 200,000,000, as 802.1D-2004 has it. */
+export type PathCost = number & { readonly [pathCost]: true };
+export const MIN_COST = 1;
+export const MAX_COST = 200_000_000;
+/** What a gigabit port costs. */
+export const DEFAULT_COST = 20_000 as PathCost;
+
 /** A switch's part in the spanning tree, as its messages with its neighbours left it. */
 export interface Tree {
 	readonly bridge: BridgeRef;
