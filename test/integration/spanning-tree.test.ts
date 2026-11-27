@@ -135,6 +135,18 @@ test("cutting a cable in use brings the blocked port into use, and pings resume 
 		// Long enough that each port may send at once again: agreeing took most of the six messages a second allows.
 		await wait(3 * HELLO_MS);
 
+		// With node3 silent, the cable is cut. Switch 1 has node3 by way of the root, and node2 has its address, so node2's
+		// ping is one frame for node3 and no question to everyone: it arrives only if switch 1 was told to forget.
+		const quietAt = lab.now();
+		lab.switches[2].setLink(7, false);
+		assert.ok(await pings(lab, 1, "node3", 1), "node2 reaches node3, which has said nothing since the cut");
+		const told = lab.frames.find((e) => e.at >= quietAt && e.switch === 1 && e.from === 7 && isForBridges(e.frame));
+		assert.equal(told && decodeBpdu(told.frame)?.topologyChange, true, "switch 2 said that the topology had changed");
+		assert.equal(asked(lab, "10.88.0.13").filter((e) => e.at >= quietAt).length, 0, "and node2 asked nobody for node3");
+		lab.switches[2].setLink(7, true);
+		await until(() => ports(lab).join() === BLOCKED.join(), 2000, "the cable is back in use");
+		await wait(3 * HELLO_MS);
+
 		// node3 pings node1 fifty times a second, and the cable that carries them is cut.
 		const gaps: number[] = [];
 		const trees: number[] = [];

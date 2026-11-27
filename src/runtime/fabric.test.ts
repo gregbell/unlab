@@ -1530,6 +1530,27 @@ describe("spanning tree", () => {
 		expect([t.storms, t.now]).toEqual([[], cutAt]);
 	});
 
+	test("forgets what it had learned when it begins, so no address is left on a port that the tree then blocks", () => {
+		const t = net(ALL, TRIANGLE);
+		// A line of three while one cable is cut, where c learns node2 on its port to b.
+		t.cut("c7");
+		t.send("b", arpRequest(2, 3));
+		t.run(5);
+		t.send("c", arpReply(3, 2));
+		t.run(5);
+		expect(t.table("c")).toMatchObject({ [NODE[2]]: 8 });
+		// The loop is closed, and before a frame has gone round it the tree blocks that port.
+		t.cut("c7", true);
+		t.stp(ALL);
+		expect(t.ports()).toEqual(BLOCKED);
+		expect(t.table("c")).toEqual({});
+		const before = t.heard("b").length;
+		t.send("c", ping(3, 2));
+		t.run(5);
+		expect(t.heard("b").slice(before)).toEqual([ping(3, 2)]);
+		expect(t.storming()).toEqual([]);
+	});
+
 	test("ends a storm when it is turned on for the switches of the loop", () => {
 		const t = net(ALL, TRIANGLE);
 		t.send("a", arpRequest(1, 9));
