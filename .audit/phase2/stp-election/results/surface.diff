@@ -1,0 +1,344 @@
+14c14
+<   "header": "26 verbs",
+---
+>   "header": "28 verbs",
+81a82,89
+>     "term": "priority",
+>     "text": "set a switch's priority in the spanning tree"
+>    },
+>    {
+>     "term": "cost",
+>     "text": "set what a switch port costs in the spanning tree"
+>    },
+>    {
+203a212,221
+>     "verb": "priority",
+>     "about": "set a switch's priority in the spanning tree",
+>     "tool": "switch_priority"
+>    },
+>    {
+>     "verb": "cost",
+>     "about": "set what a switch port costs in the spanning tree",
+>     "tool": "port_cost"
+>    },
+>    {
+1962c1980
+<     "text": "Turn rapid spanning tree (RSTP) on or off for switches: lan, switch0,lan or all. It is off on a new switch, where a loop of cables storms. Switches with it on send each other BPDUs, choose a root, and block the ports that would close a loop, so a lab can have spare cables. When a cable in use is cut, a blocked port takes over. A switch with it off passes no BPDU on, so a loop through it still storms, and a port towards it carries after 3 seconds. topology has each port's role and state."
+---
+>     "text": "Turn rapid spanning tree (RSTP) on or off for switches: lan, switch0,lan or all. It is off on a new switch, where a loop of cables storms. Switches with it on send each other BPDUs, choose a root, and block the ports that would close a loop, so a lab can have spare cables. If a cable in use is cut, a blocked port takes over. A switch with it off passes no BPDU on, so a loop through it still storms. priority and cost steer the root and which port blocks. topology has each port's role and state."
+1986c2004
+<    "description": "Turn rapid spanning tree (RSTP) on or off for switches: lan, switch0,lan or all. It is off on a new switch, where a loop of cables storms. Switches with it on send each other BPDUs, choose a root, and block the ports that would close a loop, so a lab can have spare cables. When a cable in use is cut, a blocked port takes over. A switch with it off passes no BPDU on, so a loop through it still storms, and a port towards it carries after 3 seconds. topology has each port's role and state.",
+---
+>    "description": "Turn rapid spanning tree (RSTP) on or off for switches: lan, switch0,lan or all. It is off on a new switch, where a loop of cables storms. Switches with it on send each other BPDUs, choose a root, and block the ports that would close a loop, so a lab can have spare cables. If a cable in use is cut, a blocked port takes over. A switch with it off passes no BPDU on, so a loop through it still storms. priority and cost steer the root and which port blocks. topology has each port's role and state.",
+2019c2037
+<  "description": "Turn rapid spanning tree (RSTP) on or off for switches: lan, switch0,lan or all. It is off on a new switch, where a loop of cables storms. Switches with it on send each other BPDUs, choose a root, and block the ports that would close a loop, so a lab can have spare cables. When a cable in use is cut, a blocked port takes over. A switch with it off passes no BPDU on, so a loop through it still storms, and a port towards it carries after 3 seconds. topology has each port's role and state.",
+---
+>  "description": "Turn rapid spanning tree (RSTP) on or off for switches: lan, switch0,lan or all. It is off on a new switch, where a loop of cables storms. Switches with it on send each other BPDUs, choose a root, and block the ports that would close a loop, so a lab can have spare cables. If a cable in use is cut, a blocked port takes over. A switch with it off passes no BPDU on, so a loop through it still storms. priority and cost steer the root and which port blocks. topology has each port's role and state.",
+2043a2062,2261
+> == help priority
+> {
+>  "line": "help priority",
+>  "assumed": [],
+>  "preview": {
+>   "will": "explain priority",
+>   "assumed": null,
+>   "tone": "plain"
+>  },
+>  "refused": null,
+>  "confirm": null,
+>  "result": {
+>   "kind": "report",
+>   "header": "priority <switches> <priority>",
+>   "blocks": [],
+>   "rows": [
+>    {
+>     "term": "does",
+>     "text": "Set the spanning tree priority of switches: lan, switch0,lan or all. It is a step of 4096 from 0 to 61440, and 32768 on a new switch. The lowest priority is the root, and of two the same, the lower address. So priority lan 4096 makes lan the root, and which ports block can change with it. A switch keeps its priority while spanning tree is off for it. topology has each switch's bridge ID, its priority and address, and its root. Returns the switches and the priority."
+>    },
+>    {
+>     "term": "<switches>",
+>     "text": "One switch (lan), a comma list (switch0,lan) or all."
+>    },
+>    {
+>     "term": "<priority>",
+>     "text": "The switch's priority: a step of 4096 from 0 to 61440, 32768 on a new switch. The lowest is the root."
+>    },
+>    {
+>     "term": "example",
+>     "text": "priority lan 4096"
+>    },
+>    {
+>     "term": "agent tool",
+>     "text": "switch_priority"
+>    }
+>   ],
+>   "data": {
+>    "verb": "priority",
+>    "about": "set a switch's priority in the spanning tree",
+>    "tool": "switch_priority",
+>    "usage": "priority <switches> <priority>",
+>    "description": "Set the spanning tree priority of switches: lan, switch0,lan or all. It is a step of 4096 from 0 to 61440, and 32768 on a new switch. The lowest priority is the root, and of two the same, the lower address. So priority lan 4096 makes lan the root, and which ports block can change with it. A switch keeps its priority while spanning tree is off for it. topology has each switch's bridge ID, its priority and address, and its root. Returns the switches and the priority.",
+>    "arguments": [
+>     {
+>      "field": "switches",
+>      "written": "<switches>",
+>      "about": "One switch (lan), a comma list (switch0,lan) or all.",
+>      "required": true,
+>      "default": null
+>     },
+>     {
+>      "field": "priority",
+>      "written": "<priority>",
+>      "about": "The switch's priority: a step of 4096 from 0 to 61440, 32768 on a new switch. The lowest is the root.",
+>      "required": true,
+>      "default": null
+>     }
+>    ],
+>    "example": {
+>     "line": "priority lan 4096",
+>     "input": {
+>      "switches": "lan",
+>      "priority": 4096
+>     }
+>    }
+>   }
+>  }
+> }
+> == manual priority
+> {
+>  "verb": "priority",
+>  "about": "set a switch's priority in the spanning tree",
+>  "tool": "switch_priority",
+>  "usage": "priority <switches> <priority>",
+>  "description": "Set the spanning tree priority of switches: lan, switch0,lan or all. It is a step of 4096 from 0 to 61440, and 32768 on a new switch. The lowest priority is the root, and of two the same, the lower address. So priority lan 4096 makes lan the root, and which ports block can change with it. A switch keeps its priority while spanning tree is off for it. topology has each switch's bridge ID, its priority and address, and its root. Returns the switches and the priority.",
+>  "arguments": [
+>   {
+>    "field": "switches",
+>    "written": "<switches>",
+>    "about": "One switch (lan), a comma list (switch0,lan) or all.",
+>    "required": true,
+>    "default": null
+>   },
+>   {
+>    "field": "priority",
+>    "written": "<priority>",
+>    "about": "The switch's priority: a step of 4096 from 0 to 61440, 32768 on a new switch. The lowest is the root.",
+>    "required": true,
+>    "default": null
+>   }
+>  ],
+>  "example": {
+>   "line": "priority lan 4096",
+>   "input": {
+>    "switches": "lan",
+>    "priority": 4096
+>   }
+>  }
+> }
+> == help cost
+> {
+>  "line": "help cost",
+>  "assumed": [],
+>  "preview": {
+>   "will": "explain cost",
+>   "assumed": null,
+>   "tone": "plain"
+>  },
+>  "refused": null,
+>  "confirm": null,
+>  "result": {
+>   "kind": "report",
+>   "header": "cost <port> <cost>",
+>   "blocks": [],
+>   "rows": [
+>    {
+>     "term": "does",
+>     "text": "Set a port's path cost in the spanning tree, from 1 to 200000000, and 20000 on a new port. Name the port (lan:3), or the NIC whose cable is in it (node2). A switch's way to the root costs what the ports it enters by add up to, and each switch takes the way that costs least, so a dearer port is the one to block. A port costs 20000 again once nothing is in it. Returns the port and its cost."
+>    },
+>    {
+>     "term": "<port>",
+>     "text": "A port that something is in (lan:3), or the NIC whose cable is in it (node2, node2:eth1)."
+>    },
+>    {
+>     "term": "<cost>",
+>     "text": "The port's cost: a whole number from 1 to 200000000, 20000 on a new port."
+>    },
+>    {
+>     "term": "example",
+>     "text": "cost lan:3 200000"
+>    },
+>    {
+>     "term": "agent tool",
+>     "text": "port_cost"
+>    }
+>   ],
+>   "data": {
+>    "verb": "cost",
+>    "about": "set what a switch port costs in the spanning tree",
+>    "tool": "port_cost",
+>    "usage": "cost <port> <cost>",
+>    "description": "Set a port's path cost in the spanning tree, from 1 to 200000000, and 20000 on a new port. Name the port (lan:3), or the NIC whose cable is in it (node2). A switch's way to the root costs what the ports it enters by add up to, and each switch takes the way that costs least, so a dearer port is the one to block. A port costs 20000 again once nothing is in it. Returns the port and its cost.",
+>    "arguments": [
+>     {
+>      "field": "port",
+>      "written": "<port>",
+>      "about": "A port that something is in (lan:3), or the NIC whose cable is in it (node2, node2:eth1).",
+>      "required": true,
+>      "default": null
+>     },
+>     {
+>      "field": "cost",
+>      "written": "<cost>",
+>      "about": "The port's cost: a whole number from 1 to 200000000, 20000 on a new port.",
+>      "required": true,
+>      "default": null
+>     }
+>    ],
+>    "example": {
+>     "line": "cost lan:3 200000",
+>     "input": {
+>      "port": "lan:3",
+>      "cost": 200000
+>     }
+>    }
+>   }
+>  }
+> }
+> == manual cost
+> {
+>  "verb": "cost",
+>  "about": "set what a switch port costs in the spanning tree",
+>  "tool": "port_cost",
+>  "usage": "cost <port> <cost>",
+>  "description": "Set a port's path cost in the spanning tree, from 1 to 200000000, and 20000 on a new port. Name the port (lan:3), or the NIC whose cable is in it (node2). A switch's way to the root costs what the ports it enters by add up to, and each switch takes the way that costs least, so a dearer port is the one to block. A port costs 20000 again once nothing is in it. Returns the port and its cost.",
+>  "arguments": [
+>   {
+>    "field": "port",
+>    "written": "<port>",
+>    "about": "A port that something is in (lan:3), or the NIC whose cable is in it (node2, node2:eth1).",
+>    "required": true,
+>    "default": null
+>   },
+>   {
+>    "field": "cost",
+>    "written": "<cost>",
+>    "about": "The port's cost: a whole number from 1 to 200000000, 20000 on a new port.",
+>    "required": true,
+>    "default": null
+>   }
+>  ],
+>  "example": {
+>   "line": "cost lan:3 200000",
+>   "input": {
+>    "port": "lan:3",
+>    "cost": 200000
+>   }
+>  }
+> }
+2062c2280
+<     "text": "List the wiring: every switch with its eight ports, what each port's cable goes to, its link (up, cut, or down while the machine at its end is not ready), its conditions, what it delivered and dropped, and what the port carries: a VLAN, or a trunk's VLANs and native one. A cable between switches is at both its ports. With spanning tree on, a switch has stp, and each port its role and state: discarding is blocked. A storming switch has storm. Then the NICs in no switch. Port 3 of lan is lan:3."
+---
+>     "text": "List the wiring: each switch's eight ports, what each port's cable goes to, its link (up, cut, or down while its machine is not ready), conditions, what it delivered and dropped, and its VLAN or a trunk's VLANs. A cable between switches is at both its ports. With spanning tree on, a switch has stp, and tree: its bridge ID, root and root cost. Each port has its role and state: discarding is blocked. priority and cost are there when set. A storming switch has storm. Then the NICs in no switch."
+2078c2296
+<    "description": "List the wiring: every switch with its eight ports, what each port's cable goes to, its link (up, cut, or down while the machine at its end is not ready), its conditions, what it delivered and dropped, and what the port carries: a VLAN, or a trunk's VLANs and native one. A cable between switches is at both its ports. With spanning tree on, a switch has stp, and each port its role and state: discarding is blocked. A storming switch has storm. Then the NICs in no switch. Port 3 of lan is lan:3.",
+---
+>    "description": "List the wiring: each switch's eight ports, what each port's cable goes to, its link (up, cut, or down while its machine is not ready), conditions, what it delivered and dropped, and its VLAN or a trunk's VLANs. A cable between switches is at both its ports. With spanning tree on, a switch has stp, and tree: its bridge ID, root and root cost. Each port has its role and state: discarding is blocked. priority and cost are there when set. A storming switch has storm. Then the NICs in no switch.",
+2093c2311
+<  "description": "List the wiring: every switch with its eight ports, what each port's cable goes to, its link (up, cut, or down while the machine at its end is not ready), its conditions, what it delivered and dropped, and what the port carries: a VLAN, or a trunk's VLANs and native one. A cable between switches is at both its ports. With spanning tree on, a switch has stp, and each port its role and state: discarding is blocked. A storming switch has storm. Then the NICs in no switch. Port 3 of lan is lan:3.",
+---
+>  "description": "List the wiring: each switch's eight ports, what each port's cable goes to, its link (up, cut, or down while its machine is not ready), conditions, what it delivered and dropped, and its VLAN or a trunk's VLANs. A cable between switches is at both its ports. With spanning tree on, a switch has stp, and tree: its bridge ID, root and root cost. Each port has its role and state: discarding is blocked. priority and cost are there when set. A storming switch has storm. Then the NICs in no switch.",
+2118c2336
+<     "text": "Maximise the capture on the frames that match a filter. lan is what that switch carried, lan:3 is what crossed the cable in its port 3, port:3 is that port of every switch, and vlan 10 is what was in VLAN 10. A machine or a NIC is matched wherever its frames went. With a switch or a cable in the filter, save .pcap saves only the frames shown. An agent reads them with capture_read."
+---
+>     "text": "Maximise the capture on the frames that match a filter. lan is what that switch carried, lan:3 is what crossed the cable in its port 3, port:3 is that port of every switch, vlan 10 is what was in VLAN 10, and stp is the messages that switches with spanning tree on send each other. A machine or a NIC is matched wherever its frames went. With a switch or a cable in the filter, save .pcap saves only the frames shown. An agent reads them with capture_read."
+2134c2352
+<    "description": "Maximise the capture on the frames that match a filter. lan is what that switch carried, lan:3 is what crossed the cable in its port 3, port:3 is that port of every switch, and vlan 10 is what was in VLAN 10. A machine or a NIC is matched wherever its frames went. With a switch or a cable in the filter, save .pcap saves only the frames shown. An agent reads them with capture_read.",
+---
+>    "description": "Maximise the capture on the frames that match a filter. lan is what that switch carried, lan:3 is what crossed the cable in its port 3, port:3 is that port of every switch, vlan 10 is what was in VLAN 10, and stp is the messages that switches with spanning tree on send each other. A machine or a NIC is matched wherever its frames went. With a switch or a cable in the filter, save .pcap saves only the frames shown. An agent reads them with capture_read.",
+2159c2377
+<  "description": "Maximise the capture on the frames that match a filter. lan is what that switch carried, lan:3 is what crossed the cable in its port 3, port:3 is that port of every switch, and vlan 10 is what was in VLAN 10. A machine or a NIC is matched wherever its frames went. With a switch or a cable in the filter, save .pcap saves only the frames shown. An agent reads them with capture_read.",
+---
+>  "description": "Maximise the capture on the frames that match a filter. lan is what that switch carried, lan:3 is what crossed the cable in its port 3, port:3 is that port of every switch, vlan 10 is what was in VLAN 10, and stp is the messages that switches with spanning tree on send each other. A machine or a NIC is matched wherever its frames went. With a switch or a cable in the filter, save .pcap saves only the frames shown. An agent reads them with capture_read.",
+2931c3149
+<  "description": "List the wiring: every switch with its eight ports, what each port's cable goes to, its link (up, cut, or down while the machine at its end is not ready), its conditions, what it delivered and dropped, and what the port carries: a VLAN, or a trunk's VLANs and native one. A cable between switches is at both its ports. With spanning tree on, a switch has stp, and each port its role and state: discarding is blocked. A storming switch has storm. Then the NICs in no switch. Port 3 of lan is lan:3.",
+---
+>  "description": "List the wiring: each switch's eight ports, what each port's cable goes to, its link (up, cut, or down while its machine is not ready), conditions, what it delivered and dropped, and its VLAN or a trunk's VLANs. A cable between switches is at both its ports. With spanning tree on, a switch has stp, and tree: its bridge ID, root and root cost. Each port has its role and state: discarding is blocked. priority and cost are there when set. A storming switch has storm. Then the NICs in no switch.",
+3264c3482
+<  "description": "Turn rapid spanning tree (RSTP) on or off for switches: lan, switch0,lan or all. It is off on a new switch, where a loop of cables storms. Switches with it on send each other BPDUs, choose a root, and block the ports that would close a loop, so a lab can have spare cables. When a cable in use is cut, a blocked port takes over. A switch with it off passes no BPDU on, so a loop through it still storms, and a port towards it carries after 3 seconds. topology has each port's role and state.",
+---
+>  "description": "Turn rapid spanning tree (RSTP) on or off for switches: lan, switch0,lan or all. It is off on a new switch, where a loop of cables storms. Switches with it on send each other BPDUs, choose a root, and block the ports that would close a loop, so a lab can have spare cables. If a cable in use is cut, a blocked port takes over. A switch with it off passes no BPDU on, so a loop through it still storms. priority and cost steer the root and which port blocks. topology has each port's role and state.",
+3288a3507,3561
+> == tool switch_priority
+> {
+>  "name": "switch_priority",
+>  "title": "Set a switch's spanning tree priority",
+>  "description": "Set the spanning tree priority of switches: lan, switch0,lan or all. It is a step of 4096 from 0 to 61440, and 32768 on a new switch. The lowest priority is the root, and of two the same, the lower address. So priority lan 4096 makes lan the root, and which ports block can change with it. A switch keeps its priority while spanning tree is off for it. topology has each switch's bridge ID, its priority and address, and its root. Returns the switches and the priority.",
+>  "inputSchema": {
+>   "type": "object",
+>   "properties": {
+>    "switches": {
+>     "type": "string",
+>     "description": "One switch (lan), a comma list (switch0,lan) or all."
+>    },
+>    "priority": {
+>     "type": "integer",
+>     "minimum": 0,
+>     "maximum": 61440,
+>     "multipleOf": 4096,
+>     "description": "The switch's priority: a step of 4096 from 0 to 61440, 32768 on a new switch. The lowest is the root."
+>    }
+>   },
+>   "required": [
+>    "switches",
+>    "priority"
+>   ],
+>   "additionalProperties": false
+>  },
+>  "annotations": {}
+> }
+> == tool port_cost
+> {
+>  "name": "port_cost",
+>  "title": "Set a switch port's spanning tree cost",
+>  "description": "Set a port's path cost in the spanning tree, from 1 to 200000000, and 20000 on a new port. Name the port (lan:3), or the NIC whose cable is in it (node2). A switch's way to the root costs what the ports it enters by add up to, and each switch takes the way that costs least, so a dearer port is the one to block. A port costs 20000 again once nothing is in it. Returns the port and its cost.",
+>  "inputSchema": {
+>   "type": "object",
+>   "properties": {
+>    "port": {
+>     "type": "string",
+>     "description": "A port that something is in (lan:3), or the NIC whose cable is in it (node2, node2:eth1)."
+>    },
+>    "cost": {
+>     "type": "integer",
+>     "minimum": 1,
+>     "maximum": 200000000,
+>     "description": "The port's cost: a whole number from 1 to 200000000, 20000 on a new port."
+>    }
+>   },
+>   "required": [
+>    "port",
+>    "cost"
+>   ],
+>   "additionalProperties": false
+>  },
+>  "annotations": {}
+> }
+3804a4078,4081
+>   },
+>   {
+>    "insert": "stp",
+>    "label": "stp"
+36012a36290,36293
+>   },
+>   {
+>    "insert": "stp",
+>    "label": "stp"
+74500a74782,74785
+>   },
+>   {
+>    "insert": "stp",
+>    "label": "stp"
+76301c76586
+< (node:3205512) ExperimentalWarning: Transform Types is an experimental feature and might change at any time
+---
+> (node:3205519) ExperimentalWarning: Transform Types is an experimental feature and might change at any time

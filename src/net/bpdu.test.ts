@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { type Bpdu, bridgeAddress, bridgeIdOf, bridgePriority, decodeBpdu, encodeBpdu, isForBridges } from "./bpdu.ts";
+import { decode } from "./decode.ts";
 import { switchAddress } from "./identity.ts";
 
 const bytes = (hex: string): Uint8Array =>
@@ -90,6 +91,47 @@ describe("a spanning tree message", () => {
 		const elsewhere = Uint8Array.from(frame, (byte, i) => (i === 5 ? 0x0e : byte));
 		expect(isForBridges(elsewhere)).toBe(false);
 		expect(decodeBpdu(elsewhere)).toBeNull();
+	});
+});
+
+describe("a spanning tree message in the capture", () => {
+	test("says its root, the cost to it, the bridge and port that sent it, and what that port is and does", () => {
+		expect(decode(bytes(RAPID))).toEqual({
+			proto: "RSTP",
+			src: "02:00:00:00:00:02",
+			dst: "01:80:c2:00:00:00",
+			info: "root 32768.02:00:00:00:00:01 · cost 20000 · from 32768.02:00:00:00:00:02 port 3 · designated, discarding, proposal, topology change",
+		});
+		const agreed = encodeBpdu(
+			{
+				...proposal,
+				role: "root",
+				proposal: false,
+				agreement: true,
+				learning: true,
+				forwarding: true,
+				topologyChange: false,
+			},
+			0x0200_0000_0002,
+		);
+		expect(decode(agreed).info).toBe(
+			"root 32768.02:00:00:00:00:01 · cost 20000 · from 32768.02:00:00:00:00:02 port 3 · root, forwarding, agreement",
+		);
+	});
+
+	test("of classic spanning tree says so, and a frame for the bridges that holds no message is told by its length", () => {
+		const config =
+			"0180c2000000 525400123456 0026 424203" +
+			"0000 00 00 00" +
+			"1000525400123456 00000000 1000525400123456 8001" +
+			"0000 1400 0200 0f00" +
+			"0000000000000000";
+		expect(decode(bytes(config))).toMatchObject({
+			proto: "STP",
+			info: "root 4096.52:54:00:12:34:56 · cost 0 · from 4096.52:54:00:12:34:56 port 1 · designated",
+		});
+		const cut = bytes(RAPID).subarray(0, 40);
+		expect(decode(cut)).toMatchObject({ proto: "0x0027", info: "40 bytes" });
 	});
 });
 

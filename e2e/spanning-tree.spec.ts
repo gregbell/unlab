@@ -162,9 +162,13 @@ test("spanning tree is off on a new switch, where a loop storms: turned on, it e
 	const report = bar(page).locator(".result");
 	await expect(report.locator(".header")).toHaveText("3 switches · 9 of 24 ports taken · 1 port blocked");
 	const lines = (await report.locator("dd").allInnerTexts()).map((text) => text.split("\n"));
-	expect(lines.map(([first]) => first)).toEqual(["spanning tree on", "spanning tree on", "spanning tree on"]);
+	expect(lines.map(([first]) => first.split(" · ")[0])).toEqual([
+		"spanning tree on",
+		"spanning tree on",
+		"spanning tree on",
+	]);
 	expect(lines.flat().filter((text) => text.endsWith(" · blocked"))).toEqual([
-		`port ${no} · ${await farEnd(page, at)} · up · blocked`,
+		`port ${no} · ${await farEnd(page, at)} · up · alternate port · blocked`,
 	]);
 	await page.keyboard.press("Escape");
 	await chooser(page).selectOption(on);
@@ -376,7 +380,8 @@ test("the desktop says which port the spanning tree has blocked, where it shows 
 	await expect(inspect).toHaveAccessibleDescription(new RegExp(`Port ${no} · to ${other} port ${no} · up · blocked`));
 	await inspect.click();
 	const details = page.getByRole("region", { name: `${on} · Switch details` });
-	await expect(details.getByText("Spanning tree")).toBeVisible();
+	const term = details.locator("dt", { hasText: "Spanning tree" });
+	await expect(term).toBeVisible();
 	const row = (port: string) =>
 		details.getByRole("row").filter({ has: page.getByRole("rowheader", { name: port, exact: true }) });
 	await expect(row(no).getByRole("cell", { name: "up · blocked", exact: true })).toBeVisible();
@@ -390,6 +395,6 @@ test("the desktop says which port the spanning tree has blocked, where it shows 
 	await expect(topology.locator(`[data-switch="${on}"]`)).not.toHaveAttribute("title", /blocked/);
 
 	await typed(page, "stp off all");
-	await expect(details.getByText("Spanning tree")).toHaveCount(0);
+	await expect(term).toHaveCount(0);
 	expect(errors).toEqual([]);
 });

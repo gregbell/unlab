@@ -21,11 +21,12 @@ import {
 	savingOf,
 } from "./machines.ts";
 import { keyboardHolder, parkedPanes, visiblePanes } from "./panes.ts";
-import { treePortAt } from "./stp.ts";
+import { costOf, treePortAt } from "./stp.ts";
 import { portLabel, portName, switchLabel } from "./switches.ts";
 import { type Tiling, tile } from "./tiling.ts";
 import {
 	AGENT_IDLE_MS,
+	DEFAULT_COST,
 	DEFAULT_SWITCH,
 	type HueNo,
 	type LabState,
@@ -34,6 +35,7 @@ import {
 	type MachineName,
 	type NicName,
 	type NicNo,
+	type PathCost,
 	type Phase,
 	type Plug,
 	PORTS,
@@ -402,6 +404,8 @@ export interface PortView {
 	readonly conditions?: string;
 	/** What it is in its switch's spanning tree, there while the switch has spanning tree on and the port's link is up. */
 	readonly tree?: TreePort;
+	/** What it adds to the way to the root through it, there when it is not 20000. */
+	readonly cost?: PathCost;
 	/** The word under the socket, one of `boot`, `up`, `cut`, `stop`, `off`, `down`. An empty port shows only its number. */
 	readonly word: string | null;
 	/** What a click will do, for the button's accessible name. Null when a click does nothing. */
@@ -454,8 +458,8 @@ function vlanView(portVlans: LabState["portVlans"], ref: PortRef): PortVlanView 
 /** A switch's eight ports, lowest first. */
 export const selectPorts = perSwitch((on) =>
 	memo(
-		(s) => [s.machines, s.rail, s.switches, s.switchCables, s.portVlans, s.trees],
-		(machines, rail, switches, switchCables, portVlans, trees): readonly PortView[] => {
+		(s) => [s.machines, s.rail, s.switches, s.switchCables, s.portVlans, s.trees, s.portCosts],
+		(machines, rail, switches, switchCables, portVlans, trees, portCosts): readonly PortView[] => {
 			const held = heldPorts({ machines, rail, switchCables }, on);
 			return PORTS.map((port) => {
 				const ref = { switch: on, port };
@@ -466,7 +470,13 @@ export const selectPorts = perSwitch((on) =>
 				);
 				const vlan = vlanView(portVlans, ref);
 				const tree = treePortAt({ trees }, ref);
-				return { ...view, ...(vlan ? { vlan } : {}), ...(tree ? { tree } : {}) };
+				const cost = costOf({ portCosts }, ref);
+				return {
+					...view,
+					...(vlan ? { vlan } : {}),
+					...(tree ? { tree } : {}),
+					...(cost === DEFAULT_COST ? {} : { cost }),
+				};
 			});
 		},
 	),

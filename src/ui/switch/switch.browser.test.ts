@@ -5,7 +5,15 @@ import { page, userEvent } from "vitest/browser";
 import { testCapture } from "../../../test/support/capture.ts";
 import { conditions } from "../../../test/support/conditions.ts";
 import { ping } from "../../../test/support/frames.ts";
-import type { ConditionValues, LabEvent, PortRef, PortVlan, VlanId } from "../../model/index.ts";
+import type {
+	BridgePriority,
+	ConditionValues,
+	LabEvent,
+	PathCost,
+	PortRef,
+	PortVlan,
+	VlanId,
+} from "../../model/index.ts";
 import {
 	addSwitch,
 	LONG_NAME,
@@ -42,6 +50,12 @@ function part(element: HTMLElement, selector: string): HTMLElement {
 }
 
 const style = (element: Element) => getComputedStyle(element);
+
+/** The lines of words under the ports. */
+const lines = (): string[] =>
+	[...document.querySelectorAll("unlab-switch .faceplate > p")].map((p) =>
+		(p.textContent ?? "").replace(/\s+/g, " ").trim(),
+	);
 
 describe("<unlab-switch>", () => {
 	it("reads switch0, its subnet and the link count in its header", async () => {
@@ -445,7 +459,7 @@ describe("cables between switches", () => {
 		expect(part(column(8), ".nic").textContent).toBe("port 7");
 	});
 
-	it("says on its tag and in its title that the spanning tree has blocked a port, and is as before for one that carries", async () => {
+	it("says on its tag that the spanning tree has blocked a port, and in each port's title what it is in the tree, and is drawn as before for one that carries", async () => {
 		const stp = { type: "cmd/stp", switches: [lan], on: true } as const;
 		const bridge = { priority: 32768, address: "02:00:00:00:00:02" };
 		const says = (state: "discarding" | "learning" | "forwarding"): LabEvent => ({
@@ -466,30 +480,42 @@ describe("cables between switches", () => {
 			"port 7 blocked",
 			"up",
 		]);
-		expect(column(8).title).toBe("to wan port 7 · blocked by spanning tree");
+		expect(column(8).title).toBe("to wan port 7 · alternate port · blocked by spanning tree");
 		// The cable is whole, so it is drawn as one that is up, and the button still cuts it.
 		expect(column(8).dataset.state).toBe("up");
 		await expect
 			.element(page.getByRole("button", { name: "Cut the cable from lan port 8 to wan port 7" }))
 			.toBeVisible();
-		// A port that carries says nothing of the tree.
+		// A port that carries has no tag for the tree, and its title says its role.
 		expect(column(1).querySelector(".nic")).toBeNull();
-		expect(column(1).title).toBe("node1");
+		expect(column(1).title).toBe("node1 · designated port");
+		// Under the ports, the switch says its bridge ID and its root.
+		expect(lines()).toContain(
+			"spanning tree on · bridge 32768.02:00:00:00:00:02 · root 32768.02:00:00:00:00:01 at cost 20000",
+		);
 
 		(store.dispatchRuntime as (event: LabEvent) => void)(says("learning"));
 		await settle();
 		expect(part(column(8), ".nic").textContent).toBe("port 7 learning");
-		expect(column(8).title).toBe("to wan port 7 · learning");
+		expect(column(8).title).toBe("to wan port 7 · alternate port · learning");
 
 		(store.dispatchRuntime as (event: LabEvent) => void)(says("forwarding"));
 		await settle();
 		expect(part(column(8), ".nic").textContent).toBe("port 7");
-		expect(column(8).title).toBe("to wan port 7");
+		expect(column(8).title).toBe("to wan port 7 · alternate port");
 
+		// A cost that is set is in the title, and a priority under the ports while spanning tree is off.
+		store.dispatchCommand({ type: "cmd/cost", port: ends[0], cost: 200_000 as PathCost });
+		await settle();
+		expect(column(8).title).toBe("to wan port 7 · alternate port · cost 200000");
 		(store.dispatchRuntime as (event: LabEvent) => void)(says("discarding"));
 		store.dispatchCommand({ type: "cmd/stp", switches: [lan], on: false });
 		await settle();
 		expect(part(column(8), ".nic").textContent).toBe("port 7");
+		expect(lines().filter((line) => line.startsWith("spanning tree"))).toEqual([]);
+		store.dispatchCommand({ type: "cmd/priority", switches: [lan], priority: 4096 as BridgePriority });
+		await settle();
+		expect(lines()).toContain("spanning tree off · priority 4096");
 	});
 
 	it("draws a cut one dashed and red, and reconnects it, from either switch", async () => {

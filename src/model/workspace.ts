@@ -14,7 +14,7 @@ import { FIRST_SETS, MAX_EXTRA_DISKS, parseGiB } from "./disks.ts";
 import { identity, isNameFault, parseCheckpointName, parseMachineName, parseSwitchName } from "./identity.ts";
 import { type BootNode, bootMachines, machineList, plugsOf, samePort } from "./machines.ts";
 import { addPanes, focusPane, keyboardHolder, parkPane, toggleMaximise } from "./panes.ts";
-import { stpEffects } from "./stp.ts";
+import { heldCosts, parseCost, parsePriority, stpEffects } from "./stp.ts";
 import {
 	type Checkpoint,
 	type ConditionPart,
@@ -34,6 +34,7 @@ import {
 	type PanelName,
 	type Plug,
 	PORTS,
+	type PortCost,
 	type PortRef,
 	type PortVlan,
 	type Step,
@@ -88,6 +89,8 @@ export function saveWorkspace(state: LabState): string {
 				: { port, trunk: { allowed: vlan.allowed, native: vlan.native } },
 		),
 		stp: state.stp,
+		priorities: state.priorities,
+		costs: state.portCosts,
 		nodes,
 		panels: state.panels.open,
 		order: state.panes.order,
@@ -162,6 +165,28 @@ function readStp(saved: unknown, switches: LabState["switches"]): readonly Switc
 	if (!Array.isArray(saved) || new Set(saved).size !== saved.length) return invalid();
 	const names = saved.map((name: unknown) => readSwitch(name, switches));
 	return switches.filter((name) => names.includes(name));
+}
+
+/** Each switch's priority, of those that have one set. */
+function readPriorities(saved: unknown, switches: LabState["switches"]): LabState["priorities"] {
+	if (!record(saved)) return invalid();
+	return Object.fromEntries(
+		Object.entries(saved).map(([name, priority]) => [
+			readSwitch(name, switches),
+			(typeof priority === "number" ? parsePriority(String(priority)) : null) ?? invalid(),
+		]),
+	);
+}
+
+function readCosts(saved: unknown, switches: LabState["switches"]): readonly PortCost[] {
+	if (!Array.isArray(saved)) return invalid();
+	const costs = saved.map((held: unknown): PortCost => {
+		if (!record(held)) return invalid();
+		const cost = (typeof held.cost === "number" ? parseCost(String(held.cost)) : null) ?? invalid();
+		return { port: readPort(held.port, switches) ?? invalid(), cost };
+	});
+	const ports = costs.map(({ port }) => port);
+	return ports.some((port, i) => ports.findIndex((other) => samePort(other, port)) !== i) ? invalid() : costs;
 }
 
 function readVlanId(saved: unknown): VlanId {
@@ -309,6 +334,8 @@ const UPGRADES: readonly ((lab: SavedLab) => SavedLab)[] = [
 	}),
 	// No switch took part in a spanning tree.
 	(lab) => ({ ...lab, stp: [] }),
+	// Every switch had the same priority, and every port the same cost.
+	(lab) => ({ ...lab, priorities: {}, costs: [] }),
 ];
 const VERSION = UPGRADES.length + 1;
 
@@ -345,6 +372,8 @@ export function restoreWorkspace(base: LabState, raw: string | null): Step {
 	const switchCables = readCables(saved.cables, switches);
 	const vlans = readVlans(saved.vlans, switches);
 	const stp = readStp(saved.stp, switches);
+	const priorities = readPriorities(saved.priorities, switches);
+	const costs = readCosts(saved.costs, switches);
 	const nodes: BootNode[] = [];
 	const taken: PortRef[] = switchCables.flatMap(({ ends }) => ends);
 	if (taken.some((port, i) => taken.findIndex((other) => samePort(other, port)) !== i)) return invalid();
@@ -398,14 +427,18 @@ export function restoreWorkspace(base: LabState, raw: string | null): Step {
 	)
 		return invalid();
 	const shownSwitch = switches.find((name) => name === saved.shown) ?? DEFAULT_SWITCH;
-	const wired: LabState = { ...base, switches, shownSwitch, switchCables, stp };
+	const wired: LabState = { ...base, switches, shownSwitch, switchCables, stp, priorities };
 	const booted = bootMachines(wired, nodes, saved.nextN, 0);
-	// A machine that failed holds no port, so the one it held is in VLAN 1.
-	const state = { ...booted.state, portVlans: heldVlans(booted.state, vlans) };
+	// A machine that failed holds no port, so the one it held is in VLAN 1 and costs 20000.
+	const state = {
+		...booted.state,
+		portVlans: heldVlans(booted.state, vlans),
+		portCosts: heldCosts(booted.state, costs),
+	};
 	// The spanning tree first, so no cable carries a frame before its switches have agreed on it. Then the cables, what
 	// their ports carry and how they treat frames, so a machine's first frame crosses them.
 	const effects = [
-		...stpEffects(wired),
+		...stpEffects(state),
 		...cableEffects(wired),
 		...vlanEffects(state),
 		...conditionEffects(state),

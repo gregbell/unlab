@@ -23,6 +23,8 @@ import {
 	selectStorm,
 	selectSubnets,
 	stpOn,
+	treeRoleText,
+	treeSummary,
 	treeWord,
 } from "../../model/index.ts";
 import { addressStr } from "../../net/index.ts";
@@ -254,6 +256,8 @@ class Desktop extends UnlabElement {
 				before.storms !== next.storms ||
 				before.stp !== next.stp ||
 				before.trees !== next.trees ||
+				before.priorities !== next.priorities ||
+				before.portCosts !== next.portCosts ||
 				before.sessions !== next.sessions ||
 				before.keyboard !== next.keyboard ||
 				before.view !== next.view ||
@@ -1100,6 +1104,11 @@ class Desktop extends UnlabElement {
 			storm = selectStorm(name)(this.lab),
 			vlans = ports.some((p) => p.vlan),
 			conditions = ports.some((p) => p.conditions),
+			tree = treeSummary(this.lab, name),
+			// What each port is in the spanning tree, and what it costs where that is set.
+			steered = stpOn(this.lab, name) || ports.some((p) => p.cost),
+			treeText = (p: (typeof ports)[number]) =>
+				[treeRoleText(p.tree), p.cost && `cost ${p.cost}`].filter(Boolean).join(" · ") || "—",
 			// What the cable does to frames, and what it has carried and dropped since.
 			cableText = (p: (typeof ports)[number]) =>
 				p.conditions
@@ -1114,8 +1123,8 @@ class Desktop extends UnlabElement {
 			<h3>Network</h3><dl><div><dt>Subnets</dt><dd>${selectSubnets(name)(this.lab)}</dd></div>
 			<div><dt>Links up</dt><dd>${ports.filter((p) => p.state === "up").length}</dd></div>
 			${storm ? html`<div><dt>Storm</dt><dd>${storm.rate} looped frames a second · ${storm.dropped} dropped</dd></div>` : nothing}
-			${stpOn(this.lab, name) ? html`<div><dt>Spanning tree</dt><dd>on</dd></div>` : nothing}</dl>
-			<h3>Ports</h3><table class="dt-ports" aria-label=${`Ports on ${name}`}><thead><tr><th>Port</th><th>Machine</th><th>Link</th>${vlans ? html`<th>VLAN</th>` : nothing}${conditions ? html`<th>Conditions</th>` : nothing}<th aria-label="Cable action"></th></tr></thead>
+			${tree === null ? nothing : html`<div><dt>Spanning tree</dt><dd>${tree}</dd></div>`}</dl>
+			<h3>Ports</h3><table class="dt-ports" aria-label=${`Ports on ${name}`}><thead><tr><th>Port</th><th>Machine</th><th>Link</th>${vlans ? html`<th>VLAN</th>` : nothing}${conditions ? html`<th>Conditions</th>` : nothing}${steered ? html`<th>Spanning tree</th>` : nothing}<th aria-label="Cable action"></th></tr></thead>
 			<tbody>${ports.map((p) => {
 				const m = p.machine,
 					cable = p.cable,
@@ -1125,6 +1134,7 @@ class Desktop extends UnlabElement {
 				<td data-state=${p.state}>${line ? [p.state, treeWord(p.tree)].filter(Boolean).join(" · ") : "—"}</td>
 				${vlans ? html`<td>${p.vlan?.text ?? (line ? "vlan 1" : "—")}</td>` : nothing}
 				${conditions ? html`<td>${cableText(p)}</td>` : nothing}
+				${steered ? html`<td>${treeText(p)}</td>` : nothing}
 				<td>${line ? html`<button class="dt-primary" ?disabled=${!p.actionLabel} title=${p.actionLabel ?? nothing} @click=${() => this.run(`link ${p.state === "cut" ? "up" : "down"} ${line}`)}>${p.state === "cut" ? "Reconnect" : "Cut cable"}</button>${cable ? html` <button class="dt-primary" title=${`Remove the cable to ${farEnd(cable)}`} @click=${() => this.run(`uncable ${cable.label}`)}>Remove</button>` : nothing}` : html`<button class="dt-primary" @click=${() => this.patchInterface("", `${name}:${p.port}`)}>Patch</button>`}</td></tr>`;
 			})}</tbody></table></div>`;
 	}

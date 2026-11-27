@@ -14,6 +14,7 @@ import {
 	tcpSegment,
 	udpSegment,
 } from "../../test/support/frames.ts";
+import { bridgeIdOf, encodeBpdu } from "./bpdu.ts";
 import { compileFilter, MATCH_ALL } from "./filter.ts";
 import { type MachineName, type NameBook, type NicNo, NO_NAMES } from "./identity.ts";
 
@@ -60,6 +61,26 @@ describe("filter terms", () => {
 			dhcp: udp(1, 2, 68, 67),
 			dns: udp(1, 2, 40000, 53),
 			ipv6: ipv6(mac(1), mac(2)),
+			stp: encodeBpdu(
+				{
+					rapid: true,
+					root: bridgeIdOf(0x8000, 0x0200_0000_0001),
+					cost: 0,
+					bridge: bridgeIdOf(0x8000, 0x0200_0000_0001),
+					port: 0x8001,
+					role: "designated",
+					proposal: false,
+					agreement: false,
+					learning: true,
+					forwarding: true,
+					topologyChange: false,
+					age: 0,
+					maxAge: 20,
+					hello: 2,
+					forwardDelay: 15,
+				},
+				0x0200_0000_0001,
+			),
 		};
 		const expected: Record<string, readonly (keyof typeof frames)[]> = {
 			arp: ["arp"],
@@ -71,6 +92,7 @@ describe("filter terms", () => {
 			ip: ["icmp", "tcp", "udp", "dhcp", "dns"],
 			ipv4: ["icmp", "tcp", "udp", "dhcp", "dns"],
 			ipv6: ["ipv6"],
+			stp: ["stp"],
 		};
 		for (const [term, matching] of Object.entries(expected)) {
 			const f = compile(term);

@@ -110,6 +110,7 @@ export type JsonSchema = {
 	readonly enum?: readonly string[];
 	readonly minimum?: number;
 	readonly maximum?: number;
+	readonly multipleOf?: number;
 	readonly default?: string | number;
 	readonly properties?: Readonly<Record<string, JsonSchema>>;
 	readonly required?: readonly string[];

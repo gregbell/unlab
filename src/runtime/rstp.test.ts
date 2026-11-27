@@ -1,8 +1,8 @@
 import fc from "fast-check";
 import { describe, expect, test } from "vitest";
-import type { PortNo, TreePort } from "../model/index.ts";
-import { type Bpdu, decodeBpdu } from "../net/index.ts";
-import { Bridge, EDGE_DELAY_MS, FORWARD_DELAY_MS, HELLO_MS, TX_HOLD } from "./rstp.ts";
+import { type BridgePriority, DEFAULT_PRIORITY, type PathCost, type PortNo, type TreePort } from "../model/index.ts";
+import { type Bpdu, bridgeIdOf, decodeBpdu, encodeBpdu } from "../net/index.ts";
+import { Bridge, EDGE_DELAY_MS, FORWARD_DELAY_MS, HELLO_MS, MOST_COST, TX_HOLD } from "./rstp.ts";
 
 type Cable = readonly [a: number, portA: PortNo, b: number, portB: PortNo];
 
@@ -280,6 +280,114 @@ describe("a triangle of bridges", () => {
 		expect(t.ports()).toContain("c8 alternate discarding");
 		expect(t.carrying()).toHaveLength(2);
 		expect([t.loops, t.now]).toEqual([0, 0]);
+	});
+});
+
+describe("a triangle of bridges that is steered", () => {
+	test("takes a bridge whose priority is lowered for its root at once, which moves the blocked port, and takes the old one back when it is raised again", () => {
+		const t = wired(3, [AB, BC, CA]);
+		t.bridges[2].setPriority(4096 as BridgePriority);
+		t.settle();
+		expect(t.roots()).toEqual(["03", "03", "03"]);
+		expect(t.bridges[2].reading()).toMatchObject({
+			bridge: { priority: 4096, address: "02:00:00:00:00:03" },
+			root: { priority: 4096, address: "02:00:00:00:00:03" },
+			cost: 0,
+		});
+		expect(t.bridges[0].reading()).toMatchObject({ root: { priority: 4096 }, cost: 20_000 });
+		// a and b each reach c by its own cable, and the cable between them is blocked at b, whose address is the higher.
+		expect(t.ports()).toEqual([
+			"a7 designated forwarding",
+			"a8 root forwarding",
+			"b7 root forwarding",
+			"b8 alternate discarding",
+			"c7 designated forwarding",
+			"c8 designated forwarding",
+		]);
+		expect([t.left, t.now]).toEqual([0, 0]);
+
+		t.bridges[2].setPriority(DEFAULT_PRIORITY);
+		t.settle();
+		expect(t.roots()).toEqual(["01", "01", "01"]);
+		expect(t.ports()).toContain("c8 alternate discarding");
+		expect(t.left).toBe(0);
+	});
+
+	test("blocks the other port of a bridge when the cost of its root port makes that way dearer", () => {
+		const t = wired(3, [AB, BC, CA]);
+		t.bridges[2].setCost(7, 100_000 as PathCost);
+		t.settle();
+		expect(t.ports()).toEqual([
+			"a7 designated forwarding",
+			"a8 designated forwarding",
+			"b7 designated forwarding",
+			"b8 root forwarding",
+			"c7 alternate discarding",
+			"c8 root forwarding",
+		]);
+		expect(t.bridges[2].reading().cost).toBe(40_000);
+		expect([t.left, t.now]).toEqual([0, 0]);
+		// A cost that the port had when its link went down is the one it has when the link comes back.
+		t.cut(CA);
+		t.plug(CA);
+		expect(t.ports()).toContain("c7 alternate discarding");
+	});
+});
+
+describe("the cost of the way to the root", () => {
+	/** A designated port's word from bridge `from` that root 01 is `cost` away. */
+	const told = (from: number, cost: number): Uint8Array =>
+		encodeBpdu(
+			{
+				rapid: true,
+				root: bridgeIdOf(32768, 0x0200_0000_0001),
+				cost,
+				bridge: bridgeIdOf(32768, from),
+				port: 0x8001,
+				role: "designated",
+				proposal: false,
+				agreement: false,
+				learning: true,
+				forwarding: true,
+				topologyChange: false,
+				age: 1,
+				maxAge: 20,
+				hello: 2,
+				forwardDelay: 15,
+			},
+			from,
+		);
+
+	test("goes by the cheaper of two ways, however near the most that a message can say the dearer is", () => {
+		const bridge = new Bridge(0x0200_0000_00f0, { send() {}, flush() {} });
+		for (const port of [1, 2, 3] as const) {
+			bridge.enable(port, false);
+			bridge.setCost(port, 200_000_000 as PathCost);
+		}
+		bridge.receive(1, told(0x0200_0000_0002, 0xf000_0000), 0);
+		bridge.receive(2, told(0x0200_0000_0003, 0xffff_ff00), 0);
+		bridge.run(0);
+		expect(bridge.reading().ports.map(({ port, role }) => `${port} ${role}`)).toEqual([
+			"1 root",
+			"2 designated",
+			"3 designated",
+		]);
+		expect(bridge.reading().cost).toBe(0xf000_0000 + 200_000_000);
+	});
+
+	test("goes no higher than the most that a message can say, which is what a bridge then says", () => {
+		const sent: Bpdu[] = [];
+		const bridge = new Bridge(0x0200_0000_00f0, {
+			send: (_port, frame) => void sent.push(decodeBpdu(frame) as Bpdu),
+			flush() {},
+		});
+		bridge.enable(1, false);
+		bridge.enable(2, false);
+		bridge.setCost(1, 200_000_000 as PathCost);
+		bridge.receive(1, told(0x0200_0000_0002, 0xffff_ff00), 0);
+		bridge.run(0);
+		expect(bridge.reading().cost).toBe(MOST_COST);
+		expect(sent.findLast((bpdu) => bpdu.role === "designated")?.cost).toBe(MOST_COST);
 	});
 });
 

@@ -690,6 +690,12 @@ export function createEngine(deps: EngineDeps): Engine {
 				fabric.setTree(switchOf(effect.switch).slot, bridge);
 				return;
 			}
+			case "switch/priority":
+				fabric.setPriority(switchOf(effect.switch).slot, effect.priority);
+				return;
+			case "port/cost":
+				fabric.setCost(switchOf(effect.port.switch).slot, effect.port.port, effect.cost);
+				return;
 			case "pty/open": {
 				const s = sessions.get(effect.session);
 				if (!s || s.tty === "console" || s.state !== "closed") return;

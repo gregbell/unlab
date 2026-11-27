@@ -112,6 +112,8 @@ on, such as the ready ones for `exec` and the ones that are off or failed for `b
 | `vlan node2 10`                          | Put the port that node2 is in, or one named as `lan:3`, in VLAN 10. It reaches only the ports of VLAN 10. Every port starts in 1.                                                                     |
 | `trunk lan:8 --allow 1,10,20 --native 1` | Make the port of a cable between switches a trunk of VLANs 1, 10 and 20: 10 and 20 tagged, and 1, its native VLAN, untagged. Make the far end a trunk too.                                            |
 | `stp on all`                             | Turn spanning tree on for every switch, or for those named: `stp on lan,wan`. The switches then block the ports that would close a loop, so a spare cable makes no storm. `stp off lan` turns it off. |
+| `priority lan 4096`                      | Make `lan` the root of the spanning tree: the lowest priority wins. A priority is a step of 4096 from 0 to 61440, and 32768 to start.                                                                 |
+| `cost lan:3 200000`                      | Make the way through port 3 of `lan` dearer, so the tree blocks it rather than another. A port costs 20000 to start, and a cost is from 1 to 200000000.                                               |
 
 ### Run commands and open consoles
 
@@ -340,6 +342,8 @@ in the browser alike.
 | `port_vlan`          | Put a switch port in a VLAN.             | `run`    |
 | `port_trunk`         | Make a switch port a trunk.              | `run`    |
 | `switch_stp`         | Turn spanning tree on or off.            | `run`    |
+| `switch_priority`    | Set a switch's spanning tree priority.   | `run`    |
+| `port_cost`          | Set a port's spanning tree cost.         | `run`    |
 | `checkpoint_save`    | Save a machine's disks as they are now.  | `run`    |
 | `checkpoint_restore` | Go back to a checkpoint and boot.        | `ask me` |
 | `checkpoint_remove`  | Delete a checkpoint.                     | `ask me` |
@@ -398,9 +402,19 @@ text that tries to instruct the agent, so unlab marks it as untrusted.
   each keeps one way to it. A port that would close a loop is blocked: it carries nothing,
   and `topology`, the switch's faceplate and the desktop say `blocked`. The BPDUs are real
   frames to `01:80:c2:00:00:00`, sent every two seconds, to the machines too, so `tcpdump`
-  in a guest sees them. One tree covers every VLAN. The root is the switch with the lowest
-  address, and a switch's address follows from its name, so the same port is blocked after a
-  reload. When a cable in use is cut, the blocked port usually takes over without waiting
+  in a guest sees them, as `sudo tcpdump -vni eth0 stp` shows. The capture decodes each
+  one, with its root, the cost to it, and the bridge and port that sent it, and `capture stp`
+  keeps them. One tree covers every VLAN, and its BPDUs cross a trunk untagged, so a port it
+  blocks carries no VLAN. The root is the switch with the lowest bridge ID: its priority,
+  32768 unless `priority` sets another, and then its address, which follows from its name.
+  `priority lan 4096` makes `lan` the root. Each other switch takes the way to the root
+  that costs least, adding up the cost of each port that the way comes in by, 20000 unless
+  `cost` sets another, and blocks the rest: `cost lan:3 200000` makes the way through that
+  port dearer, so another port carries in its place. A switch keeps its priority while it
+  takes no part, and a port its cost until nothing is in it, and both come back with a
+  reload, so the same port is blocked after one. `topology` and the switch's details on the
+  desktop say each switch's bridge ID, its root and the cost to it, and each port's role and
+  state. When a cable in use is cut, the blocked port usually takes over without waiting
   for a timer, and the switches that learned the old way forget it. Rarely, when the cut
   parts the root from a ring, two switches hold on to what each last heard from the other,
   and the path stays blocked until that is three hellos old, about 6 s. In the lab's tests on real

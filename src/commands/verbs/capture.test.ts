@@ -113,7 +113,19 @@ describe("capture", () => {
 		await lab.lab(1);
 		const offered = (line: string) =>
 			completeLine(lab.registry, line, line.length, lab.store.state).suggestions.map((s) => s.insert);
-		expect(offered("capture ")).toEqual(["node1", "arp", "ip", "ipv4", "ipv6", "icmp", "tcp", "udp", "dhcp", "dns"]);
+		expect(offered("capture ")).toEqual([
+			"node1",
+			"arp",
+			"ip",
+			"ipv4",
+			"ipv6",
+			"icmp",
+			"tcp",
+			"udp",
+			"dhcp",
+			"dns",
+			"stp",
+		]);
 		expect(offered("capture switch0:1")).toEqual(["switch0:1"]);
 		expect(lab.parsed("capture switch0:1").validate(lab.store.state)).toBeNull();
 	});

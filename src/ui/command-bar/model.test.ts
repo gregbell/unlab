@@ -187,6 +187,8 @@ describe("the artboards, replayed", () => {
 			"vlan",
 			"trunk",
 			"stp",
+			"priority",
+			"cost",
 			"topology",
 			"capture",
 			"focus",

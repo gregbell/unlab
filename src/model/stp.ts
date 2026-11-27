@@ -1,13 +1,34 @@
-// Which switches take part in the spanning tree. A switch takes none until it
-// is told to, and one that is removed takes the setting with it, so a switch
-// that is added under its name starts as any other. `settleStp` keeps that
-// after every change, and tells the runtime. What each switch is in the tree
-// is the runtime's to work out, with real messages between the switches, and
-// `trees` has what it last said.
+// Which switches take part in the spanning tree, and how it is steered: each
+// switch's priority, and what each port costs. A switch takes no part until it
+// is told to, a free port costs what every port starts with, and a switch that
+// is removed takes its settings with it, so a switch that is added under its
+// name starts as any other. `settleStp` keeps that after every change, and
+// tells the runtime. What each switch is in the tree is the runtime's to work
+// out, with real messages between the switches, and `trees` has what it last
+// said.
 
+import { heldPorts, samePort, type Wiring } from "./machines.ts";
 import { without } from "./record.ts";
 import { step } from "./step.ts";
-import type { Effect, LabState, PortRef, Step, SwitchName, Tree, TreePort } from "./types.ts";
+import {
+	type BridgePriority,
+	type BridgeRef,
+	DEFAULT_COST,
+	DEFAULT_PRIORITY,
+	type Effect,
+	type LabState,
+	MAX_COST,
+	MAX_PRIORITY,
+	MIN_COST,
+	type PathCost,
+	type PortCost,
+	type PortRef,
+	PRIORITY_STEP,
+	type Step,
+	type SwitchName,
+	type Tree,
+	type TreePort,
+} from "./types.ts";
 
 type Setting = Pick<LabState, "stp">;
 
@@ -22,12 +43,107 @@ export function setStp(state: LabState, switches: readonly SwitchName[], on: boo
 	return step(same ? state : { ...state, stp });
 }
 
+const WHOLE = /^(0|[1-9][0-9]*)$/;
+
+/** A step of 4096 from 0 to 61440, written as a whole number, or null. */
+export function parsePriority(text: string): BridgePriority | null {
+	if (!WHOLE.test(text)) return null;
+	const n = Number(text);
+	return n <= MAX_PRIORITY && n % PRIORITY_STEP === 0 ? (n as BridgePriority) : null;
+}
+
+/** A whole number from 1 to 200,000,000, or null. */
+export function parseCost(text: string): PathCost | null {
+	if (!WHOLE.test(text)) return null;
+	const n = Number(text);
+	return n >= MIN_COST && n <= MAX_COST ? (n as PathCost) : null;
+}
+
+export function priorityOf({ priorities }: Pick<LabState, "priorities">, on: SwitchName): BridgePriority {
+	return priorities[on] ?? DEFAULT_PRIORITY;
+}
+
+export function costOf({ portCosts }: Pick<LabState, "portCosts">, port: PortRef): PathCost {
+	return portCosts.find((held) => samePort(held.port, port))?.cost ?? DEFAULT_COST;
+}
+
+/** Sets it for each of the switches that is there. 32768 is kept as no setting, as it is where every switch starts. */
+export function setPriority(state: LabState, switches: readonly SwitchName[], priority: BridgePriority): Step {
+	const changed = switches.filter((name) => state.switches.includes(name) && priorityOf(state, name) !== priority);
+	if (changed.length === 0) return step(state);
+	const kept = Object.entries(state.priorities).filter(([name]) => !changed.some((other) => other === name));
+	const set = priority === DEFAULT_PRIORITY ? [] : changed.map((name) => [name, priority] as const);
+	return step({ ...state, priorities: Object.fromEntries([...kept, ...set]) });
+}
+
+/** Ignored unless something is in the port. 20000 is kept as no setting. */
+export function setCost(state: LabState, port: PortRef, cost: PathCost): Step {
+	const held = heldPorts(state, port.switch).some((other) => other.port === port.port);
+	if (!held || costOf(state, port) === cost) return step(state);
+	const others = state.portCosts.filter((other) => !samePort(other.port, port));
+	return step({ ...state, portCosts: cost === DEFAULT_COST ? others : [...others, { port, cost }] });
+}
+
+/** Those that something is in, on switches that are there. */
+export function heldCosts(state: Wiring & Pick<LabState, "switches">, costs: readonly PortCost[]): readonly PortCost[] {
+	return costs.filter(
+		({ port }) =>
+			state.switches.includes(port.switch) && heldPorts(state, port.switch).some((held) => held.port === port.port),
+	);
+}
+
+/**
+ * After every change: a switch that is gone takes its priority with it, a port
+ * that nothing is in costs 20000 again, and the runtime is told of each switch
+ * and port whose setting changed and that it still has.
+ */
+function settleSteering(before: LabState, after: LabState): Step {
+	const unchanged =
+		before.priorities === after.priorities &&
+		before.portCosts === after.portCosts &&
+		before.machines === after.machines &&
+		before.switchCables === after.switchCables &&
+		before.switches === after.switches;
+	if (unchanged) return step(after);
+	const gone = Object.keys(after.priorities).filter((name) => !after.switches.some((on) => on === name));
+	const priorities = gone.reduce<LabState["priorities"]>(
+		(held, name) => without(held, name as SwitchName),
+		after.priorities,
+	);
+	const kept = heldCosts(after, after.portCosts);
+	const portCosts = kept.length === after.portCosts.length ? after.portCosts : kept;
+	const state = gone.length === 0 && portCosts === after.portCosts ? after : { ...after, priorities, portCosts };
+	// A switch that was not there before is new in the runtime, where it has the priority that every switch starts with.
+	const was = (on: SwitchName): BridgePriority =>
+		before.switches.includes(on) ? priorityOf(before, on) : DEFAULT_PRIORITY;
+	const effects: Effect[] = state.switches.flatMap((on): Effect[] => {
+		const priority = priorityOf(state, on);
+		return priority === was(on) ? [] : [{ type: "switch/priority", switch: on, priority }];
+	});
+	for (const { port } of before.portCosts) {
+		if (state.switches.includes(port.switch) && !kept.some((now) => samePort(now.port, port))) {
+			effects.push({ type: "port/cost", port, cost: DEFAULT_COST });
+		}
+	}
+	for (const { port, cost } of kept) {
+		if (costOf(before, port) !== cost) effects.push({ type: "port/cost", port, cost });
+	}
+	return step(state, effects);
+}
+
 /**
  * After every change: a switch that is gone takes part in nothing, the
  * runtime is told of each switch that begins or stops, and no reading is kept
- * of a switch that takes no part.
+ * of a switch that takes no part. Then its priority and its ports' costs, as
+ * `settleSteering` keeps them.
  */
 export function settleStp(before: LabState, after: LabState): Step {
+	const taking = settleTaking(before, after);
+	const steering = settleSteering(before, taking.state);
+	return step(steering.state, [...steering.effects, ...taking.effects]);
+}
+
+function settleTaking(before: LabState, after: LabState): Step {
 	if (before.stp === after.stp && before.switches === after.switches) return step(after);
 	const kept = after.stp.filter((name) => after.switches.includes(name));
 	const stp = kept.length === after.stp.length ? after.stp : kept;
@@ -67,6 +183,34 @@ export function tree(state: LabState, name: SwitchName, reading: Tree): Step {
 	return step({ ...state, trees: { ...state.trees, [name]: reading } });
 }
 
+/** The switch that the tree of `on` takes for its root, once that switch has said what it is. */
+export function rootOf({ switches, trees }: Pick<LabState, "switches" | "trees">, on: SwitchName): SwitchName | null {
+	const root = trees[on]?.root;
+	if (!root) return null;
+	return switches.find((name) => trees[name]?.bridge.address === root.address) ?? null;
+}
+
+/** `32768.02:00:a1:b2:c3:d4`: a bridge's priority as a command takes it, and then its address. */
+export const bridgeText = ({ priority, address }: BridgeRef): string => `${priority}.${address}`;
+
+/**
+ * What a switch is in the spanning tree, after the words `spanning tree`: `on · bridge 32768.02:00:… · root lan at
+ * cost 20000`, `on · bridge 4096.02:00:… · the root`, `on` until it has said, `off · priority 4096` for one that
+ * takes no part with a priority set, and null for one that takes none with none.
+ */
+export function treeSummary(
+	state: Pick<LabState, "switches" | "trees" | "stp" | "priorities">,
+	on: SwitchName,
+): string | null {
+	if (!stpOn(state, on)) return on in state.priorities ? `off · priority ${priorityOf(state, on)}` : null;
+	const reading = state.trees[on];
+	if (!reading) return "on";
+	const { bridge, root, cost } = reading;
+	const name = rootOf(state, on);
+	const rooted = sameBridge(bridge, root) ? "the root" : `root ${name ?? bridgeText(root)} at cost ${cost}`;
+	return ["on", `bridge ${bridgeText(bridge)}`, rooted].join(" · ");
+}
+
 /** What the port is in its switch's tree, or undefined for a port with no link, or of a switch that takes no part. */
 export function treePortAt({ trees }: Pick<LabState, "trees">, { switch: on, port }: PortRef): TreePort | undefined {
 	return trees[on]?.ports.find((held) => held.port === port);
@@ -87,7 +231,27 @@ export function treeText(port: Pick<TreePort, "state"> | undefined): string | nu
 	return word === BLOCKED ? `${BLOCKED} by spanning tree` : word;
 }
 
-/** The effects that have a saved lab's switches take part again, before their cables are in. */
-export function stpEffects({ stp }: Setting): readonly Effect[] {
-	return stp.map((name) => ({ type: "switch/stp", switch: name, on: true }));
+/** `root port`, `alternate port · blocked`: its role, and its state where it does not carry. */
+export function treeRoleText(port: Pick<TreePort, "role" | "state"> | undefined): string | null {
+	if (!port) return null;
+	const word = treeWord(port);
+	return [`${port.role} port`, ...(word ? [word] : [])].join(" · ");
+}
+
+/**
+ * The effects that give a saved lab's switches their priorities and its ports their costs, and then have its
+ * switches take part again, before their cables are in.
+ */
+export function stpEffects({
+	stp,
+	priorities,
+	portCosts,
+}: Pick<LabState, "stp" | "priorities" | "portCosts">): readonly Effect[] {
+	return [
+		...Object.entries(priorities).flatMap(([name, priority]): Effect[] =>
+			priority === undefined ? [] : [{ type: "switch/priority", switch: name as SwitchName, priority }],
+		),
+		...portCosts.map(({ port, cost }): Effect => ({ type: "port/cost", port, cost })),
+		...stp.map((name): Effect => ({ type: "switch/stp", switch: name, on: true })),
+	];
 }

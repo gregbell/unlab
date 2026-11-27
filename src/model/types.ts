@@ -161,6 +161,27 @@ export interface BridgeRef {
 	readonly address: string;
 }
 
+declare const bridgePriority: unique symbol;
+/** A switch's priority in the spanning tree: a step of 4096 from 0 to 61440, as 802.1D-2004 has it. The lower wins. */
+export type BridgePriority = number & { readonly [bridgePriority]: true };
+export const PRIORITY_STEP = 4096;
+export const MAX_PRIORITY = 61_440;
+export const DEFAULT_PRIORITY = 32_768 as BridgePriority;
+
+declare const pathCost: unique symbol;
+/** What a port adds to the way to the root through it: from 1 to 200,000,000, as 802.1D-2004 has it. */
+export type PathCost = number & { readonly [pathCost]: true };
+export const MIN_COST = 1;
+export const MAX_COST = 200_000_000;
+/** What a gigabit port costs. */
+export const DEFAULT_COST = 20_000 as PathCost;
+
+/** A port that something is in, whose cost is not the one every port starts with. */
+export interface PortCost {
+	readonly port: PortRef;
+	readonly cost: PathCost;
+}
+
 /** A switch's part in the spanning tree, as its messages with its neighbours left it. */
 export interface Tree {
 	readonly bridge: BridgeRef;
@@ -429,6 +450,8 @@ export type ToolName =
 	| "port_vlan"
 	| "port_trunk"
 	| "switch_stp"
+	| "switch_priority"
+	| "port_cost"
 	| "checkpoint_save"
 	| "checkpoint_restore"
 	| "checkpoint_remove"
@@ -534,6 +557,10 @@ export interface LabState {
 	readonly stp: readonly SwitchName[];
 	/** What each of those is in the tree, as the runtime last said, once it has. Never saved. */
 	readonly trees: Readonly<Partial<Record<SwitchName, Tree>>>;
+	/** The switches whose priority in the spanning tree is not 32768. Kept while a switch takes no part. */
+	readonly priorities: Readonly<Partial<Record<SwitchName, BridgePriority>>>;
+	/** The ports that something is in and whose cost is not 20000, one each. A free port costs 20000. */
+	readonly portCosts: readonly PortCost[];
 	readonly sessions: Readonly<Partial<Record<SessionId, Session>>>;
 	readonly panes: Panes;
 	readonly keyboard: Keyboard;
@@ -737,6 +764,8 @@ export type CommandEvent =
 	| { readonly type: "cmd/vlan"; readonly port: PortRef; readonly vlan: PortVlan }
 	| { readonly type: "cmd/conditions"; readonly changes: readonly ConditionsChange[] }
 	| { readonly type: "cmd/stp"; readonly switches: readonly SwitchName[]; readonly on: boolean }
+	| { readonly type: "cmd/priority"; readonly switches: readonly SwitchName[]; readonly priority: BridgePriority }
+	| { readonly type: "cmd/cost"; readonly port: PortRef; readonly cost: PathCost }
 	| { readonly type: "cmd/shell"; readonly machine: MachineName }
 	| {
 			readonly type: "cmd/focus";
@@ -882,6 +911,10 @@ export type Effect =
 	| { readonly type: "port/conditions"; readonly port: PortRef; readonly conditions: Conditions }
 	/** The switch takes part in the spanning tree from now on, or takes none. It reports switch/tree as its part changes. */
 	| { readonly type: "switch/stp"; readonly switch: SwitchName; readonly on: boolean }
+	/** The switch's priority in the spanning tree from now on, whether or not it takes part. */
+	| { readonly type: "switch/priority"; readonly switch: SwitchName; readonly priority: BridgePriority }
+	/** What the port adds to the way to the root through it from now on. */
+	| { readonly type: "port/cost"; readonly port: PortRef; readonly cost: PathCost }
 	| { readonly type: "pty/open"; readonly session: SessionId }
 	| { readonly type: "pty/close"; readonly session: SessionId }
 	| { readonly type: "screen/create"; readonly session: SessionId }

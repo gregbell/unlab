@@ -17,7 +17,16 @@
 // A port is safe from the moment it is enabled: it neither learns nor forwards
 // until the procedures have said that it may.
 
-import type { PortNo, Tree, TreePort, TreeRole } from "../model/index.ts";
+import {
+	type BridgePriority,
+	DEFAULT_COST,
+	DEFAULT_PRIORITY,
+	type PathCost,
+	type PortNo,
+	type Tree,
+	type TreePort,
+	type TreeRole,
+} from "../model/index.ts";
 import {
 	type Bpdu,
 	type BridgeId,
@@ -44,9 +53,8 @@ export const EDGE_DELAY_MS = 3000;
  * a mistake, far above what the protocol needs.
  */
 export const TX_HOLD = 1000;
-export const DEFAULT_PRIORITY = 0x8000;
-/** What a gigabit port costs. */
-export const DEFAULT_COST = 20_000;
+/** The most that a way to the root can cost, which is what a message has four bytes for. A dearer way costs this. */
+export const MOST_COST = 0xffff_ffff;
 const PORT_PRIORITY = 0x80;
 const PORTS = 8;
 /** What a message says three hellos after the last of it. */
@@ -92,7 +100,7 @@ class Port {
 	readonly no: number;
 	/** Its priority and then its number, as a message has it. */
 	readonly id: number;
-	cost = DEFAULT_COST;
+	cost: PathCost = DEFAULT_COST;
 	/** Its link is up. */
 	enabled = false;
 	/** Its cable ends at no bridge, as far as it has heard. */
@@ -159,8 +167,8 @@ export interface Wire {
 export class Bridge {
 	readonly #wire: Wire;
 	readonly #address: number;
-	readonly #id: BridgeId;
-	readonly #own: Vector;
+	#id: BridgeId;
+	#own: Vector;
 	readonly #ports: Port[];
 	#root: Vector;
 	#rootTimes: Times = OWN_TIMES;
@@ -176,7 +184,7 @@ export class Bridge {
 	version = 0;
 
 	/** `address` is the switch's MAC as one number, which is the lower part of its ID. */
-	constructor(address: number, wire: Wire, priority = DEFAULT_PRIORITY) {
+	constructor(address: number, wire: Wire, priority: BridgePriority = DEFAULT_PRIORITY) {
 		this.#wire = wire;
 		this.#address = address;
 		this.#id = bridgeIdOf(priority, address);
@@ -200,6 +208,29 @@ export class Bridge {
 	/** The port's link went down, or its cable is out. */
 	disable(no: PortNo): void {
 		this.#fresh(no);
+	}
+
+	/** The switch's priority from now on. Each port works out again what it is, as 17.13 has it. */
+	setPriority(priority: BridgePriority): void {
+		const id = bridgeIdOf(priority, this.#address);
+		if (id === this.#id) return;
+		this.#id = id;
+		this.#own = vector(id, 0, id, 0);
+		for (const port of this.#ports) this.#reselect(port);
+	}
+
+	/** What the port adds to the way to the root through it, from now on. The port works out again what it is. */
+	setCost(no: PortNo, cost: PathCost): void {
+		const port = this.#port(no);
+		if (port.cost === cost) return;
+		port.cost = cost;
+		this.#reselect(port);
+	}
+
+	#reselect(port: Port): void {
+		port.reselect = true;
+		port.selected = false;
+		this.pending = true;
 	}
 
 	/** The port as a new one, which takes no frame until it is run. */
@@ -376,7 +407,7 @@ export class Bridge {
 			port.reselect = false;
 			if (port.infoIs !== "received" || address(port.held.bridge) === address(this.#id)) continue;
 			const { root, cost, bridge, port: sender } = port.held;
-			const through = vector(root, cost + port.cost, bridge, sender);
+			const through = vector(root, Math.min(cost + port.cost, MOST_COST), bridge, sender);
 			// Of two ports that hear the same, the lower is the first here, and stays.
 			if (through.key < best.key) {
 				best = through;

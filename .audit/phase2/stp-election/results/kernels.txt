@@ -1,0 +1,1 @@
+node3's tcpdump of a message from switch 2: 16:49:02.170644 STP 802.1w, Rapid STP, Flags [Learn, Forward], bridge-id 8000.02:00:00:00:00:03.8001, length 36 message-age 1.00s, max-age 20.00s, hello-time 2.00s, forwarding-delay 15.00s root-id 8000.02:00:00:00:00:01, root-pathcost 20000, port-role Designated 
