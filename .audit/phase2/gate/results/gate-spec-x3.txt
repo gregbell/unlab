@@ -1,0 +1,9 @@
+
+Running 3 tests using 1 worker
+
+  ✓  1 [chromium] › e2e/gate.spec.ts:120:1 › the recorded command set, typed into the bar, builds three subnets and two routers; a ping crosses both routers, the trunk and the lossy cable, every echo is answered at 0% and none at 100%, and a reload brings it all back (26.5s)
+  ✓  2 [chromium] › e2e/gate.spec.ts:120:1 › the recorded command set, typed into the bar, builds three subnets and two routers; a ping crosses both routers, the trunk and the lossy cable, every echo is answered at 0% and none at 100%, and a reload brings it all back (26.3s)
+  ✓  3 [chromium] › e2e/gate.spec.ts:120:1 › the recorded command set, typed into the bar, builds three subnets and two routers; a ping crosses both routers, the trunk and the lossy cable, every echo is answered at 0% and none at 100%, and a reload brings it all back (27.5s)
+
+  3 passed (1.4m)
+exit 0

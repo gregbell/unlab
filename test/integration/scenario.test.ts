@@ -6,7 +6,7 @@ import { afterAll, beforeAll, test } from "vitest";
 import type { Topology } from "../../src/commands/index.ts";
 import type { PortRef, SwitchName } from "../../src/model/index.ts";
 import { dstMac, ETH_HDR, ip4, ip4str, ipAddrs, srcMac } from "../../src/net/index.ts";
-import { inGuests, scenarioLines, waitsForMachines } from "../support/scenario.ts";
+import { inGuests, scenarioLines, THREE_SUBNETS_WIRING, waitsForMachines, wiringOf } from "../support/scenario.ts";
 import { type CommandedLab, commandLab, macNames, type NamedTap } from "./commanded.ts";
 
 const LINES = scenarioLines("three-subnets");
@@ -119,30 +119,10 @@ async function crossed(): Promise<void> {
 	assert.ok(seen.delivered >= 2 * received, "each answered echo crossed it both ways");
 }
 
-/** Each port that a cable is in, and what is in it: what topology_read says, but for counters, which only grow. */
-async function wiring(): Promise<string[]> {
-	const data = (await lab.run("topology")).data as Topology;
-	return data.switches.flatMap(({ name, ports }) =>
-		ports.flatMap(({ port, cable, vlan }) => {
-			if (!cable) return [];
-			const to =
-				cable.to.kind === "nic" ? `${cable.to.machine}:${cable.to.nic}` : `${cable.to.switch}:${cable.to.port}`;
-			return [`${name}:${port} ${to} ${cable.link} ${JSON.stringify(vlan)} ${JSON.stringify(cable.conditions)}`];
-		}),
-	);
-}
+const wiring = async (): Promise<string[]> => wiringOf((await lab.run("topology")).data as Topology);
 
 test("one recorded set of commands builds three subnets, two routers, a VLAN trunk between two switches and one cable that loses frames", async () => {
-	assert.deepEqual(await wiring(), [
-		'core:1 r1:eth0 up {"mode":"access","vlan":10} {}',
-		'core:2 r1:eth1 up {"mode":"access","vlan":20} {}',
-		'core:8 edge:8 up {"mode":"trunk","allowed":[10,20],"native":1} {}',
-		'edge:1 alice:eth0 up {"mode":"access","vlan":10} {}',
-		'edge:2 r2:eth0 up {"mode":"access","vlan":20} {}',
-		'edge:3 r2:eth1 up {"mode":"access","vlan":30} {"loss":"10%"}',
-		'edge:4 bob:eth0 up {"mode":"access","vlan":30} {}',
-		'edge:8 core:8 up {"mode":"trunk","allowed":[10,20],"native":1} {}',
-	]);
+	assert.deepEqual(await wiring(), THREE_SUBNETS_WIRING);
 	const routes = await lab.run("exec all -- ip -4 -o addr show scope global; sysctl -n net.ipv4.ip_forward");
 	const ran = (routes.data as { ran: { session: string; output: string }[] }).ran;
 	const seen = ran.map(({ session, output }) => {

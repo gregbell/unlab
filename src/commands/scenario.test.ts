@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { scenarioLines, waitsForMachines } from "../../test/support/scenario.ts";
+import { scenarioLines, THREE_SUBNETS_WIRING, waitsForMachines, wiringOf } from "../../test/support/scenario.ts";
 import { machineList } from "../model/index.ts";
 import { addressStr } from "../net/index.ts";
 import type { ExecPort } from "./index.ts";
@@ -72,26 +72,7 @@ describe("the recorded command set of three-subnets.md", () => {
 		]);
 
 		// The agent's tool returns the same, as data.
-		const data = report.data as Topology;
-		const used = data.switches.flatMap(({ name, ports }) =>
-			ports.flatMap(({ port, cable, vlan }) => {
-				if (!cable) return [];
-				const to =
-					cable.to.kind === "nic" ? `${cable.to.machine}:${cable.to.nic}` : `${cable.to.switch}:${cable.to.port}`;
-				const carries = vlan.mode === "access" ? `vlan ${vlan.vlan}` : `trunk ${vlan.allowed} native ${vlan.native}`;
-				return [`${name}:${port} ${to} ${cable.link} ${carries} ${JSON.stringify(cable.conditions)}`];
-			}),
-		);
-		expect(used).toEqual([
-			"core:1 r1:eth0 up vlan 10 {}",
-			"core:2 r1:eth1 up vlan 20 {}",
-			"core:8 edge:8 up trunk 10,20 native 1 {}",
-			"edge:1 alice:eth0 up vlan 10 {}",
-			"edge:2 r2:eth0 up vlan 20 {}",
-			'edge:3 r2:eth1 up vlan 30 {"loss":"10%"}',
-			"edge:4 bob:eth0 up vlan 30 {}",
-			"edge:8 core:8 up trunk 10,20 native 1 {}",
-		]);
+		expect(wiringOf(report.data as Topology)).toEqual(THREE_SUBNETS_WIRING);
 
 		const subnets = machineList(lab.store.state).map(({ name, spec }) => [
 			name,
