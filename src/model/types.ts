@@ -137,6 +137,41 @@ export interface Storm {
 	readonly dropped: number;
 }
 
+/**
+ * What a port is in its switch's spanning tree: its way to the root, a way
+ * from the root to whatever is on its cable, or a spare of either, which
+ * carries nothing: an alternate to the root port, or a backup to another port
+ * of its own switch.
+ */
+export type TreeRole = "root" | "designated" | "alternate" | "backup";
+
+/** What a port of a switch with spanning tree on does with frames: drops them, drops them and learns from them, or carries them. */
+export type TreeState = "discarding" | "learning" | "forwarding";
+
+export interface TreePort {
+	readonly port: PortNo;
+	readonly role: TreeRole;
+	readonly state: TreeState;
+}
+
+/** A switch as the spanning tree knows it. The lower priority wins, and then the lower address. */
+export interface BridgeRef {
+	readonly priority: number;
+	/** As a MAC is written. */
+	readonly address: string;
+}
+
+/** A switch's part in the spanning tree, as its messages with its neighbours left it. */
+export interface Tree {
+	readonly bridge: BridgeRef;
+	/** The switch that every one of the tree counts its way to. Its own, for the root. */
+	readonly root: BridgeRef;
+	/** What its way to the root costs: 0 for the root. */
+	readonly cost: number;
+	/** The ports whose link is up, lowest first. */
+	readonly ports: readonly TreePort[];
+}
+
 // ───────────────────────────── machines ─────────────────────────────
 
 export type Source = "bar" | "button" | "agent" | "cli";
