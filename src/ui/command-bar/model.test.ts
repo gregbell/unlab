@@ -44,6 +44,9 @@ function labOf() {
 		until: store.until,
 		now: () => clock,
 		carried: () => undefined,
+		switches: { macTable: () => [], totals: () => ({ in: 0, delivered: 0, flooded: 0 }), now: () => 0 },
+		capture: { frames: () => [], startedAt: 0 },
+		download: () => {},
 		files: { write: () => Promise.reject(new Error("This test has no file port.")) },
 		exec: {
 			inject: (session, _line, _source, signal) =>
@@ -190,7 +193,9 @@ describe("the artboards, replayed", () => {
 			"priority",
 			"cost",
 			"topology",
+			"macs",
 			"capture",
+			"pcap",
 			"focus",
 			"boot",
 			"reboot",

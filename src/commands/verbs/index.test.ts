@@ -34,7 +34,9 @@ describe("VERBS", () => {
 			["priority", "<switches> <priority>", "set a switch's priority in the spanning tree"],
 			["cost", "<port> <cost>", "set what a switch port costs in the spanning tree"],
 			["topology", "", "list switches, their ports and what is plugged in"],
+			["macs", "[switches]", "list what switches have learned, and their counters"],
 			["capture", "<filter>", "filter the packet capture"],
+			["pcap", "<filter>", "save the capture as a .pcap"],
 			["focus", "<machine or session> [--main | --max]", "move the keyboard to a console"],
 			["boot", "<machines>", "boot machines that are off or failed"],
 			["reboot", "<machines>", "shut machines down and boot them again"],
@@ -70,6 +72,8 @@ describe("VERBS", () => {
 			["priority", "switch_priority", "run", {}],
 			["cost", "port_cost", "run", {}],
 			["topology", "topology_read", "run", { readOnlyHint: true }],
+			["macs", "switch_macs", "run", { readOnlyHint: true }],
+			["pcap", "capture_save", "run", { readOnlyHint: true, untrustedContentHint: true }],
 			["boot", "machines_boot", "run", {}],
 			["reboot", "machines_reboot", "run", {}],
 			["poweroff", "machines_poweroff", "run", {}],
@@ -121,8 +125,19 @@ const lines = fc.oneof(
 	fc
 		.array(fc.constantFrom("icmp", "arp", "node1", "or", "port:2"), { maxLength: 4 })
 		.map((w) => `capture ${w.join(" ")}`),
+	fc.array(fc.constantFrom("icmp", "wan", "wan:3", "or", "port:2"), { maxLength: 4 }).map((w) => `pcap ${w.join(" ")}`),
 	fc.tuple(fc.constantFrom("reboot", "poweroff"), word).map(([verb, w]) => `${verb} ${w}`),
-	fc.constantFrom("topology", "mkswitch", "mkswitch lan", "mkswitch switch7", "rmswitch wan"),
+	fc.constantFrom(
+		"topology",
+		"macs",
+		"macs wan",
+		"macs switch0,wan",
+		"macs all",
+		"mkswitch",
+		"mkswitch lan",
+		"mkswitch switch7",
+		"rmswitch wan",
+	),
 	fc.constantFrom("ls", "sh node1", "sh node3", "help", "help spawn", "help machines_spawn"),
 	fc
 		.tuple(

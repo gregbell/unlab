@@ -14,6 +14,13 @@ export interface Update {
 export const UPDATES: readonly Update[] = [
 	{
 		date: "2026-11-27",
+		title: "Read MAC tables and save a .pcap from a command",
+		detail:
+			"macs lists what each switch has learned, with its port, VLAN, machine and age, and the frames it took in, delivered and flooded, as the switch panel shows them. pcap saves the capture as save .pcap does, so pcap lan:3 downloads one cable's frames. An agent reads them too, with switch_macs and capture_save.",
+		example: "macs switch0",
+	},
+	{
+		date: "2026-11-27",
 		title: "Choose the root and the blocked port",
 		detail:
 			"priority makes a switch the spanning tree's root, and cost makes a port dearer, so the tree blocks it rather than another. topology and the switch's details say each switch's bridge ID, its root and each port's role. The capture decodes each BPDU's root, cost and port, and tcpdump in a guest reads them too.",

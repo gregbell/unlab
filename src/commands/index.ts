@@ -9,6 +9,7 @@ export type { Approval } from "./approval.ts";
 export type {
 	AnyVerb,
 	ApprovedRunContext,
+	CaptureReads,
 	Command,
 	CommandDeps,
 	CommandFace,
@@ -24,6 +25,7 @@ export type {
 	SafeCommand,
 	SafeLine,
 	SafeVerbDefinition,
+	SwitchReads,
 	ToolAnnotations,
 	ToolFace,
 	ToolSpec,

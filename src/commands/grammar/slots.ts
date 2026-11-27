@@ -1385,7 +1385,7 @@ export function frameFilter(): Rest {
 			"filter",
 			"Terms that all match, with or between alternatives: protocol, machine, NIC (node2:eth1), IP, MAC, switch (lan), cable (lan:3), port:N. Empty is all.",
 		),
-		check(text, { lab }) {
+		check(text, { lab, verb }) {
 			const names = selectNames(lab);
 			const compiled = compileFilter(text, names);
 			if (compiled.ok) return null;
@@ -1397,7 +1397,7 @@ export function frameFilter(): Rest {
 			const fits = (word: string) =>
 				compileFilter(text.slice(0, start) + word + text.slice(start + token.length), names).ok;
 			const instead = words.filter(fits);
-			return { message: message.replace(/^Capture /, "capture "), start, instead };
+			return { message: message.replace(/^Capture /, `${verb} `), start, instead };
 		},
 		suggest: (typed, { lab }) => filterTerms(typed, lab),
 	};

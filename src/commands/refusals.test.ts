@@ -156,7 +156,9 @@ describe("every verb", () => {
 		},
 	);
 
-	it.each(all.filter(({ verb }) => verb !== "capture"))(
+	/** Their filter is every word to the end of the line. */
+	const filtering = ["capture", "pcap"];
+	it.each(all.filter(({ verb }) => !filtering.includes(verb)))(
 		"$verb names an argument that is one too many",
 		({ verb, example }) => {
 			const said = sentenceOf(bar(insert(example.line, "extra"), labFor(verb)));

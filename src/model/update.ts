@@ -81,6 +81,7 @@ export const DEFAULT_POLICIES: Readonly<Record<ToolName, Policy>> = {
 	lab_help: "run",
 	machines_list: "run",
 	topology_read: "run",
+	switch_macs: "run",
 	machines_spawn: "ask",
 	machines_boot: "run",
 	machines_reboot: "run",
@@ -105,6 +106,7 @@ export const DEFAULT_POLICIES: Readonly<Record<ToolName, Policy>> = {
 	cable_plug: "run",
 	cable_unplug: "run",
 	capture_read: "run",
+	capture_save: "run",
 };
 
 const NOWHERE: Keyboard = { kind: "none" };

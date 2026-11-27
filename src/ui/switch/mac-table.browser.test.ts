@@ -24,9 +24,9 @@ function part(element: Element, selector: string): HTMLElement {
 
 describe("<unlab-mac-table>", () => {
 	const table = [
-		{ mac: "52:54:00:88:00:0c", port: 2 as PortNo, seen: 92_000, flushed: false },
-		{ mac: "52:54:00:88:00:0b", port: 1 as PortNo, seen: 99_000, flushed: false },
-		{ mac: "52:54:00:88:00:0d", port: 3 as PortNo, seen: 60_000, flushed: true },
+		{ vlan: 1, mac: "52:54:00:88:00:0c", port: 2 as PortNo, seen: 92_000, flushed: false },
+		{ vlan: 1, mac: "52:54:00:88:00:0b", port: 1 as PortNo, seen: 99_000, flushed: false },
+		{ vlan: 1, mac: "52:54:00:88:00:0d", port: 3 as PortNo, seen: 60_000, flushed: true },
 	];
 
 	it("lists learned addresses by port with machine, port and age", async () => {
@@ -50,9 +50,9 @@ describe("<unlab-mac-table>", () => {
 			state: lab(spawn(1), spawn(1, "switch0", "switch0"), ready()),
 			switch: {
 				macTable: () => [
-					{ mac: "52:54:00:88:00:0b", port: 1, seen: 0, flushed: false },
-					{ mac: "52:54:00:88:00:0c", port: 2, seen: 0, flushed: false },
-					{ mac: "52:54:00:88:01:0c", port: 3, seen: 0, flushed: false },
+					{ vlan: 1, mac: "52:54:00:88:00:0b", port: 1, seen: 0, flushed: false },
+					{ vlan: 1, mac: "52:54:00:88:00:0c", port: 2, seen: 0, flushed: false },
+					{ vlan: 1, mac: "52:54:00:88:01:0c", port: 3, seen: 0, flushed: false },
 				],
 				now: () => 0,
 			},
@@ -83,7 +83,7 @@ describe("<unlab-mac-table>", () => {
 			capture: capture.log,
 			switch: { macTable: () => learned, now: () => 100_400 },
 		});
-		learned.push({ mac: "52:54:00:88:00:0e", port: 4, seen: 100_000, flushed: false });
+		learned.push({ vlan: 1, mac: "52:54:00:88:00:0e", port: 4, seen: 100_000, flushed: false });
 		capture.frame(ping(4, 1), 4, [1]);
 		await settle();
 		expect(element.querySelectorAll("tbody tr")).toHaveLength(4);
@@ -96,8 +96,8 @@ describe("the maximised switch", () => {
 			state: cutThree,
 			switch: {
 				macTable: () => [
-					{ mac: "52:54:00:88:00:0b", port: 1, seen: 99_000, flushed: false },
-					{ mac: "52:54:00:88:00:0d", port: 3, seen: 60_000, flushed: true },
+					{ vlan: 1, mac: "52:54:00:88:00:0b", port: 1, seen: 99_000, flushed: false },
+					{ vlan: 1, mac: "52:54:00:88:00:0d", port: 3, seen: 60_000, flushed: true },
 				],
 				now: () => 100_000,
 			},

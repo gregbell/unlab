@@ -49,6 +49,7 @@ describe("<unlab-agent-panel>", () => {
 			"lab_help(verb)",
 			"machines_list()",
 			"topology_read()",
+			"switch_macs(switches)",
 			"machines_spawn(count, image, mem, cpus, disk, extraDisk, name, nics, net, addr, gateway)",
 			"machines_boot(names)",
 			"machines_reboot(names)",
@@ -73,6 +74,7 @@ describe("<unlab-agent-panel>", () => {
 			"cable_plug(nic, to)",
 			"cable_unplug(nic)",
 			"capture_read(filter, limit)",
+			"capture_save(filter)",
 		]);
 		const spawnPolicy = page.getByRole("combobox", { name: "Policy for machines_spawn" }).element();
 		expect(spawnPolicy instanceof HTMLSelectElement && spawnPolicy.selectedOptions[0]?.textContent).toBe("ask me");
@@ -241,7 +243,7 @@ describe("<unlab-agent-panel>", () => {
 		expect(text(element.querySelector(".about"))).toBe(
 			"This tab has no WebMCP, but an agent can call these through the CLI: connect an agent. For an agent in this browser, open chrome://flags/#enable-webmcp-testing in Chrome or Edge 150 or later, choose Enabled and relaunch.",
 		);
-		expect(element.querySelectorAll(".tool")).toHaveLength(27);
+		expect(element.querySelectorAll(".tool")).toHaveLength(29);
 		expect(page.getByRole("button", { name: "try a call" }).elements()).toEqual([]);
 
 		const copy = page.getByRole("button", { name: "copy address" }).element();

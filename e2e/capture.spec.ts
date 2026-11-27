@@ -222,14 +222,15 @@ test("a filter takes a switch or one cable, beside the other terms, the same in 
 
 interface Saved {
 	readonly name: string;
+	readonly bytes: Buffer;
 	readonly frames: readonly { readonly at: number; readonly bytes: Buffer }[];
 }
 
-/** Saves the capture as a person does, and reads the file. */
-async function saved(page: Page): Promise<Saved> {
+/** Saves the capture as a person does, with save .pcap or else with a line, and reads the file. */
+async function saved(page: Page, line?: string): Promise<Saved> {
 	const [file] = await Promise.all([
 		page.waitForEvent("download"),
-		full(page).getByRole("button", { name: "save .pcap" }).click(),
+		line === undefined ? full(page).getByRole("button", { name: "save .pcap" }).click() : typed(page, line),
 	]);
 	const bytes = readFileSync(await file.path());
 	expect([bytes.readUInt32LE(0), bytes.readUInt32LE(20)]).toEqual([0xa1b2c3d4, 1]);
@@ -238,7 +239,14 @@ async function saved(page: Page): Promise<Saved> {
 		const at = bytes.readUInt32LE(o) * 1e6 + bytes.readUInt32LE(o + 4);
 		frames.push({ at, bytes: bytes.subarray(o + 16, o + 16 + bytes.readUInt32LE(o + 8)) });
 	}
-	return { name: file.suggestedFilename(), frames };
+	return { name: file.suggestedFilename(), bytes, frames };
+}
+
+/** The file that capture_save gives an agent for the filter. */
+async function given(page: Page, filter: string): Promise<Pick<Saved, "name" | "bytes">> {
+	const reply = (await call(page, "capture_save", { filter })) as { data?: { name: string; bytes: string } };
+	if (!reply.data) throw new Error(`capture_save ${filter}: ${JSON.stringify(reply)}`);
+	return { name: reply.data.name, bytes: Buffer.from(reply.data.bytes, "base64") };
 }
 
 /** `request 2`, for each ping in the file. */
@@ -255,6 +263,8 @@ test("a capture narrowed to one cable saves each of its frames once, and any oth
 	await routed(page);
 	await full(page).or(dock(page)).first().getByRole("button", { name: "Clear" }).click();
 	expect(await pinged(page, 5)).toBe(true);
+	// Nothing more comes in, so each way of saving it saves the same frames.
+	await full(page).or(dock(page)).first().getByRole("button", { name: "Pause" }).click();
 	const each = [0, 1, 2, 3, 4].flatMap((seq) => [`request ${seq}`, `reply ${seq}`]);
 
 	for (const cable of ["mid:1", "mid:2", "switch0:1", "far:2"]) {
@@ -271,7 +281,10 @@ test("a capture narrowed to one cable saves each of its frames once, and any oth
 		const times = file.frames.map(({ at }) => at);
 		expect(times).toEqual([...times].sort((a, b) => a - b));
 		expect(Math.abs(times[0] / 1000 - Date.now())).toBeLessThan(120_000);
+		// An agent is given the same file, and so is a person who types it.
+		expect(await given(page, cable), cable).toEqual({ name: file.name, bytes: file.bytes });
 		await page.keyboard.press("Escape");
+		if (cable === "mid:1") expect((await saved(page, `pcap ${cable}`)).bytes.equals(file.bytes)).toBe(true);
 	}
 
 	// Narrowed further, or to more than a cable, the file has what is shown.
@@ -280,12 +293,14 @@ test("a capture narrowed to one cable saves each of its frames once, and any oth
 	expect(two.name).toBe("unlab-filtered.pcap");
 	expect(echoes(two)).toHaveLength(20);
 	expect(two.frames).toHaveLength(20);
+	expect(await given(page, "mid:1 icmp or far:2 icmp")).toEqual({ name: two.name, bytes: two.bytes });
 	await page.keyboard.press("Escape");
 
 	// A filter for reading, as before: the whole capture, on every switch, whatever it shows.
 	await typed(page, "capture arp");
 	const whole = await saved(page);
 	expect(whole.name).toBe("unlab.pcap");
+	expect(await given(page, "arp")).toEqual({ name: whole.name, bytes: whole.bytes });
 	expect(echoes(whole)).toEqual(
 		[0, 1, 2, 3, 4].flatMap((seq) => [...Array(3).fill(`request ${seq}`), ...Array(3).fill(`reply ${seq}`)]),
 	);

@@ -24,6 +24,7 @@ import {
 } from "./model/index.ts";
 import { createRuntime, type DistroManifest, type Engine, sweepDisks } from "./runtime/index.ts";
 import { startTailcat } from "./runtime/tailcat.ts";
+import { download } from "./ui/base/download.ts";
 import type { AppServices, TerminalHost } from "./ui/services.ts";
 import { createShareService } from "./ui/share-ssh/service.ts";
 
@@ -147,6 +148,7 @@ async function main(): Promise<void> {
 	followLab(capture, store);
 
 	const engine = runtime;
+	const switches = { ...engine.reads, now };
 	const registry = createRegistry(
 		{
 			state: () => store.state,
@@ -154,6 +156,9 @@ async function main(): Promise<void> {
 			until: (predicate, signal) => store.until(predicate, signal),
 			now,
 			carried: engine.reads.carried,
+			switches,
+			capture,
+			download,
 			exec: engine.exec,
 			files: engine.files,
 		},
@@ -198,7 +203,7 @@ async function main(): Promise<void> {
 		store,
 		commands,
 		capture,
-		switch: { ...engine.reads, now },
+		switch: switches,
 		terminals: {
 			host(session): TerminalHost | null {
 				const screen = engine.screens.get(session);
