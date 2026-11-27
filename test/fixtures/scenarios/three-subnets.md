@@ -18,11 +18,11 @@ its ends, carrying VLANs 10 and 20. Nothing else crosses it.
 
 Each subnet is a VLAN of its own.
 
-| Subnet        | VLAN | Machines in it                     |
-| ------------- | ---- | ---------------------------------- |
-| `10.1.0.0/24` | 10   | alice, and r1's `eth0`             |
-| `10.2.0.0/24` | 20   | r1's `eth1`, and r2's `eth0`       |
-| `10.3.0.0/24` | 30   | r2's `eth1`, and bob               |
+| Subnet        | VLAN | Machines in it               |
+| ------------- | ---- | ---------------------------- |
+| `10.1.0.0/24` | 10   | alice, and r1's `eth0`       |
+| `10.2.0.0/24` | 20   | r1's `eth1`, and r2's `eth0` |
+| `10.3.0.0/24` | 30   | r2's `eth1`, and bob         |
 
 ## Machines
 
