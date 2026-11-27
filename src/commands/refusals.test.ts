@@ -182,6 +182,35 @@ describe("every verb", () => {
 		},
 	);
 
+	/** Takes any word: a user name, which only the guest can check. */
+	const ANY_WORD = ["write --owner"];
+	const valued = all.flatMap(({ verb, tool, arguments: args, example }) =>
+		args
+			.filter(({ written }) => !/^\[?--[a-z-]+\]?$/.test(written) && !written.startsWith("-- "))
+			.map(({ field, written }) => ({ verb, tool, field, written, example })),
+	);
+
+	it.each(valued.filter(({ verb, written }) => !ANY_WORD.includes(`${verb} ${written.replace(/^\[|\s.*$/g, "")}`)))(
+		"$verb names a value of $written that cannot be, and what would do, the same from its tool",
+		async ({ verb, tool, field, example }) => {
+			const on = labFor(verb);
+			const command = registry.find(verb);
+			for (const value of ["zz9", "Zz_9"]) {
+				const input = { ...example.input, [field]: value };
+				const line = command?.tool ? command.tool.toLine(input) : `${verb} ${value}`;
+				if (typeof line !== "string") throw new Error(line.message);
+				const said = bar(line, on);
+				// A name of the right shape that is free can be taken, so the second value breaks its shape.
+				if (said === null) continue;
+				expect(sentenceOf(said), line).toContain(value);
+				expect(said).toMatch(/\b(so|such as|wants)\b/);
+				if (tool !== null) expect(await agent(tool, input, on)).toBe(said);
+				return;
+			}
+			throw new Error(`${verb} takes any ${field}`);
+		},
+	);
+
 	it("names what is no verb, and the verbs there are", async () => {
 		const verbs = all.map(({ verb }) => verb);
 		const use = `so use ${verbs.slice(0, -1).join(", ")} or help.`;

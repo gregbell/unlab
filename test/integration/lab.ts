@@ -183,7 +183,7 @@ export async function bootLab(setups: readonly MachineSetup[], wiring: Wiring = 
 		return first ? [{ ip: ip4str(first.ip), name: nameOf(setup) }] : [];
 	});
 
-	const boot = async (setup: MachineSetup): Promise<TestMachine> => {
+	const boot = (setup: MachineSetup): Promise<TestMachine> => {
 		const data: MachineData = {
 			n: setup.n,
 			name: nameOf(setup),
@@ -194,53 +194,72 @@ export async function bootLab(setups: readonly MachineSetup[], wiring: Wiring = 
 			hosts,
 			gateway: setup.gateway ?? false,
 		};
-		const worker = new Worker(new URL("./vm-worker.ts", import.meta.url), { workerData: data });
-		workers.push(worker);
-		const post = (message: ToMachine, transfer: ArrayBuffer[] = []) => worker.postMessage(message, transfer);
-		const deliver = (nic: NicNo, frame: Uint8Array) => {
-			// The switch shares a flooded frame with every port.
-			const copy = new Uint8Array(frame);
-			post({ type: "frame", nic, frame: copy }, [copy.buffer]);
-		};
 		const slot = setup.on ?? 0;
+		const machine = startMachine(data, workers, (nic, frame) => {
+			const port = setup.ports[nic];
+			if (port) pump.receive(slot, port, frame);
+		});
 		for (const nic of NICS) {
 			const port = setup.ports[nic];
-			if (port) fabric.attach(slot, port, { deliver: (frame) => deliver(nic, frame) });
+			if (port) fabric.attach(slot, port, { deliver: (frame) => machine.deliver(nic, frame) });
 		}
+		return machine.ready;
+	};
 
-		const startedAt = performance.now();
-		const pending = new Map<number, (result: ExecDone) => void>();
-		const lost: string[] = [];
-		let printed = "";
-		await new Promise<void>((resolve, reject) => {
-			worker.on("error", reject);
-			worker.on("message", (m: FromMachine) => {
-				switch (m.type) {
-					case "ready":
-						resolve();
-						return;
-					case "failed":
-						reject(new Error(`${data.name}: ${m.reason}`));
-						return;
-					case "lost":
-						lost.push(m.reason);
-						return;
-					case "console":
-						printed += m.text;
-						return;
-					case "ran":
-						pending.get(m.id)?.(m.result);
-						pending.delete(m.id);
-						return;
-					case "frame": {
-						const port = setup.ports[m.nic];
-						if (port) pump.receive(slot, port, m.frame);
-						return;
-					}
-				}
-			});
+	try {
+		const machines = await Promise.all(setups.map(boot));
+		return { sw: switches[0], switches, frames, storms, trees, machines, now: () => clock.now(), stop };
+	} catch (error) {
+		await stop();
+		throw error;
+	}
+}
+
+/** A machine's kernel in its own thread, which no switch has yet: what it sends goes to `frames`. Its worker joins `workers`. */
+export function startMachine(
+	data: MachineData,
+	workers: Worker[],
+	frames: (nic: NicNo, frame: Uint8Array) => void,
+): { readonly deliver: TestMachine["deliver"]; readonly ready: Promise<TestMachine> } {
+	const worker = new Worker(new URL("./vm-worker.ts", import.meta.url), { workerData: data });
+	workers.push(worker);
+	const post = (message: ToMachine, transfer: ArrayBuffer[] = []) => worker.postMessage(message, transfer);
+	const deliver = (nic: NicNo, frame: Uint8Array) => {
+		// The switch shares a flooded frame with every port.
+		const copy = new Uint8Array(frame);
+		post({ type: "frame", nic, frame: copy }, [copy.buffer]);
+	};
+	const startedAt = performance.now();
+	const pending = new Map<number, (result: ExecDone) => void>();
+	const lost: string[] = [];
+	let printed = "";
+	const booted = new Promise<void>((resolve, reject) => {
+		worker.on("error", reject);
+		worker.on("message", (m: FromMachine) => {
+			switch (m.type) {
+				case "ready":
+					resolve();
+					return;
+				case "failed":
+					reject(new Error(`${data.name}: ${m.reason}`));
+					return;
+				case "lost":
+					lost.push(m.reason);
+					return;
+				case "console":
+					printed += m.text;
+					return;
+				case "ran":
+					pending.get(m.id)?.(m.result);
+					pending.delete(m.id);
+					return;
+				case "frame":
+					frames(m.nic, m.frame);
+					return;
+			}
 		});
-
+	});
+	const ready = booted.then((): TestMachine => {
 		const bootMs = performance.now() - startedAt;
 		let calls = 0;
 		const exec = (cmd: string) =>
@@ -268,13 +287,6 @@ export async function bootLab(setups: readonly MachineSetup[], wiring: Wiring = 
 			link: (target) => post({ type: "link", target }),
 			deliver,
 		};
-	};
-
-	try {
-		const machines = await Promise.all(setups.map(boot));
-		return { sw: switches[0], switches, frames, storms, trees, machines, now: () => clock.now(), stop };
-	} catch (error) {
-		await stop();
-		throw error;
-	}
+	});
+	return { deliver, ready };
 }

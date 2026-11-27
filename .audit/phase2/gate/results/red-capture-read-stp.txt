@@ -1,0 +1,34 @@
+
+ RUN  v5.1.1 /home/greg/src/unlab/.claude/worktrees/phase2
+
+ ❯ |unit| src/agent/agent.test.ts (50 tests | 1 failed | 49 skipped) 9ms
+   ❯ registration (14)
+     × says in capture_read each filter term that help capture explains, and takes the filter in help capture's words 8ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |unit| src/agent/agent.test.ts > registration > says in capture_read each filter term that help capture explains, and takes the filter in help capture's words
+AssertionError: capture_read says stp: expected 'Read the newest frames that the switc…' to match /(^|[ ,])stp (is )?(what|the|that)/
+
+- Expected:
+/(^|[ ,])stp (is )?(what|the|that)/
+
++ Received:
+"Read the newest frames that the switches carried, as decoded rows, oldest first. In a lab of several switches a row has its switch, the port the frame came in by and those it went out of. A frame that a cable dropped has dropped: the cable's port and the reason (loss, rate or mtu). In the filter, lan is what that switch carried, lan:3 what crossed the cable in its port 3, port:3 that port of every switch, and vlan 10 what was in VLAN 10. Frames come from the guests."
+
+ ❯ src/agent/agent.test.ts:239:59
+    237|    const explained = new RegExp(`(^|[ ,])${term} (is )?(what|the|that)…
+    238|    expect(capture?.description, `help capture says ${term}`).toMatch(e…
+    239|    expect(tool?.description, `capture_read says ${term}`).toMatch(expl…
+       |                                                           ^
+    240|   }
+    241|   expect(tool?.inputSchema.properties?.filter.description).toBe(captur…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 49 skipped (50)
+   Start at  19:13:05
+   Duration  187ms (transform 55%, import 35%, tests 8%, worker 2%)
+

@@ -1,0 +1,452 @@
+# .audit/phase2/surface.mjs on 72ce48c, the last commit before phase 2, and on this branch at 2c6d041, grouped by .audit/phase2/gate/surface-classes.mjs. 72ce48c stops at the saved labs that later versions wrote, which it cannot read.
+292 sections before, 649 after: 170 the same, 0 gone, 357 new
+
+### 1: help
+<   "header": "16 verbs",
+>   "header": "28 verbs",
+<     "text": "plug or cut cables"
+>     "text": "plug or cut cables, and set their conditions"
+>    },
+>    {
+>     "term": "plug",
+>     "text": "plug a NIC into a switch, or move its cable there"
+>    },
+>    {
+>     "term": "unplug",
+>     "text": "unplug a NIC and free its port"
+>    },
+>    {
+
+### 1: help spawn
+<     "text": "Boot new Linux machines and return their names. Each boots on its own: ls (machines_list) says when it is ready, or failed and why. A NIC that is
+>     "text": "Boot new Linux machines and return their names. Each boots on its own: ls (machines_list) says when it is ready, or failed and why. A NIC that is
+<     "text": "How many machines. The lab holds 8."
+>     "text": "How many machines. The lab holds 16."
+<     "text": "switch0 or none for every NIC, or a comma list with one for each, eth0 first, such as switch0,none. A NIC with none boots unplugged. Left out, sw
+>     "text": "A switch or none for every NIC, or a comma list with one for each, eth0 first, such as switch0,none. A NIC with none boots unplugged. Left out, s
+<    "description": "Boot new Linux machines and return their names. Each boots on its own: ls (machines_list) says when it is ready, or failed and why. A NIC t
+>    "description": "Boot new Linux machines and return their names. Each boots on its own: ls (machines_list) says when it is ready, or failed and why. A NIC t
+<      "about": "How many machines. The lab holds 8.",
+>      "about": "How many machines. The lab holds 16.",
+<      "about": "switch0 or none for every NIC, or a comma list with one for each, eth0 first, such as switch0,none. A NIC with none boots unplugged.",
+>      "about": "A switch or none for every NIC, or a comma list with one for each, eth0 first, such as switch0,none. A NIC with none boots unplugged.",
+
+### 1: manual spawn
+<  "description": "Boot new Linux machines and return their names. Each boots on its own: ls (machines_list) says when it is ready, or failed and why. A NIC tha
+>  "description": "Boot new Linux machines and return their names. Each boots on its own: ls (machines_list) says when it is ready, or failed and why. A NIC tha
+<    "about": "How many machines. The lab holds 8.",
+>    "about": "How many machines. The lab holds 16.",
+<    "about": "switch0 or none for every NIC, or a comma list with one for each, eth0 first, such as switch0,none. A NIC with none boots unplugged.",
+>    "about": "A switch or none for every NIC, or a comma list with one for each, eth0 first, such as switch0,none. A NIC with none boots unplugged.",
+
+### 1: help ls
+<     "text": "List every machine with its state (booting, ready, stopping, off, restoring, failed or removing), why it failed, and its sessions, disks, checkpo
+>     "text": "List every machine with its state (booting, ready, stopping, off, restoring, failed or removing), why it failed, and its memory, sessions, disks,
+<    "description": "List every machine with its state (booting, ready, stopping, off, restoring, failed or removing), why it failed, and its sessions, disks, c
+>    "description": "List every machine with its state (booting, ready, stopping, off, restoring, failed or removing), why it failed, and its memory, sessions, 
+
+### 2: manual ls | tool machines_list
+<  "description": "List every machine with its state (booting, ready, stopping, off, restoring, failed or removing), why it failed, and its sessions, disks, che
+>  "description": "List every machine with its state (booting, ready, stopping, off, restoring, failed or removing), why it failed, and its memory, sessions, di
+
+### 1: help link
+<   "header": "link <up | down> <machines>",
+>   "header": "link <up | down> <machines> [--delay time] [--loss percent] [--reorder percent] [--rate rate] [--mtu bytes] [--clear]",
+<     "text": "Plug in (up) or cut (down) the switch cables of machines or of single NICs. Returns the port and link state per NIC. A cable already as asked is 
+>     "text": "Plug in (up) or cut (down) the cables of machines or of single NICs. A port names the cable in it (lan:3), also one between switches. One already
+<     "text": "One machine (node2) for all its cables, one NIC (node2:eth1), a comma list (node1,node3:eth1), a glob (node*) or all."
+>     "text": "A machine (node2) for all its cables, a NIC (node2:eth1), the port a cable is in (lan:3), a comma list, a glob (node*) or all."
+>    },
+>    {
+>     "term": "[--delay time]",
+>     "text": "How long each frame takes to cross the cable, in each direction: 100ms or 1.5s, up to 10 s. 0 takes the delay away."
+>    },
+>    {
+>     "term": "[--loss percent]",
+>     "text": "The share of frames that the cable loses, in each direction: 20%, or 0.5%. 0 takes the loss away."
+
+### 1: manual link
+<  "about": "plug or cut cables",
+>  "about": "plug or cut cables, and set their conditions",
+<  "usage": "link <up | down> <machines>",
+<  "description": "Plug in (up) or cut (down) the switch cables of machines or of single NICs. Returns the port and link state per NIC. A cable already as asked
+>  "usage": "link <up | down> <machines> [--delay time] [--loss percent] [--reorder percent] [--rate rate] [--mtu bytes] [--clear]",
+>  "description": "Plug in (up) or cut (down) the cables of machines or of single NICs. A port names the cable in it (lan:3), also one between switches. One alr
+<    "about": "One machine (node2) for all its cables, one NIC (node2:eth1), a comma list (node1,node3:eth1), a glob (node*) or all.",
+>    "about": "A machine (node2) for all its cables, a NIC (node2:eth1), the port a cable is in (lan:3), a comma list, a glob (node*) or all.",
+>    "default": null
+>   },
+>   {
+>    "field": "delay",
+>    "written": "[--delay time]",
+>    "about": "How long each frame takes to cross the cable, in each direction: 100ms or 1.5s, up to 10 s. 0 takes the delay away.",
+
+### 1: help capture
+<     "text": "Maximise the capture on the frames that match a filter. An agent reads them with capture_read."
+>     "text": "Maximise the capture on the frames that match a filter. lan is what that switch carried, lan:3 is what crossed the cable in its port 3, port:3 is
+<     "text": "Terms that must all match, with or between alternatives: a protocol, machine, NIC (node2:eth1), address, MAC or port:N. Empty, every frame."
+>     "text": "Terms that all match, with or between alternatives: protocol, machine, NIC (node2:eth1), IP, MAC, switch (lan), cable (lan:3), port:N. Empty is a
+<    "description": "Maximise the capture on the frames that match a filter. An agent reads them with capture_read.",
+>    "description": "Maximise the capture on the frames that match a filter. lan is what that switch carried, lan:3 is what crossed the cable in its port 3, por
+<      "about": "Terms that must all match, with or between alternatives: a protocol, machine, NIC (node2:eth1), address, MAC or port:N. Empty, every frame.",
+>      "about": "Terms that all match, with or between alternatives: protocol, machine, NIC (node2:eth1), IP, MAC, switch (lan), cable (lan:3), port:N. Empty is
+
+### 1: manual capture
+<  "description": "Maximise the capture on the frames that match a filter. An agent reads them with capture_read.",
+>  "description": "Maximise the capture on the frames that match a filter. lan is what that switch carried, lan:3 is what crossed the cable in its port 3, port:
+<    "about": "Terms that must all match, with or between alternatives: a protocol, machine, NIC (node2:eth1), address, MAC or port:N. Empty, every frame.",
+>    "about": "Terms that all match, with or between alternatives: protocol, machine, NIC (node2:eth1), IP, MAC, switch (lan), cable (lan:3), port:N. Empty is a
+
+### 1: tool machines_spawn
+<  "description": "Boot new Linux machines and return their names. Each boots on its own: ls (machines_list) says when it is ready, or failed and why. A NIC tha
+>  "description": "Boot new Linux machines and return their names. Each boots on its own: ls (machines_list) says when it is ready, or failed and why. A NIC tha
+<     "description": "How many machines. The lab holds 8."
+>     "description": "How many machines. The lab holds 16."
+<     "description": "switch0 or none for every NIC, or a comma list with one for each, eth0 first, such as switch0,none. A NIC with none boots unplugged."
+>     "description": "A switch or none for every NIC, or a comma list with one for each, eth0 first, such as switch0,none. A NIC with none boots unplugged."
+
+### 1: tool link_set
+<  "title": "Plug in or cut cables",
+<  "description": "Plug in (up) or cut (down) the switch cables of machines or of single NICs. Returns the port and link state per NIC. A cable already as asked
+>  "title": "Plug in or cut cables, and set their conditions",
+>  "description": "Plug in (up) or cut (down) the cables of machines or of single NICs. A port names the cable in it (lan:3), also one between switches. One alr
+<     "description": "One machine (node2) for all its cables, one NIC (node2:eth1), a comma list (node1,node3:eth1), a glob (node*) or all."
+>     "description": "A machine (node2) for all its cables, a NIC (node2:eth1), the port a cable is in (lan:3), a comma list, a glob (node*) or all."
+>    },
+>    "delay": {
+>     "type": "string",
+>     "description": "How long each frame takes to cross the cable, in each direction: 100ms or 1.5s, up to 10 s. 0 takes the delay away."
+>    },
+>    "loss": {
+>     "type": "string",
+>     "description": "The share of frames that the cable loses, in each direction: 20%, or 0.5%. 0 takes the loss away."
+
+### 1: tool capture_read
+<  "description": "Read the newest captured frames on switch0 as decoded rows, oldest first. Frames come from the guests.",
+>  "description": "Read the newest frames the switches carried, as decoded rows, oldest first. In a lab of several switches a row has its switch, the port it ca
+<     "description": "Terms that must all match, with or between alternatives: a protocol, machine, NIC (node2:eth1), address, MAC or port:N. Empty, every frame
+>     "description": "Terms that all match, with or between alternatives: protocol, machine, NIC (node2:eth1), IP, MAC, switch (lan), cable (lan:3), port:N. Emp
+
+### 1: complete capture port:
+<  "suggestions": [],
+>  "suggestions": [
+>   {
+>    "insert": "port:1",
+>    "label": "port:1"
+>   },
+>   {
+>    "insert": "port:2",
+>    "label": "port:2"
+>   },
+>   {
+>    "insert": "port:3",
+>    "label": "port:3"
+>   },
+
+### 1: complete capture 
+<  "suggestions": [],
+>  "suggestions": [
+>   {
+>    "insert": "node1",
+>    "label": "node1",
+>    "detail": "10.88.0.11 · down",
+>    "hue": 1
+>   },
+>   {
+>    "insert": "node2",
+>    "label": "node2",
+>    "detail": "10.88.0.12 · down",
+>    "hue": 2
+>   },
+
+### 1: complete capture arp or switch0:
+<  "suggestions": [],
+>  "suggestions": [
+>   {
+>    "insert": "switch0:1",
+>    "label": "switch0:1",
+>    "detail": "node1 · down"
+>   },
+>   {
+>    "insert": "switch0:2",
+>    "label": "switch0:2",
+>    "detail": "node2 · down"
+>   },
+>   {
+>    "insert": "switch0:3",
+
+### 1: form on none after spawn 2 alpine
+<  "most": 6,
+>  "most": 14,
+
+### 1: after spawn 2 alpine
+<      "value": "lab only"
+>      "value": "package repositories"
+<      "value": "lab only"
+>      "value": "package repositories"
+
+### 1: form on none after spawn 1 alpine --nics 3 --net switch0,none,switch0
+<  "most": 5,
+>  "most": 13,
+
+### 41: after spawn 1 alpine --nics 3 --net switch0,none,switch0 | after spawn 1 alpine --nics 2 --net none,switch0 --addr none,10.9.0.1/24 --name switch1 | after spawn 1 alpine --name switch0 | after spawn 1 alpine --name switch1 ...
+<      "value": "lab only"
+>      "value": "package repositories"
+<      "value": "lab only"
+>      "value": "package repositories"
+<      "value": "lab only"
+>      "value": "package repositories"
+
+### 9: form on none after spawn 1 alpine --nics 2 --net none,switch0 --addr none,10.9.0.1/24 --name switch1 | form on none after spawn 1 alpine --name switch0 | form on none after spawn 1 alpine --name switch1 | form on none after spawn 1 alpine --net switch1 ...
+<  "most": 4,
+>  "most": 12,
+
+### 1: run spawn 1 alpine --nics 2 --net switch0,switc0
+<  "message": "spawn wants switch0 or none after --net, not switch0,switc0. Nothing was changed.",
+>  "message": "spawn wants switch0 or none after --net, not switc0. Nothing was changed.",
+
+### 1: form on none after spawn 1 alpine --no-net
+<  "most": 3,
+>  "most": 11,
+
+### 30: form on none after spawn 1 alpine --nics 2 --no-gateway | form on none after spawn 8 alpine | form on none after spawn 2 alpine --nics 2 | form on none after ls ...
+<  "most": 2,
+>  "most": 10,
+
+### 1: run spawn 8 alpine
+<   "message": "The lab has room for 2 more machines, not 8. Nothing was changed.",
+>   "message": "switch0 has 1 free port and this takes 8, so add --no-net to boot unplugged, or leave some NICs out with --net switch0,none. Nothing was changed
+<   "message": "The lab has room for 2 more machines, not 8. Nothing was changed.",
+>   "message": "switch0 has 1 free port and this takes 8, so add --no-net to boot unplugged, or leave some NICs out with --net switch0,none. Nothing was changed
+
+### 1: run ls
+<   "header": "6 machines · 6 ready",
+>   "header": "6 machines · 6 ready · 1536 MiB of memory",
+<     "lastLine": "10.88.0.11/24 · 52:54:00:88:00:0b · cut on port 1 · 4 GiB disk · console",
+>     "lastLine": "10.88.0.11/24 · 52:54:00:88:00:0b · cut on port 1 · package repositories only · 4 GiB disk · console",
+<     "lastLine": "10.88.0.12/24 · 52:54:00:88:00:0c · cut on port 2 · 4 GiB disk · console",
+>     "lastLine": "10.88.0.12/24 · 52:54:00:88:00:0c · cut on port 2 · package repositories only · 4 GiB disk · console",
+<     "lastLine": "eth0 · 10.88.0.13/24 · 52:54:00:88:00:0d · cut on port 3\neth1 · no address · 52:54:00:88:01:0d · cut on port 8\neth2 · no address · 52:54:00
+>     "lastLine": "eth0 · 10.88.0.13/24 · 52:54:00:88:00:0d · cut on port 3\neth1 · no address · 52:54:00:88:01:0d · cut on port 8\neth2 · no address · 52:54:00
+>     "memoryMiB": 256,
+>     "memoryMiB": 256,
+>     "memoryMiB": 256,
+>     "memoryMiB": 256,
+>     "memoryMiB": 256,
+>     "memoryMiB": 256,
+
+### 1: run link down switch0
+<  "message": "No machine is called switch0, so use node1, node2, node3, switch1, node5 or node6. Nothing was changed.",
+<  "token": 2,
+<  "fix": "link down switch1"
+>  "message": "switch0 is a switch, so name a port with a cable in it: switch0:1, switch0:2, switch0:3, switch0:4, switch0:5, switch0:6, switch0:7 or switch0:8.
+>  "token": 2
+
+### 1: run capture port:9
+<  "line": "capture port:9",
+<  "assumed": [],
+<  "preview": {
+<   "message": "capture cannot read port:9, so use a protocol, a machine, a NIC (node2:eth1), an address, a MAC or port:N. Nothing was changed.",
+<   "token": 1
+<  },
+<  "refused": {
+<   "message": "capture cannot read port:9, so use a protocol, a machine, a NIC (node2:eth1), an address, a MAC or port:N. Nothing was changed.",
+<   "token": 1
+<  },
+<  "confirm": null
+>  "message": "capture cannot read port:9, so use a protocol, a machine, a NIC (node2:eth1), an address, a MAC, vlan N or port:N. Nothing was changed.",
+>  "token": 1
+
+### 1: run capture switch0
+<   "message": "capture cannot read switch0, so use a protocol, a machine, a NIC (node2:eth1), an address, a MAC or port:N. Nothing was changed.",
+<   "token": 1
+>   "will": "show captured frames matching switch0",
+>   "assumed": null,
+>   "tone": "plain"
+<  "refused": {
+<   "message": "capture cannot read switch0, so use a protocol, a machine, a NIC (node2:eth1), an address, a MAC or port:N. Nothing was changed.",
+<   "token": 1
+<  },
+<  "confirm": null
+>  "refused": null,
+>  "confirm": null,
+>  "result": {
+>   "kind": "visible",
+
+### 1: run capture switch0:2 arp
+<   "message": "capture cannot read switch0:2, so use a protocol, a machine, a NIC (node2:eth1), an address, a MAC or port:N. Nothing was changed.",
+<   "token": 1
+>   "will": "show captured frames matching switch0:2 arp",
+>   "assumed": null,
+>   "tone": "plain"
+<  "refused": {
+<   "message": "capture cannot read switch0:2, so use a protocol, a machine, a NIC (node2:eth1), an address, a MAC or port:N. Nothing was changed.",
+<   "token": 1
+<  },
+<  "confirm": null
+>  "refused": null,
+>  "confirm": null,
+>  "result": {
+>   "kind": "visible",
+
+### 1: run capture switch0:9
+<  "line": "capture switch0:9",
+<  "assumed": [],
+<  "preview": {
+<   "message": "capture cannot read switch0:9, so use a protocol, a machine, a NIC (node2:eth1), an address, a MAC or port:N. Nothing was changed.",
+<   "token": 1
+<  },
+<  "refused": {
+<   "message": "capture cannot read switch0:9, so use a protocol, a machine, a NIC (node2:eth1), an address, a MAC or port:N. Nothing was changed.",
+<   "token": 1
+<  },
+<  "confirm": null
+>  "message": "switch0:9 is no port, so use one from switch0:1 to switch0:8. Nothing was changed.",
+>  "token": 1
+
+### 1: run capture lan:2
+<  "line": "capture lan:2",
+<  "assumed": [],
+<  "preview": {
+<   "message": "capture cannot read lan:2, so use a protocol, a machine, a NIC (node2:eth1), an address, a MAC or port:N. Nothing was changed.",
+<   "token": 1
+<  },
+<  "refused": {
+<   "message": "capture cannot read lan:2, so use a protocol, a machine, a NIC (node2:eth1), an address, a MAC or port:N. Nothing was changed.",
+<   "token": 1
+<  },
+<  "confirm": null
+>  "message": "capture cannot read lan:2, so use a protocol, a machine, a NIC (node2:eth1), an address, a MAC, vlan N or port:N. Nothing was changed.",
+>  "token": 1
+
+### 1: run capture arp bogus
+<  "line": "capture arp bogus",
+<  "assumed": [],
+<  "preview": {
+<   "message": "capture cannot read bogus, so use a protocol, a machine, a NIC (node2:eth1), an address, a MAC or port:N. Nothing was changed.",
+<   "token": 1
+<  },
+<  "refused": {
+<   "message": "capture cannot read bogus, so use a protocol, a machine, a NIC (node2:eth1), an address, a MAC or port:N. Nothing was changed.",
+<   "token": 1
+<  },
+<  "confirm": null
+>  "message": "capture cannot read bogus, so use a protocol, a machine, a NIC (node2:eth1), an address, a MAC, vlan N or port:N. Nothing was changed.",
+>  "token": 2
+
+### 1: failed boot node3
+<   "will": "boot node3 again · alpine 3.24 · 256 MiB · plugged into switch0 on ports 3 and 4",
+>   "will": "boot node3 again · alpine 3.24 · 256 MiB · plugged into switch0 on ports 3, 4 and 8",
+
+### 1: failed ls
+<   "header": "6 machines · 5 ready, 1 booting",
+>   "header": "6 machines · 5 ready, 1 booting · 1536 MiB of memory",
+<     "lastLine": "10.88.0.11/24 · 52:54:00:88:00:0b · cut on port 1 · 4 GiB disk · console",
+>     "lastLine": "10.88.0.11/24 · 52:54:00:88:00:0b · cut on port 1 · package repositories only · 4 GiB disk · console",
+<     "lastLine": "10.88.0.12/24 · 52:54:00:88:00:0c · cut on port 2 · 4 GiB disk · console",
+>     "lastLine": "10.88.0.12/24 · 52:54:00:88:00:0c · cut on port 2 · package repositories only · 4 GiB disk · console",
+<     "lastLine": "eth0 · 10.88.0.13/24 · 52:54:00:88:00:0d · port 3 reserved\neth1 · no address · 52:54:00:88:01:0d · unplugged\neth2 · no address · 52:54:00:8
+>     "lastLine": "eth0 · 10.88.0.13/24 · 52:54:00:88:00:0d · port 3 reserved\neth1 · no address · 52:54:00:88:01:0d · port 4 reserved\neth2 · no address · 52:5
+>     "memoryMiB": 256,
+>     "memoryMiB": 256,
+>     "memoryMiB": 256,
+<       "port": null,
+>       "port": 4,
+<       "port": 4,
+
+### 1: failed rm node3
+<   "will": "remove node3 with its disk · frees ports 3 and 4",
+>   "will": "remove node3 with its disk · frees ports 3, 4 and 8",
+<   "detail": "Its console closes and everything on its 4 GiB disk is gone. There is no undo. Ports 3 and 4 on switch0 free up.",
+>   "detail": "Its console closes and everything on its 4 GiB disk is gone. There is no undo. Ports 3, 4 and 8 on switch0 free up.",
+
+### 1: capture_read {"filter":"port:9"}
+<  "error": "Capture cannot read port:9, so use a protocol, a machine, a NIC (node2:eth1), an address, a MAC or port:N."
+>  "error": "Capture cannot read port:9, so use a protocol, a machine, a NIC (node2:eth1), an address, a MAC, vlan N or port:N."
+
+### 1: capture_read {"filter":"switch0:2"}
+<  "ok": false,
+<  "line": "capture_read(\"switch0:2\", 20)",
+<  "error": "Capture cannot read switch0:2, so use a protocol, a machine, a NIC (node2:eth1), an address, a MAC or port:N."
+>  "summary": "3 frames",
+>  "reply": {
+>   "rows": [
+>    {
+>     "kind": "frame",
+>     "seq": 1,
+>     "time": "1.50",
+>     "proto": "ARP",
+>     "from": {
+>      "kind": "machine",
+>      "n": 1,
+
+### 1: capture_read {"filter":"lan"}
+<  "error": "Capture cannot read lan, so use a protocol, a machine, a NIC (node2:eth1), an address, a MAC or port:N."
+>  "error": "Capture cannot read lan, so use a protocol, a machine, a NIC (node2:eth1), an address, a MAC, vlan N or port:N."
+
+### 1: frame 1
+<    "Ports 4, 5, 6 and 7 were down, so ",
+>    "Ports 4, 5, 6, 7 and 8 were down, so ",
+<     "label": "node3:eth2"
+>     "label": "node3:eth1"
+<    " and ",
+>    ", ",
+>    },
+>    " and ",
+>    {
+>     "n": 3,
+>     "label": "node3:eth2"
+
+### 1: frame 4
+<    "Ports 2, 4, 5, 6 and 7 were down, so ",
+>    "Ports 2, 4, 5, 6, 7 and 8 were down, so ",
+<     "label": "node3:eth2"
+>     "label": "node3:eth1"
+<    " and ",
+>    ", ",
+>    },
+>    " and ",
+>    {
+>     "n": 3,
+>     "label": "node3:eth2"
+
+### 1: frame 6
+<    "Ports 1, 2, 4, 5, 6 and 7 were down, so ",
+>    "Ports 1, 2, 4, 5, 6, 7 and 8 were down, so ",
+<     "label": "node3:eth2"
+>     "label": "node3:eth1"
+<    " and ",
+>    ", ",
+>    },
+>    " and ",
+>    {
+>     "n": 3,
+>     "label": "node3:eth2"
+
+### 1: version-1.json as it opens
+<    "lastLine": "10.88.0.11/24 · 52:54:00:88:00:0b · port 1 reserved · 8 GiB disk · console",
+>    "lastLine": "10.88.0.11/24 · 52:54:00:88:00:0b · port 1 reserved · package repositories only · 8 GiB disk · console",
+<    "lastLine": "10.88.0.13/24 · 52:54:00:88:00:0d · port 3 reserved · 8 GiB disk · console",
+>    "lastLine": "10.88.0.13/24 · 52:54:00:88:00:0d · port 3 reserved · package repositories only · 8 GiB disk · console",
+<    "lastLine": "10.88.0.14/24 · 52:54:00:88:00:0e · port 2 reserved · 8 GiB disk · console",
+>    "lastLine": "10.88.0.14/24 · 52:54:00:88:00:0e · port 2 reserved · package repositories only · 8 GiB disk · console",
+>    "memoryMiB": 256,
+>    "memoryMiB": 256,
+>    "memoryMiB": 256,
+>    "memoryMiB": 256,
+
+### 1: version-1.json ready
+<    "lastLine": "10.88.0.11/24 · 52:54:00:88:00:0b · up on port 1 · 8 GiB disk · console",
+>    "lastLine": "10.88.0.11/24 · 52:54:00:88:00:0b · up on port 1 · package repositories only · 8 GiB disk · console",
+<    "lastLine": "10.88.0.13/24 · 52:54:00:88:00:0d · up on port 3 · 8 GiB disk · console",
+>    "lastLine": "10.88.0.13/24 · 52:54:00:88:00:0d · up on port 3 · package repositories only · 8 GiB disk · console",
+<    "lastLine": "10.88.0.14/24 · 52:54:00:88:00:0e · cut on port 2 · 8 GiB disk · console",
+>    "lastLine": "10.88.0.14/24 · 52:54:00:88:00:0e · cut on port 2 · package repositories only · 8 GiB disk · console",
+>    "memoryMiB": 256,
+>    "memoryMiB": 256,
+>    "memoryMiB": 256,
+>    "memoryMiB": 256,
+
+### 1: version-1.json effects
+< ]
+> ]
