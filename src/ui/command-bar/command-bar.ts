@@ -90,6 +90,7 @@ export class UnlabCommandBar extends UnlabElement {
 	readonly #lab = new Select(this, (s: LabState) => s);
 	readonly #lastLine = new Select(this, (s) => s.log.at(-1)?.line ?? null);
 	#bar: BarState = RESTING;
+	#lastUpdatedBar: BarState = RESTING;
 	/** Where focus was before the bar opened, to give it back on close. */
 	#returnTo: HTMLElement | null = null;
 	/** The app that hears `confirmInBar`; kept, because once this element leaves it `closest` finds nothing. */
@@ -124,13 +125,17 @@ export class UnlabCommandBar extends UnlabElement {
 
 	protected override updated(changed: PropertyValues<this>): void {
 		super.updated(changed);
+		const barChanged = this.#lastUpdatedBar !== this.#bar;
+		this.#lastUpdatedBar = this.#bar;
 		const input = this.#input;
 		if (!input || !this.#bar.open) return;
 		const { caret } = this.#bar;
 		if (input.selectionStart === input.selectionEnd && input.selectionStart !== caret) {
 			input.setSelectionRange(caret, caret);
 		}
-		this.querySelector<HTMLElement>('[role="option"][aria-selected="true"]')?.scrollIntoView({ block: "nearest" });
+		if (barChanged) {
+			this.querySelector<HTMLElement>('[role="option"][aria-selected="true"]')?.scrollIntoView({ block: "nearest" });
+		}
 	}
 
 	override render(): TemplateResult {

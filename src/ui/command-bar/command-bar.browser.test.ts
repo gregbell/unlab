@@ -219,6 +219,25 @@ describe("<unlab-command-bar> CmdOpen: just opened", () => {
 		expect(style(".keys").fontSize).toBe("11px");
 	});
 
+	it("keeps the scroll position on a lab tick and reveals the next keyboard choice", async () => {
+		const { store, settle } = await mountBar();
+		await openByClick();
+		const list = the('[role="listbox"]');
+		const bottom = list.scrollHeight - list.clientHeight;
+		list.scrollTop = bottom;
+		expect(box('[aria-selected="true"]').bottom).toBeLessThan(list.getBoundingClientRect().top);
+
+		store.dispatchRuntime({ type: "tick", now: NOW + 1000 });
+		await settle();
+		expect(list.scrollTop).toBe(bottom);
+
+		await userEvent.keyboard("{ArrowDown}");
+		expect(text('[aria-selected="true"] .verb')).toBe("rm");
+		const selected = box('[aria-selected="true"]');
+		expect(selected.top).toBeGreaterThanOrEqual(list.getBoundingClientRect().top);
+		expect(selected.bottom).toBeLessThanOrEqual(list.getBoundingClientRect().bottom);
+	});
+
 	it("dims nothing behind it", async () => {
 		await mountBar();
 		await openByClick();
