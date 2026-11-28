@@ -15,6 +15,16 @@ The subject-based reference describing <https://unlab.run> and its controls, com
 The collection of exercises that use <https://unlab.run> to teach concepts. An exercise gives the reader something to investigate, such as how traffic moves between two switches, and asks them to explain what they observe.
 _Avoid_: Lab Workbook, labs, lessons
 
+**Subject section**
+
+A section of the Manual that explains one subject, such as cable conditions, under a noun-phrase heading.
+_Avoid_: topic page, concept page
+
+**Command entry**
+
+The one definitive description of a Lab Command in the Manual, placed in the chapter that owns its subject and opening with the command's synopsis. Every other mention links to it.
+_Avoid_: command reference, man page
+
 ### The lab
 
 **Lab**
