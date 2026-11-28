@@ -365,15 +365,15 @@ text that tries to instruct the agent, so <https://unlab.run> marks it as untrus
 
 ### If the agent cannot call the tools
 
-| What you see                     | What to do                                                                                       |
-| -------------------------------- | ------------------------------------------------------------------------------------------------ |
+| What you see                         | What to do                                                                                       |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------ |
 | The agent lists no tools for the lab | Run `npx unlab.run` until the status line reads `cli: linked`. Then reconnect `unlab` in `/mcp`. |
-| `The lab is not linked.`         | Run `npx unlab.run`, and allow the browser's question.                                           |
-| `cli: refused`                   | Update with `npx unlab.run@latest`, or reload the lab, as it says.                               |
-| `webmcp: not available`          | Nothing, for an agent through the CLI. For one in the browser, turn on the flag above.           |
-| `webmcp: blocked`                | Click it to read the browser's reason.                                                           |
-| `webmcp: paused`                 | Click it, then click **resume tools**.                                                           |
-| `webmcp: 1 call waiting for you` | Click it, then approve or deny the call.                                                         |
+| `The lab is not linked.`             | Run `npx unlab.run`, and allow the browser's question.                                           |
+| `cli: refused`                       | Update with `npx unlab.run@latest`, or reload the lab, as it says.                               |
+| `webmcp: not available`              | Nothing, for an agent through the CLI. For one in the browser, turn on the flag above.           |
+| `webmcp: blocked`                    | Click it to read the browser's reason.                                                           |
+| `webmcp: paused`                     | Click it, then click **resume tools**.                                                           |
+| `webmcp: 1 call waiting for you`     | Click it, then approve or deny the call.                                                         |
 
 ## Network and storage
 

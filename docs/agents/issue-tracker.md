@@ -4,14 +4,14 @@ Issues and product requirements live in GitHub Issues for `gregbell/unlab`.
 Run `gh` from this repo so it picks up the repository from `origin`.
 Before creating the first issue in a session, verify that `gh repo view --json nameWithOwner --jq .nameWithOwner` returns `gregbell/unlab`.
 
-| Task | Command |
-| --- | --- |
-| Publish a ticket | `gh issue create --title "<title>" --body-file <file>` |
-| Read a ticket and its discussion | `gh issue view <number> --json title,body,labels,comments` |
-| Find open tickets by label | `gh issue list --state open --label "<label>"` |
-| Comment on a ticket | `gh issue comment <number> --body-file <file>` |
-| Apply or remove a label | `gh issue edit <number> --add-label "<label>"` or `--remove-label "<label>"` |
-| Close a ticket | `gh issue comment <number> --body-file <resolution-file>` followed by `gh issue close <number>` |
+| Task                             | Command                                                                                         |
+| -------------------------------- | ----------------------------------------------------------------------------------------------- |
+| Publish a ticket                 | `gh issue create --title "<title>" --body-file <file>`                                          |
+| Read a ticket and its discussion | `gh issue view <number> --json title,body,labels,comments`                                      |
+| Find open tickets by label       | `gh issue list --state open --label "<label>"`                                                  |
+| Comment on a ticket              | `gh issue comment <number> --body-file <file>`                                                  |
+| Apply or remove a label          | `gh issue edit <number> --add-label "<label>"` or `--remove-label "<label>"`                    |
+| Close a ticket                   | `gh issue comment <number> --body-file <resolution-file>` followed by `gh issue close <number>` |
 
 **PRs as a request surface: no.**
 
