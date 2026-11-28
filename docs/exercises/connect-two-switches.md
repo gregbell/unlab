@@ -15,7 +15,7 @@ with both Alpine machines connected to `switch0` and the ping working.
    In **Topology**, node1 connects to **switch0** and node2 connects to **lan**.
    Both machines still have their original IP addresses.
 
-2. **Test the gap.** In node1's terminal, repeat the ping from the first lab.
+2. **Test the gap.** In node1's terminal, repeat the ping from [Follow your first ping](../../README.md#follow-your-first-ping).
 
    ```sh
    ping -c 1 -W 2 node2
@@ -43,7 +43,7 @@ with both Alpine machines connected to `switch0` and the ping working.
    on port 8 from switch0 and left on port 1 toward node2. The echo reply
    shows the reverse path, `lan 1 → 8`.
 
-## Return to the first lab
+## Put the lab back
 
 In the command bar, move node2 back to its original port before removing the
 switch you added. Run each line separately.
