@@ -173,10 +173,7 @@ class Desktop extends UnlabElement {
 		const name = selectFocused(this.lab) ?? this.lab.rail[0];
 		if (name) {
 			this.picked = { kind: "machine", name };
-			if (!localStorage.getItem(storage)) {
-				const session = this.lab.machines[name]?.activeSession;
-				if (session) this.showSession(session, false, startupBoxes().terminal(0));
-			}
+			if (!localStorage.getItem(storage)) this.openConsoles(name);
 		}
 		let previous = this.lab;
 		this.unsub = this.app.store.subscribe(() => {
@@ -302,6 +299,20 @@ class Desktop extends UnlabElement {
 			this.requestUpdate();
 		}, 1000);
 		this.restoreShells();
+	}
+	/** A lab with no desktop of its own yet opens each console as a first boot does: an agent reads a console only once it is drawn. */
+	private openConsoles(focused: Machine["name"]) {
+		const boxes = startupBoxes();
+		const columns = boxes.narrow ? 1 : 2;
+		const names = [focused, ...this.lab.rail.filter((n) => n !== focused)];
+		for (const [index, name] of names.entries()) {
+			const session = this.lab.machines[name]?.activeSession;
+			if (!session) continue;
+			const win = this.showSession(session, false, index < columns ? boxes.terminal(index) : undefined);
+			if (index >= columns) win.state = "mini";
+		}
+		const front = this.lab.machines[focused]?.activeSession;
+		if (front) this.showSession(front, false);
 	}
 	private restoreShells() {
 		// A reload restarts the guests. Recreate one shell for each saved secondary terminal window.
@@ -1127,7 +1138,7 @@ class Desktop extends UnlabElement {
 			<div><dt>Links up</dt><dd>${ports.filter((p) => p.state === "up").length}</dd></div>
 			${storm ? html`<div><dt>Storm</dt><dd>${storm.rate} looped frames a second · ${storm.dropped} dropped</dd></div>` : nothing}
 			${tree === null ? nothing : html`<div><dt>Spanning tree</dt><dd>${tree}</dd></div>`}</dl>
-			<h3>Ports</h3><table class="dt-ports" aria-label=${`Ports on ${name}`}><thead><tr><th>Port</th><th>Machine</th><th>Link</th>${vlans ? html`<th>VLAN</th>` : nothing}${conditions ? html`<th>Conditions</th>` : nothing}${steered ? html`<th>Spanning tree</th>` : nothing}<th aria-label="Cable action"></th></tr></thead>
+			<h3>Ports</h3><table class="dt-ports" aria-label=${`Ports on ${name}`}><thead><tr><th>Port</th><th>Machine</th><th>Link</th>${vlans ? html`<th>VLAN</th>` : nothing}${conditions ? html`<th>Conditions</th>` : nothing}${steered ? html`<th>Spanning tree</th>` : nothing}<th><span class="visually-hidden">Cable action</span></th></tr></thead>
 			<tbody>${ports.map((p) => {
 				const m = p.machine,
 					cable = p.cable,

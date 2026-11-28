@@ -13,6 +13,7 @@
 
 		.head {
 			display: flex;
+			flex: none;
 			flex-wrap: wrap;
 			align-items: center;
 			gap: 4px 12px;
@@ -141,6 +142,7 @@
 
 		.approvals {
 			display: flex;
+			flex: none;
 			flex-direction: column;
 			gap: 8px;
 			margin: 0 var(--gutter) var(--gutter);

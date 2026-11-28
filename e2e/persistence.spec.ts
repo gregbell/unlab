@@ -1,22 +1,35 @@
 import { expect, type Page, test } from "@playwright/test";
-import { openWithTwoMachines } from "./lab.ts";
+import {
+	configuration,
+	openWithTwoMachines,
+	portRow,
+	rackRow,
+	screen,
+	status,
+	switchDetails,
+	terminal,
+} from "./lab.ts";
 
 async function shell(page: Page, node: number, command: string, result: string) {
-	const panel = page.locator(`#panel-node${node}-console`);
-	await panel.click();
+	const shown = screen(page, `node${node}`);
+	await shown.click();
 	await page.keyboard.type(command);
 	await page.keyboard.press("Enter");
-	await expect(panel).toContainText(result);
+	await expect(shown).toContainText(result);
 }
 
 test("reload restores distinct sized machines, private files and a cut cable", async ({ page }) => {
-	await page.goto("/?layout=classic");
-	await page.getByText("Customize machines", { exact: true }).click();
-	await page.getByLabel("CPUs each").selectOption("2");
-	await page.getByRole("button", { name: "512 MiB" }).click();
-	await page.getByRole("button", { name: "8 GiB" }).click();
-	await page.getByRole("button", { name: "Boot 2 machines" }).click();
-	await expect(page.getByText("2 of 2 ready")).toBeVisible({ timeout: 90000 });
+	await page.goto("/");
+	await page.getByRole("button", { name: "Customize machines" }).click();
+	const wizard = page.getByRole("region", { name: "Add machines" });
+	await wizard.getByRole("button", { name: /Compute$/ }).click();
+	await wizard.getByLabel("Virtual CPUs").fill("2");
+	await wizard.getByLabel("Memory (MiB)").fill("512");
+	await wizard.getByRole("button", { name: /Storage$/ }).click();
+	await wizard.getByRole("combobox", { name: "Root disk · /dev/wdb" }).selectOption("8");
+	await wizard.getByRole("button", { name: /Review$/ }).click();
+	await wizard.getByRole("button", { name: "Boot 2 machines" }).click();
+	await status(page, "2 of 2 ready", 90000);
 	for (const n of [1, 2]) {
 		await shell(
 			page,
@@ -25,10 +38,16 @@ test("reload restores distinct sized machines, private files and a cut cable", a
 			`CPUs=2 node=node${n}`,
 		);
 	}
-	await page.getByRole("button", { name: "Cut the cable from node2 to port 2" }).click();
+	const port = async () => portRow(await switchDetails(page, "switch0"), 2);
+	const cut = (await port()).getByRole("button", { name: "Cut cable" });
+	await expect(cut).toHaveAttribute("title", "Cut the cable from node2 to port 2");
+	await cut.click();
 	await page.reload();
-	await expect(page.getByText("2 of 2 ready")).toBeVisible({ timeout: 90000 });
-	await expect(page.getByRole("button", { name: "Reconnect the cable from node2 to port 2" })).toBeVisible();
+	await status(page, "2 of 2 ready", 90000);
+	await expect((await port()).getByRole("button", { name: "Reconnect" })).toHaveAttribute(
+		"title",
+		"Reconnect the cable from node2 to port 2",
+	);
 	for (const n of [1, 2]) {
 		await shell(
 			page,
@@ -45,21 +64,21 @@ test("removing one node releases its disk and preserves the other node's identit
 	await second.goto("/");
 	await expect(second.getByText(/This lab is open in another tab/)).toBeVisible();
 	await second.close();
-	await page.locator("#panel-node1-console").click();
+	await screen(page, "node1").click();
 	await page.keyboard.press("Control+/");
 	await page.keyboard.type("rm node1");
 	await page.keyboard.press("Enter");
 	await page.getByRole("button", { name: "Remove node1", exact: true }).click();
-	await expect(page.locator("unlab-pane[machine=node1]")).toHaveCount(0);
+	await expect(rackRow(page, "node1")).toHaveCount(0);
 	await expect
 		.poll(() => page.evaluate(async () => (await indexedDB.databases()).map((db) => db.name).sort()))
 		.toEqual(["kwdisk:unlab-node2-v1"]);
 	await page.reload();
-	await expect(page.locator("unlab-pane[machine=node1]")).toHaveCount(0);
-	await expect(page.locator("unlab-machine-details")).toContainText("ready");
-	await expect(page.locator("unlab-pane[machine=node2]")).toBeVisible();
+	await expect(rackRow(page, "node1")).toHaveCount(0);
+	await expect(await configuration(page, "node2")).toContainText("node2 · ready");
+	await expect(terminal(page, "node2")).toBeVisible();
 	await page.keyboard.press("Control+/");
 	await page.keyboard.type("spawn 1 alpine");
 	await page.keyboard.press("Enter");
-	await expect(page.locator("unlab-pane[machine=node3]")).toBeVisible();
+	await expect(terminal(page, "node3")).toBeVisible();
 });

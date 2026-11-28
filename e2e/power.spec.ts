@@ -1,6 +1,20 @@
 import { expect, type Page, test } from "@playwright/test";
 import { chromiumExecutable } from "../test/support/chromium.ts";
-import { crash, root, shell, typed } from "./lab.ts";
+import {
+	configuration,
+	consoleOf,
+	crash,
+	openLab,
+	portRow,
+	rackRow,
+	root,
+	screen,
+	shell,
+	status,
+	switchDetails,
+	terminal,
+	typed,
+} from "./lab.ts";
 import { call, finish, start } from "./webmcp.ts";
 
 /** When set, the tests also save screenshots of machines that are off there. */
@@ -10,26 +24,21 @@ test.use({
 	launchOptions: { executablePath: chromiumExecutable(), args: ["--enable-features=WebMCP"] },
 });
 
-async function openLab(page: Page): Promise<void> {
-	await page.goto("/?layout=classic");
-	await expect(page.getByRole("heading", { name: "Your Linux lab in a tab." })).toBeVisible();
-}
+/** A machine's row in the Rack manager, which says the state it is in while it is not ready. */
+const rail = rackRow;
 
-const status = (page: Page, text: string) => expect(page.getByText(text)).toBeVisible({ timeout: 60_000 });
+const panel = (page: Page, name: string) => screen(page, name);
 
-const rail = (page: Page, name: string) =>
-	page.getByRole("complementary", { name: "Machines" }).getByRole("button", { name: new RegExp(`^${name}\\b`) });
-
-const panel = (page: Page, name: string) => page.locator(`#panel-${name}-console`);
-
-const details = (page: Page) => page.locator("unlab-machine-details");
+/** What switch0's details say of a port's link. */
+const link = async (page: Page, port: number) =>
+	portRow(await switchDetails(page, "switch0"), port).locator("td[data-state]");
 
 /** The machine's worker, which holds its memory. */
 const workers = (page: Page) => page.workers().filter((worker) => worker.url().includes("vm-worker")).length;
 
 /** Keys on the machine's console, as a person types them. */
 async function keys(page: Page, name: string, line: string): Promise<void> {
-	await panel(page, name).click();
+	await (await consoleOf(page, name)).locator(".wterm").click();
 	await page.keyboard.type(`${line}\n`);
 }
 
@@ -75,23 +84,23 @@ for (const image of ["alpine", "debian"]) {
 		);
 		await root(page, "box", "echo synced > /root/synced; sync");
 		await typed(page, "sh box");
-		await expect(page.locator("#tab-box-sh1")).toBeVisible();
+		await expect(terminal(page, "box", "sh1")).toBeVisible();
 		await announced(page);
 		// What a program writes when it is told to end is written while the machine shuts down.
-		await page.locator("#tab-box-console").click();
+		await (await consoleOf(page, "box")).locator(".wterm").click();
 		await root(
 			page,
 			"box",
 			'(trap "echo late > /root/late; printf raw | dd of=/dev/wdc bs=1M seek=100 conv=notrunc; exit" TERM; while :; do sleep 0.1; done) >/dev/null 2>&1 &',
 		);
 		await typed(page, "reboot box");
-		await expect(rail(page, "box")).toContainText("rebooting");
+		await expect(rail(page, "box")).toContainText("stopping");
 		await expect(rail(page, "box")).toContainText("booting");
 		await status(page, "2 of 2 ready");
 
 		expect(await listed(page)).toEqual(before);
 		expect(await root(page, "box", "grep MemTotal /proc/meminfo")).toBe(memory);
-		await expect(page.locator("#tab-box-sh1")).toHaveCount(0);
+		await expect(terminal(page, "box", "sh1").locator("unlab-terminal")).toHaveCount(0);
 		expect(await heard(page)).toContain("box rebooting. sh1 closed with it.");
 		const text = await consoleText(page, "box");
 		expect(text).toContain("box is rebooting. sh1 closed with it.");
@@ -121,10 +130,10 @@ for (const image of ["alpine", "debian"]) {
 		await announced(page);
 
 		await typed(page, "sh node1");
-		await expect(page.locator("#panel-node1-sh1")).toContainText("⇒");
-		await page.locator("#panel-node1-sh1").click();
+		await expect(screen(page, "node1", "sh1")).toContainText("⇒");
+		await screen(page, "node1", "sh1").click();
 		await page.keyboard.type("echo kept > ~/kept; reboot\n");
-		await expect(page.locator("#tab-node1-sh1")).toHaveCount(0);
+		await expect(terminal(page, "node1", "sh1").locator("unlab-terminal")).toHaveCount(0);
 		await expect.poll(() => consoleText(page, "node1")).toContain("node1 is rebooting. sh1 closed with it.");
 		await status(page, "1 of 1 ready");
 		expect(await heard(page)).toContain("node1 rebooting. sh1 closed with it.");
@@ -136,9 +145,10 @@ for (const image of ["alpine", "debian"]) {
 		await keys(page, "node1", "poweroff");
 		await status(page, "0 of 1 ready, 1 off");
 		expect(await listed(page)).toMatchObject([{ name: "node1", state: "off", nics: [{ port: 1, link: "off" }] }]);
-		await expect(page.locator("unlab-pane[machine=node1]")).toContainText("node1 is off.");
+		await expect(screen(page, "node1")).toContainText("node1 is off.");
 		await expect.poll(() => workers(page)).toBe(0);
-		await page.locator("unlab-pane[machine=node1]").getByRole("button", { name: "Boot" }).click();
+		await (await configuration(page, "node1")).getByRole("button", { name: "More actions for node1" }).click();
+		await page.getByRole("menuitem", { name: "Boot" }).click();
 		await status(page, "1 of 1 ready");
 		expect(await shell(page, 1, "cat ~/kept")).toMatchObject({ output: "kept" });
 
@@ -168,7 +178,7 @@ test("a machine that is off holds no memory, keeps its ports, name and disks, an
 			{ name: "node2", state: "off", nics: [{ port: 2, link: "cut" }] },
 		]);
 		await expect(rail(page, "node2")).toContainText("off");
-		await expect(page.locator(".port[data-port='2']")).toContainText("cut");
+		await expect(await link(page, 2)).toHaveText("cut");
 		await typed(page, "exec node2 -- ls");
 		await expect(page.locator("unlab-command-bar")).toContainText("node2 is off.");
 		await page.keyboard.press("Escape");
@@ -188,7 +198,7 @@ test("a machine that is off holds no memory, keeps its ports, name and disks, an
 	expect(await call(page, "link_set", { link: "up", machines: "node2" })).toMatchObject({
 		data: [{ machine: "node2", port: 2, link: "off" }],
 	});
-	await expect(page.locator(".port[data-port='2']")).toContainText("off");
+	await expect(await link(page, 2)).toHaveText("off");
 	await typed(page, "spawn 1 alpine");
 	await typed(page, "boot node2");
 	await status(page, "3 of 3 ready");
@@ -338,7 +348,6 @@ test("a guest that does not shut down is stopped, says so, and keeps what its di
 	});
 	expect(Date.now() - asked).toBeLessThan(20_000);
 	expect(await heard(page)).toContain(`node1 off. ${said}`);
-	await expect(details(page)).toContainText("off · did not shut down");
 	expect(await consoleText(page, "node1")).toContain("node1 is off. It did not shut down in 10 s");
 	await typed(page, "boot node1");
 	await status(page, "1 of 1 ready");
@@ -348,10 +357,10 @@ test("a guest that does not shut down is stopped, says so, and keeps what its di
 
 	// Removing one that will not shut down does not wait for it.
 	await typed(page, "poweroff node1");
-	await expect(rail(page, "node1")).toContainText("powering off");
+	await expect(rail(page, "node1")).toContainText("stopping");
 	await typed(page, "rm node1");
 	await page.keyboard.press("Enter");
-	await expect(page.locator("unlab-pane[machine=node1]")).toHaveCount(0, { timeout: 3000 });
+	await expect(rail(page, "node1")).toHaveCount(0, { timeout: 3000 });
 });
 
 test("a reload while a machine stops ends as the stop would have, and an off machine can be removed", async ({
@@ -369,8 +378,8 @@ test("a reload while a machine stops ends as the stop would have, and an off mac
 	}
 	await typed(page, "poweroff node1");
 	await typed(page, "reboot node2");
-	await expect(rail(page, "node1")).toContainText("powering off");
-	await expect(rail(page, "node2")).toContainText("rebooting");
+	await expect(rail(page, "node1")).toContainText("stopping");
+	await expect(rail(page, "node2")).toContainText("stopping");
 	await page.reload();
 	await status(page, "1 of 2 ready, 1 off");
 	expect(await listed(page)).toMatchObject([
@@ -379,7 +388,7 @@ test("a reload while a machine stops ends as the stop would have, and an off mac
 	]);
 	await typed(page, "rm node1");
 	await page.keyboard.press("Enter");
-	await expect(page.locator("unlab-pane[machine=node1]")).toHaveCount(0);
+	await expect(rail(page, "node1")).toHaveCount(0);
 	await expect
 		.poll(() => page.evaluate(async () => (await indexedDB.databases()).map(({ name }) => name)))
 		.toEqual(["kwdisk:unlab-node2-v1"]);
@@ -437,7 +446,6 @@ test("a NIC that is gone from a running guest is said, and one that went down wi
 	await status(page, "1 of 1 ready");
 	await root(page, 1, "kill -9 $(pidof unlab-nic)");
 	await expect.poll(() => heard(page)).toMatch(/node1 lost a NIC\. eth1 stopped: .*\. Reboot it to have it back\./);
-	await expect(details(page)).toContainText("gone from the guest until it reboots");
 	expect(await call(page, "machines_reboot", { names: "node1" })).toMatchObject({ result: "node1 ready" });
-	await expect(details(page)).toContainText("connected on port 2");
+	await expect((await configuration(page, "node1")).locator(".dt-link").nth(1)).toContainText(/switch0:2\s*up/);
 });

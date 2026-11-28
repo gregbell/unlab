@@ -1,41 +1,41 @@
 import { expect, test } from "@playwright/test";
-import { openWithTwoMachines } from "./lab.ts";
+import { fromMenu, openWithTwoMachines, rackRow, screen, terminal } from "./lab.ts";
 
-test("a console runs what is typed into it, keeps it through park and maximise, and + opens a shell tab", async ({
+test("a console runs what is typed into it, keeps it through minimize and maximize, and New terminal opens a shell", async ({
 	page,
 }) => {
 	const errors: string[] = [];
 	page.on("pageerror", (e) => errors.push(e.message));
 	await openWithTwoMachines(page);
 
-	const node1 = page.locator('unlab-pane[machine="node1"]');
-	const console1 = node1.locator("#panel-node1-console");
+	const node1 = terminal(page, "node1");
+	const console1 = screen(page, "node1");
 	await console1.click();
 	await page.keyboard.type("echo unlab-$((40+2))");
 	await page.keyboard.press("Enter");
 	await expect(console1).toContainText("unlab-42");
 
-	await node1.getByRole("button", { name: "Park node1" }).click();
+	await node1.getByRole("button", { name: "Minimize node1 · terminal" }).click();
 	await expect(node1).toBeHidden();
-	const chip = page.locator("unlab-parked-strip").getByRole("button", { name: "node1" });
-	await chip.click();
+	await page.getByRole("button", { name: "Restore node1 · terminal from dock" }).click();
 	await expect(node1).toBeVisible();
 	await expect(console1).toContainText("unlab-42");
 
-	const node2 = page.locator('unlab-pane[machine="node2"]');
-	await node1.getByRole("button", { name: "Maximise node1" }).click();
-	await expect(node2).toBeHidden();
-	await node1.getByRole("button", { name: "Maximise node1" }).click();
-	await expect(node2).toBeVisible();
+	const node2 = terminal(page, "node2");
+	await node1.getByRole("button", { name: "Maximize node1 · terminal" }).click();
+	await expect(node1).toHaveAttribute("data-max", "true");
+	await expect(node2).toHaveAttribute("data-max", "false");
+	await node1.getByRole("button", { name: "Restore node1 · terminal" }).click();
+	await expect(node1).toHaveAttribute("data-max", "false");
 	await expect(console1).toContainText("unlab-42");
 
-	await node1.getByRole("button", { name: "New shell on node1" }).click();
-	const shellTab = node1.getByRole("tab", { name: "sh1" });
-	await expect(shellTab).toHaveAttribute("aria-selected", "true");
-	await expect(console1).toBeHidden();
-	const shell = node1.getByRole("tabpanel", { name: "sh1" });
-	await expect(shell).toBeVisible();
-	await expect(shell).toHaveAttribute("aria-busy", "false");
+	await fromMenu(page, "Rack manager");
+	await rackRow(page, "node1").locator(".dt-device").click({ button: "right" });
+	await page.getByRole("menuitem", { name: "New terminal" }).click();
+	const sh1 = terminal(page, "node1", "sh1");
+	await expect(sh1).toHaveAttribute("data-active", "true");
+	const shell = screen(page, "node1", "sh1");
+	await expect(shell.getByRole("textbox")).toBeFocused({ timeout: 60_000 });
 	await page.keyboard.type("echo sh-$((6*7))");
 	await page.keyboard.press("Enter");
 	await expect(shell).toContainText("sh-42");
@@ -47,8 +47,7 @@ test("a console whose program read Enter takes commands again, and a line typed 
 	page,
 }) => {
 	await openWithTwoMachines(page);
-	const node1 = page.locator('unlab-pane[machine="node1"]');
-	const console1 = node1.locator("#panel-node1-console");
+	const console1 = screen(page, "node1");
 	const exec = async (command: string) => {
 		await page.keyboard.press("Control+/");
 		await expect(page.getByRole("combobox", { name: "Command" })).toBeFocused();

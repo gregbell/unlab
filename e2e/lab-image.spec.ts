@@ -1,18 +1,18 @@
 import { appendFileSync } from "node:fs";
 import { expect, type Page, test } from "@playwright/test";
 import { chromiumExecutable } from "../test/support/chromium.ts";
-import { root, typed } from "./lab.ts";
+import { rackRow, root, status, typed } from "./lab.ts";
 
 test.use({
 	launchOptions: { executablePath: chromiumExecutable(), args: ["--enable-features=WebMCP"] },
 });
 
 async function openLab(page: Page): Promise<void> {
-	await page.goto("/?layout=classic");
+	await page.goto("/");
 	await expect(page.getByRole("heading", { name: "Your Linux lab in a tab." })).toBeVisible();
 }
 
-const ready = (page: Page, text: string) => expect(page.getByText(text)).toBeVisible({ timeout: 60_000 });
+const ready = (page: Page, said: string) => status(page, said);
 
 const PROGRAMS = "tcpdump curl dig ssh sshd nginx strace sfdisk parted mkfs.ext4";
 
@@ -49,18 +49,17 @@ test("a lab machine boots about as fast as an Alpine one", async ({ page }) => {
 	// In turn, so that what else the host does falls on both. The first of each also fetches its image.
 	for (let n = 1; n <= 8; n++) {
 		const image = n % 2 === 1 ? "alpine" : "lab";
+		const asked = Date.now();
 		await typed(page, `spawn 1 ${image} --name ${image}-${n} --no-gateway`);
-		const fact = page.locator("unlab-machine-details").getByText(/^ready · \d+ ms$/);
-		await page.keyboard.press("Escape");
-		await typed(page, `focus ${image}-${n}`);
-		await expect(fact).toBeVisible({ timeout: 60_000 });
-		boots[image].push(Number(/\d+/.exec((await fact.textContent()) ?? "")?.[0]));
+		await expect(rackRow(page, `${image}-${n}`)).toHaveCount(1);
+		await ready(page, "1 of 1 ready");
+		boots[image].push(Date.now() - asked);
 		await typed(page, `rm ${image}-${n}`);
 		await page.getByRole("button", { name: `Remove ${image}-${n}` }).click();
-		await expect(page.getByText(`${image}-${n}`, { exact: true })).toHaveCount(0);
+		await expect(rackRow(page, `${image}-${n}`)).toHaveCount(0);
 	}
 	const fastest = (image: "alpine" | "lab") => Math.min(...boots[image]);
-	const summary = `Boot to prompt, ms: alpine ${boots.alpine.join(", ")} · lab ${boots.lab.join(", ")}`;
+	const summary = `Spawn to ready, ms: alpine ${boots.alpine.join(", ")} · lab ${boots.lab.join(", ")}`;
 	test.info().annotations.push({ type: "boot", description: summary });
 	if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${summary}\n`);
 	console.log(summary);

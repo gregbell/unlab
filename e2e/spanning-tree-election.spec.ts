@@ -1,6 +1,6 @@
 import { expect, type Page, test } from "@playwright/test";
 import { chromiumExecutable } from "../test/support/chromium.ts";
-import { root, shell, typed } from "./lab.ts";
+import { portRow, root, shell, status, switchDetails, typed } from "./lab.ts";
 import { call } from "./webmcp.ts";
 
 test.use({
@@ -37,9 +37,8 @@ interface Row {
 /** Each switch's address in the tree, which follows from its name. */
 const ADDRESS = { switch0: "02:00:0b:35:f3:53", lan: "02:00:56:60:80:10", wan: "02:00:2b:e2:e3:01" } as const;
 
-const ready = (page: Page, text: string) => expect(page.getByText(text)).toBeVisible({ timeout: 90_000 });
+const ready = (page: Page, said: string) => status(page, said, 90_000);
 const bar = (page: Page) => page.locator("unlab-command-bar");
-const panel = (page: Page) => page.locator("unlab-switch");
 
 async function switches(page: Page): Promise<readonly Listed[]> {
 	return ((await call(page, "topology_read", {})) as { data: { switches: Listed[] } }).data.switches;
@@ -79,9 +78,9 @@ async function refused(page: Page, line: string, tool: string, input: object, se
 	await page.keyboard.press("Escape");
 }
 
-/** The words under the classic switch panel's ports. */
-const faceplateLines = async (page: Page) =>
-	(await panel(page).locator(".faceplate > p").allInnerTexts()).map((text) => text.trim());
+/** What a switch's details say of it in the spanning tree. */
+const treeSaid = async (page: Page, on: string) =>
+	(await switchDetails(page, on)).locator("dt", { hasText: "Spanning tree" }).locator("xpath=following-sibling::dd");
 
 test("the switches exchange BPDUs that the capture decodes and a guest's tcpdump reads, each says its root and bridge ID, and priority and cost move the root and the blocked port, which a reload keeps", async ({
 	page,
@@ -89,7 +88,7 @@ test("the switches exchange BPDUs that the capture decodes and a guest's tcpdump
 	const errors: string[] = [];
 	page.on("pageerror", (e) => errors.push(e.message));
 	page.on("crash", () => errors.push("the page crashed"));
-	await page.goto("/?layout=classic");
+	await page.goto("/");
 	await expect(page.getByRole("heading", { name: "Your Linux lab in a tab." })).toBeVisible();
 	for (const name of ["lan", "wan"]) await typed(page, `mkswitch ${name}`);
 	await typed(page, "spawn 1 lab --no-gateway");
@@ -162,18 +161,12 @@ test("the switches exchange BPDUs that the capture decodes and a guest's tcpdump
 		expect(await reaches(page, from, to), `node${from} to ${to}`).toBe(true);
 	}
 
-	// The switch panel says it too: under wan's ports that it is the root, and in the title of lan's blocked port.
-	const chooser = panel(page).getByRole("combobox", { name: "Switch" });
-	await chooser.selectOption("wan");
-	await expect.poll(() => faceplateLines(page)).toContain(`spanning tree on · bridge 4096.${ADDRESS.wan} · the root`);
-	await chooser.selectOption("lan");
-	await expect
-		.poll(() => faceplateLines(page))
-		.toContain(`spanning tree on · bridge 32768.${ADDRESS.lan} · root wan at cost 20000`);
-	await expect(panel(page).locator('[data-port="8"]')).toHaveAttribute(
-		"title",
-		"to switch0 port 7 · alternate port · blocked by spanning tree",
-	);
+	// The desktop says it too: in wan's details that it is the root, and in lan's the port it has blocked.
+	await expect(await treeSaid(page, "wan")).toHaveText(`on · bridge 4096.${ADDRESS.wan} · the root`);
+	await expect(await treeSaid(page, "lan")).toHaveText(`on · bridge 32768.${ADDRESS.lan} · root wan at cost 20000`);
+	const eight = portRow(await switchDetails(page, "lan"), 8);
+	await expect(eight).toContainText("switch0 port 7");
+	await expect(eight).toContainText("alternate port · blocked");
 
 	// lan's own cable to wan is made dearer than the way round by switch0, so that port blocks instead.
 	expect(await call(page, "port_cost", { port: "lan:7", cost: 100_000 })).toEqual({

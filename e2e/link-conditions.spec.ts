@@ -1,6 +1,6 @@
 import { expect, type Page, test } from "@playwright/test";
 import { chromiumExecutable } from "../test/support/chromium.ts";
-import { shell, typed } from "./lab.ts";
+import { portRow, shell, status, switchDetails, typed } from "./lab.ts";
 import { call } from "./webmcp.ts";
 
 test.use({
@@ -29,9 +29,10 @@ interface Row {
 	readonly dropped?: readonly { readonly port: number; readonly reason: string }[];
 }
 
-const ready = (page: Page, text: string) => expect(page.getByText(text)).toBeVisible({ timeout: 90_000 });
+const ready = (page: Page, said: string) => status(page, said, 90_000);
 const bar = (page: Page) => page.locator("unlab-command-bar");
-const panel = (page: Page) => page.locator("unlab-switch");
+/** A port's row in switch0's details. */
+const port = async (page: Page, no: number) => portRow(await switchDetails(page, "switch0"), no);
 
 /** The cable in a port such as `switch0:1`, as topology_read has it. */
 async function cable(page: Page, name: string) {
@@ -77,7 +78,7 @@ test("one command gives a NIC's cable or a cable between switches a delay, loss 
 }) => {
 	const errors: string[] = [];
 	page.on("pageerror", (e) => errors.push(e.message));
-	await page.goto("/?layout=classic");
+	await page.goto("/");
 	await expect(page.getByRole("heading", { name: "Your Linux lab in a tab." })).toBeVisible();
 	await typed(page, "mkswitch lan");
 	await typed(page, "spawn 1 alpine --no-gateway");
@@ -110,17 +111,14 @@ test("one command gives a NIC's cable or a cable between switches a delay, loss 
 	const two = await roundTrip(page, 2, "node1");
 	expect(two).toBeGreaterThanOrEqual(400);
 	expect(two).toBeLessThan(400 + base + 70);
-	await expect(panel(page).locator(".port[data-port='1'] .nic")).toHaveText("impaired");
-	await expect(panel(page).locator(".port[data-port='8'] .nic")).toHaveText("port 8 impaired");
-	await expect(panel(page).locator(".port[data-port='1']")).toHaveAttribute(
-		"title",
-		/^node1 · delay 100 ms · \d+ delivered · 0 dropped$/,
-	);
+	await expect(await port(page, 1)).toContainText("node1");
+	await expect(await port(page, 1)).toContainText(/delay 100 ms · \d+ delivered · 0 dropped/);
+	await expect(await port(page, 8)).toContainText("delay 100 ms");
 
 	await typed(page, "link up node1,switch0:8 --clear");
 	await expect.poll(async () => (await cable(page, "lan:8")).conditions).toEqual({});
 	expect(await roundTrip(page, 1, "node2")).toBeLessThan(base + 20);
-	await expect(panel(page).locator(".port[data-port='1'] .nic")).toHaveCount(0);
+	await expect(await port(page, 1)).not.toContainText("delay");
 
 	// Loss, in both directions of the cable between the switches, with each lost frame in the capture and counted.
 	await call(page, "link_set", { link: "up", machines: "switch0:8", loss: "100%" });
@@ -147,10 +145,7 @@ test("one command gives a NIC's cable or a cable between switches a delay, loss 
 		["switch0", 1, "dropped by the cable into switch0 port 1: MTU"],
 	]);
 	expect((await cable(page, "switch0:1")).carried.dropped).toEqual({ loss: 0, rate: 0, mtu: 1 });
-	await expect(panel(page).locator(".port[data-port='1']")).toHaveAttribute(
-		"title",
-		/mtu 1400 · \d+ delivered · 1 dropped \(1 by MTU\)$/,
-	);
+	await expect(await port(page, 1)).toContainText(/mtu 1400 · \d+ delivered · 1 dropped \(1 by MTU\)/);
 	const { output } = await shell(page, 1, "sudo -n true 2>/dev/null; ls /tmp/since-boot");
 	expect(output).toContain("/tmp/since-boot");
 
@@ -186,7 +181,7 @@ test("with reordering, pings arrive out of order and the capture shows it, and w
 }) => {
 	const errors: string[] = [];
 	page.on("pageerror", (e) => errors.push(e.message));
-	await page.goto("/?layout=classic");
+	await page.goto("/");
 	await expect(page.getByRole("heading", { name: "Your Linux lab in a tab." })).toBeVisible();
 	await typed(page, "spawn 2 alpine --no-gateway");
 	await ready(page, "2 of 2 ready");

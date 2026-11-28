@@ -1,37 +1,38 @@
 import { expect, type Page, test } from "@playwright/test";
 import { chromiumExecutable } from "../test/support/chromium.ts";
-import { crash, root, shell, typed } from "./lab.ts";
+import {
+	agentPanel,
+	configuration,
+	crash,
+	openLab,
+	rackRow,
+	root,
+	screen,
+	shell,
+	status,
+	terminal,
+	typed,
+} from "./lab.ts";
 import { call, finish, start } from "./webmcp.ts";
 
 test.use({
 	launchOptions: { executablePath: chromiumExecutable(), args: ["--enable-features=WebMCP"] },
 });
 
-async function openLab(page: Page): Promise<void> {
-	await page.goto("/?layout=classic");
-	await expect(page.getByRole("heading", { name: "Your Linux lab in a tab." })).toBeVisible();
-}
-
-const status = (page: Page, text: string) => expect(page.getByText(text)).toBeVisible({ timeout: 60_000 });
-
-const details = (page: Page) => page.locator("unlab-machine-details");
-
-/** What the details say of the machine's checkpoints. */
-const row = (page: Page) => details(page).locator(".fact", { hasText: "checkpoints" });
-
 const bar = (page: Page) => page.locator("unlab-command-bar");
-
-const rail = (page: Page, name: string) =>
-	page.getByRole("complementary", { name: "Machines" }).getByRole("button", { name: new RegExp(`^${name}\\b`) });
 
 interface Listed {
 	readonly name: string;
 	readonly state: string;
 	readonly reason?: string;
+	readonly saving?: string;
 	readonly checkpoints: readonly { readonly name: string; readonly bytes: number }[];
 }
 
 const listed = async (page: Page) => ((await call(page, "machines_list", {})) as { data: Listed[] }).data;
+
+/** The checkpoint that the machine is saving, while it is. */
+const saving = async (page: Page) => (await listed(page))[0]?.saving;
 
 const names = async (page: Page) => (await listed(page)).map(({ checkpoints }) => checkpoints.map(({ name }) => name));
 
@@ -98,14 +99,14 @@ for (const image of ["alpine", "debian"]) {
 			"echo first > /root/note; mkdir /root/tree; seq 1 5000 > /root/tree/numbers; printf one | dd of=/dev/wdc bs=1M seek=100 conv=notrunc 2>/dev/null; printf two | dd of=/dev/wdd bs=1M seek=7 conv=notrunc 2>/dev/null",
 		);
 		await typed(page, "sh node1");
-		await expect(page.locator("#tab-node1-sh1")).toBeVisible();
-		await page.locator("#tab-node1-console").click();
+		await expect(terminal(page, "node1", "sh1")).toBeVisible();
+		await screen(page, "node1").click();
 		await root(page, 1, "sleep 4321 & echo $! > /tmp/pid");
 		// Every prompt has the guest write its files to disk. This one is written after the last, and is still in memory.
 		await root(page, 1, "(sleep 1; echo late > /root/late) >/dev/null 2>&1 &");
 		await page.waitForTimeout(2500);
 		await typed(page, "checkpoint node1 before");
-		await expect(row(page)).toContainText(/before \d+\.\d MiB/);
+		await expect.poll(() => names(page)).toEqual([["before"]]);
 		await root(page, 1, "kill -0 $(cat /tmp/pid)");
 		const [{ checkpoints }] = await listed(page);
 		expect(checkpoints).toEqual([{ name: "before", bytes: await bytesIn(page, saved(1, 1)) }]);
@@ -140,19 +141,23 @@ for (const image of ["alpine", "debian"]) {
 			"restore node1 before",
 			"node1 stops without shutting down, so what it runs is lost and 1 shell closes. Everything written to its 3 disks since checkpoint before was saved is gone. There is no undo.",
 		);
-		await expect(rail(page, "node1")).toContainText("restoring");
+		await expect(rackRow(page, "node1")).toContainText("restoring");
 		await status(page, "1 of 1 ready");
-		await expect(page.locator("#tab-node1-sh1")).toHaveCount(0);
+		await expect(terminal(page, "node1", "sh1").locator("unlab-terminal")).toHaveCount(0);
 		expect(await consoleText(page, "node1")).toContain("node1 is back at checkpoint before. sh1 closed with it.");
 		await first();
 
 		await change();
 		await page.reload();
 		await status(page, "1 of 1 ready");
+		// The desktop opens a shell again in the window that sh1 had, and it takes commands once it is at its prompt.
+		await expect
+			.poll(() => shell(page, 1, "true").then(({ exitCode }) => exitCode, String), { timeout: 60_000 })
+			.toBe(0);
 		expect(await root(page, 1, "cat /root/note")).toBe("second");
-		await expect(row(page)).toContainText(/before \d+\.\d MiB/);
+		expect(await names(page)).toEqual([["before"]]);
 		await typed(page, "checkpoint node1 after");
-		await expect(row(page)).toContainText(/after \d+\.\d MiB · \d+\.\d MiB in all/);
+		await expect.poll(() => names(page)).toEqual([["before", "after"]]);
 		await typed(page, "poweroff node1");
 		await status(page, "0 of 1 ready, 1 off");
 		expect(await call(page, "checkpoint_save", { machine: "node1", checkpoint: "off" })).toMatchObject({
@@ -171,7 +176,7 @@ for (const image of ["alpine", "debian"]) {
 		await confirmed(page, "forget node1 after", "node1 cannot go back to it then. Its disks stay as they are now.");
 		await expect.poll(() => names(page)).toEqual([["before", "off"]]);
 		await confirmed(page, "rm node1", "Its checkpoints before and off are deleted too. There is no undo.");
-		await expect(page.locator("unlab-pane[machine=node1]")).toHaveCount(0);
+		await expect(rackRow(page, "node1")).toHaveCount(0);
 		await expect.poll(() => databases(page)).toEqual([]);
 	});
 }
@@ -193,9 +198,9 @@ test("a checkpoint is of one moment on every disk, however the guest writes mean
 	const counted = async () => Number(await root(page, 1, "cat /root/count"));
 	const from = await counted();
 	await typed(page, "checkpoint node1 moving");
-	await expect(row(page)).toContainText(/saving moving [1-9]\d?%/);
+	await expect.poll(() => saving(page)).toBe("moving");
 	const during = await counted();
-	await expect(row(page)).toContainText(/moving \d+\.\d MiB/, { timeout: 60_000 });
+	await expect.poll(() => names(page), { timeout: 60_000 }).toEqual([["moving"]]);
 	const to = await counted();
 	expect(to - from, "it counted on while the disks were copied").toBeGreaterThan(20);
 
@@ -242,8 +247,8 @@ test("a reload while a checkpoint is saved leaves none of it, and one while a ma
 }) => {
 	await withCheckpoint(page);
 	await typed(page, "checkpoint node1 cut");
-	await expect(row(page)).toContainText(/saving cut [1-9]\d?%/);
-	expect(await databases(page)).toEqual([...kept(1, 0, 1), saved(1, 1), saved(1, 2)].sort());
+	await expect.poll(() => saving(page)).toBe("cut");
+	await expect.poll(() => databases(page)).toEqual([...kept(1, 0, 1), saved(1, 1), saved(1, 2)].sort());
 	const [worker] = page.workers().filter((w) => w.url().includes("vm-worker"));
 	// As when the browser goes down, the worker does not see that it has ended.
 	await worker.evaluate(() => {
@@ -256,13 +261,13 @@ test("a reload while a checkpoint is saved leaves none of it, and one while a ma
 	expect(await written(page)).toBe("second\ntwo");
 
 	await confirmed(page, "restore node1 before", "since checkpoint before was saved");
-	await expect(rail(page, "node1")).toContainText(/restoring [1-9]\d?%/);
+	await expect(rackRow(page, "node1")).toContainText("restoring");
 	expect(await listed(page)).toMatchObject([{ name: "node1", state: "restoring" }]);
 	expect(await call(page, "shell_exec", { targets: "node1", command: "true" })).toEqual({
 		error: "exec wants a ready machine here, and node1 is being restored. Nothing was changed.",
 	});
 	await page.reload();
-	await expect(rail(page, "node1")).toContainText(/restoring [1-9]\d?%/, { timeout: 60_000 });
+	await expect(rackRow(page, "node1")).toContainText("restoring", { timeout: 60_000 });
 	await page.reload();
 	await status(page, "0 of 1 ready, 1 restoring");
 	await status(page, "1 of 1 ready");
@@ -279,18 +284,18 @@ test("a reload while a checkpoint is saved leaves none of it, and one while a ma
 test("a machine can be removed while its disks are saved or restored, and nothing of it is left", async ({ page }) => {
 	await withCheckpoint(page);
 	await typed(page, "checkpoint node1 cut");
-	await expect(row(page)).toContainText(/saving cut [1-9]\d?%/);
+	await expect.poll(() => saving(page)).toBe("cut");
 	await confirmed(page, "rm node1", "Its checkpoint before is deleted too.");
-	await expect(page.locator("unlab-pane[machine=node1]")).toHaveCount(0);
+	await expect(rackRow(page, "node1")).toHaveCount(0);
 	await expect.poll(() => databases(page)).toEqual([]);
 	await page.reload();
 	await expect(page.getByRole("heading", { name: "Your Linux lab in a tab." })).toBeVisible();
 	await page.evaluate(() => localStorage.clear());
 	await withCheckpoint(page);
 	await confirmed(page, "restore node1 before", "since checkpoint before was saved");
-	await expect(rail(page, "node1")).toContainText(/restoring [1-9]\d?%/);
+	await expect(rackRow(page, "node1")).toContainText("restoring");
 	await confirmed(page, "rm node1", "Remove node1?");
-	await expect(page.locator("unlab-pane[machine=node1]")).toHaveCount(0);
+	await expect(rackRow(page, "node1")).toHaveCount(0);
 	await expect.poll(() => databases(page)).toEqual([]);
 });
 
@@ -362,7 +367,7 @@ test("a restore that runs out of storage, or whose checkpoint is gone, fails wit
 	await confirmed(page, "restore node1 before", "Everything written to its 2 disks");
 	await status(page, "0 of 1 ready, 1 failed");
 	const full = FULL("node1 could not go back to checkpoint before, and its disks are as they were");
-	await expect(details(page)).toContainText(full);
+	await expect(await configuration(page, "node1")).toContainText(full);
 	await expect.poll(() => databases(page)).toEqual(before);
 
 	await page.evaluate(
@@ -373,7 +378,7 @@ test("a restore that runs out of storage, or whose checkpoint is gone, fails wit
 		saved(1, 1),
 	);
 	await confirmed(page, "restore node1 before", "Everything written to its 2 disks");
-	await expect(details(page)).toContainText(
+	await expect(await configuration(page, "node1")).toContainText(
 		/could not go back to checkpoint before, and its disks are as they were: .+\./,
 	);
 	await typed(page, "boot node1");
@@ -384,7 +389,7 @@ test("a restore that runs out of storage, or whose checkpoint is gone, fails wit
 test("what stops under a checkpoint that is being saved ends it, and what would is refused", async ({ page }) => {
 	await withCheckpoint(page);
 	await start(page, "save", "checkpoint_save", { machine: "node1", checkpoint: "cut" });
-	await expect(row(page)).toContainText(/saving cut [1-9]\d?%/);
+	await expect.poll(() => saving(page)).toBe("cut");
 	const busy = "node1 is saving checkpoint cut, so wait until it is done. Nothing was changed.";
 	for (const tool of ["machines_poweroff", "machines_reboot"]) {
 		expect(await call(page, tool, { names: "node1" })).toEqual({ error: busy });
@@ -400,7 +405,7 @@ test("what stops under a checkpoint that is being saved ends it, and what would 
 	await expect.poll(() => databases(page)).toEqual([...kept(1, 0, 1), saved(1, 1)].sort());
 
 	await start(page, "off", "checkpoint_save", { machine: "node1", checkpoint: "off" });
-	await expect(row(page)).toContainText(/saving off [1-9]\d?%/);
+	await expect.poll(() => saving(page)).toBe("off");
 	expect(await call(page, "machines_boot", { names: "node1" })).toEqual({
 		error: "node1 is saving a checkpoint, so wait until it is done. Nothing was changed.",
 	});
@@ -422,6 +427,11 @@ test("an agent's restore asks first, runs only for the checkpoint it asked about
 
 	const panel = page.locator("unlab-agent-panel");
 	const approve = panel.getByRole("button", { name: "Restore node1 to before", exact: true });
+	/** The person brings the WebMCP window in front of the windows opened since, and says yes. */
+	const yes = async (button = approve) => {
+		await agentPanel(page);
+		await button.click();
+	};
 	await start(page, "stale", "checkpoint_restore", { machine: "node1", checkpoint: "before" });
 	await expect(panel.locator("unlab-confirm")).toContainText(
 		"Everything written to its disk since checkpoint before was saved is gone. There is no undo.",
@@ -429,7 +439,7 @@ test("an agent's restore asks first, runs only for the checkpoint it asked about
 	await confirmed(page, "forget node1 before", "Delete checkpoint before of node1?");
 	await expect.poll(() => names(page)).toEqual([[]]);
 	await call(page, "checkpoint_save", { machine: "node1", checkpoint: "before" });
-	await approve.click();
+	await yes();
 	expect(await finish(page, "stale")).toEqual({
 		error: "What this does to node1 has changed since it was asked, so ask again. Nothing was changed.",
 	});
@@ -437,16 +447,16 @@ test("an agent's restore asks first, runs only for the checkpoint it asked about
 	await crash(page, 1);
 	await status(page, "0 of 1 ready, 1 failed");
 	await start(page, "restore", "checkpoint_restore", { machine: "node1", checkpoint: "before" });
-	await approve.click();
+	await yes();
 	expect(await finish(page, "restore")).toEqual({
 		result: "node1 ready",
 		data: [{ name: "node1", state: "ready" }],
 	});
 	expect(await root(page, 1, "cat /root/note")).toBe("second");
-	await expect(details(page)).toContainText("connected on port 1");
+	await expect((await configuration(page, "node1")).locator(".dt-link")).toContainText(/switch0:1\s*up/);
 
 	await start(page, "forget", "checkpoint_remove", { machine: "node1", checkpoint: "before" });
-	await panel.getByRole("button", { name: "Delete checkpoint before of node1", exact: true }).click();
+	await yes(panel.getByRole("button", { name: "Delete checkpoint before of node1", exact: true }));
 	expect(await finish(page, "forget")).toMatchObject({ data: { machine: "node1", removed: "before" } });
 	expect(await call(page, "checkpoint_restore", { machine: "node1", checkpoint: "before" })).toEqual({
 		error:

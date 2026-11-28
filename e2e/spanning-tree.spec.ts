@@ -1,7 +1,7 @@
 import { appendFileSync, mkdirSync } from "node:fs";
 import { expect, type Locator, type Page, test } from "@playwright/test";
 import { chromiumExecutable } from "../test/support/chromium.ts";
-import { root, shell, typed } from "./lab.ts";
+import { portRow, root, shell, status, switchDetails, typed } from "./lab.ts";
 import { call } from "./webmcp.ts";
 
 test.use({
@@ -33,14 +33,12 @@ interface Row {
 const THREE_HELLOS_MS = 6000;
 
 async function openLab(page: Page): Promise<void> {
-	await page.goto("/?layout=classic");
+	await page.goto("/");
 	await expect(page.getByRole("heading", { name: "Your Linux lab in a tab." })).toBeVisible();
 }
 
-const ready = (page: Page, text: string) => expect(page.getByText(text)).toBeVisible({ timeout: 90_000 });
+const ready = (page: Page, said: string) => status(page, said, 90_000);
 const bar = (page: Page) => page.locator("unlab-command-bar");
-const panel = (page: Page) => page.locator("unlab-switch");
-const chooser = (page: Page) => panel(page).getByRole("combobox", { name: "Switch" });
 
 async function switches(page: Page): Promise<readonly Listed[]> {
 	return ((await call(page, "topology_read", {})) as { data: { switches: Listed[] } }).data.switches;
@@ -171,11 +169,9 @@ test("spanning tree is off on a new switch, where a loop storms: turned on, it e
 		`port ${no} · ${await farEnd(page, at)} · up · alternate port · blocked`,
 	]);
 	await page.keyboard.press("Escape");
-	await chooser(page).selectOption(on);
-	const column = panel(page).locator(`[data-port="${no}"]`);
-	await expect(column.locator(".nic")).toContainText("blocked");
-	await expect(column).toHaveAttribute("title", /blocked by spanning tree/);
-	await expect(column.locator(".word")).toHaveText("up");
+	const column = portRow(await switchDetails(page, on), Number(no));
+	await expect(column.locator("td[data-state]")).toHaveText("up · blocked");
+	await expect(column).toContainText("alternate port · blocked");
 
 	// One broadcast now reaches each machine once, and is carried once by each switch.
 	for (const machine of [2, 3]) await listen(page, machine);

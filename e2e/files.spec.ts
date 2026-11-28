@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { expect, type Page, test } from "@playwright/test";
 import { chromiumExecutable } from "../test/support/chromium.ts";
-import { root, shell, typed } from "./lab.ts";
+import { fromMenu, openLab as openDesktop, root, screen, shell, status, typed } from "./lab.ts";
 import { call, finish, start } from "./webmcp.ts";
 
 /** When set, the tests also save screenshots of an approval there. */
@@ -12,13 +12,10 @@ test.use({
 });
 
 async function openLab(page: Page, line = "spawn 1 alpine", ready = "1 of 1 ready"): Promise<void> {
-	await page.goto("/?layout=classic");
-	await expect(page.getByRole("heading", { name: "Your Linux lab in a tab." })).toBeVisible();
+	await openDesktop(page);
 	await typed(page, line);
 	await status(page, ready);
 }
-
-const status = (page: Page, text: string) => expect(page.getByText(text)).toBeVisible({ timeout: 60_000 });
 
 const bar = (page: Page) => page.locator("unlab-command-bar");
 
@@ -48,11 +45,16 @@ const sum = async (page: Page, path: string) => (await root(page, 1, `sha256sum 
 const sessionText = async (page: Page, session: string) =>
 	((await call(page, "shell_read", { machine: session, lines: 500 })) as { text: string }).text;
 
-/** Keys on a session's terminal, as a person types them. */
+/** What a session's terminal window shows: `node1:console`, `node1:sh1`. */
+const shows = (page: Page, session: string) => {
+	const [machine, shell] = session.split(":");
+	return screen(page, machine, shell === "console" ? undefined : shell);
+};
+
+/** Keys on a session's terminal, as a person types them, with its window brought to the front first. */
 async function keys(page: Page, session: string, text: string): Promise<void> {
-	const id = session.replace(":", "-");
-	await page.locator(`#tab-${id}`).click();
-	await page.locator(`#panel-${id}`).click();
+	await typed(page, `focus ${session}`);
+	await shows(page, session).click();
 	await page.keyboard.type(text);
 }
 
@@ -120,38 +122,38 @@ for (const image of ["alpine", "debian"]) {
 	test(`${image}: a write leaves a person's program, half-typed line and shell history alone`, async ({ page }) => {
 		await openLab(page, `spawn 1 ${image}`);
 		await typed(page, "sh node1");
-		await expect(page.locator("#panel-node1-sh1")).toContainText("⇒");
+		await expect(shows(page, "node1:sh1")).toContainText("⇒");
 		await keys(page, "node1:sh1", image === "alpine" ? "vi /tmp/draft\n" : "cat\n");
 		// Keys that come while a shell starts a program are not the program's yet.
 		await page.waitForTimeout(1000);
 		await page.keyboard.type(image === "alpine" ? "ihalf a sentence" : "half a sentence");
-		await expect(page.locator("#panel-node1-sh1")).toContainText("half a sentence");
+		await expect(shows(page, "node1:sh1")).toContainText("half a sentence");
 		await keys(page, "node1:console", "echo typed-$((6*");
-		await expect(page.locator("#panel-node1-console")).toContainText("echo typed-$((6*");
+		await expect(shows(page, "node1:console")).toContainText("echo typed-$((6*");
 		await page.waitForTimeout(500);
 
 		const shown = async () => ({
 			text: [await sessionText(page, "node1:console"), await sessionText(page, "node1:sh1")],
 			marks: await page.locator("unlab-terminal .gutter .rule").count(),
-			focused: await page.evaluate(() => document.activeElement?.closest("[id^=panel-]")?.id),
+			focused: await page.evaluate(() => document.activeElement?.closest(".dt-window")?.getAttribute("aria-label")),
 		});
 		const before = await shown();
 		expect(before.text).toEqual([
 			expect.stringContaining("echo typed-$((6*"),
 			expect.stringContaining("half a sentence"),
 		]);
-		expect(before.focused).toBe("panel-node1-console");
+		expect(before.focused).toBe("node1 · terminal");
 		await wrote(page, { path: "/etc/secret-path", text: QUOTED });
 		await wrote(page, { path: "/home/user/secret-path", text: "two\nlines\n", owner: "user" });
 		await page.waitForTimeout(1000);
 		expect(await shown()).toEqual(before);
 
 		await page.keyboard.type("7))\n");
-		await expect(page.locator("#panel-node1-console")).toContainText("typed-42");
+		await expect(shows(page, "node1:console")).toContainText("typed-42");
 		await page.keyboard.type("history\n");
-		await expect(page.locator("#panel-node1-console")).toContainText(/\d+ +history/);
+		await expect(shows(page, "node1:console")).toContainText(/\d+ +history/);
 		await page.keyboard.type("cat ~/.ash_history ~/.bash_history; echo hist-$((1+1))\n");
-		await expect(page.locator("#panel-node1-console")).toContainText("hist-2");
+		await expect(shows(page, "node1:console")).toContainText("hist-2");
 		expect(await sessionText(page, "node1:console")).not.toContain("secret-path");
 		expect(await sum(page, "/etc/secret-path")).toBe(sha256(QUOTED));
 
@@ -167,7 +169,7 @@ for (const image of ["alpine", "debian"]) {
 				.toBe("half a sentence more");
 		} else {
 			await page.keyboard.press("Enter");
-			await expect(page.locator("#panel-node1-sh1")).toContainText(/half a sentence more\s+half a sentence more/);
+			await expect(shows(page, "node1:sh1")).toContainText(/half a sentence more\s+half a sentence more/);
 		}
 	});
 }
@@ -319,7 +321,7 @@ test("a write an agent withdraws is whole or not at all, and the next one comes 
 	await start(page, "write", "file_write", { machine: "node1", path: "/etc/motd", text: "withdrawn\n" });
 	await writing(page);
 	await page.evaluate(() => window.running?.get("write")?.controller.abort());
-	await page.getByRole("button", { name: /webmcp/ }).click();
+	await fromMenu(page, "WebMCP");
 	await expect(panel(page)).toContainText("withdrawn by the agent");
 	await root(page, 1, "rm /usr/local/bin/mktemp");
 	await wrote(page, { path: "/etc/motd", text: "next\n" });
@@ -332,7 +334,7 @@ test("a text of several lines is readable where a person approves it, and left o
 	page,
 }) => {
 	await openLab(page);
-	await page.getByRole("button", { name: /webmcp/ }).click();
+	await fromMenu(page, "WebMCP");
 	await page.getByLabel("Policy for file_write").selectOption("ask");
 	const text = `server {\n    listen 80;\n\tname $host;\n}\n${"a\n".repeat(20)}${"long ".repeat(60)}\n`;
 	await start(page, "write", "file_write", { machine: "node1", path: "/etc/nginx/lab.conf", mode: "600", text });

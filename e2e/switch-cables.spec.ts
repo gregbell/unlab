@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { expect, type Page, test } from "@playwright/test";
 import { chromiumExecutable } from "../test/support/chromium.ts";
-import { root, shell, typed } from "./lab.ts";
+import { inspector, openLab, portRow, rack, root, shell, status, switchDetails, switchesListed, typed } from "./lab.ts";
 import { call, finish, start } from "./webmcp.ts";
 
 /** When set, the tests also save screenshots of cabled switches there. */
@@ -39,16 +39,8 @@ interface Row {
 	readonly looped?: true;
 }
 
-async function openLab(page: Page): Promise<void> {
-	await page.goto("/?layout=classic");
-	await expect(page.getByRole("heading", { name: "Your Linux lab in a tab." })).toBeVisible();
-}
-
-const ready = (page: Page, text: string) => expect(page.getByText(text)).toBeVisible({ timeout: 90_000 });
+const ready = (page: Page, said: string) => status(page, said, 90_000);
 const bar = (page: Page) => page.locator("unlab-command-bar");
-const panel = (page: Page) => page.locator("unlab-switch");
-const chooser = (page: Page) => panel(page).getByRole("combobox", { name: "Switch" });
-const dock = (page: Page) => page.locator("unlab-capture[mode=dock]");
 const full = (page: Page) => page.locator("unlab-capture[mode=full]");
 
 async function topology(page: Page): Promise<Topology> {
@@ -82,18 +74,19 @@ async function storms(page: Page): Promise<Record<string, { rate: number; droppe
 const reaches = async (page: Page, machine: number | string, address: string) =>
 	(await shell(page, machine, `ping -c 1 -W 1 ${address}`)).exitCode === 0;
 
-/** `node2 at 3`, with `flushed` after it, for each address that the switch has learned. The switch panel is maximised. */
+/** `node2 at 3`, with `flushed` after it, for each address that the switch has learned. */
 async function learned(page: Page, on: string): Promise<string[]> {
-	await chooser(page).selectOption(on);
-	await expect(page.locator("unlab-mac-table").getByRole("heading")).toHaveText(`${on} mac address table`);
-	const rows = await page.locator("unlab-mac-table tbody tr").evaluateAll((trs) =>
-		trs.map((tr) => {
-			const [, port, machine, seen] = [...tr.querySelectorAll("td")].map((td) => td.textContent?.trim() ?? "");
-			return `${machine} at ${port}${seen.startsWith("flushed") ? " flushed" : ""}`;
-		}),
-	);
-	return rows.sort();
+	const reply = (await call(page, "switch_macs", { switches: on })) as {
+		data: { macs: { port: number; machine?: string; flushed: boolean }[] }[];
+	};
+	return reply.data[0].macs
+		.map(({ port, machine, flushed }) => `${machine} at ${port}${flushed ? " flushed" : ""}`)
+		.sort();
 }
+
+/** What a switch's details say of its storm, while it storms. */
+const stormSaid = async (page: Page, on: string) =>
+	(await switchDetails(page, on)).locator("dl > div", { hasText: "Storm" });
 
 /** Keeps what the page tells a screen reader, from now on. */
 const listen = (page: Page) =>
@@ -121,7 +114,7 @@ async function refused(page: Page, line: string, tool: string, input: object, se
 
 /** What the capture has counted since the lab began: frames that switches accepted. */
 async function carried(page: Page): Promise<number> {
-	const text = (await page.locator("unlab-capture .counters").first().textContent()) ?? "";
+	const text = (await (await inspector(page)).locator(".counters").textContent()) ?? "";
 	return Number(/^(\d+) in/.exec(text.trim())?.[1]);
 }
 
@@ -181,13 +174,11 @@ test("a cable joins two switches at the lowest free ports or those that are name
 	]);
 
 	// Each switch has learned the far machine on the port that its end of the cable is in.
-	await page.getByRole("button", { name: "Maximise switches" }).click();
 	expect(await learned(page, "switch0")).toEqual(["node1 at 1", "node2 at 2"]);
 	expect(await learned(page, "lan")).toEqual(["node1 at 2", "node2 at 1"]);
-	const between = panel(page).locator(".port[data-port='2']");
-	await expect(between.locator(".name")).toHaveText("switch0");
-	await expect(between.locator(".nic")).toHaveText("port 2");
-	await expect(between.locator(".word")).toHaveText("up");
+	const between = portRow(await switchDetails(page, "lan"), 2);
+	await expect(between.getByRole("button", { name: "switch0 port 2" })).toBeVisible();
+	await expect(between.locator("td[data-state]")).toHaveText("up");
 	if (shots) await page.screenshot({ path: `${shots}/cable-between-switches.png` });
 
 	// Another command removes it, by either of its ports, and both are free again.
@@ -225,7 +216,6 @@ test("a cable between switches is cut and reconnected, which flushes what both l
 	await ready(page, "2 of 2 ready");
 	await typed(page, "cable switch0:8 lan:7");
 	expect(await reaches(page, 1, "node2")).toBe(true);
-	await page.getByRole("button", { name: "Maximise switches" }).click();
 	expect(await learned(page, "switch0")).toEqual(["node1 at 1", "node2 at 8"]);
 	expect(await learned(page, "lan")).toEqual(["node1 at 7", "node2 at 1"]);
 
@@ -236,7 +226,7 @@ test("a cable between switches is cut and reconnected, which flushes what both l
 	});
 	expect(await learned(page, "lan")).toEqual(["node1 at 7 flushed", "node2 at 1"]);
 	expect(await learned(page, "switch0")).toEqual(["node1 at 1", "node2 at 8 flushed"]);
-	await expect(panel(page).locator(".port[data-port='8'] .word")).toHaveText("cut");
+	await expect(portRow(await switchDetails(page, "switch0"), 8).locator("td[data-state]")).toHaveText("cut");
 	expect(await wiring(page)).toEqual([
 		"switch0: 1 node1:eth0 up, 8 lan:7 cut",
 		"lan: 1 node2:eth0 up, 7 switch0:8 cut",
@@ -257,8 +247,13 @@ test("a cable between switches is cut and reconnected, which flushes what both l
 	expect(await reaches(page, 1, "node2")).toBe(false);
 
 	// Reconnected by a click on its port, as a machine's cable is.
-	await panel(page).getByRole("button", { name: "Reconnect the cable from switch0 port 8 to lan port 7" }).click();
-	await expect(panel(page).locator(".port[data-port='8'] .word")).toHaveText("up");
+	const eight = portRow(await switchDetails(page, "switch0"), 8);
+	await expect(eight.getByRole("button", { name: "Reconnect" })).toHaveAttribute(
+		"title",
+		"Reconnect the cable from switch0 port 8 to lan port 7",
+	);
+	await eight.getByRole("button", { name: "Reconnect" }).click();
+	await expect(eight.locator("td[data-state]")).toHaveText("up");
 	expect(await reaches(page, 1, "node2")).toBe(true);
 	expect(await learned(page, "switch0")).toEqual(["node1 at 1", "node2 at 8"]);
 	expect(await learned(page, "lan")).toEqual(["node1 at 7", "node2 at 1"]);
@@ -425,7 +420,7 @@ test("a switch that is removed takes its cables to other switches with it, after
 	await expect(asked).toHaveCount(1);
 	await expect(asked).toContainText("This removes the cable from port 1 to wan port 1.");
 	await page.keyboard.press("Enter");
-	await expect(chooser(page).getByRole("option")).toHaveText(["switch0", "wan"]);
+	await expect(switchesListed(page)).toHaveText(["switch0", "wan"]);
 	expect(await wiring(page)).toEqual(["switch0: ", "wan: "]);
 });
 
@@ -481,12 +476,8 @@ test("closing a loop is allowed: one broadcast then goes round, the switches are
 		/^storming · \d+ looped frames a second · \d+ dropped$/,
 	);
 	await page.keyboard.press("Escape");
-	await expect(panel(page).locator(".storm")).toContainText(/storming · \d+ looped frames a second · \d+ dropped/);
-	await expect(chooser(page).getByRole("option")).toHaveText([
-		/switch0 · storming/,
-		/lan · storming/,
-		/wan · storming/,
-	]);
+	await expect(await stormSaid(page, "switch0")).toContainText(/\d+ looped frames a second · \d+ dropped/);
+	await expect(rack(page).locator("[data-switch] small")).toHaveText([/ · storming$/, / · storming$/, / · storming$/]);
 	expect(await heard(page)).toContain("A storm has begun: frames go round a loop of cables until one of them is cut");
 	if (shots) await page.screenshot({ path: `${shots}/storm.png` });
 
@@ -497,7 +488,7 @@ test("closing a loop is allowed: one broadcast then goes round, the switches are
 		expect((await shell(page, machine, "echo answered")).output).toContain("answered");
 		expect(Date.now() - started).toBeLessThan(1000);
 	}
-	await expect(page.getByText("3 of 3 ready")).toBeVisible();
+	await status(page, "3 of 3 ready");
 	const started = Date.now();
 	await typed(page, "ls");
 	await expect(bar(page).locator(".result .header")).toContainText("3 ready");
@@ -516,7 +507,7 @@ test("closing a loop is allowed: one broadcast then goes round, the switches are
 	const still = await carried(page);
 	await page.waitForTimeout(500);
 	expect((await carried(page)) - still).toBeLessThan(50);
-	await expect(panel(page).locator(".storm")).toHaveCount(0);
+	await expect(await stormSaid(page, "switch0")).toHaveCount(0);
 	expect(await heard(page)).toContain("The storm is over");
 	const told = await events(page, "wan");
 	expect(told).toContain(
@@ -567,7 +558,7 @@ test("a mesh of four switches storms until every loop is cut, and what the lab d
 		expect(storm.rate).toBeLessThanOrEqual(3000);
 	}
 	const shown = async () =>
-		Number(/(\d+) dropped/.exec((await panel(page).locator(".storm").textContent()) ?? "")?.[1]);
+		Number(/(\d+) dropped/.exec((await (await stormSaid(page, "switch0")).textContent()) ?? "")?.[1]);
 	await expect.poll(shown).toBeGreaterThan(1000);
 	for (let i = 0; i < 3; i++) expect(await answersIn(page)).toBeLessThan(1000);
 	expect((await shell(page, 2, "echo answered")).output).toContain("answered");
@@ -618,10 +609,8 @@ test("a reload brings back the cables between switches, cut or not, with tables 
 	await page.reload();
 	await ready(page, "2 of 2 ready");
 	expect(wiringOf(await topology(page))).toEqual(wiringOf(before));
-	await page.getByRole("button", { name: "Maximise switches" }).click();
 	// Only what the machines have said since they booted, and nothing of before the reload.
 	expect((await learned(page, "lan")).filter((row) => row.includes("flushed"))).toEqual([]);
-	await page.keyboard.press("Escape");
 	expect(await reaches(page, 1, "node2")).toBe(true);
 	expect(await events(page, "lan:7")).toEqual([
 		"lan port 7 and wan port 8 link up. Cable between them plugged in by the lab.",
@@ -685,7 +674,7 @@ test("a cable between switches is filtered by either of its ports, saves each fr
 	await ready(page, "2 of 2 ready");
 	await typed(page, "cable switch0:8 lan:7");
 	expect(await reaches(page, 1, "node2")).toBe(true);
-	await dock(page).getByRole("button", { name: "Clear" }).click();
+	await (await inspector(page)).getByRole("button", { name: "Clear" }).click();
 	expect((await shell(page, 1, "ping -c 4 -W 1 node2")).exitCode).toBe(0);
 	const each = [0, 1, 2, 3].flatMap((seq) => [`request ${seq}`, `reply ${seq}`]);
 

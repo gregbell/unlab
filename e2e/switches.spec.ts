@@ -1,7 +1,19 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, test } from "@playwright/test";
 import { chromiumExecutable } from "../test/support/chromium.ts";
-import { root, shell, typed } from "./lab.ts";
+import {
+	agentPanel,
+	counters,
+	inspector,
+	learned,
+	openLab,
+	root,
+	shell,
+	status,
+	switchDetails,
+	switchesListed,
+	typed,
+} from "./lab.ts";
 import { call, finish, start } from "./webmcp.ts";
 
 /** When set, the tests also save screenshots of a lab with several switches there. */
@@ -19,29 +31,18 @@ interface Topology {
 	readonly switches: readonly { readonly name: string; readonly ports: readonly Port[] }[];
 	readonly unplugged: readonly { readonly machine: string; readonly nic: string }[];
 }
-interface MacsRead {
-	readonly counters: { readonly in: number; readonly delivered: number; readonly flooded: number };
-	readonly macs: readonly { readonly mac: string; readonly port: number; readonly machine?: string }[];
-}
 interface Row {
 	readonly kind: string;
 	readonly switch?: string;
 	readonly from: { readonly name?: string };
 }
 
-async function openLab(page: Page): Promise<void> {
-	await page.goto("/?layout=classic");
-	await expect(page.getByRole("heading", { name: "Your Linux lab in a tab." })).toBeVisible();
-}
-
-const ready = (page: Page, text: string) => expect(page.getByText(text)).toBeVisible({ timeout: 90_000 });
+const ready = (page: Page, said: string) => status(page, said, 90_000);
 const bar = (page: Page) => page.locator("unlab-command-bar");
-const panel = (page: Page) => page.locator("unlab-switch");
-const chooser = (page: Page) => panel(page).getByRole("combobox", { name: "Switch" });
 
 /** Takes the only call that waits, as the person. */
 async function approve(page: Page, action: string): Promise<void> {
-	await page.locator("unlab-agent-panel").getByRole("button", { name: action, exact: true }).click();
+	await (await agentPanel(page)).getByRole("button", { name: action, exact: true }).click();
 }
 
 async function topology(page: Page): Promise<Topology> {
@@ -84,9 +85,7 @@ const reaches = async (page: Page, machine: number | string, address: string) =>
 const NODE1 = "52:54:00:88:00:0b";
 const NODE3 = "52:54:00:88:00:0d";
 
-test("a broadcast stays on its switch, and each switch has its own MAC table and counters to look at", async ({
-	page,
-}) => {
+test("a broadcast stays on its switch, and each switch has its own ports, MAC table and counters", async ({ page }) => {
 	const errors: string[] = [];
 	page.on("pageerror", (e) => errors.push(e.message));
 	await openLab(page);
@@ -116,57 +115,27 @@ test("a broadcast stays on its switch, and each switch has its own MAC table and
 	expect(await reaches(page, 3, "node4")).toBe(true);
 	expect(await reaches(page, 1, "node3")).toBe(false);
 
-	// The same addresses, by eye: each switch's own ports, counters and MAC table.
-	const names = panel(page).locator(".port .name");
-	const counters = async () =>
-		(
-			/^(\d+) in · (\d+) delivered · (\d+) flooded$/.exec(
-				(await panel(page).locator(".counters").textContent()) ?? "",
-			) ?? []
-		)
-			.slice(1)
-			.map(Number);
+	// The same addresses, in the desktop and to an agent: each switch's own ports, MAC table and counters.
 	const captured = async (on: string) => {
 		const { rows } = (await call(page, "capture_read", { limit: 1000 })) as { rows: Row[] };
 		return rows.filter((row) => row.kind === "frame" && row.switch === on).length;
 	};
-	await page.getByRole("button", { name: "Maximise switches" }).click();
-	await expect(chooser(page)).toHaveValue("switch0");
-	await expect(names).toHaveText(["node1", "node2"]);
-	await expect(page.locator("unlab-mac-table tbody .machine")).toHaveText(["node1", "node2"]);
-	await expect(async () => expect((await counters())[0]).toBe(await captured("switch0"))).toPass({ timeout: 15_000 });
-
-	await chooser(page).focus();
-	await page.keyboard.press("ArrowDown");
-	await expect(chooser(page)).toHaveValue("lan");
-	await expect(names).toHaveText(["node3", "node4"]);
-	await expect(page.locator("unlab-mac-table tbody .machine")).toHaveText(["node3", "node4"]);
-	await expect(page.locator("unlab-mac-table").getByRole("heading")).toHaveText("lan mac address table");
-	await expect(async () => expect((await counters())[0]).toBe(await captured("lan"))).toPass({ timeout: 15_000 });
-	const [lanIn] = await counters();
+	for (const [on, machines] of [
+		["switch0", ["node1", "node2"]],
+		["lan", ["node3", "node4"]],
+	] as const) {
+		await expect((await switchDetails(page, on)).locator(".dt-peer")).toHaveText([...machines]);
+		expect(await learned(page, on)).toEqual(machines);
+		await expect(async () => expect((await counters(page, on)).in).toBe(await captured(on))).toPass({
+			timeout: 15_000,
+		});
+	}
+	const lanIn = (await counters(page, "lan")).in;
 	expect(lanIn).toBeGreaterThan(0);
 	expect(lanIn).not.toBe(await captured("switch0"));
-
-	// An agent reads the same table and counters.
-	const agentSees = async () => {
-		const { data } = (await call(page, "switch_macs", { switches: "lan" })) as { data: MacsRead[] };
-		const [{ counters: c, macs }] = data;
-		return { counters: [c.in, c.delivered, c.flooded], rows: macs.map((m) => [m.mac, String(m.port), m.machine]) };
-	};
-	const panelSees = async () => ({
-		counters: await counters(),
-		rows: await page
-			.locator("unlab-mac-table tbody tr")
-			.evaluateAll((rows) =>
-				rows.map((row) => [...row.querySelectorAll("td")].slice(0, 3).map((td) => td.textContent)),
-			),
-	});
-	await expect(async () => expect(await agentSees()).toEqual(await panelSees())).toPass({ timeout: 15_000 });
-	const axe = await new AxeBuilder({ page }).include("unlab-switch").analyze();
+	const axe = await new AxeBuilder({ page }).include('[data-kind="switch-details"]').analyze();
 	expect(axe.violations.map((v) => v.id)).toEqual([]);
-	if (shots) await page.screenshot({ path: `${shots}/switch-lan-maximised.png` });
-	await page.keyboard.press("Escape");
-	if (shots) await page.screenshot({ path: `${shots}/switch-lan-dock.png` });
+	if (shots) await page.screenshot({ path: `${shots}/switch-details.png` });
 	expect(errors).toEqual([]);
 });
 
@@ -178,9 +147,9 @@ test("a switch is added by a chosen name or the next free one, and a taken name 
 	await typed(page, "spawn 1 alpine --name switch1 --no-gateway");
 	await ready(page, "1 of 1 ready");
 	await typed(page, "mkswitch lan");
-	await expect(chooser(page).getByRole("option")).toHaveText(["switch0", "lan"]);
+	await expect(switchesListed(page)).toHaveText(["switch0", "lan"]);
 	await typed(page, "mkswitch");
-	await expect(chooser(page).getByRole("option")).toHaveText(["switch0", "lan", "switch2"]);
+	await expect(switchesListed(page)).toHaveText(["switch0", "lan", "switch2"]);
 	expect(await call(page, "switch_add", { name: "wan" })).toEqual({ result: "added wan", data: { name: "wan" } });
 	expect(await call(page, "switch_add", {})).toEqual({ result: "added switch3", data: { name: "switch3" } });
 
@@ -261,7 +230,7 @@ test("each NIC goes on the switch that spawn names, or on none", async ({ page }
 	if (shots) await page.screenshot({ path: `${shots}/topology.png` });
 	await page.keyboard.press("Escape");
 	expect(await wiring(page)).toContain("lan: 1 node2:eth0 up, 2 node3:eth0 cut");
-	await expect(page.locator("unlab-capture[mode=dock]")).toContainText("lan port 2 link down");
+	await expect(await inspector(page)).toContainText("lan port 2 link down");
 });
 
 test("a switch asks before it goes, unplugs what is in it, and leaves the machines running", async ({ page }) => {
@@ -283,9 +252,8 @@ test("a switch asks before it goes, unplugs what is in it, and leaves the machin
 	await expect(asked).toContainText("Nothing is plugged into it.");
 	expect((await topology(page)).switches).toHaveLength(3);
 	await page.keyboard.press("Enter");
-	await expect(chooser(page).getByRole("option")).toHaveText(["switch0", "lan"]);
+	await expect(switchesListed(page)).toHaveText(["switch0", "lan"]);
 
-	await chooser(page).selectOption("lan");
 	await start(page, "denied", "switch_remove", { switch: "lan" });
 	const waiting = page.locator("unlab-agent-panel unlab-confirm");
 	await expect(waiting).toContainText("rmswitch lan");
@@ -311,7 +279,7 @@ test("a switch asks before it goes, unplugs what is in it, and leaves the machin
 	await expect(waiting).toHaveCount(0);
 
 	// The link is down, and the same kernel and program run on.
-	await expect(page.locator("unlab-capture[mode=dock]")).toContainText("lan port 1 link down");
+	await expect(await inspector(page)).toContainText("lan port 1 link down");
 	expect(await reaches(page, 1, "node2")).toBe(false);
 	expect(await root(page, 1, "cat /proc/sys/kernel/random/boot_id")).toBe(bootId);
 	expect(await root(page, 1, "pidof sleep")).not.toBe("");
@@ -323,19 +291,16 @@ test("a switch asks before it goes, unplugs what is in it, and leaves the machin
 		],
 	});
 	expect(await wiring(page)).toEqual(["switch0: 1 node2:eth1 up"]);
-	await expect(panel(page).locator(".title")).toHaveText("switch0");
-	await expect(chooser(page)).toHaveCount(0);
+	await expect(switchesListed(page)).toHaveText(["switch0"]);
 
 	// Its name is free, and the one that takes it starts empty.
 	await typed(page, "mkswitch lan");
-	await chooser(page).selectOption("lan");
-	await expect(panel(page).locator(".counters")).toHaveText("0 in · 0 delivered · 0 flooded");
-	await page.getByRole("button", { name: "Maximise switches" }).click();
-	await expect(page.locator("unlab-mac-table")).toContainText("Nothing learned yet.");
-	await page.keyboard.press("Escape");
+	await expect(switchesListed(page)).toHaveText(["switch0", "lan"]);
+	expect(await counters(page, "lan")).toEqual({ in: 0, delivered: 0, flooded: 0 });
+	expect(await learned(page, "lan")).toEqual([]);
 	await typed(page, "rmswitch lan");
 	await page.keyboard.press("Enter");
-	await expect(chooser(page)).toHaveCount(0);
+	await expect(switchesListed(page)).toHaveText(["switch0"]);
 
 	await page.reload();
 	await ready(page, "2 of 2 ready");
@@ -360,20 +325,17 @@ test("a reload brings back every switch and what was plugged in, with tables and
 	await typed(page, "spawn 1 alpine --nics 2 --net wan,switch0 --no-gateway");
 	await ready(page, "3 of 3 ready");
 	await typed(page, "link down node3:eth0");
-	await chooser(page).selectOption("lan");
 	expect((await shell(page, 1, "ping -c 60 -i 0.05 node2")).exitCode).toBe(0);
 	const before = await topology(page);
 	expect(before.switches.map(({ name }) => name)).toEqual(["switch0", "wan", "switch1", "lan"]);
-	const counted = async () => Number(/^\d+/.exec((await panel(page).locator(".counters").textContent()) ?? "")?.[0]);
+	const counted = async () => (await counters(page, "lan")).in;
 	await expect.poll(counted).toBeGreaterThan(120);
 
 	await page.reload();
 	await ready(page, "3 of 3 ready");
 	expect(wiringOf(await topology(page))).toEqual(wiringOf(before));
-	await expect(chooser(page)).toHaveValue("lan");
 	expect(await counted()).toBeLessThan(60);
-	await chooser(page).selectOption("switch1");
-	await expect(panel(page).locator(".counters")).toHaveText("0 in · 0 delivered · 0 flooded");
+	expect(await counters(page, "switch1")).toEqual({ in: 0, delivered: 0, flooded: 0 });
 	expect(await reaches(page, 1, "node2")).toBe(true);
 	expect(await reaches(page, 1, "node3")).toBe(false);
 });

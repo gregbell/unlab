@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
 import { chromiumExecutable } from "../test/support/chromium.ts";
 import { buildCli, freePort, type Session, TestCli } from "../test/support/cli.ts";
-import { openWithTwoMachines, typed } from "./lab.ts";
+import { linkSaid, openWithTwoMachines, status, typed } from "./lab.ts";
 import { call } from "./webmcp.ts";
 
 const ORIGIN = `http://localhost:${process.env.E2E_PORT ?? 4173}`;
@@ -24,7 +24,8 @@ test.beforeEach(async () => {
 });
 test.afterEach(() => cli.close());
 
-const status = (page: Page) => page.locator('unlab-cli-link [data-key="cli"]');
+const access = (page: Page) => page.getByRole("region", { name: "SSH access", exact: true });
+
 /** One at a time, as they are pressed: what comes all at once is taken for pasted text. */
 async function keys(session: Session, ...presses: readonly string[]): Promise<void> {
 	for (const press of presses) {
@@ -54,7 +55,7 @@ async function linkedLab(page: Page): Promise<Session> {
 		location.hash = hash;
 	}, `cli=${cli.port}`);
 	await session.shows("Linked to the lab: node1 (alpine), node2 (alpine)");
-	await expect(status(page)).toHaveText("cli: linked");
+	await expect(await linkSaid(page)).toHaveText("cli: linked");
 	return session;
 }
 
@@ -63,7 +64,7 @@ test("a lab that has never linked reaches for nothing, and downloads nothing for
 	const ssh: string[] = [];
 	page.on("request", (request) => request.url().includes("/ssh/") && ssh.push(request.url()));
 	await openWithTwoMachines(page);
-	await expect(status(page)).toHaveText("cli: off");
+	await expect(await linkSaid(page)).toHaveText("cli: off");
 	await page.waitForTimeout(3000);
 	expect(urls).toEqual([]);
 	expect(ssh).toEqual([]);
@@ -100,7 +101,7 @@ test("a lab that has linked before is linked within three seconds of the CLI sta
 	const first = await linkedLab(page);
 	first.child.kill("SIGTERM");
 	await first.exited;
-	await expect(status(page)).toHaveText("cli: waiting", { timeout: 5000 });
+	await expect(await linkSaid(page)).toHaveText("cli: waiting", { timeout: 5000 });
 	const t0 = Date.now();
 	const again = cli.start();
 	await again.shows("Linked to the lab: node1");
@@ -117,25 +118,22 @@ test("a page the CLI opens beside an open lab hands the link to it, and does not
 	await second.goto(opened());
 	await expect(second.getByText("This lab is open in another tab, and the CLI links to it there.")).toBeVisible();
 	await session.shows("Linked to the lab: node1 (alpine), node2 (alpine)");
-	await expect(status(page)).toHaveText("cli: linked");
+	await expect(await linkSaid(page)).toHaveText("cli: linked");
 });
 
 test("the link is turned off in the lab, by keyboard, and stays off over a reload", async ({ page }) => {
 	const session = await linkedLab(page);
-	await status(page).focus();
-	await page.keyboard.press("Enter");
-	const dialog = page.getByRole("dialog", { name: "Reach the lab from your terminal" });
-	await expect(dialog).toContainText("Linked to the CLI on this computer.");
-	const off = dialog.getByRole("button", { name: "Turn the link off" });
+	await expect(access(page)).toContainText("Linked to the CLI on this computer.");
+	const off = access(page).getByRole("button", { name: "Turn link off" });
 	await off.focus();
 	await page.keyboard.press("Enter");
-	await expect(status(page)).toHaveText("cli: off");
+	await expect(await linkSaid(page)).toHaveText("cli: off");
 	await session.shows("The lab is not linked any more.");
 	const urls = dialled(page);
 	await page.reload();
-	await expect(page.getByText("2 of 2 ready")).toBeVisible({ timeout: 60_000 });
+	await status(page, "2 of 2 ready", 60_000);
 	await page.waitForTimeout(2500);
-	await expect(status(page)).toHaveText("cli: off");
+	await expect(await linkSaid(page)).toHaveText("cli: off");
 	expect(urls).toEqual([]);
 });
 
@@ -160,7 +158,7 @@ test("the prompt runs the lab's commands, asks for what asks first, and the lab 
 	await run("n", "You did not say yes. Nothing was changed.");
 	await run("rm node2", "Remove node2? [y/N]");
 	await run("yes", "removed node2");
-	await expect(page.getByText("1 of 1 ready")).toBeVisible();
+	await status(page, "1 of 1 ready");
 
 	await page.keyboard.press("Control+/");
 	await expect(page.locator('[data-source="cli"]').first()).toContainText("cli");
@@ -207,16 +205,20 @@ test("a second CLI uses the first", async ({ page }) => {
 
 test("a CLI that is killed leaves the lab as it was, within five seconds", async ({ page }) => {
 	const session = await linkedLab(page);
-	const details = page.locator("unlab-machine-details");
-	await expect(details).toContainText("internet through the CLI");
+	const uplinks = async (said: string) => {
+		await typed(page, "ls");
+		await expect(page.locator("unlab-command-bar").locator(".machine-result").first()).toContainText(said);
+		await page.keyboard.press("Escape");
+	};
+	await uplinks("internet through the CLI");
 	session.child.kill("SIGKILL");
-	await expect(status(page)).toHaveText("cli: waiting", { timeout: 5000 });
-	await expect(details).toContainText("package repositories");
+	await expect(await linkSaid(page)).toHaveText("cli: waiting", { timeout: 5000 });
+	await uplinks("package repositories");
 	const ping = (await call(page, "shell_exec", { targets: "node1", command: "ping -c 1 10.88.0.12" })) as {
 		data: { ran: { exitCode: number }[] };
 	};
 	expect(ping.data.ran[0].exitCode).toBe(0);
-	await expect(page.getByText("2 of 2 ready")).toBeVisible();
+	await status(page, "2 of 2 ready");
 });
 
 test("a machine in the browser reaches the internet while linked, and nothing after", async ({ page }) => {
@@ -237,7 +239,7 @@ test("a machine in the browser reaches the internet while linked, and nothing af
 	});
 	expect((await cli.ssh("node1.unlab", `ping -c 2 -W 5 ${address}`)).stdout).toContain("2 packets received");
 	session.child.kill("SIGKILL");
-	await expect(status(page)).toHaveText("cli: waiting", { timeout: 5000 });
+	await expect(await linkSaid(page)).toHaveText("cli: waiting", { timeout: 5000 });
 	const tried = (await call(page, "shell_exec", { targets: "node1", command: `wget -T 3 -qO- ${url}` })) as {
 		data: { ran: { exitCode: number }[] };
 	};

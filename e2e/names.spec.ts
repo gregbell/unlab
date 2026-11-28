@@ -1,6 +1,20 @@
 import { expect, type Page, test } from "@playwright/test";
 import { chromiumExecutable } from "../test/support/chromium.ts";
-import { openWithTwoMachines, root, shell, typed } from "./lab.ts";
+import {
+	inspector,
+	openWithTwoMachines,
+	portRow,
+	rack,
+	rackRow,
+	ready,
+	root,
+	screen,
+	shell,
+	status,
+	switchDetails,
+	terminal,
+	typed,
+} from "./lab.ts";
 import { call } from "./webmcp.ts";
 
 /** When set, the tests also save screenshots of named machines there. */
@@ -12,17 +26,19 @@ test.use({
 
 const LONG = `long-${"x".repeat(56)}-1`;
 
-const allReady = (page: Page, count: number) =>
-	expect(page.getByText(`${count} of ${count} ready`)).toBeVisible({ timeout: 90_000 });
+const allReady = (page: Page, count: number) => ready(page, count, count, 90_000);
+
+/** A port's row in switch0's details. */
+const port = async (page: Page, no: number) => portRow(await switchDetails(page, "switch0"), no);
 
 /** web-1 is alpine, db is debian, and the third chooses nothing. */
 async function openNamed(page: Page): Promise<void> {
-	await page.goto("/?layout=classic");
+	await page.goto("/");
 	await expect(page.getByRole("heading", { name: "Your Linux lab in a tab." })).toBeVisible();
 	await typed(page, "spawn 1 alpine --name web-1");
-	await expect(page.locator("unlab-pane")).toHaveCount(1);
+	await expect(rack(page).locator("[data-machine]")).toHaveCount(1);
 	await typed(page, "spawn 1 debian --name db");
-	await expect(page.locator("unlab-pane")).toHaveCount(2);
+	await expect(rack(page).locator("[data-machine]")).toHaveCount(2);
 	await typed(page, "spawn 1 alpine");
 	await allReady(page, 3);
 }
@@ -53,18 +69,20 @@ const prompt = async (page: Page, machine: string) =>
 const names = async (page: Page) =>
 	((await call(page, "machines_list", {})) as { data: { name: string }[] }).data.map((m) => m.name);
 
-test("a chosen name is the guest's, and the rail, the panes, ls, the prompt and the switch show it", async ({
+test("a chosen name is the guest's, and the Rack manager, the terminals, ls, the prompt and the switch show it", async ({
 	page,
 }) => {
 	await openNamed(page);
 	const shown = async () => {
-		const rail = page.getByRole("complementary", { name: "Machines" });
 		for (const name of ["web-1", "db", "node3"]) {
-			await expect(rail.getByRole("button", { name: new RegExp(`^${name}\\b`) })).toBeVisible();
-			await expect(page.locator(`unlab-pane[machine=${name}] .header .name`)).toHaveText(name);
+			await expect(rackRow(page, name).locator(".dt-device-name b")).toHaveText(name);
+			await expect(terminal(page, name).locator(".dt-title b")).toHaveText(name);
 			expect(await shell(page, name, "hostname")).toMatchObject({ exitCode: 0, output: name });
 		}
-		await expect(page.getByRole("button", { name: "Cut the cable from web-1 to port 1" })).toBeVisible();
+		await expect((await port(page, 1)).getByRole("button", { name: "Cut cable" })).toHaveAttribute(
+			"title",
+			"Cut the cable from web-1 to port 1",
+		);
 		await expect.poll(() => prompt(page, "web-1")).toBe("web-1 ~ ⇒");
 		await expect.poll(() => prompt(page, "db")).toBe("db ~ ⇒");
 		await expect.poll(() => prompt(page, "node3")).toBe("~ ⇒");
@@ -100,10 +118,10 @@ test("a chosen name is the guest's, and the rail, the panes, ls, the prompt and 
 test("every command that takes a machine takes its name", async ({ page }) => {
 	await openNamed(page);
 	await typed(page, "sh web-1");
-	await expect(page.locator("#panel-web-1-sh1")).toBeVisible();
-	await expect(page.locator("#panel-web-1-sh1")).toContainText("web-1 ~ ⇒");
+	await expect(terminal(page, "web-1", "sh1")).toBeVisible();
+	await expect(screen(page, "web-1", "sh1")).toContainText("web-1 ~ ⇒");
 	await typed(page, "focus web-1:console");
-	await expect(page.locator("#panel-web-1-console")).toBeVisible();
+	await expect(terminal(page, "web-1")).toHaveAttribute("data-active", "true");
 	await typed(page, "exec web-1:sh1,db -- echo said-$((40+2))-$(hostname)");
 	await expect(page.locator(".machine-result", { hasText: "said-42-web-1" })).toContainText("exit 0");
 	await expect(page.locator(".machine-result", { hasText: "said-42-db" })).toContainText("exit 0");
@@ -114,7 +132,10 @@ test("every command that takes a machine takes its name", async ({ page }) => {
 	});
 
 	await typed(page, "link down db");
-	await expect(page.getByRole("button", { name: "Reconnect the cable from db to port 2" })).toBeVisible();
+	await expect((await port(page, 2)).getByRole("button", { name: "Reconnect" })).toHaveAttribute(
+		"title",
+		"Reconnect the cable from db to port 2",
+	);
 	expect((await shell(page, "web-1", "ping -c 1 -W 1 db")).exitCode).toBe(1);
 	expect(await call(page, "link_set", { link: "up", machines: "db:eth0" })).toMatchObject({
 		data: [{ machine: "db", nic: "eth0", link: "up" }],
@@ -134,21 +155,22 @@ test("every command that takes a machine takes its name", async ({ page }) => {
 		/52:54:00:88:00:0b\s+web-1/,
 	);
 	if (shots) await page.screenshot({ path: `${shots}/names-capture.png` });
-	await page.getByRole("button", { name: "Maximise capture" }).click();
-	await page.getByRole("button", { name: "Maximise switch0" }).click();
-	await expect(page.locator("unlab-mac-table tr", { hasText: "52:54:00:88:00:0c" })).toContainText("db");
+	const macs = (await call(page, "switch_macs", { switches: "switch0" })) as {
+		data: { macs: { mac: string; machine?: string }[] }[];
+	};
+	expect(macs.data[0].macs.find(({ mac }) => mac === "52:54:00:88:00:0c")).toMatchObject({ machine: "db" });
 	await page.keyboard.press("Control+/");
 	await page.keyboard.type("capture dbx");
 	await page.keyboard.press("Enter");
 	await expect(page.locator("unlab-command-bar")).toContainText("capture cannot read dbx, so use");
 	await page.keyboard.press("Escape");
-	await expect(page.locator("unlab-pane:visible")).toHaveCount(0);
 	await typed(page, "focus db --max");
-	await expect(page.locator("unlab-pane:visible")).toHaveCount(1);
+	await expect(terminal(page, "db")).toHaveAttribute("data-max", "true");
 	await typed(page, "focus db --max");
+	await expect(terminal(page, "db")).toHaveAttribute("data-max", "false");
 
 	await typed(page, "poweroff web-1");
-	await expect(page.getByText("2 of 3 ready, 1 off")).toBeVisible();
+	await status(page, "2 of 3 ready, 1 off");
 	await typed(page, "boot web-1");
 	await allReady(page, 3);
 	expect(await call(page, "machines_reboot", { names: "web-1" })).toMatchObject({ result: "web-1 ready" });
@@ -156,7 +178,7 @@ test("every command that takes a machine takes its name", async ({ page }) => {
 
 	await typed(page, "rm web*");
 	await page.getByRole("button", { name: "Remove web-1" }).click();
-	await expect(page.locator("unlab-pane[machine=web-1]")).toHaveCount(0);
+	await expect(rackRow(page, "web-1")).toHaveCount(0);
 	expect(await names(page)).toEqual(["db", "node3"]);
 });
 
@@ -180,7 +202,7 @@ test("a name in use or that is not a hostname is refused in a sentence, and noth
 		await expect(page.locator("unlab-command-bar")).toContainText(sentence);
 		await page.keyboard.press("Escape");
 	}
-	await expect(page.locator("unlab-pane")).toHaveCount(3);
+	await expect(rack(page).locator("[data-machine]")).toHaveCount(3);
 });
 
 test("a name is free once its machine is gone, and the next machine of that name is another machine", async ({
@@ -194,7 +216,7 @@ test("a name is free once its machine is gone, and the next machine of that name
 
 	await typed(page, "rm web-1");
 	await page.getByRole("button", { name: "Remove web-1" }).click();
-	await expect(page.locator("unlab-pane[machine=web-1]")).toHaveCount(0);
+	await expect(rackRow(page, "web-1")).toHaveCount(0);
 	await typed(page, "spawn 1 debian --name web-1");
 	await allReady(page, 3);
 	expect(await names(page)).toEqual(["db", "node3", "web-1"]);
@@ -248,11 +270,20 @@ test("a name as long as a hostname can be fits everywhere it is shown", async ({
 	expect((await shell(page, 1, `ping -c 1 -W 2 ${LONG}`)).exitCode).toBe(0);
 	const overflow = (selector: string) =>
 		page.locator(selector).evaluate((element) => element.scrollWidth - element.clientWidth);
-	for (const part of ["unlab-rail", `unlab-pane[machine=${LONG}] .header`, "unlab-switch[compact] .header", "body"]) {
+	await switchDetails(page, "switch0");
+	for (const part of [
+		`[data-machine="${LONG}"] .dt-row-main`,
+		`[data-kind="console"] .dt-title:has-text("${LONG}")`,
+		'[data-kind="switch-details"] .dt-interior',
+		"body",
+	]) {
 		expect(await overflow(part), part).toBe(0);
 	}
-	await expect(page.locator("unlab-switch[compact] [data-port='3']")).toHaveAttribute("title", LONG);
-	await expect(page.locator(".route", { hasText: LONG }).first()).toHaveAttribute("title", /→/);
+	await expect(rack(page).locator('[data-switch="switch0"] .dt-port-block').nth(2)).toHaveAttribute(
+		"title",
+		new RegExp(`^Port 3 · ${LONG} · `),
+	);
+	await expect((await inspector(page)).locator(".route", { hasText: LONG }).first()).toHaveAttribute("title", /→/);
 	if (shots) await page.screenshot({ path: `${shots}/long-name.png` });
 	await typed(page, "capture icmp");
 	await expect(page.getByRole("option", { name: new RegExp(LONG) }).first()).toBeVisible();
@@ -271,14 +302,15 @@ test("a name as long as a hostname can be fits everywhere it is shown", async ({
 
 test("a filter typed before its machine is there takes effect once it is", async ({ page }) => {
 	await openWithTwoMachines(page);
-	const filter = page.getByLabel("filter");
+	const capture = await inspector(page);
+	const filter = capture.getByLabel("filter");
 	await filter.fill("later");
 	await expect(filter).toHaveAttribute("aria-invalid", "true");
 	await typed(page, "spawn 1 alpine --name later");
 	await allReady(page, 3);
 	await expect(filter).toHaveAttribute("aria-invalid", "false");
 	expect((await shell(page, 1, "ping -c 1 -W 2 node2; ping -c 1 -W 2 later")).exitCode).toBe(0);
-	const list = page.locator("unlab-capture[mode=dock]").getByRole("listitem");
+	const list = capture.getByRole("option");
 	await expect(list.filter({ hasText: "later" }).filter({ hasText: "echo reply" })).toHaveCount(1);
 	await expect(list.filter({ hasText: "node2" })).toHaveCount(0);
 });
