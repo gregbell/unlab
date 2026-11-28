@@ -2,7 +2,7 @@ import { expect, type Page, test } from "@playwright/test";
 import type { Topology } from "../src/commands/index.ts";
 import { chromiumExecutable } from "../test/support/chromium.ts";
 import { inGuests, scenarioLines, THREE_SUBNETS_WIRING, waitsForMachines, wiringOf } from "../test/support/scenario.ts";
-import { learned, shell, typed } from "./lab.ts";
+import { learned, shell, switchDetails, typed } from "./lab.ts";
 import { call, registered } from "./webmcp.ts";
 
 test.use({
@@ -161,7 +161,7 @@ test("the recorded command set, typed into the bar, builds three subnets and two
 	await allReady(page);
 	await expect.poll(async () => wiringOf(await topology(page))).toEqual(wired);
 	expect((await lossy(page)).delivered).toBeLessThan(carried.delivered);
-	await expect.poll(() => learned(page, "edge")).toEqual([]);
+	await expect(await switchDetails(page, "edge")).toContainText("Nothing learned yet.");
 	// A boot forgets routes and forwarding, so the lines that set them in the guests run again, and only those.
 	for (const line of LINES.filter(inGuests)) await run(page, line);
 	await crossed(page);

@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { openWithTwoMachines, rack, rackRow, screen } from "./lab.ts";
+import { openWithTwoMachines, portRow, rackRow, screen, switchDetails } from "./lab.ts";
 
 test("the bar cuts a real cable, then removes a machine after asking", async ({ page }) => {
 	const errors: string[] = [];
@@ -7,7 +7,6 @@ test("the bar cuts a real cable, then removes a machine after asking", async ({ 
 	await openWithTwoMachines(page);
 
 	const node2 = rackRow(page, "node2");
-	const port2 = rack(page).locator('[data-switch="switch0"] .dt-port-block').nth(1);
 	const command = page.getByRole("combobox", { name: "Command" });
 
 	const console1 = screen(page, "node1");
@@ -17,9 +16,9 @@ test("the bar cuts a real cable, then removes a machine after asking", async ({ 
 	await page.keyboard.type("link down node2");
 	await expect(page.getByRole("status").filter({ hasText: "will" })).toContainText("cut the cable to node2");
 	await page.keyboard.press("Enter");
-	await expect(port2).toHaveAttribute("data-state", "cut");
 	await expect(command).not.toBeFocused();
 	await expect(console1).not.toContainText("link down node2");
+	await expect(portRow(await switchDetails(page, "switch0"), 2).locator("td[data-state]")).toHaveText("cut");
 
 	await page.keyboard.press("Control+/");
 	await expect(command).toBeFocused();

@@ -123,6 +123,15 @@ test("a page the CLI opens beside an open lab hands the link to it, and does not
 
 test("the link is turned off in the lab, by keyboard, and stays off over a reload", async ({ page }) => {
 	const session = await linkedLab(page);
+	await page.getByRole("button", { name: "Close SSH access", exact: true }).click();
+	await expect(access(page)).toBeHidden();
+	await page.getByRole("button", { name: "Lab menu" }).focus();
+	await page.keyboard.press("Enter");
+	const item = page.getByRole("menuitem", { name: "SSH access", exact: true });
+	for (let press = 0; press < 12 && !(await item.evaluate((el) => el === document.activeElement)); press++)
+		await page.keyboard.press("ArrowDown");
+	await expect(item).toBeFocused();
+	await page.keyboard.press("Enter");
 	await expect(access(page)).toContainText("Linked to the CLI on this computer.");
 	const off = access(page).getByRole("button", { name: "Turn link off" });
 	await off.focus();

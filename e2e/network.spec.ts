@@ -1,7 +1,15 @@
 import { expect, type Page, test } from "@playwright/test";
 import { chromiumExecutable } from "../test/support/chromium.ts";
-import { consoleOf, inspector, openWithTwoMachines, portRow, rack, switchCapture, switchDetails } from "./lab.ts";
-import { call } from "./webmcp.ts";
+import {
+	consoleOf,
+	inspector,
+	macTable,
+	openWithTwoMachines,
+	portRow,
+	rack,
+	switchCapture,
+	switchDetails,
+} from "./lab.ts";
 
 test.use({
 	launchOptions: { executablePath: chromiumExecutable(), args: ["--enable-features=WebMCP"] },
@@ -14,10 +22,6 @@ async function shoot(page: Page, name: string): Promise<void> {
 	if (!shots) return;
 	await page.evaluate(() => document.fonts.ready);
 	await page.screenshot({ path: `${shots}/${name}.png` });
-}
-
-interface Macs {
-	readonly data: { readonly macs: { readonly machine?: string; readonly age: number; readonly flushed: boolean }[] }[];
 }
 
 test("pings show in the switch's capture; cutting a cable by its port floods, flushes and reconnects", async ({
@@ -66,11 +70,10 @@ test("pings show in the switch's capture; cutting a cable by its port floods, fl
 	await page.keyboard.press("Escape");
 	await shoot(page, "capture-cut");
 
-	const macs = async () => {
-		const { data } = (await call(page, "switch_macs", { switches: "switch0" })) as Macs;
-		return Object.fromEntries(data[0].macs.map(({ machine, age, flushed }) => [machine, { age, flushed }]));
-	};
-	expect(await macs()).toMatchObject({ node2: { flushed: true }, node1: { flushed: false, age: expect.any(Number) } });
+	const table = await macTable(page, "switch0");
+	await expect(table.getByRole("row", { name: /node2/ })).toContainText("flushed, link down");
+	await expect(table.getByRole("row", { name: /node1/ })).toContainText("s ago");
+	await shoot(page, "switch-details");
 
 	await page.keyboard.press("Control+/");
 	await page.keyboard.type("capture");

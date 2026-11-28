@@ -1,7 +1,19 @@
 import { readFileSync } from "node:fs";
 import { expect, type Page, test } from "@playwright/test";
 import { chromiumExecutable } from "../test/support/chromium.ts";
-import { inspector, openLab, portRow, rack, root, shell, status, switchDetails, switchesListed, typed } from "./lab.ts";
+import {
+	inspector,
+	macRows,
+	openLab,
+	portRow,
+	rack,
+	root,
+	shell,
+	status,
+	switchDetails,
+	switchesListed,
+	typed,
+} from "./lab.ts";
 import { call, finish, start } from "./webmcp.ts";
 
 /** When set, the tests also save screenshots of cabled switches there. */
@@ -74,13 +86,10 @@ async function storms(page: Page): Promise<Record<string, { rate: number; droppe
 const reaches = async (page: Page, machine: number | string, address: string) =>
 	(await shell(page, machine, `ping -c 1 -W 1 ${address}`)).exitCode === 0;
 
-/** `node2 at 3`, with `flushed` after it, for each address that the switch has learned. */
+/** `node2 at 3`, with `flushed` after it, for each address in the switch's MAC table, in its details window. */
 async function learned(page: Page, on: string): Promise<string[]> {
-	const reply = (await call(page, "switch_macs", { switches: on })) as {
-		data: { macs: { port: number; machine?: string; flushed: boolean }[] }[];
-	};
-	return reply.data[0].macs
-		.map(({ port, machine, flushed }) => `${machine} at ${port}${flushed ? " flushed" : ""}`)
+	return (await macRows(page, on))
+		.map(([, port, machine, seen]) => `${machine} at ${port}${seen.startsWith("flushed") ? " flushed" : ""}`)
 		.sort();
 }
 

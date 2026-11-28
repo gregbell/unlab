@@ -4,8 +4,11 @@ import { chromiumExecutable } from "../test/support/chromium.ts";
 import {
 	agentPanel,
 	counters,
+	countersSaid,
 	inspector,
 	learned,
+	macRows,
+	macTable,
 	openLab,
 	root,
 	shell,
@@ -30,6 +33,10 @@ interface Port {
 interface Topology {
 	readonly switches: readonly { readonly name: string; readonly ports: readonly Port[] }[];
 	readonly unplugged: readonly { readonly machine: string; readonly nic: string }[];
+}
+interface MacsRead {
+	readonly counters: { readonly in: number; readonly delivered: number; readonly flooded: number };
+	readonly macs: readonly { readonly mac: string; readonly port: number; readonly machine?: string }[];
 }
 interface Row {
 	readonly kind: string;
@@ -85,7 +92,9 @@ const reaches = async (page: Page, machine: number | string, address: string) =>
 const NODE1 = "52:54:00:88:00:0b";
 const NODE3 = "52:54:00:88:00:0d";
 
-test("a broadcast stays on its switch, and each switch has its own ports, MAC table and counters", async ({ page }) => {
+test("a broadcast stays on its switch, and each switch has its own MAC table and counters to look at", async ({
+	page,
+}) => {
 	const errors: string[] = [];
 	page.on("pageerror", (e) => errors.push(e.message));
 	await openLab(page);
@@ -115,7 +124,7 @@ test("a broadcast stays on its switch, and each switch has its own ports, MAC ta
 	expect(await reaches(page, 3, "node4")).toBe(true);
 	expect(await reaches(page, 1, "node3")).toBe(false);
 
-	// The same addresses, in the desktop and to an agent: each switch's own ports, MAC table and counters.
+	// The same addresses, by eye: each switch's own ports, MAC table and counters, in its details window.
 	const captured = async (on: string) => {
 		const { rows } = (await call(page, "capture_read", { limit: 1000 })) as { rows: Row[] };
 		return rows.filter((row) => row.kind === "frame" && row.switch === on).length;
@@ -125,6 +134,7 @@ test("a broadcast stays on its switch, and each switch has its own ports, MAC ta
 		["lan", ["node3", "node4"]],
 	] as const) {
 		await expect((await switchDetails(page, on)).locator(".dt-peer")).toHaveText([...machines]);
+		await expect(await macTable(page, on)).toBeVisible();
 		expect(await learned(page, on)).toEqual(machines);
 		await expect(async () => expect((await counters(page, on)).in).toBe(await captured(on))).toPass({
 			timeout: 15_000,
@@ -133,6 +143,18 @@ test("a broadcast stays on its switch, and each switch has its own ports, MAC ta
 	const lanIn = (await counters(page, "lan")).in;
 	expect(lanIn).toBeGreaterThan(0);
 	expect(lanIn).not.toBe(await captured("switch0"));
+
+	// An agent reads the same table and counters.
+	const agentSees = async () => {
+		const { data } = (await call(page, "switch_macs", { switches: "lan" })) as { data: MacsRead[] };
+		const [{ counters: c, macs }] = data;
+		return { counters: [c.in, c.delivered, c.flooded], rows: macs.map((m) => [m.mac, String(m.port), m.machine]) };
+	};
+	const windowSees = async () => {
+		const { in: taken, delivered, flooded } = await counters(page, "lan");
+		return { counters: [taken, delivered, flooded], rows: (await macRows(page, "lan")).map((row) => row.slice(0, 3)) };
+	};
+	await expect(async () => expect(await agentSees()).toEqual(await windowSees())).toPass({ timeout: 15_000 });
 	const axe = await new AxeBuilder({ page }).include('[data-kind="switch-details"]').analyze();
 	expect(axe.violations.map((v) => v.id)).toEqual([]);
 	if (shots) await page.screenshot({ path: `${shots}/switch-details.png` });
@@ -296,8 +318,8 @@ test("a switch asks before it goes, unplugs what is in it, and leaves the machin
 	// Its name is free, and the one that takes it starts empty.
 	await typed(page, "mkswitch lan");
 	await expect(switchesListed(page)).toHaveText(["switch0", "lan"]);
-	expect(await counters(page, "lan")).toEqual({ in: 0, delivered: 0, flooded: 0 });
-	expect(await learned(page, "lan")).toEqual([]);
+	await expect(await countersSaid(page, "lan")).toHaveText("0 in · 0 delivered · 0 flooded");
+	await expect(await switchDetails(page, "lan")).toContainText("Nothing learned yet.");
 	await typed(page, "rmswitch lan");
 	await page.keyboard.press("Enter");
 	await expect(switchesListed(page)).toHaveText(["switch0"]);
@@ -335,7 +357,7 @@ test("a reload brings back every switch and what was plugged in, with tables and
 	await ready(page, "3 of 3 ready");
 	expect(wiringOf(await topology(page))).toEqual(wiringOf(before));
 	expect(await counted()).toBeLessThan(60);
-	expect(await counters(page, "switch1")).toEqual({ in: 0, delivered: 0, flooded: 0 });
+	await expect(await countersSaid(page, "switch1")).toHaveText("0 in · 0 delivered · 0 flooded");
 	expect(await reaches(page, 1, "node2")).toBe(true);
 	expect(await reaches(page, 1, "node3")).toBe(false);
 });

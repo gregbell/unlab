@@ -3,6 +3,7 @@ import { chromiumExecutable } from "../test/support/chromium.ts";
 import {
 	configuration,
 	inspector,
+	macTable,
 	openWithTwoMachines,
 	portRow,
 	rack,
@@ -70,13 +71,9 @@ test("a two-NIC machine forwards in the browser, and the capture and its filter 
 	await page.keyboard.press("ArrowUp");
 	await expect(page.locator("unlab-frame-detail")).toContainText("node3:eth1");
 	if (shots) await page.screenshot({ path: `${shots}/capture-nics.png` });
-	const macs = (await call(page, "switch_macs", { switches: "switch0" })) as {
-		data: { macs: { mac: string; machine?: string; nic?: string }[] }[];
-	};
-	expect(macs.data[0].macs.find(({ mac }) => mac === "52:54:00:88:01:0d")).toMatchObject({
-		machine: "node3",
-		nic: "eth1",
-	});
+	await expect((await macTable(page, "switch0")).getByRole("row", { name: /52:54:00:88:01:0d/ })).toContainText(
+		"node3:eth1",
+	);
 
 	// The same bytes arrive, in each direction, through the browser's workers and vsock.
 	const transfer = async (from: number, to: number, address: string, port: number) => {
@@ -103,9 +100,14 @@ test("a cable per NIC: cut one by name, from the switch's details and by machine
 	const details = await configuration(page, "node3");
 	const nic = (n: number) => details.locator(".dt-link").nth(n);
 	const reaches = async (address: string) => (await shell(page, 1, `ping -c 1 -W 1 ${address}`)).exitCode === 0;
+	const listed = page.locator(".machine-result", { hasText: "node3" });
 
 	await expect(nic(0)).toContainText(/switch0:3\s*up/);
 	await expect(nic(1)).toContainText(/switch0:4\s*up/);
+	await typed(page, "ls");
+	await expect(listed).toContainText("eth0 · 10.88.0.13/24 · 52:54:00:88:00:0d · up on port 3");
+	await expect(listed).toContainText("eth1 · no address · 52:54:00:88:01:0d · up on port 4");
+	await page.keyboard.press("Escape");
 	if (shots) await page.screenshot({ path: `${shots}/lab-nics.png` });
 
 	expect(await reaches("10.2.0.2")).toBe(true);
@@ -118,7 +120,6 @@ test("a cable per NIC: cut one by name, from the switch's details and by machine
 	expect(await reaches("10.88.0.13")).toBe(true);
 
 	await typed(page, "ls");
-	const listed = page.locator(".machine-result", { hasText: "node3" });
 	await expect(listed).toContainText("eth0 · 10.88.0.13/24 · 52:54:00:88:00:0d · up on port 3");
 	await expect(listed).toContainText("eth1 · no address · 52:54:00:88:01:0d · cut on port 4");
 	if (shots) await page.screenshot({ path: `${shots}/ls-nics.png` });

@@ -2,6 +2,7 @@ import { expect, type Page, test } from "@playwright/test";
 import { chromiumExecutable } from "../test/support/chromium.ts";
 import {
 	inspector,
+	macTable,
 	openWithTwoMachines,
 	portRow,
 	rack,
@@ -155,10 +156,7 @@ test("every command that takes a machine takes its name", async ({ page }) => {
 		/52:54:00:88:00:0b\s+web-1/,
 	);
 	if (shots) await page.screenshot({ path: `${shots}/names-capture.png` });
-	const macs = (await call(page, "switch_macs", { switches: "switch0" })) as {
-		data: { macs: { mac: string; machine?: string }[] }[];
-	};
-	expect(macs.data[0].macs.find(({ mac }) => mac === "52:54:00:88:00:0c")).toMatchObject({ machine: "db" });
+	await expect((await macTable(page, "switch0")).getByRole("row", { name: /52:54:00:88:00:0c/ })).toContainText("db");
 	await page.keyboard.press("Control+/");
 	await page.keyboard.type("capture dbx");
 	await page.keyboard.press("Enter");

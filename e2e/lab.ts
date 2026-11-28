@@ -99,24 +99,34 @@ export async function inspector(page: Page): Promise<Locator> {
 	return window.locator("unlab-capture");
 }
 
-/** Whose addresses a switch has learned, in its MAC table's order: `node1`, or `r1:eth0` for a machine of several NICs. */
-export async function learned(page: Page, on: string): Promise<string[]> {
-	const reply = (await call(page, "switch_macs", { switches: on })) as {
-		data: { macs: { machine?: string; nic?: string }[] }[];
-	};
-	const listed = (await call(page, "machines_list", {})) as { data: { name: string; nics: unknown[] }[] };
-	const several = new Set(listed.data.flatMap(({ name, nics }) => (nics.length > 1 ? [name] : [])));
-	return reply.data.flatMap(({ macs }) =>
-		macs.flatMap(({ machine, nic }) => (machine ? [several.has(machine) && nic ? `${machine}:${nic}` : machine] : [])),
-	);
+/** A switch's MAC address table, in its details window. */
+export const macTable = async (page: Page, on: string): Promise<Locator> =>
+	(await switchDetails(page, on)).getByRole("table", { name: `MAC address table on ${on}`, exact: true });
+
+/** Each row of a switch's MAC address table as its details window shows it: MAC, port, machine and seen. */
+export async function macRows(page: Page, on: string): Promise<string[][]> {
+	return (await macTable(page, on))
+		.locator("tbody tr")
+		.evaluateAll((rows) =>
+			rows.map((row) => [...row.querySelectorAll("td")].map((td) => td.textContent?.trim() ?? "")),
+		);
 }
 
-/** The frames a switch took in, the copies it delivered and those it flooded, since it was added. */
+/** Whose addresses a switch has learned, in its MAC table's order: `node1`, or `r1:eth0` for a machine of several NICs. */
+export async function learned(page: Page, on: string): Promise<string[]> {
+	return (await macRows(page, on)).flatMap(([, , machine]) => (machine && machine !== "—" ? [machine] : []));
+}
+
+/** What a switch's details window says of the frames it has taken in, delivered and flooded since it was added. */
+export const countersSaid = async (page: Page, on: string): Promise<Locator> =>
+	(await switchDetails(page, on)).locator("dl > div", { hasText: "Frames" }).locator("dd");
+
+/** The same, as numbers. */
 export async function counters(page: Page, on: string): Promise<{ in: number; delivered: number; flooded: number }> {
-	const reply = (await call(page, "switch_macs", { switches: on })) as {
-		data: { counters: { in: number; delivered: number; flooded: number } }[];
-	};
-	return reply.data[0].counters;
+	const said = (await (await countersSaid(page, on)).textContent()) ?? "";
+	const [, taken, delivered, flooded] = /^(\d+) in · (\d+) delivered · (\d+) flooded$/.exec(said.trim()) ?? [];
+	if (taken === undefined) throw new Error(`${on} says ${said} of its frames`);
+	return { in: Number(taken), delivered: Number(delivered), flooded: Number(flooded) };
 }
 
 /** What SSH access, opened from the logo menu, says of the link with the CLI. */

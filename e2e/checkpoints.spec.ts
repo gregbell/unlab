@@ -25,14 +25,22 @@ interface Listed {
 	readonly name: string;
 	readonly state: string;
 	readonly reason?: string;
-	readonly saving?: string;
 	readonly checkpoints: readonly { readonly name: string; readonly bytes: number }[];
 }
 
 const listed = async (page: Page) => ((await call(page, "machines_list", {})) as { data: Listed[] }).data;
 
-/** The checkpoint that the machine is saving, while it is. */
-const saving = async (page: Page) => (await listed(page))[0]?.saving;
+/** `ls`, typed into the bar until it says what is given of the machine, as a person reads it there. */
+async function lsSays(page: Page, said: string | RegExp, timeout = 15_000): Promise<void> {
+	await expect(async () => {
+		await typed(page, "ls");
+		try {
+			await expect(bar(page)).toContainText(said, { timeout: 1_000 });
+		} finally {
+			await page.keyboard.press("Escape");
+		}
+	}).toPass({ timeout });
+}
 
 const names = async (page: Page) => (await listed(page)).map(({ checkpoints }) => checkpoints.map(({ name }) => name));
 
@@ -106,7 +114,7 @@ for (const image of ["alpine", "debian"]) {
 		await root(page, 1, "(sleep 1; echo late > /root/late) >/dev/null 2>&1 &");
 		await page.waitForTimeout(2500);
 		await typed(page, "checkpoint node1 before");
-		await expect.poll(() => names(page)).toEqual([["before"]]);
+		await lsSays(page, /checkpoint before \d+\.\d MiB/);
 		await root(page, 1, "kill -0 $(cat /tmp/pid)");
 		const [{ checkpoints }] = await listed(page);
 		expect(checkpoints).toEqual([{ name: "before", bytes: await bytesIn(page, saved(1, 1)) }]);
@@ -155,9 +163,9 @@ for (const image of ["alpine", "debian"]) {
 			.poll(() => shell(page, 1, "true").then(({ exitCode }) => exitCode, String), { timeout: 60_000 })
 			.toBe(0);
 		expect(await root(page, 1, "cat /root/note")).toBe("second");
-		expect(await names(page)).toEqual([["before"]]);
+		await lsSays(page, /checkpoint before \d+\.\d MiB/);
 		await typed(page, "checkpoint node1 after");
-		await expect.poll(() => names(page)).toEqual([["before", "after"]]);
+		await lsSays(page, /checkpoints before \d+\.\d MiB, after \d+\.\d MiB/);
 		await typed(page, "poweroff node1");
 		await status(page, "0 of 1 ready, 1 off");
 		expect(await call(page, "checkpoint_save", { machine: "node1", checkpoint: "off" })).toMatchObject({
@@ -198,9 +206,9 @@ test("a checkpoint is of one moment on every disk, however the guest writes mean
 	const counted = async () => Number(await root(page, 1, "cat /root/count"));
 	const from = await counted();
 	await typed(page, "checkpoint node1 moving");
-	await expect.poll(() => saving(page)).toBe("moving");
+	await lsSays(page, "saving moving");
 	const during = await counted();
-	await expect.poll(() => names(page), { timeout: 60_000 }).toEqual([["moving"]]);
+	await lsSays(page, /checkpoint moving \d+\.\d MiB/, 60_000);
 	const to = await counted();
 	expect(to - from, "it counted on while the disks were copied").toBeGreaterThan(20);
 
@@ -247,7 +255,7 @@ test("a reload while a checkpoint is saved leaves none of it, and one while a ma
 }) => {
 	await withCheckpoint(page);
 	await typed(page, "checkpoint node1 cut");
-	await expect.poll(() => saving(page)).toBe("cut");
+	await lsSays(page, "saving cut");
 	await expect.poll(() => databases(page)).toEqual([...kept(1, 0, 1), saved(1, 1), saved(1, 2)].sort());
 	const [worker] = page.workers().filter((w) => w.url().includes("vm-worker"));
 	// As when the browser goes down, the worker does not see that it has ended.
@@ -284,7 +292,7 @@ test("a reload while a checkpoint is saved leaves none of it, and one while a ma
 test("a machine can be removed while its disks are saved or restored, and nothing of it is left", async ({ page }) => {
 	await withCheckpoint(page);
 	await typed(page, "checkpoint node1 cut");
-	await expect.poll(() => saving(page)).toBe("cut");
+	await lsSays(page, "saving cut");
 	await confirmed(page, "rm node1", "Its checkpoint before is deleted too.");
 	await expect(rackRow(page, "node1")).toHaveCount(0);
 	await expect.poll(() => databases(page)).toEqual([]);
@@ -389,7 +397,7 @@ test("a restore that runs out of storage, or whose checkpoint is gone, fails wit
 test("what stops under a checkpoint that is being saved ends it, and what would is refused", async ({ page }) => {
 	await withCheckpoint(page);
 	await start(page, "save", "checkpoint_save", { machine: "node1", checkpoint: "cut" });
-	await expect.poll(() => saving(page)).toBe("cut");
+	await lsSays(page, "saving cut");
 	const busy = "node1 is saving checkpoint cut, so wait until it is done. Nothing was changed.";
 	for (const tool of ["machines_poweroff", "machines_reboot"]) {
 		expect(await call(page, tool, { names: "node1" })).toEqual({ error: busy });
@@ -405,7 +413,7 @@ test("what stops under a checkpoint that is being saved ends it, and what would 
 	await expect.poll(() => databases(page)).toEqual([...kept(1, 0, 1), saved(1, 1)].sort());
 
 	await start(page, "off", "checkpoint_save", { machine: "node1", checkpoint: "off" });
-	await expect.poll(() => saving(page)).toBe("off");
+	await lsSays(page, "saving off");
 	expect(await call(page, "machines_boot", { names: "node1" })).toEqual({
 		error: "node1 is saving a checkpoint, so wait until it is done. Nothing was changed.",
 	});
