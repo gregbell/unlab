@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { expect, type Page, test } from "@playwright/test";
 import { chromiumExecutable } from "../test/support/chromium.ts";
-import { fromMenu, openLab as openDesktop, root, screen, shell, status, typed } from "./lab.ts";
+import { fromMenu, openLab as openDesktop, rackRow, root, screen, shell, status, typed } from "./lab.ts";
 import { call, finish, start } from "./webmcp.ts";
 
 /** When set, the tests also save screenshots of an approval there. */
@@ -303,6 +303,8 @@ test("a machine that goes down or comes back while it writes a file says so, and
 		expect(await finish(page, "write")).toEqual({
 			error: `node1 ${why} while /etc/motd was being written, so check whether it was.`,
 		});
+		// The desktop's ready count can still show the machine as ready for a frame after the reboot is typed.
+		if (why === "rebooted") await expect(rackRow(page, "node1")).toContainText("booting");
 		await status(page, back);
 		if (why === "powered off") {
 			await typed(page, "boot node1");

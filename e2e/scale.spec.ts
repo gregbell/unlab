@@ -159,7 +159,13 @@ test("sixteen machines on two switches boot and each pings the others in its sub
 		await typed(page, `capture icmp ${name}`);
 		const routes = (await inspector(page)).locator(".row.frame .route");
 		await expect(routes.first()).toBeVisible();
-		for (const route of await routes.allTextContents()) expect(route).toMatch(new RegExp(`\\b${name}\\b`));
+		const named = new RegExp(`\\b${name}\\b`);
+		await expect
+			.poll(async () => (await routes.allTextContents()).filter((route) => !named.test(route)), {
+				message: `every route names ${name}`,
+			})
+			.toEqual([]);
+		expect(await routes.count()).toBeGreaterThan(0);
 	}
 
 	const record = [
