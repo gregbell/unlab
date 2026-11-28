@@ -104,7 +104,6 @@ describe("a lab saved before there were cables between switches", () => {
 	test("version 7 opens with its switches and what was plugged into each, and has no such cable", async () => {
 		const { state, cables, booted } = await open(savedBy(7));
 		expect(state.switches).toEqual(["switch0", "lan", "wan"]);
-		expect(state.shownSwitch).toBe("lan");
 		expect(state.switchCables).toEqual([]);
 		expect(cables).toEqual([
 			["node1", "eth0 10.88.0.11/24 up on port 3"],

@@ -10,7 +10,6 @@ import {
 	type Lifecycle,
 	type Machine,
 	type MachineName,
-	PANELS,
 	type Phase,
 	type Plug,
 	PORTS,
@@ -116,7 +115,6 @@ export function labWith(fixtures: readonly MachineFixture[], images: readonly Im
 				kind: id.endsWith(":console") ? "console" : "shell",
 				state: "open",
 				shell: "prompt",
-				agentLines: false,
 			};
 		}
 		rail.push(name);
@@ -132,7 +130,6 @@ export function labWith(fixtures: readonly MachineFixture[], images: readonly Im
 		portCosts: [],
 		departedSwitches: [],
 		switches: [DEFAULT_SWITCH],
-		shownSwitch: DEFAULT_SWITCH,
 		switchCables: [],
 		portVlans: [],
 		storms: {},
@@ -143,7 +140,6 @@ export function labWith(fixtures: readonly MachineFixture[], images: readonly Im
 		keyboard: { kind: "none" },
 		view: "lab",
 		agentPanel: false,
-		panels: { open: PANELS, maximised: null },
 		capture: { filter: "", paused: false, selected: null },
 		agent: {
 			webmcp: { kind: "absent" },

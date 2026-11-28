@@ -1,6 +1,5 @@
 import { html, type TemplateResult } from "lit";
 import { afterEach, describe, expect, it } from "vitest";
-import { selectRail } from "../../model/index.ts";
 import { UnlabElement } from "./element.ts";
 import { Select } from "./select.ts";
 import { lab, mount, ready, spawn, unmountAll } from "./testing.ts";
@@ -8,7 +7,7 @@ import { lab, mount, ready, spawn, unmountAll } from "./testing.ts";
 class SelectProbe extends UnlabElement {
 	renders = 0;
 	readonly view = new Select(this, (state) => state.view);
-	readonly rail = new Select(this, selectRail);
+	readonly rail = new Select(this, (state) => state.rail);
 
 	override render(): TemplateResult {
 		this.renders += 1;

@@ -1,6 +1,6 @@
 import { expect, type Page, test } from "@playwright/test";
 import { chromiumExecutable } from "../test/support/chromium.ts";
-import { crash, root, shell, typed } from "./lab.ts";
+import { crash, inspector, learned, root, shell, status, typed } from "./lab.ts";
 import { call } from "./webmcp.ts";
 
 /** When set, the tests also save screenshots of cables that were moved there. */
@@ -30,14 +30,12 @@ interface Row {
 async function openLab(page: Page): Promise<string[]> {
 	const errors: string[] = [];
 	page.on("pageerror", (e) => errors.push(e.message));
-	await page.goto("/?layout=classic");
+	await page.goto("/");
 	await expect(page.getByRole("heading", { name: "Your Linux lab in a tab." })).toBeVisible();
 	return errors;
 }
 
-const status = (page: Page, text: string) => expect(page.getByText(text)).toBeVisible({ timeout: 90_000 });
 const bar = (page: Page) => page.locator("unlab-command-bar");
-const dock = (page: Page) => page.locator("unlab-capture[mode=dock]");
 
 /** `lan: 1 node2:eth0 up, 2 node3:eth0 cut` for each switch, and the NICs that are in none. */
 async function wiring(page: Page): Promise<string[]> {
@@ -55,16 +53,6 @@ async function wiring(page: Page): Promise<string[]> {
 const reaches = async (page: Page, machine: number | string, address: string) =>
 	(await shell(page, machine, `ping -c 1 -W 1 ${address}`)).exitCode === 0;
 
-/** The machines that the switch has learned, on its panel. */
-async function learned(page: Page, on: string): Promise<string[]> {
-	await page.getByRole("button", { name: "Maximise switches" }).click();
-	await page.locator("unlab-switch").getByRole("combobox", { name: "Switch" }).selectOption(on);
-	await expect(page.locator("unlab-mac-table").getByRole("heading")).toHaveText(`${on} mac address table`);
-	const names = await page.locator("unlab-mac-table tbody .machine").allTextContents();
-	await page.keyboard.press("Escape");
-	return names;
-}
-
 /** What its machine would lose if it stopped. */
 const life = (page: Page, machine: number) =>
 	root(page, machine, "cat /proc/sys/kernel/random/boot_id; pidof sleep; ls /run/kept");
@@ -75,9 +63,9 @@ test("a cable moves to another switch, at its lowest free port or one that is na
 	const errors = await openLab(page);
 	await typed(page, "mkswitch lan");
 	await typed(page, "spawn 2 alpine --no-gateway");
-	await status(page, "2 of 2 ready");
+	await status(page, "2 of 2 ready", 90_000);
 	await typed(page, "spawn 1 alpine --net lan --no-gateway");
-	await status(page, "3 of 3 ready");
+	await status(page, "3 of 3 ready", 90_000);
 	await root(page, 1, "nohup sleep 9999 > /dev/null 2>&1 < /dev/null & touch /run/kept");
 	const before = await life(page, 1);
 	expect(await reaches(page, 1, "node2")).toBe(true);
@@ -86,8 +74,8 @@ test("a cable moves to another switch, at its lowest free port or one that is na
 
 	// By a person, without naming the port.
 	await typed(page, "plug node1 lan");
-	await expect(dock(page)).toContainText("switch0 port 1 link down. Cable to node1 unplugged by you.");
-	await expect(dock(page)).toContainText("lan port 2 link up. Cable to node1 plugged in by you.");
+	await expect(await inspector(page)).toContainText("switch0 port 1 link down. Cable to node1 unplugged by you.");
+	await expect(await inspector(page)).toContainText("lan port 2 link up. Cable to node1 plugged in by you.");
 	expect(await wiring(page)).toEqual(["switch0: 2 node2:eth0 up", "lan: 1 node3:eth0 up, 2 node1:eth0 up"]);
 	expect(await learned(page, "switch0")).toEqual(["node2"]);
 	expect(await reaches(page, 1, "node3")).toBe(true);
@@ -115,8 +103,8 @@ test("a cable moves to another switch, at its lowest free port or one that is na
 
 	// A cut cable moves as it is.
 	await typed(page, "link down node1");
-	await expect(dock(page)).toContainText("lan port 7 link down. Cable to node1 cut by you.");
-	await expect(dock(page)).not.toContainText("lan port 7 link down. Cable to node1 unplugged");
+	await expect(await inspector(page)).toContainText("lan port 7 link down. Cable to node1 cut by you.");
+	await expect(await inspector(page)).not.toContainText("lan port 7 link down. Cable to node1 unplugged");
 	expect(await call(page, "cable_plug", { nic: "node1", to: "switch0:8" })).toMatchObject({
 		result: "node1 plugged into switch0 port 8 · cut",
 		data: { link: "cut" },
@@ -137,7 +125,7 @@ test("a cable moves to another switch, at its lowest free port or one that is na
 	await typed(page, "plug node1 lan:4");
 	expect(await reaches(page, 1, "node3")).toBe(true);
 	expect(await life(page, 1)).toBe(before);
-	await status(page, "3 of 3 ready");
+	await status(page, "3 of 3 ready", 90_000);
 	expect(errors).toEqual([]);
 });
 
@@ -147,7 +135,7 @@ test("a moved or unplugged cable is where a reload, a reboot, a restore and a bo
 	await openLab(page);
 	await typed(page, "mkswitch lan");
 	await typed(page, "spawn 3 alpine --no-gateway");
-	await status(page, "3 of 3 ready");
+	await status(page, "3 of 3 ready", 90_000);
 	expect(await call(page, "checkpoint_save", { machine: "node1", checkpoint: "before" })).not.toHaveProperty("error");
 	await typed(page, "plug node1 lan:4");
 	await typed(page, "plug node2 lan:6");
@@ -156,23 +144,23 @@ test("a moved or unplugged cable is where a reload, a reboot, a restore and a bo
 	expect(await wiring(page)).toEqual(moved);
 
 	await page.reload();
-	await status(page, "3 of 3 ready");
+	await status(page, "3 of 3 ready", 90_000);
 	expect(await wiring(page)).toEqual(moved);
 	expect(await reaches(page, 1, "node2")).toBe(true);
 
 	expect(await call(page, "machines_reboot", { names: "node1" })).toMatchObject({ data: [{ state: "ready" }] });
 	await typed(page, "restore node1 before");
 	await bar(page).getByRole("button", { name: "Restore node1" }).click();
-	await status(page, "2 of 3 ready");
-	await status(page, "3 of 3 ready");
+	await status(page, "2 of 3 ready", 90_000);
+	await status(page, "3 of 3 ready", 90_000);
 	expect(await wiring(page)).toEqual(moved);
 	expect(await reaches(page, 1, "node2")).toBe(true);
 
 	// It gives its port up when it fails, and boots on the switch that the cable was moved to.
 	for (const machine of [1, 3]) await crash(page, machine);
-	await status(page, "1 of 3 ready, 2 failed");
+	await status(page, "1 of 3 ready, 2 failed", 90_000);
 	await typed(page, "boot node1,node3");
-	await status(page, "3 of 3 ready");
+	await status(page, "3 of 3 ready", 90_000);
 	expect(await wiring(page)).toEqual(["switch0: ", "lan: 1 node1:eth0 up, 6 node2:eth0 up", "unplugged: node3:eth0"]);
 	expect(await reaches(page, 1, "node2")).toBe(true);
 });
@@ -181,9 +169,9 @@ test("a NIC that link up plugged in stays plugged in when its machine fails and 
 	await openLab(page);
 	await typed(page, "mkswitch lan");
 	await typed(page, "spawn 1 alpine --net lan --no-gateway");
-	await status(page, "1 of 1 ready");
+	await status(page, "1 of 1 ready", 90_000);
 	await typed(page, "spawn 1 alpine --no-net --no-gateway");
-	await status(page, "2 of 2 ready");
+	await status(page, "2 of 2 ready", 90_000);
 	await typed(page, "rmswitch lan");
 	await page.keyboard.press("Enter");
 	await expect.poll(() => wiring(page)).toEqual(["switch0: ", "unplugged: node1:eth0, node2:eth0"]);
@@ -192,12 +180,12 @@ test("a NIC that link up plugged in stays plugged in when its machine fails and 
 	expect(await wiring(page)).toEqual(back);
 
 	for (const machine of [1, 2]) await crash(page, machine);
-	await status(page, "0 of 2 ready, 2 failed");
+	await status(page, "0 of 2 ready, 2 failed", 90_000);
 	// A reload before the boot changes nothing of it.
 	await page.reload();
-	await status(page, "0 of 2 ready, 2 failed");
+	await status(page, "0 of 2 ready, 2 failed", 90_000);
 	await typed(page, "boot node1,node2");
-	await status(page, "2 of 2 ready");
+	await status(page, "2 of 2 ready", 90_000);
 	expect(await wiring(page)).toEqual(back);
 	expect(await reaches(page, 1, "node2")).toBe(true);
 });
@@ -208,11 +196,11 @@ test("a machine with a NIC on each of two switches forwards a ping between them,
 	const errors = await openLab(page);
 	await typed(page, "mkswitch lan");
 	await typed(page, "spawn 1 alpine --no-gateway --addr 10.1.0.2/24");
-	await status(page, "1 of 1 ready");
+	await status(page, "1 of 1 ready", 90_000);
 	await typed(page, "spawn 1 alpine --net lan --no-gateway --addr 10.2.0.2/24");
-	await status(page, "2 of 2 ready");
+	await status(page, "2 of 2 ready", 90_000);
 	await typed(page, "spawn 1 alpine --name router --nics 2 --no-gateway --addr 10.1.0.1/24,10.2.0.1/24");
-	await status(page, "3 of 3 ready");
+	await status(page, "3 of 3 ready", 90_000);
 	await root(page, 1, "ip route add 10.2.0.0/24 via 10.1.0.1");
 	await root(page, 2, "ip route add 10.1.0.0/24 via 10.2.0.1");
 	await root(page, "router", "sysctl -w net.ipv4.ip_forward=1");
@@ -262,13 +250,13 @@ test("the package gateway works on any switch that eth0 is on, and --no-gateway 
 	await typed(page, "mkswitch lan");
 	await typed(page, "mkswitch wan");
 	await typed(page, "spawn 1 alpine --net lan");
-	await status(page, "1 of 1 ready");
+	await status(page, "1 of 1 ready", 90_000);
 	await typed(page, "spawn 1 alpine");
-	await status(page, "2 of 2 ready");
+	await status(page, "2 of 2 ready", 90_000);
 	await typed(page, "spawn 1 alpine --net lan --no-gateway");
-	await status(page, "3 of 3 ready");
+	await status(page, "3 of 3 ready", 90_000);
 	await typed(page, "spawn 1 alpine --no-net");
-	await status(page, "4 of 4 ready");
+	await status(page, "4 of 4 ready", 90_000);
 
 	const install = async (machine: number, name: string) => {
 		await root(page, machine, `apk add --quiet ${name}`);
@@ -280,7 +268,7 @@ test("the package gateway works on any switch that eth0 is on, and --no-gateway 
 	expect((await wiring(page))[2]).toBe("wan: 5 node2:eth0 up");
 	await install(2, "tree");
 	await page.reload();
-	await status(page, "4 of 4 ready");
+	await status(page, "4 of 4 ready", 90_000);
 	expect((await wiring(page))[2]).toBe("wan: 5 node2:eth0 up");
 	await install(2, "jq");
 
@@ -304,9 +292,9 @@ test("a full switch, a taken port and all else that cannot be plugged is refused
 	await openLab(page);
 	await typed(page, "mkswitch lan");
 	await typed(page, "spawn 1 alpine --no-gateway");
-	await status(page, "1 of 1 ready");
+	await status(page, "1 of 1 ready", 90_000);
 	await typed(page, "spawn 2 alpine --nics 4 --net lan --no-gateway");
-	await status(page, "3 of 3 ready");
+	await status(page, "3 of 3 ready", 90_000);
 	const before = await wiring(page);
 
 	const refused = async (nic: string, to: string, sentence: string) => {
@@ -337,18 +325,18 @@ test("a full switch, a taken port and all else that cannot be plugged is refused
 
 	// A machine that takes no change: one that boots, one that has failed.
 	await typed(page, "spawn 1 alpine --no-net --no-gateway");
-	await status(page, "3 of 4 ready, 1 booting");
+	await status(page, "3 of 4 ready, 1 booting", 90_000);
 	expect(await call(page, "cable_plug", { nic: "node4", to: "switch0:2" })).toEqual({
 		error: "plug wants a ready or off machine here, and node4 is still booting. Nothing was changed.",
 	});
-	await status(page, "4 of 4 ready");
+	await status(page, "4 of 4 ready", 90_000);
 	await crash(page, 1);
-	await status(page, "3 of 4 ready, 1 failed");
+	await status(page, "3 of 4 ready, 1 failed", 90_000);
 	await refused("node1", "switch0:2", "plug wants a ready or off machine here, and node1 has failed.");
 
 	// What the refusal says would work does.
 	await typed(page, "boot node1");
-	await status(page, "4 of 4 ready");
+	await status(page, "4 of 4 ready", 90_000);
 	await typed(page, "unplug node3:eth1");
 	expect(await call(page, "cable_plug", { nic: "node1", to: "lan" })).toMatchObject({
 		data: { switch: "lan", port: 6 },

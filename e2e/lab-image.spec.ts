@@ -1,18 +1,31 @@
 import { appendFileSync } from "node:fs";
 import { expect, type Page, test } from "@playwright/test";
+import type { MachineName } from "../src/model/index.ts";
+import type { UnlabApp } from "../src/ui/app/app.ts";
 import { chromiumExecutable } from "../test/support/chromium.ts";
-import { root, typed } from "./lab.ts";
+import { rackRow, root, status, typed } from "./lab.ts";
 
 test.use({
 	launchOptions: { executablePath: chromiumExecutable(), args: ["--enable-features=WebMCP"] },
 });
 
 async function openLab(page: Page): Promise<void> {
-	await page.goto("/?layout=classic");
+	await page.goto("/");
 	await expect(page.getByRole("heading", { name: "Your Linux lab in a tab." })).toBeVisible();
 }
 
-const ready = (page: Page, text: string) => expect(page.getByText(text)).toBeVisible({ timeout: 60_000 });
+const ready = (page: Page, said: string) => status(page, said);
+
+/** What the runtime timed the machine's boot at, read from the page's store: the desktop does not show it. */
+async function bootMs(page: Page, name: string): Promise<number> {
+	const ms = await page.evaluate((name) => {
+		const life =
+			document.querySelector<UnlabApp>("unlab-app")?.services?.store.state.machines[name as MachineName]?.life;
+		return life?.phase === "ready" ? life.bootMs : null;
+	}, name);
+	if (ms === null) throw new Error(`${name} is not ready`);
+	return ms;
+}
 
 const PROGRAMS = "tcpdump curl dig ssh sshd nginx strace sfdisk parted mkfs.ext4";
 
@@ -50,14 +63,12 @@ test("a lab machine boots about as fast as an Alpine one", async ({ page }) => {
 	for (let n = 1; n <= 8; n++) {
 		const image = n % 2 === 1 ? "alpine" : "lab";
 		await typed(page, `spawn 1 ${image} --name ${image}-${n} --no-gateway`);
-		const fact = page.locator("unlab-machine-details").getByText(/^ready · \d+ ms$/);
-		await page.keyboard.press("Escape");
-		await typed(page, `focus ${image}-${n}`);
-		await expect(fact).toBeVisible({ timeout: 60_000 });
-		boots[image].push(Number(/\d+/.exec((await fact.textContent()) ?? "")?.[0]));
+		await expect(rackRow(page, `${image}-${n}`)).toHaveCount(1);
+		await ready(page, "1 of 1 ready");
+		boots[image].push(await bootMs(page, `${image}-${n}`));
 		await typed(page, `rm ${image}-${n}`);
 		await page.getByRole("button", { name: `Remove ${image}-${n}` }).click();
-		await expect(page.getByText(`${image}-${n}`, { exact: true })).toHaveCount(0);
+		await expect(rackRow(page, `${image}-${n}`)).toHaveCount(0);
 	}
 	const fastest = (image: "alpine" | "lab") => Math.min(...boots[image]);
 	const summary = `Boot to prompt, ms: alpine ${boots.alpine.join(", ")} · lab ${boots.lab.join(", ")}`;

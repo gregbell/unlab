@@ -4,7 +4,7 @@
 
 import { expect, type Page, test } from "@playwright/test";
 import { buildCli, freePort, type McpSession, TestCli } from "../test/support/cli.ts";
-import { openWithTwoMachines } from "./lab.ts";
+import { agentPanel, linkSaid, openWithTwoMachines } from "./lab.ts";
 
 const ORIGIN = `http://localhost:${process.env.E2E_PORT ?? 4173}`;
 
@@ -19,19 +19,6 @@ test.afterEach(() => cli.close());
 type Answer = Record<string, unknown>;
 const text = (answer: Answer) => (answer.result as { content: { text: string }[] }).content[0].text;
 const isError = (answer: Answer) => (answer.result as { isError?: boolean }).isError === true;
-
-/** A call that waits opens it by itself. */
-async function openPanel(page: Page) {
-	const panel = page.locator("unlab-agent-panel");
-	if (!(await panel.isVisible())) {
-		await page
-			.getByRole("contentinfo")
-			.getByRole("button", { name: /^webmcp:/ })
-			.click();
-	}
-	await expect(panel).toBeVisible();
-	return panel;
-}
 
 async function linked(page: Page): Promise<McpSession> {
 	const mcp = cli.mcp();
@@ -71,8 +58,8 @@ test("an agent that started before the lab linked gets its tools, and calls them
 		"node2",
 	]);
 
-	await expect(page.locator('unlab-cli-link [data-key="cli"]')).toHaveText("cli: linked, agent active");
-	const panel = await openPanel(page);
+	await expect(await linkSaid(page)).toHaveText("cli: linked, agent active");
+	const panel = await agentPanel(page);
 	await expect(panel.locator(".call").last()).toContainText("ls via cli");
 	const block = panel.locator("unlab-confirm");
 

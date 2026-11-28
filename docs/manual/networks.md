@@ -323,6 +323,15 @@ In **Rack manager**, select a switch to inspect each numbered port. Under
 or [Cutting and removing cables](#cutting-and-removing-cables) to interrupt
 traffic.
 
+In **Switch details**, scroll below **Ports** to **Counters** for the switch's
+frame totals and its count of active addresses. Under **MAC address table**,
+find an Ethernet address to see which port learned it. **Machine** identifies
+the interface when the address belongs to a lab machine. **Seen** shows how long
+ago the switch last received a frame from that address, or `flushed, link down`
+when the switch has stopped using the entry. Use
+[`macs`](#macs-list-learned-addresses) to read the tables for several switches
+together.
+
 ### `topology`: List the wiring
 
 ```text

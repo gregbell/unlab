@@ -2,7 +2,7 @@ import { expect, type Page, test } from "@playwright/test";
 import type { Topology } from "../src/commands/index.ts";
 import { chromiumExecutable } from "../test/support/chromium.ts";
 import { inGuests, scenarioLines, THREE_SUBNETS_WIRING, waitsForMachines, wiringOf } from "../test/support/scenario.ts";
-import { shell, typed } from "./lab.ts";
+import { learned, shell, switchDetails, typed } from "./lab.ts";
 import { call, registered } from "./webmcp.ts";
 
 test.use({
@@ -122,7 +122,7 @@ test("the recorded command set, typed into the bar, builds three subnets and two
 }) => {
 	const errors: string[] = [];
 	page.on("pageerror", (e) => errors.push(e.message));
-	await page.goto("/?layout=classic");
+	await page.goto("/");
 	await expect(page.getByRole("heading", { name: "Your Linux lab in a tab." })).toBeVisible();
 	for (const line of LINES) await run(page, line);
 
@@ -153,14 +153,7 @@ test("the recorded command set, typed into the bar, builds three subnets and two
 	const wired = wiringOf(await topology(page));
 	await crossed(page);
 	const carried = await lossy(page);
-	await page.locator("unlab-switch").getByRole("combobox", { name: "Switch" }).selectOption("edge");
-	const table = page.locator("unlab-mac-table");
-	await page.getByRole("button", { name: "Maximise switches" }).click();
-	await expect(table.locator("tbody .machine")).toHaveText(
-		["alice", "r2:eth0", "r2:eth1", "bob", "r1:eth0", "r1:eth1"],
-		{ useInnerText: true },
-	);
-	await page.keyboard.press("Escape");
+	await expect.poll(() => learned(page, "edge")).toEqual(["alice", "r2:eth0", "r2:eth1", "bob", "r1:eth0", "r1:eth1"]);
 
 	// Box 4: a reload, which boots every machine again with all that the lab held.
 	await page.reload();
@@ -168,9 +161,7 @@ test("the recorded command set, typed into the bar, builds three subnets and two
 	await allReady(page);
 	await expect.poll(async () => wiringOf(await topology(page))).toEqual(wired);
 	expect((await lossy(page)).delivered).toBeLessThan(carried.delivered);
-	await page.getByRole("button", { name: "Maximise switches" }).click();
-	await expect(table).toContainText("Nothing learned yet.");
-	await page.keyboard.press("Escape");
+	await expect(await switchDetails(page, "edge")).toContainText("Nothing learned yet.");
 	// A boot forgets routes and forwarding, so the lines that set them in the guests run again, and only those.
 	for (const line of LINES.filter(inGuests)) await run(page, line);
 	await crossed(page);

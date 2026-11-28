@@ -8,6 +8,7 @@ import {
 	DEFAULT_SWITCH,
 	disksOf,
 	type Machine,
+	machineList,
 	memoryGiven,
 	NOTHING_CARRIED,
 	nicPortsOf,
@@ -19,7 +20,6 @@ import {
 	selectCliSegment,
 	selectFocused,
 	selectPorts,
-	selectRail,
 	selectStorm,
 	selectSubnets,
 	stpOn,
@@ -30,10 +30,16 @@ import {
 import { addressStr } from "../../net/index.ts";
 import { maximiseIcon, parkIcon, restoreIcon } from "../base/icons.ts";
 import { closeIcon, UnlabElement } from "../base/index.ts";
-import { CLI_COMMAND, cliGuidance } from "../cli-link/cli-link.ts";
 import { AUTHOR_URL, LIVE_LAB_URL, REPO_URL, X_ACCOUNT, X_URL } from "../links.ts";
-import { peerPing } from "../machine-details/peer-ping.ts";
+import { CLI_COMMAND, cliGuidance } from "./cli-guidance.ts";
+import { peerPing } from "./peer-ping.ts";
+import "../command-bar/command-bar.ts";
+import "../terminal/terminal.ts";
 import "../share-ssh/share-ssh.ts";
+import "../whats-new/whats-new.ts";
+import "../capture/capture.ts";
+import "../spawn-form/spawn-form.ts";
+import "../agent-panel/agent-panel.ts";
 import {
 	alignWithLab,
 	type Box,
@@ -49,6 +55,7 @@ import "./topology.ts";
 import type { Device, Selection } from "./topology.ts";
 import "./desktop.css";
 import "./machine-wizard.ts";
+import "./mac-table.ts";
 
 import type { SpawnChoice } from "../spawn-form/form.ts";
 import { type Icon, icon, launcherMark } from "./icons.ts";
@@ -173,10 +180,7 @@ class Desktop extends UnlabElement {
 		const name = selectFocused(this.lab) ?? this.lab.rail[0];
 		if (name) {
 			this.picked = { kind: "machine", name };
-			if (!localStorage.getItem(storage)) {
-				const session = this.lab.machines[name]?.activeSession;
-				if (session) this.showSession(session, false, startupBoxes().terminal(0));
-			}
+			if (!localStorage.getItem(storage)) this.openConsoles(name);
 		}
 		let previous = this.lab;
 		this.unsub = this.app.store.subscribe(() => {
@@ -302,6 +306,20 @@ class Desktop extends UnlabElement {
 			this.requestUpdate();
 		}, 1000);
 		this.restoreShells();
+	}
+	/** A lab with no desktop of its own yet opens each console as a first boot does: an agent reads a console only once it is drawn. */
+	private openConsoles(focused: Machine["name"]) {
+		const boxes = startupBoxes();
+		const columns = boxes.narrow ? 1 : 2;
+		const names = [focused, ...this.lab.rail.filter((n) => n !== focused)];
+		for (const [index, name] of names.entries()) {
+			const session = this.lab.machines[name]?.activeSession;
+			if (!session) continue;
+			const win = this.showSession(session, false, index < columns ? boxes.terminal(index) : undefined);
+			if (index >= columns) win.state = "mini";
+		}
+		const front = this.lab.machines[focused]?.activeSession;
+		if (front) this.showSession(front, false);
 	}
 	private restoreShells() {
 		// A reload restarts the guests. Recreate one shell for each saved secondary terminal window.
@@ -1063,7 +1081,7 @@ class Desktop extends UnlabElement {
 		return html`<button type="button" class="dt-primary dt-terminal-icon" aria-label=${`Open terminal for ${name}`} title=${`Open terminal for ${name}`} @click=${() => this.console(name)}>${icon("console")}</button>`;
 	}
 	private pingAction(m: Machine) {
-		const { label, line } = peerPing(m.name, this.lab.machines, selectRail(this.lab));
+		const { label, line } = peerPing(m.name, machineList(this.lab));
 		return {
 			label,
 			disabled: !line || !ACCEPTS[m.life.phase].commands,
@@ -1127,7 +1145,7 @@ class Desktop extends UnlabElement {
 			<div><dt>Links up</dt><dd>${ports.filter((p) => p.state === "up").length}</dd></div>
 			${storm ? html`<div><dt>Storm</dt><dd>${storm.rate} looped frames a second · ${storm.dropped} dropped</dd></div>` : nothing}
 			${tree === null ? nothing : html`<div><dt>Spanning tree</dt><dd>${tree}</dd></div>`}</dl>
-			<h3>Ports</h3><table class="dt-ports" aria-label=${`Ports on ${name}`}><thead><tr><th>Port</th><th>Machine</th><th>Link</th>${vlans ? html`<th>VLAN</th>` : nothing}${conditions ? html`<th>Conditions</th>` : nothing}${steered ? html`<th>Spanning tree</th>` : nothing}<th aria-label="Cable action"></th></tr></thead>
+			<h3>Ports</h3><table class="dt-ports" aria-label=${`Ports on ${name}`}><thead><tr><th>Port</th><th>Machine</th><th>Link</th>${vlans ? html`<th>VLAN</th>` : nothing}${conditions ? html`<th>Conditions</th>` : nothing}${steered ? html`<th>Spanning tree</th>` : nothing}<th><span class="visually-hidden">Cable action</span></th></tr></thead>
 			<tbody>${ports.map((p) => {
 				const m = p.machine,
 					cable = p.cable,
@@ -1139,7 +1157,8 @@ class Desktop extends UnlabElement {
 				${conditions ? html`<td>${cableText(p)}</td>` : nothing}
 				${steered ? html`<td>${treeText(p)}</td>` : nothing}
 				<td>${line ? html`<button class="dt-primary" ?disabled=${!p.actionLabel} title=${p.actionLabel ?? nothing} @click=${() => this.run(`link ${p.state === "cut" ? "up" : "down"} ${line}`)}>${p.state === "cut" ? "Reconnect" : "Cut cable"}</button>${cable ? html` <button class="dt-primary" title=${`Remove the cable to ${farEnd(cable)}`} @click=${() => this.run(`uncable ${cable.label}`)}>Remove</button>` : nothing}` : html`<button class="dt-primary" @click=${() => this.patchInterface("", `${name}:${p.port}`)}>Patch</button>`}</td></tr>`;
-			})}</tbody></table></div>`;
+			})}</tbody></table>
+			<unlab-mac-table .switch=${name}></unlab-mac-table></div>`;
 	}
 	private topologyBody() {
 		return html`<unlab-topology class="dt-map n-network" .lab=${this.lab} .selected=${this.picked} .pick=${this.pickOnMap}></unlab-topology>`;
@@ -1190,7 +1209,7 @@ class Desktop extends UnlabElement {
 		<p>A Linux network lab in your browser. Boot guests, wire them to virtual switches, and watch the packets move between them.</p>
 		<p>Built by <a href=${AUTHOR_URL} target="_blank" rel="noopener noreferrer">Greg Bell</a> with <a href="https://unkernel.dev/" target="_blank" rel="noopener noreferrer">unkernel</a>, the WebAssembly Linux runtime by Pooya Parsa and contributors.</p>
 		<div class="dt-about-links"><a href=${REPO_URL} target="_blank" rel="noopener noreferrer">Source on GitHub ↗</a><a href=${X_URL} target="_blank" rel="noopener noreferrer">${X_ACCOUNT} on X ↗</a></div>
-		<unlab-whats-new inline></unlab-whats-new></article>`;
+		<unlab-whats-new></unlab-whats-new></article>`;
 	}
 	private content(w: Win) {
 		switch (w.kind) {

@@ -807,7 +807,6 @@ export function createEngine(deps: EngineDeps): Engine {
 					}
 					s.injection = injection;
 					mark = s.screen.beginMark(source === "agent" ? "agent" : "bar", line);
-					if (source === "agent") dispatch({ type: "session/marked", session, source: "agent" });
 					send(s, vm, `${line}\r`);
 				};
 

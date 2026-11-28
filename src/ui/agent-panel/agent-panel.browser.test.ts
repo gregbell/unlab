@@ -213,6 +213,15 @@ describe("<unlab-agent-panel>", () => {
 		await expect.poll(() => approve().disabled, { timeout: 2_000 }).toBe(false);
 	});
 
+	it("arms its approve buttons after a move in the page that came while they were disarmed", async () => {
+		const { element } = await mount("unlab-agent-panel", { state: lab(spawn(3), ready(), ...ACTIVE, WAITING) });
+		const approve = page.getByRole("button", { name: "Remove node3", exact: true });
+		await expect.element(approve).toBeDisabled();
+		const host = element.parentElement;
+		host?.append(document.createElement("div"), element);
+		await expect.element(approve, { timeout: 2_000 }).toBeEnabled();
+	});
+
 	it("stacks waiting calls oldest first", async () => {
 		const { element } = await mount("unlab-agent-panel", {
 			state: lab(

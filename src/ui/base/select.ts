@@ -5,7 +5,7 @@ import type { AppServices } from "../services.ts";
 export type SelectHost = ReactiveControllerHost & { readonly app: AppServices };
 
 /**
- * The one store binding: `readonly #rows = new Select(this, selectRail)` in a
+ * The one store binding: `readonly #names = new Select(this, selectNames)` in a
  * field. It subscribes while the host is connected and asks for a render only
  * when the selected value changes by `Object.is`. Model selectors are
  * memoised, so a derived list keeps its identity until its inputs change.

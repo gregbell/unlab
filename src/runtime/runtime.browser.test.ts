@@ -144,7 +144,6 @@ describe.skipIf(!haveImage)("real kernels", () => {
 
 		const failed = await engine.exec.inject("node1:console", "false", "agent", never);
 		expect(failed).toMatchObject({ exitCode: 1, output: "", lastLine: "" });
-		expect(events).toContainEqual({ type: "session/marked", session: "node1:console", source: "agent" });
 
 		await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 		expect(console1.marks().map((m) => m.source)).toEqual(["bar", "agent"]);

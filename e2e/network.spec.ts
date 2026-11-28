@@ -1,7 +1,21 @@
 import { expect, type Page, test } from "@playwright/test";
-import { openWithTwoMachines } from "./lab.ts";
+import { chromiumExecutable } from "../test/support/chromium.ts";
+import {
+	consoleOf,
+	inspector,
+	macTable,
+	openWithTwoMachines,
+	portRow,
+	rack,
+	switchCapture,
+	switchDetails,
+} from "./lab.ts";
 
-/** When set, the test also saves screenshots of the panels there, for comparing with the artboards. */
+test.use({
+	launchOptions: { executablePath: chromiumExecutable(), args: ["--enable-features=WebMCP"] },
+});
+
+/** When set, the test also saves screenshots of the windows there, for comparing with the artboards. */
 const shots = process.env.UI_SHOTS;
 
 async function shoot(page: Page, name: string): Promise<void> {
@@ -10,17 +24,19 @@ async function shoot(page: Page, name: string): Promise<void> {
 	await page.screenshot({ path: `${shots}/${name}.png` });
 }
 
-test("pings show in the dock; cutting a cable by its port floods, flushes and reconnects", async ({ page }) => {
+test("pings show in the switch's capture; cutting a cable by its port floods, flushes and reconnects", async ({
+	page,
+}) => {
 	const errors: string[] = [];
 	page.on("pageerror", (e) => errors.push(e.message));
 	await openWithTwoMachines(page);
 
-	const dock = page.locator("unlab-capture[mode=dock]");
-	const faceplate = page.locator("unlab-switch[compact]");
-	const rail = page.getByRole("complementary", { name: "Machines" });
-	const node2 = rail.getByRole("button", { name: /^node2\b/ });
+	const dock = await switchCapture(page, "switch0");
+	/** Port 2 in switch0's details, brought in front of the capture windows. */
+	const port2 = async () => portRow(await switchDetails(page, "switch0"), 2);
+	const strip = rack(page).locator('[data-switch="switch0"] .dt-port-block').nth(1);
 
-	const console1 = page.locator("#panel-node1-console");
+	const console1 = (await consoleOf(page, "node1")).locator(".wterm");
 	await console1.click();
 	await page.keyboard.press("Control+/");
 	await page.keyboard.type("exec node1 -- ping -c 2 10.88.0.12");
@@ -32,15 +48,17 @@ test("pings show in the dock; cutting a cable by its port floods, flushes and re
 	});
 	await expect(dock.getByRole("listitem").filter({ hasText: "node1 → node2" }).first()).toBeVisible();
 	await expect(console1).toContainText("packet loss", { timeout: 30_000 });
-	await shoot(page, "dock-pinging");
+	await shoot(page, "capture-pinging");
 
-	await faceplate.getByRole("button", { name: "Cut the cable from node2 to port 2" }).click();
+	const cut = (await port2()).getByRole("button", { name: "Cut cable" });
+	await expect(cut).toHaveAttribute("title", "Cut the cable from node2 to port 2");
+	await cut.click();
 	await expect(dock.getByRole("listitem").filter({ hasText: "port 2 link down" })).toContainText(
 		"Cable to node2 cut by you.",
 	);
-	await expect(node2).toContainText("cut");
-	await expect(faceplate.locator('[data-port="2"] .word')).toHaveText("cut");
-	await expect(page.getByText("1 of 2 links up")).toBeVisible();
+	await expect(strip).toHaveAttribute("data-state", "cut");
+	await expect((await port2()).locator("td[data-state]")).toHaveText("cut");
+	await expect(rack(page).locator(".dt-rackfoot")).toContainText("1 link up");
 
 	// The console takes the line once its shell is back at a prompt; until then exec refuses it.
 	await expect(async () => {
@@ -50,36 +68,32 @@ test("pings show in the dock; cutting a cable by its port floods, flushes and re
 		await expect(dock.getByText(/unknown destination, flooded/).first()).toBeVisible({ timeout: 5_000 });
 	}).toPass({ timeout: 30_000 });
 	await page.keyboard.press("Escape");
-	await shoot(page, "dock-cut");
+	await shoot(page, "capture-cut");
 
-	await page.getByRole("button", { name: "Maximise switch0" }).click();
-	const macTable = page.locator("unlab-mac-table");
-	await expect(macTable.locator("tr", { hasText: "node2" })).toContainText("flushed, link down");
-	await expect(macTable.locator("tr", { hasText: "node1" })).toContainText("s ago");
+	const table = await macTable(page, "switch0");
+	await expect(table.getByRole("row", { name: /node2/ })).toContainText("flushed, link down");
+	await expect(table.getByRole("row", { name: /node1/ })).toContainText("s ago");
+	await shoot(page, "switch-details");
 
-	await shoot(page, "switch-maximised");
-
-	await page.getByRole("button", { name: "Maximise switch0" }).click();
-	await page.getByRole("button", { name: "Maximise capture" }).click();
-	const full = page.locator("unlab-capture[mode=full]");
+	await page.keyboard.press("Control+/");
+	await page.keyboard.type("capture");
+	await page.keyboard.press("Enter");
+	const full = await inspector(page);
 	await full.getByRole("textbox", { name: "filter" }).fill("icmp");
 	const list = full.getByRole("listbox", { name: "Captured frames" });
 	await list.focus();
 	await page.keyboard.press("ArrowUp");
 	await expect(full.locator("unlab-frame-detail")).toContainText("icmp echo request");
 	await expect(full.locator("unlab-frame-detail .did")).toContainText("did not know where node2 is");
-	await shoot(page, "capture-maximised");
+	await shoot(page, "packet-inspector");
 
-	await page.keyboard.press("Escape");
-	await expect(full).toHaveCount(0);
-	await expect(console1).toBeVisible();
-	await expect(faceplate).toBeVisible();
-
-	await faceplate.getByRole("button", { name: "Reconnect the cable from node2 to port 2" }).click();
+	const reconnect = (await port2()).getByRole("button", { name: "Reconnect" });
+	await expect(reconnect).toHaveAttribute("title", "Reconnect the cable from node2 to port 2");
+	await reconnect.click();
 	await expect(dock.getByRole("listitem").filter({ hasText: "port 2 link up" }).last()).toContainText(
 		"Cable to node2 reconnected by you.",
 	);
-	await expect(node2).toContainText("up");
-	await expect(faceplate.locator('[data-port="2"] .word')).toHaveText("up");
+	await expect(strip).toHaveAttribute("data-state", "up");
+	await expect((await port2()).locator("td[data-state]")).toHaveText("up");
 	expect(errors).toEqual([]);
 });

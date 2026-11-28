@@ -75,10 +75,10 @@ Bring the terminal you last used on a machine to the front, or select a session
 by name. Enter the command in the command bar or at the CLI prompt. If the
 machine is ready, you can type in the terminal immediately.
 
-| Option   | Meaning                                                                                                                                                          |
-| -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--main` | Bring the terminal forward. In the classic tiled layout, put it in the first position. With three terminals in two columns, that position fills the left column. |
-| `--max`  | Maximize the terminal, or restore its size if it is already maximized.                                                                                           |
+| Option   | Meaning                                                                |
+| -------- | ---------------------------------------------------------------------- |
+| `--main` | Bring the terminal window to the front.                                |
+| `--max`  | Maximize the terminal, or restore its size if it is already maximized. |
 
 With `node2` ready, enter `focus node2:console`.
 

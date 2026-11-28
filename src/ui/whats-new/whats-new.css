@@ -3,83 +3,11 @@
 
 @layer components {
 	@scope (unlab-whats-new) {
-		.opener {
-			display: inline-flex;
-			align-items: center;
-			gap: 6px;
-			min-height: 24px;
-			padding: 0;
-			border: 0;
-			background: transparent;
-			color: inherit;
-			text-shadow: inherit;
-			text-decoration: underline;
-			text-underline-offset: 3px;
-			cursor: pointer;
-		}
-
-		.opener:hover {
-			color: var(--link-hover);
-		}
-
 		.dot {
 			width: 6px;
 			height: 6px;
 			border-radius: 50%;
 			background: var(--agent);
-		}
-
-		dialog {
-			width: min(560px, 100vw - 2 * var(--gutter));
-			max-width: none;
-			max-height: min(680px, 100vh - 2 * var(--gutter));
-			padding: 0;
-			border: 1px solid var(--line-strong);
-			border-radius: var(--r-panel);
-			background: var(--base);
-			color: var(--text);
-			font-size: var(--fs-ui);
-			line-height: var(--lh-ui);
-			text-shadow: none;
-			overflow: hidden;
-		}
-
-		dialog[open] {
-			display: flex;
-		}
-
-		dialog::backdrop {
-			background: rgb(17 17 27 / 60%);
-		}
-
-		.sheet {
-			display: flex;
-			flex: 1 1 auto;
-			flex-direction: column;
-			min-width: 0;
-			min-height: 0;
-		}
-
-		.head {
-			display: flex;
-			flex: none;
-			align-items: center;
-			justify-content: space-between;
-			padding: 10px 10px 10px 20px;
-			border-bottom: 1px solid var(--line);
-		}
-
-		h2 {
-			font-size: var(--fs-title);
-			line-height: var(--lh-title);
-			font-weight: 600;
-		}
-
-		.scroll {
-			flex: 1 1 auto;
-			min-height: 0;
-			padding: 4px 20px 20px;
-			overflow-y: auto;
 		}
 
 		h3 {
@@ -141,16 +69,6 @@
 			color: var(--text);
 			font: inherit;
 			overflow-wrap: anywhere;
-		}
-
-		.foot {
-			display: flex;
-			flex: none;
-			flex-wrap: wrap;
-			justify-content: space-between;
-			gap: 4px var(--gutter);
-			padding: 12px 20px;
-			border-top: 1px solid var(--line);
 		}
 	}
 }

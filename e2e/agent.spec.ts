@@ -1,6 +1,6 @@
-import { expect, type Page, test } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 import { chromiumExecutable } from "../test/support/chromium.ts";
-import { openWithTwoMachines, root, typed } from "./lab.ts";
+import { agentPanel, fromMenu, openWithTwoMachines, rackRow, root, status, terminal, typed } from "./lab.ts";
 import { call, finish, registered, start } from "./webmcp.ts";
 
 /** When set, the test also saves the panel with a call waiting there, for comparing with the Agent artboard. */
@@ -10,14 +10,6 @@ const shots = process.env.UI_SHOTS;
 test.use({
 	launchOptions: { executablePath: chromiumExecutable(), args: ["--enable-features=WebMCP"] },
 });
-
-async function openPanel(page: Page) {
-	await page
-		.getByRole("contentinfo")
-		.getByRole("button", { name: /^webmcp:/ })
-		.click();
-	return page.locator("unlab-agent-panel");
-}
 
 test("an agent lists, asks to remove node2, and node2 goes once the person clicks Remove node2", async ({ page }) => {
 	const errors: string[] = [];
@@ -64,14 +56,14 @@ test("an agent lists, asks to remove node2, and node2 goes once the person click
 		annotations: { consequentialHint: false, readOnlyHint: true, untrustedContentHint: true },
 	});
 
-	const panel = await openPanel(page);
+	const panel = await agentPanel(page);
 	await expect(panel.getByRole("heading", { name: "webmcp" })).toBeVisible();
 
 	const listed = await call(page, "machines_list", {});
 	expect(listed).toMatchObject({ result: "2 machines · 2 ready · 512 MiB of memory" });
 	await expect(panel.locator(".call").first()).toContainText("ls");
 	await expect(panel.locator(".call").first()).toContainText("→ 2 machines · 2 ready");
-	await expect(page.getByRole("contentinfo").getByRole("button", { name: /agent active/ })).toBeVisible();
+	await expect(panel.locator(".state")).toHaveText("agent active");
 
 	const echoed = await call(page, "shell_exec", { targets: "node1", command: "echo hello" });
 	expect(echoed).toMatchObject({ data: { ran: [{ exitCode: 0, output: "hello", truncated: false }] } });
@@ -85,21 +77,20 @@ test("an agent lists, asks to remove node2, and node2 goes once the person click
 	await expect(block).toContainText("waiting for you");
 	await expect(block).toContainText("rm node2");
 	await expect(block).toContainText("There is no undo.");
-	await expect(page.getByText("webmcp: 1 call waiting for you")).toBeVisible();
+	await expect(panel.locator(".calls-head")).toContainText("1 waiting");
 	if (shots) {
 		await page.evaluate(() => document.fonts.ready);
 		await page.screenshot({ path: `${shots}/agent-waiting.png` });
 	}
 
-	const rail = page.getByRole("complementary", { name: "Machines" });
-	await expect(rail.getByRole("button", { name: /^node2\b/ })).toBeVisible();
+	await expect(rackRow(page, "node2")).toHaveCount(1);
 	await panel.getByRole("button", { name: "Remove node2", exact: true }).click();
 	expect(await finish(page, "remove")).toMatchObject({ result: "removed node2", data: { removed: ["node2"] } });
-	await expect(rail.getByRole("button", { name: /^node2\b/ })).toHaveCount(0);
+	await expect(rackRow(page, "node2")).toHaveCount(0);
 	await expect(block).toHaveCount(0);
 	await expect(panel.locator(".call").last()).toContainText("→ removed node2");
 
-	await page.keyboard.press("Escape");
+	await page.getByRole("button", { name: "Close WebMCP" }).click();
 	await expect(panel).toHaveCount(0);
 	expect(errors).toEqual([]);
 });
@@ -108,7 +99,7 @@ test("deny, abort, off and pause, each as the handoff says", async ({ page }) =>
 	const errors: string[] = [];
 	page.on("pageerror", (e) => errors.push(e.message));
 	await openWithTwoMachines(page);
-	const panel = await openPanel(page);
+	const panel = await agentPanel(page);
 	const block = panel.locator("unlab-confirm");
 
 	await start(page, "deny", "machines_remove", { names: "node1" });
@@ -116,7 +107,7 @@ test("deny, abort, off and pause, each as the handoff says", async ({ page }) =>
 	await panel.getByRole("button", { name: "Deny", exact: true }).click();
 	expect(await finish(page, "deny")).toEqual({ error: "Denied by the user." });
 	await expect(block).toHaveCount(0);
-	await expect(page.getByText("2 of 2 ready")).toBeVisible();
+	await status(page, "2 of 2 ready");
 
 	await start(page, "abort", "machines_spawn", { count: 1, image: "alpine" });
 	await expect(block).toContainText("Boot node3");
@@ -133,7 +124,7 @@ test("deny, abort, off and pause, each as the handoff says", async ({ page }) =>
 	await expect.poll(() => registered(page)).not.toContain("machines_list");
 	await panel.getByRole("button", { name: "pause tools" }).click();
 	await expect.poll(() => registered(page)).toEqual([]);
-	await expect(page.getByText("webmcp: paused")).toBeVisible();
+	await expect(panel.locator(".state")).toHaveText("tools paused");
 	await panel.getByRole("button", { name: "resume tools" }).click();
 	await expect.poll(() => registered(page)).toHaveLength(28);
 	expect(errors).toEqual([]);
@@ -143,23 +134,27 @@ test("a yes removes only what it was asked about: not a machine that took the na
 	page,
 }) => {
 	const changed = { error: "What this does to web has changed since it was asked, so ask again. Nothing was changed." };
-	await page.goto("/?layout=classic");
+	await page.goto("/");
 	await expect(page.getByRole("heading", { name: "Your Linux lab in a tab." })).toBeVisible();
-	const ready = expect(page.getByText("1 of 1 ready"));
 	await typed(page, "spawn 1 alpine --name web");
-	await ready.toBeVisible({ timeout: 60_000 });
+	await status(page, "1 of 1 ready");
 	const approve = page.locator("unlab-agent-panel").getByRole("button", { name: "Remove web", exact: true });
+	/** The person brings the WebMCP window back in front of the terminals that opened since, and says yes. */
+	const yes = async () => {
+		await fromMenu(page, "WebMCP");
+		await approve.click();
+	};
 
 	await start(page, "first", "machines_remove", { names: "web" });
 	await expect(approve).toBeVisible();
 	await typed(page, "rm web");
 	await expect(page.locator("unlab-command-bar unlab-confirm")).toContainText("Remove web?");
 	await page.keyboard.press("Enter");
-	await expect(page.locator("unlab-pane[machine=web]")).toHaveCount(0);
+	await expect(rackRow(page, "web")).toHaveCount(0);
 	await typed(page, "spawn 1 alpine --name web");
-	await ready.toBeVisible({ timeout: 60_000 });
+	await status(page, "1 of 1 ready");
 	await root(page, "web", "echo kept > /root/kept");
-	await approve.click();
+	await yes();
 	expect(await finish(page, "first")).toEqual(changed);
 	await expect(page.locator("unlab-agent-panel .call", { hasText: "rm web" })).toContainText(changed.error);
 	expect(await root(page, "web", "cat /root/kept")).toBe("kept");
@@ -167,14 +162,14 @@ test("a yes removes only what it was asked about: not a machine that took the na
 	await start(page, "second", "machines_remove", { names: "web" });
 	await expect(approve).toBeVisible();
 	await typed(page, "sh web");
-	await expect(page.getByRole("tab", { name: /sh1/ })).toBeVisible();
-	await approve.click();
+	await expect(terminal(page, "web", "sh1")).toBeVisible();
+	await yes();
 	expect(await finish(page, "second")).toEqual(changed);
 	expect(await root(page, "web", "cat /root/kept")).toBe("kept");
 
 	await start(page, "third", "machines_remove", { names: "web" });
 	await expect(page.locator("unlab-agent-panel unlab-confirm")).toContainText("Its console and 1 shell close");
-	await approve.click();
+	await yes();
 	expect(await finish(page, "third")).toMatchObject({ data: { removed: ["web"] } });
 });
 
@@ -187,14 +182,14 @@ test("output longer than the terminal keeps comes back as its end, flagged", asy
 });
 
 test("try a call makes a person's first call through the browser", async ({ page }) => {
-	await page.goto("/?layout=classic");
-	const panel = await openPanel(page);
+	await page.goto("/");
+	const panel = await agentPanel(page);
 	await panel.getByRole("button", { name: "try a call" }).click();
 	await expect(panel.locator(".call")).toHaveCount(1);
 	await expect(panel.locator(".call")).toContainText("ls");
 	await expect(panel.locator(".call")).toContainText("→ no machines yet");
 	await expect(panel.getByRole("button", { name: "try a call" })).toHaveCount(0);
-	await expect(page.getByRole("contentinfo").getByRole("button", { name: /agent active/ })).toBeVisible();
+	await expect(panel.locator(".state")).toHaveText("agent active");
 });
 
 for (const [where, width, height] of [
@@ -204,7 +199,7 @@ for (const [where, width, height] of [
 ] as const) {
 	test(`an agent's first boot asks in view on the empty lab: ${where}`, async ({ page }) => {
 		await page.setViewportSize({ width, height });
-		await page.goto("/?layout=classic");
+		await page.goto("/");
 		await expect(page.getByRole("heading", { name: "Your Linux lab in a tab." })).toBeVisible();
 		await expect.poll(() => registered(page)).toHaveLength(29);
 
@@ -213,7 +208,7 @@ for (const [where, width, height] of [
 		await expect(boot).toBeInViewport({ ratio: 1 });
 		await boot.click();
 		expect(await finish(page, "spawn")).toMatchObject({ data: { names: ["node1"] } });
-		await expect(page.getByText("1 of 1 ready")).toBeVisible({ timeout: 60_000 });
+		await status(page, "1 of 1 ready", 60_000);
 	});
 }
 

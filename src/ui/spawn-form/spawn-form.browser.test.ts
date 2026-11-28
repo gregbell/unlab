@@ -1,9 +1,21 @@
 import "../app/app.ts";
 import axe from "axe-core";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { page, userEvent } from "vitest/browser";
+import { page } from "vitest/browser";
 import type { LabState } from "../../model/index.ts";
-import { addSwitch, lab, mount, ready, spawn, switchNamed, tokenColor, unmountAll } from "../base/testing.ts";
+import {
+	addSwitch,
+	lab,
+	mount,
+	ready,
+	remove,
+	spawn,
+	stopped,
+	switchNamed,
+	tokenColor,
+	unmountAll,
+} from "../base/testing.ts";
+import type { SpawnChoice } from "./form.ts";
 
 beforeEach(() => page.viewport(1440, 900));
 afterEach(unmountAll);
@@ -13,11 +25,19 @@ const IMAGES = [
 	{ name: "debian", label: "debian 13" },
 ] as const;
 
-/** The Add machines view open over a lab that offers alpine and debian. */
-const opened = (state: LabState = lab()): LabState => ({ ...state, images: IMAGES, view: "spawn" });
+/** A lab that offers alpine and debian. */
+const offered = (state: LabState = lab()): LabState => ({ ...state, images: IMAGES });
 
-function mountForm(state = opened()) {
-	return mount("unlab-spawn-form", { state });
+/** The form as Welcome has it, handing what Customize is pressed with to `customized`. */
+async function mountForm(state = offered()) {
+	const customized: SpawnChoice[] = [];
+	const mounted = await mount("unlab-spawn-form", {
+		state,
+		prepare: (form) => {
+			form.customize = (choice) => customized.push(choice);
+		},
+	});
+	return { ...mounted, customized };
 }
 
 function the(selector: string): HTMLElement {
@@ -33,11 +53,9 @@ const rows = (): string[][] =>
 	);
 const button = (name: string) => page.getByRole("button", { name, exact: true });
 
-const customize = () => page.getByText("Customize machines", { exact: true }).click();
-
 describe("machine choices", () => {
 	it("previews the default pair and its switch before the first boot", async () => {
-		await mountForm();
+		const { customized } = await mountForm();
 		expect(text("h1")).toBe("Your Linux lab in a tab.");
 		expect(rows()).toEqual([
 			["node1", "10.88.0.11/24", "port 1"],
@@ -45,30 +63,29 @@ describe("machine choices", () => {
 		]);
 		expect(text(".network-summary")).toBe("alpine 3.24 · switch0");
 		await expect.element(button("Boot 2 machines")).toBeEnabled();
-		expect(the(".customize").hasAttribute("open")).toBe(false);
-		await customize();
-		await expect.element(page.getByRole("combobox", { name: "CPUs each" })).toHaveValue("2");
-		await expect.element(button("256 MiB")).toHaveAttribute("aria-pressed", "true");
+		await button("Customize machines").click();
+		expect(customized).toEqual([expect.objectContaining({ count: 2, image: "alpine", mem: 256, net: "switch0" })]);
 	});
-	it("updates the distribution and connection preview and boots the chosen settings", async () => {
-		const { runs } = await mountForm();
+	it("updates the distribution preview and boots the chosen settings", async () => {
+		const { runs, customized } = await mountForm();
 		await button("debian 13").click();
-		await customize();
-		await button("512 MiB").click();
-		await button("8 GiB").click();
-		await button("leave unplugged").click();
-		expect(text(".network-summary")).toBe("debian 13 · unplugged");
-		expect(rows().map((row) => row[2])).toEqual(["unplugged", "unplugged"]);
-		expect(text(".memory-note")).toBe("1 GiB of memory in total");
-		await button("Boot 2 machines").click();
-		expect(runs).toEqual([{ line: "spawn 2 debian --mem 512 --disk 8 --no-net", source: "button" }]);
+		await button("One fewer").click();
+		expect(text(".network-summary")).toBe("debian 13 · switch0");
+		expect(rows()).toEqual([["node1", "10.88.0.11/24", "port 1"]]);
+		await button("Boot 1 machine").click();
+		expect(runs).toEqual([{ line: "spawn 1 debian", source: "button" }]);
+		await button("Customize machines").click();
+		expect(customized).toEqual([expect.objectContaining({ count: 1, image: "debian" })]);
 	});
-	it("uses the next available identities and ports when adding to a lab", async () => {
-		await mountForm(opened(lab(spawn(3), ready())));
-		expect(text("h1")).toBe("Add machines");
+	it("uses the next available identities and ports in a lab whose machines are gone", async () => {
+		await mountForm(
+			offered(
+				lab(spawn(3), ready(), remove("node1", "node2", "node3"), stopped("node1"), stopped("node2"), stopped("node3")),
+			),
+		);
 		expect(rows()).toEqual([
-			["node4", "10.88.0.14/24", "port 4"],
-			["node5", "10.88.0.15/24", "port 5"],
+			["node4", "10.88.0.14/24", "port 1"],
+			["node5", "10.88.0.15/24", "port 2"],
 		]);
 	});
 });
@@ -81,11 +98,10 @@ describe("<unlab-spawn-form> stepper", () => {
 		expect(text(".count")).toBe("1");
 		await expect.element(button("One fewer")).toBeDisabled();
 		await expect.element(button("Boot 1 machine")).toBeEnabled();
-		expect(text(".memory-note")).toBe("256 MiB of memory in total");
 	});
 
 	it("goes no higher than the room the lab has left", async () => {
-		const { settle } = await mountForm(opened(lab(spawn(5), ready())));
+		const { settle } = await mountForm(offered(lab(spawn(5), ready())));
 		await button("One more").click();
 		expect(text(".count")).toBe("3");
 		await expect.element(button("One more")).toBeDisabled();
@@ -98,18 +114,12 @@ describe("<unlab-spawn-form> stepper", () => {
 		await expect.element(button("One more")).toBeDisabled();
 	});
 
-	it("goes no higher than the ports machines with several NICs have left, and boots unplugged past them", async () => {
+	it("goes no higher than the ports machines with several NICs have left", async () => {
 		const three = ["switch0", "switch0", "switch0"] as const;
-		const { settle, runs } = await mountForm(opened(lab(spawn(2, ...three), spawn(1), ready())));
+		await mountForm(offered(lab(spawn(2, ...three), spawn(1), ready())));
 		expect(text(".count")).toBe("1");
 		await expect.element(button("One more")).toBeDisabled();
 		expect(rows()).toEqual([["node4", "10.88.0.14/24", "port 8"]]);
-		await customize();
-		await button("leave unplugged").click();
-		await settle();
-		await expect.element(button("One more")).toBeEnabled();
-		await button("Boot 1 machine").click();
-		expect(runs.map((run) => run.line)).toEqual(["spawn 1 alpine --no-net"]);
 	});
 
 	it("counts up to eight in an empty lab", async () => {
@@ -118,14 +128,12 @@ describe("<unlab-spawn-form> stepper", () => {
 		await settle();
 		expect(text(".count")).toBe("8");
 		await expect.element(button("One more")).toBeDisabled();
-		await customize();
-		expect(page.getByText("0 of 8 ports left on switch0 afterwards.").query()).not.toBeNull();
 	});
 });
 
 describe("<unlab-spawn-form> preview", () => {
 	it("shows the bar's refusal and will not boot when the lab is full", async () => {
-		await mountForm(opened(lab(spawn(8), spawn(8, "none"), ready())));
+		await mountForm(offered(lab(spawn(8), spawn(8, "none"), ready())));
 		expect(text(".count")).toBe("1");
 		await expect.element(button("One fewer")).toBeDisabled();
 		await expect.element(button("One more")).toBeDisabled();
@@ -138,74 +146,24 @@ describe("<unlab-spawn-form> preview", () => {
 });
 
 describe("<unlab-spawn-form> with several switches", () => {
-	it("offers each, and names the one that each port is on", async () => {
-		const lan = switchNamed("lan");
-		const { element, runs, settle } = await mount("unlab-spawn-form", {
-			state: lab(addSwitch(lan), spawn(1), ready()),
-		});
-		element.querySelector("details")?.setAttribute("open", "");
-		const network = page.getByRole("group", { name: "Network" });
-		const choices = [...network.element().querySelectorAll("button")].map((button) => button.textContent?.trim());
-		expect(choices).toEqual(["plug into switch0", "plug into lan", "leave unplugged"]);
-		const ports = () => [...element.querySelectorAll(".you-get .port")].map((port) => port.textContent);
-		expect(ports()).toEqual(["switch0 port 2", "switch0 port 3"]);
-		await network.getByRole("button", { name: "plug into lan" }).click();
-		await settle();
-		expect(ports()).toEqual(["lan port 1", "lan port 2"]);
-		await page.getByRole("button", { name: "Boot 2 machines" }).click();
-		expect(runs.map((run) => run.line)).toEqual(["spawn 2 alpine --net lan"]);
+	it("names the switch that each port is on", async () => {
+		const { element } = await mountForm(offered(lab(addSwitch(switchNamed("lan")), spawn(1), ready())));
+		const ports = [...element.querySelectorAll(".you-get .port")].map((port) => port.textContent);
+		expect(ports).toEqual(["switch0 port 2", "switch0 port 3"]);
 	});
 });
 
-describe("<unlab-spawn-form> leaving", () => {
-	it("returns to an existing lab on Cancel", async () => {
-		const { runs, store } = await mountForm(opened(lab(spawn(1), ready())));
-		await button("Cancel").click();
-		expect(store.state.view).toBe("lab");
-		expect(runs).toEqual([]);
-	});
-});
-
-describe("<unlab-spawn-form> in the app", () => {
-	function mountApp(state: LabState) {
-		return mount("unlab-app", {
-			state,
+describe("<unlab-spawn-form> in Welcome", () => {
+	it("passes axe", async () => {
+		await mount("unlab-app", {
+			state: offered(),
 			prepare: (element, services) => {
 				element.services = services;
 			},
 		});
-	}
-
-	it("opens from the rail or header with fresh choices each time", async () => {
-		const { settle } = await mountApp({ ...lab(spawn(1), ready()), images: IMAGES });
-		expect(document.querySelector("unlab-spawn-form")).toBeNull();
-		await page
-			.getByRole("complementary", { name: "Machines" })
-			.getByRole("button", { name: "Add machines", exact: true })
-			.click();
-		await settle();
-		expect(document.querySelector<HTMLElement>("unlab-app .lab")?.hidden).toBe(true);
-		await button("debian 13").click();
-		await button("Cancel").click();
-		await settle();
-		expect(document.querySelector("unlab-spawn-form")).toBeNull();
-		await page.getByRole("banner").getByRole("button", { name: "Add machines", exact: true }).click();
-		await settle();
-		await expect.element(button("alpine 3.24")).toHaveAttribute("aria-pressed", "true");
-	});
-
-	it("returns to the lab on Esc", async () => {
-		const { store, settle } = await mountApp(opened(lab(spawn(1), ready())));
-		await button("One more").click();
-		await userEvent.keyboard("{Escape}");
-		await settle();
-		expect(store.state.view).toBe("lab");
-		expect(document.querySelector("unlab-spawn-form")).toBeNull();
-	});
-
-	it("passes axe", async () => {
-		const { element } = await mountApp(opened(lab(spawn(2), ready())));
-		const results = await axe.run(element);
+		const form = document.querySelector("unlab-spawn-form");
+		if (!form) throw new Error("Welcome has no form");
+		const results = await axe.run(form);
 		const failures = results.violations.flatMap((violation) =>
 			violation.nodes.map((node) => `${violation.id} at ${node.target.join(" ")}: ${node.failureSummary}`),
 		);
@@ -227,24 +185,8 @@ describe("<unlab-spawn-form> type and size", () => {
 		const boot = the(".button.primary");
 		expect(boot.getBoundingClientRect().height).toBe(44);
 		expect(getComputedStyle(boot).backgroundColor).toBe(tokenColor("text"));
-		await customize();
-		for (const name of ["One fewer", "One more", "alpine 3.24", "1 GiB", "leave unplugged"]) {
+		for (const name of ["One fewer", "One more", "alpine 3.24"]) {
 			expect(button(name).element().getBoundingClientRect().height, name).toBe(44);
 		}
-	});
-});
-
-const shots: string | undefined = import.meta.env.VITE_UI_SHOTS;
-
-describe.skipIf(!shots)("screenshots for comparing with the artboards", () => {
-	it("Add machines over a lab with three machines", async () => {
-		await mount("unlab-app", {
-			state: opened(lab(spawn(3), ready())),
-			prepare: (element, services) => {
-				element.services = services;
-			},
-		});
-		await document.fonts.ready;
-		await page.screenshot({ path: `${shots}/spawn-form.png` });
 	});
 });

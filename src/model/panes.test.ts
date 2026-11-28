@@ -6,16 +6,13 @@ import {
 	emptyPanes,
 	focusPane,
 	gridFor,
-	parkedPanes,
 	parkPane,
 	promotePane,
 	reconcilePanes,
 	removePane,
-	resizeArea,
 	toggleMaximise,
 	visiblePanes,
 } from "./panes.ts";
-import { tile } from "./tiling.ts";
 import type { MachineName, Panes, PanesParked, ParkReason } from "./types.ts";
 
 const name = (n: number): MachineName => `node${n}`;
@@ -124,36 +121,12 @@ describe("focus", () => {
 });
 
 describe("parking", () => {
-	test("the park button parks by hand, and the strip lists parked panes in pane order", () => {
+	test("parks by hand, as a saved lab can ask", () => {
 		let p = panes(4, 3, 2);
 		p = parkPane(p, "node3");
 		p = parkPane(p, "node1");
 		expect(p.parked).toEqual({ node1: "user", node3: "user" });
-		expect(parkedPanes(p)).toEqual(["node1", "node3"]);
 		expect(visiblePanes(p)).toEqual(["node2", "node4"]);
-	});
-
-	test("when capacity grows, automatically parked panes return, most recently focused first", () => {
-		let p = panes(4, 3, 2);
-		for (const m of names(4)) p = focusPane(p, m);
-		p = resizeArea(p, 400, 200);
-		expect(visiblePanes(p)).toEqual(["node4"]);
-		p = resizeArea(p, 800, 200);
-		expect(visiblePanes(p)).toEqual(["node3", "node4"]);
-		p = resizeArea(p, 1200, 200);
-		expect(visiblePanes(p)).toEqual(["node2", "node3", "node4"]);
-	});
-
-	test("panes parked by the user stay parked when capacity grows", () => {
-		let p = parkPane(panes(3, 1, 1), "node1");
-		p = resizeArea(p, 1200, 400);
-		expect(p.parked).toEqual({ node1: "user" });
-		expect(visiblePanes(p)).toEqual(["node2", "node3"]);
-	});
-
-	test("a resize that does not change the grid changes nothing", () => {
-		const p = panes(3, 3, 2);
-		expect(resizeArea(p, 1250, 450)).toBe(p);
 	});
 });
 
@@ -230,8 +203,7 @@ describe("maximise", () => {
 
 type Op =
 	| { readonly op: "add"; readonly count: number }
-	| { readonly op: "remove" | "focus" | "park" | "promote" | "maximise"; readonly pick: number }
-	| { readonly op: "resize"; readonly width: number; readonly height: number };
+	| { readonly op: "remove" | "focus" | "park" | "promote" | "maximise"; readonly pick: number };
 
 const pick = fc.nat({ max: 20 });
 const opArb: fc.Arbitrary<Op> = fc.oneof(
@@ -241,14 +213,6 @@ const opArb: fc.Arbitrary<Op> = fc.oneof(
 	{ weight: 2, arbitrary: fc.record({ op: fc.constant("park" as const), pick }) },
 	{ weight: 1, arbitrary: fc.record({ op: fc.constant("promote" as const), pick }) },
 	{ weight: 2, arbitrary: fc.record({ op: fc.constant("maximise" as const), pick }) },
-	{
-		weight: 2,
-		arbitrary: fc.record({
-			op: fc.constant("resize" as const),
-			width: fc.integer({ min: 0, max: 1700 }),
-			height: fc.integer({ min: 0, max: 700 }),
-		}),
-	},
 );
 const opsArb = fc.array(opArb, { maxLength: 40 });
 const areaArb = fc.record({ width: fc.integer({ min: 0, max: 1700 }), height: fc.integer({ min: 0, max: 700 }) });
@@ -259,7 +223,6 @@ function apply(p: Panes, op: Op, next: { n: number }): Panes {
 			p,
 			Array.from({ length: op.count }, () => name(next.n++)),
 		);
-	if (op.op === "resize") return resizeArea(p, op.width, op.height);
 	if (p.order.length === 0) return p;
 	const m = p.order[op.pick % p.order.length];
 	if (op.op === "remove") return removePane(p, m);
@@ -280,12 +243,6 @@ function reach(ops: readonly Op[], check: (p: Panes) => void = () => {}): Panes 
 	return p;
 }
 
-/** Panes the user parked that are out of sight. While one pane is maximised the reasons live in `before`. */
-const userParked = (p: Panes): MachineName[] => {
-	const parked = p.maximised ? p.maximised.before : p.parked;
-	return p.order.filter((m) => parked[m] === "user" && m !== p.maximised?.machine);
-};
-
 describe("pane properties", () => {
 	test("visible panes never exceed capacity, and nothing is lost or left dangling", () => {
 		fc.assert(
@@ -301,34 +258,6 @@ describe("pane properties", () => {
 					if (waiting && !p.maximised) expect(visible.length).toBe(capacity(p));
 				});
 			}),
-		);
-	});
-
-	test("the layout never makes a pane narrower than 400px or shorter than 200px", () => {
-		fc.assert(
-			fc.property(
-				opsArb,
-				fc.integer({ min: 400, max: 2400 }),
-				fc.integer({ min: 200, max: 1400 }),
-				(ops, width, height) => {
-					const p = resizeArea(reach(ops), width, height);
-					const tiling = tile(visiblePanes(p), p.grid);
-					const share = (template: string): number[] => {
-						const weights = [...template.matchAll(/(\d+)fr/g)].map((m) => Number(m[1]));
-						const total = weights.reduce((a, b) => a + b, 0);
-						return weights.map((w) => w / total);
-					};
-					const cols = share(tiling.columns);
-					const rows = share(tiling.rows);
-					for (const t of tiling.tiles) {
-						const [rowStart, colStart, rowEnd, colEnd] = t.area.split(" / ").map(Number);
-						const w = cols.slice(colStart - 1, colEnd - 1).reduce((a, b) => a + b, 0) * width;
-						const h = rows.slice(rowStart - 1, rowEnd - 1).reduce((a, b) => a + b, 0) * height;
-						expect(w).toBeGreaterThanOrEqual(400 - 1e-6);
-						expect(h).toBeGreaterThanOrEqual(200 - 1e-6);
-					}
-				},
-			),
 		);
 	});
 
@@ -359,7 +288,7 @@ describe("pane properties", () => {
 		fc.assert(
 			fc.property(opsArb, pick, (ops, i) => {
 				const p = reach(ops);
-				const parked = parkedPanes(p);
+				const parked = p.order.filter((m) => p.parked[m] !== undefined);
 				fc.pre(parked.length > 0 && !p.maximised);
 				const m = parked[i % parked.length];
 				const focused = focusPane(p, m);
@@ -423,20 +352,6 @@ describe("pane properties", () => {
 				const exact: PanesParked = p.parked;
 				expect(restored.parked).toEqual(exact);
 				expect(restored).toEqual(p);
-			}),
-		);
-	});
-
-	test("panes parked by the user never come back on a resize", () => {
-		fc.assert(
-			fc.property(opsArb, fc.array(areaArb, { minLength: 1, maxLength: 5 }), (ops, areas) => {
-				let p = reach(ops);
-				const byHand = userParked(p);
-				for (const area of areas) {
-					p = resizeArea(p, area.width, area.height);
-					expect(userParked(p)).toEqual(byHand);
-					for (const m of byHand) expect(visiblePanes(p)).not.toContain(m);
-				}
 			}),
 		);
 	});

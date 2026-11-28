@@ -1,18 +1,11 @@
 import { expect, type Page, test } from "@playwright/test";
 import { chromiumExecutable } from "../test/support/chromium.ts";
-import { crash, root, shell, typed } from "./lab.ts";
+import { configuration, crash, openLab, rackRow, root, shell, status, typed } from "./lab.ts";
 import { call } from "./webmcp.ts";
 
 test.use({
 	launchOptions: { executablePath: chromiumExecutable(), args: ["--enable-features=WebMCP"] },
 });
-
-async function openLab(page: Page): Promise<void> {
-	await page.goto("/?layout=classic");
-	await expect(page.getByRole("heading", { name: "Your Linux lab in a tab." })).toBeVisible();
-}
-
-const ready = (page: Page, text: string) => expect(page.getByText(text)).toBeVisible({ timeout: 60_000 });
 
 const databases = (page: Page) =>
 	page.evaluate(async () => (await indexedDB.databases()).map(({ name }) => name ?? "").sort());
@@ -38,15 +31,15 @@ test("extra disks are blank and sized as asked, take a partition and a file syst
 }) => {
 	await openLab(page);
 	await typed(page, "spawn 1 alpine --extra-disk 1,2");
-	await ready(page, "1 of 1 ready");
+	await status(page, "1 of 1 ready");
 
 	expect(await sizes(page, 1)).toMatchObject({ wdb: 4 * KIB * KIB, wdc: KIB * KIB, wdd: 2 * KIB * KIB });
 	expect(await sizes(page, 1)).not.toHaveProperty("wde");
 	expect(await root(page, 1, 'tr -d "\\000" < /dev/wdc | wc -c')).toBe("0");
 
-	const details = page.locator("unlab-machine-details");
+	const details = await configuration(page, "node1");
 	for (const [device, size] of Object.entries({ wdb: 4, wdc: 1, wdd: 2 })) {
-		await expect(details.locator(".fact", { hasText: `/dev/${device}` })).toContainText(`${size} GiB`);
+		await expect(details.locator("dl > div", { hasText: `/dev/${device}` })).toContainText(`${size} GiB`);
 	}
 	await typed(page, "ls");
 	await expect(page.locator("unlab-command-bar")).toContainText("/dev/wdb 4 GiB, /dev/wdc 1 GiB, /dev/wdd 2 GiB");
@@ -79,13 +72,13 @@ test("extra disks are blank and sized as asked, take a partition and a file syst
 		expect(await root(page, 1, "dd if=/dev/wdd bs=1M skip=100 count=1 2>/dev/null | head -c 3")).toBe("raw");
 	};
 	await page.reload();
-	await ready(page, "1 of 1 ready");
+	await status(page, "1 of 1 ready");
 	await held();
 
 	await crash(page, 1);
 	await expect(details).toContainText("failed", { timeout: 60_000 });
 	await typed(page, "boot node1");
-	await ready(page, "1 of 1 ready");
+	await status(page, "1 of 1 ready");
 	await held();
 });
 
@@ -94,7 +87,7 @@ test("rm lists every disk it deletes, once, and what a reload cut short is delet
 	await typed(page, "spawn 1 alpine --no-net --extra-disk 1,16");
 	await typed(page, "spawn 1 alpine --no-net --extra-disk 64");
 	await typed(page, "spawn 1 alpine --no-net");
-	await ready(page, "3 of 3 ready");
+	await status(page, "3 of 3 ready");
 	expect(await databases(page)).toEqual([...kept(1, 2), ...kept(2, 1), ...kept(3)].sort());
 
 	await typed(page, "rm node1");
@@ -103,7 +96,7 @@ test("rm lists every disk it deletes, once, and what a reload cut short is delet
 		"everything on its 3 disks is gone: /dev/wdb 4 GiB, /dev/wdc 1 GiB, /dev/wdd 16 GiB. There is no undo.",
 	);
 	await page.keyboard.press("Enter");
-	await expect(page.locator("unlab-pane[machine=node1]")).toHaveCount(0);
+	await expect(rackRow(page, "node1")).toHaveCount(0);
 	await expect.poll(() => databases(page)).toEqual([...kept(2, 1), ...kept(3)].sort());
 
 	await page.evaluate(() => {
@@ -113,10 +106,10 @@ test("rm lists every disk it deletes, once, and what a reload cut short is delet
 	});
 	await typed(page, "rm node2");
 	await page.keyboard.press("Enter");
-	await expect(page.locator("unlab-pane[machine=node2]")).toHaveCount(0);
+	await expect(rackRow(page, "node2")).toHaveCount(0);
 	expect(await databases(page)).toEqual(expect.arrayContaining(kept(2, 1)));
 	await page.reload();
-	await ready(page, "1 of 1 ready");
+	await status(page, "1 of 1 ready");
 	const left = [...kept(3), "kwdisk:unlab-node9.extra2-v1", "kwdisk:unlab-notes"].sort();
 	await expect.poll(() => databases(page)).toEqual(left);
 	expect(await sizes(page, 3)).toHaveProperty("wdb", 4 * KIB * KIB);
@@ -148,7 +141,7 @@ test("a machine the browser has no memory for fails naming memory and the size, 
 	const reason =
 		"The browser could not give node1 512 MiB of memory, so remove a machine or close other tabs, then boot it again.";
 	await typed(page, "spawn 1 alpine --no-net --mem 512");
-	await expect(page.locator("unlab-machine-details")).toContainText(reason);
+	await expect(await configuration(page, "node1")).toContainText(reason);
 	expect(await call(page, "machines_list", {})).toMatchObject({ data: [{ state: "failed", reason }] });
 });
 
@@ -161,10 +154,10 @@ async function limitStorage(page: Page, quotaSize?: number): Promise<void> {
 	});
 }
 
-/** The sentence a person sees in the details and an agent reads in the list. */
+/** The sentence a person sees in the machine's configuration and an agent reads in the list. */
 async function outOfStorage(page: Page, machine: string, device: string): Promise<void> {
 	const reason = `Browser storage is full, so ${machine}'s disk ${device} could not be saved: remove a machine or free some space, then boot it again.`;
-	await expect(page.locator("unlab-machine-details")).toContainText(reason);
+	await expect(await configuration(page, machine)).toContainText(reason, { timeout: 60_000 });
 	const { data } = (await call(page, "machines_list", {})) as { data: { name: string }[] };
 	expect(data.find(({ name }) => name === machine)).toMatchObject({ state: "failed", reason });
 }
@@ -179,13 +172,13 @@ for (const [device, file] of [
 		await openLab(page);
 		await limitStorage(page, 8e6);
 		await typed(page, "spawn 1 alpine --no-net --extra-disk 1");
-		await ready(page, "1 of 1 ready");
+		await status(page, "1 of 1 ready");
 		await shell(page, 1, `sudo sh -c "dd if=/dev/urandom of=${file} bs=1M count=32; sync"`).catch(() => {});
 		await outOfStorage(page, "node1", device);
 
 		await limitStorage(page);
 		await typed(page, "boot node1");
-		await ready(page, "1 of 1 ready");
+		await status(page, "1 of 1 ready");
 	});
 }
 
@@ -195,7 +188,7 @@ test("a machine the browser has no storage for fails naming storage and the disk
 	await typed(page, "spawn 1 alpine --no-net");
 	await outOfStorage(page, "node1", "/dev/wdb");
 	await typed(page, "spawn 1 alpine --no-net --extra-disk 1");
-	await expect(page.locator("unlab-pane[machine=node2]")).toBeVisible();
+	await expect(rackRow(page, "node2")).toHaveCount(1);
 	await typed(page, "focus node2");
 	await outOfStorage(page, "node2", "/dev/wdc");
 });

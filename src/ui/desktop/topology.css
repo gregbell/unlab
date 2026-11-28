@@ -56,7 +56,7 @@
 		stroke: var(--machine-hue, var(--agent));
 		stroke-width: 3;
 	}
-	/* Each state has its own dashes, so none is told by its colour alone. Dotted is a machine that is not up, as on a switch's faceplate. */
+	/* Each state has its own dashes, so none is told by its colour alone. Dotted is a machine that is not up. */
 	.wire:is([data-state="off"], [data-state="booting"], [data-state="stopping"]) {
 		stroke-dasharray: 2 4;
 	}

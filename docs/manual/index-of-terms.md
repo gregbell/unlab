@@ -232,7 +232,7 @@ Find a command, MCP tool, control, or subject in the [Manual](README.md).
 - [`lab_help`](commands-and-the-command-bar.md#help-look-up-a-command) (MCP
   tool)
 - [`--lan`](connecting-from-your-computer.md#internet-access)
-- [learned addresses](networks.md#macs-list-learned-addresses)
+- [learned addresses](networks.md#topology-and-counters)
 - [`link`](networks.md#link-cut-reconnect-or-change-cables)
 - [`link_set`](networks.md#link-cut-reconnect-or-change-cables) (MCP tool)
 - [links up, rack status](getting-started.md#first-boot)
@@ -247,7 +247,8 @@ Find a command, MCP tool, control, or subject in the [Manual](README.md).
 
 ## M
 
-- [MAC table](networks.md#macs-list-learned-addresses)
+- [MAC address table](networks.md#topology-and-counters)
+- [MAC table](networks.md#topology-and-counters)
 - [machine](introduction.md#the-lab)
 - [machine configuration](machines.md#machine-inventory)
 - [Machine creation](machines.md#machine-creation)

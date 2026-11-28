@@ -23,14 +23,12 @@ import {
 	saveCheckpoint,
 	selectTab,
 	sessionEnded,
-	sessionMarked,
 	sessionOpened,
 	sessionShell,
 	spawn,
 	stage,
 	stopped,
 } from "./machines.ts";
-import { ALL_OPEN, maximisePanel, parkPanel, restorePanels, toggleMaximisedPanel, unparkPanel } from "./panels.ts";
 import {
 	addPanes,
 	emptyPanes,
@@ -38,16 +36,14 @@ import {
 	gridFor,
 	keyboardHolder,
 	lastFocused,
-	parkPane,
 	promotePane,
 	removePane,
-	resizeArea,
 	toggleMaximise,
 	visiblePanes,
 } from "./panes.ts";
 import { later, patch, step } from "./step.ts";
 import { setCost, setPriority, setStp, settleStp, tree } from "./stp.ts";
-import { addSwitch, removeSwitch, showSwitch } from "./switches.ts";
+import { addSwitch, removeSwitch } from "./switches.ts";
 import {
 	type AgentCall,
 	type AgentState,
@@ -61,7 +57,6 @@ import {
 	LOG_LIMIT,
 	type LogEntry,
 	type MachineName,
-	type Panels,
 	type Panes,
 	type Policy,
 	type SessionId,
@@ -123,7 +118,6 @@ export function initialState(
 		departed: {},
 		departedSwitches: [],
 		switches: [DEFAULT_SWITCH],
-		shownSwitch: DEFAULT_SWITCH,
 		switchCables: [],
 		portVlans: [],
 		storms: {},
@@ -136,7 +130,6 @@ export function initialState(
 		keyboard: NOWHERE,
 		view: "lab",
 		agentPanel: false,
-		panels: ALL_OPEN,
 		capture: { filter: "", paused: false, selected: null },
 		agent: {
 			webmcp: { kind: "absent" },
@@ -203,8 +196,6 @@ function reduce(state: LabState, event: LabEvent): Step {
 			return sessionEnded(state, event.session);
 		case "session/shell":
 			return sessionShell(state, event.session, event.shell);
-		case "session/marked":
-			return sessionMarked(state, event.session, event.source);
 
 		case "cmd/spawn": {
 			const spawned = spawn(state, event.plan, event.at);
@@ -250,42 +241,18 @@ function reduce(state: LabState, event: LabEvent): Step {
 		case "cmd/cost":
 			return setCost(state, event.port, event.cost);
 		case "cmd/shell":
-			return shell(state, event.machine);
+			return openShell(state, event.machine);
 		case "cmd/focus":
 			return focus(state, event.target, event.mode);
 		case "cmd/capture":
-			return step(
-				patch(capture(state, { filter: event.filter }), {
-					view: "lab",
-					panels: maximisePanel(state.panels, "capture"),
-				}),
-			);
+			return step(patch(capture(state, { filter: event.filter }), { view: "lab" }));
 		case "cmd/logged":
 			return step(logged(state, { line: event.line, source: event.source, at: event.at, outcome: event.outcome }));
 
-		case "ui/pane-focused":
-		case "ui/unpark":
-			return showPane(state, event.machine, focusPane(state.panes, event.machine));
-		case "ui/maximise":
-			return showPane(state, event.machine, toggleMaximise(focusPane(state.panes, event.machine), event.machine));
-		case "ui/tab-selected":
-			return selectTab(state, event.session);
-		case "ui/park":
-			return step(patch(state, { panes: parkPane(state.panes, event.machine) }));
-		case "ui/area-resized":
-			return step(patch(state, { panes: resizeArea(state.panes, event.width, event.height) }));
 		case "ui/view":
 			return step(patch(state, { view: event.view }));
 		case "ui/agent-panel":
 			return step(patch(state, { agentPanel: event.open }));
-		case "ui/panel-unparked":
-			return panels(state, unparkPanel(state.panels, event.panel));
-		case "ui/panel-parked":
-			return panels(state, parkPanel(state.panels, event.panel));
-		case "ui/panel-maximised":
-			return panels(state, toggleMaximisedPanel(state.panels, event.panel));
-		case "ui/switch-shown":
-			return step(showSwitch(state, event.switch));
 		case "ui/bar":
 			return event.open ? openBar(state) : closeBar(state);
 		case "ui/capture-filter":
@@ -317,9 +284,8 @@ function reduce(state: LabState, event: LabEvent): Step {
 
 /**
  * What must hold after every change, kept in one place. Each machine has a
- * pane and no pane outlives its machine. No panel stays maximised once the
- * last machine is gone, or it would hide the next one. The keyboard is on a
- * visible pane whenever there is one. A port that nothing is in is in VLAN 1,
+ * pane and no pane outlives its machine. The keyboard is on a visible pane
+ * whenever there is one. A port that nothing is in is in VLAN 1,
  * and the switches treat each cable's frames as the lab has its conditions.
  * A switch takes part in the spanning tree only while it is there and told to.
  * The clock runs fast only while something boots.
@@ -336,10 +302,7 @@ function settle(before: LabState, reduced: Step): Step {
 function followMachines(state: LabState): LabState {
 	let panes = state.panes;
 	for (const name of panes.order) if (!state.machines[name]) panes = removePane(panes, name);
-	return patch(state, {
-		panes: addPanes(panes, state.rail),
-		panels: state.rail.length === 0 ? restorePanels(state.panels) : state.panels,
-	});
+	return patch(state, { panes: addPanes(panes, state.rail) });
 }
 
 /** When the pane that held the keyboard parks or goes, the visible pane focused before it takes over. */
@@ -365,24 +328,8 @@ function takeKeyboard(state: LabState, name: MachineName, panes: Panes): Step {
 	return step(withKeyboard(patch(state, { panes }), { kind: "pane", machine: name }));
 }
 
-/** As `takeKeyboard`, for a pane asked for by name, which a maximised panel must not cover. */
-function showPane(state: LabState, name: MachineName, panes: Panes): Step {
-	return takeKeyboard(state.machines[name] ? uncovered(state) : state, name, panes);
-}
-
-/** With no panel over the panes. */
-const uncovered = (state: LabState): LabState => patch(state, { panels: restorePanels(state.panels) });
-
-const panels = (state: LabState, next: Panels): Step => step(patch(state, { panels: next }));
-
-/** `sh`. The new shell takes the keyboard, so its pane comes out from under a maximised panel. */
-function shell(state: LabState, name: MachineName): Step {
-	const opened = openShell(state, name);
-	return opened.state === state ? opened : step(uncovered(opened.state), opened.effects);
-}
-
 /**
- * `focus`, from the bar or a rail row. A session target also selects its tab.
+ * `focus`, from the bar or a terminal window. A session target also selects its tab.
  * While the bar is open it keeps the keyboard and this decides where it returns.
  */
 function focus(state: LabState, target: MachineName | SessionId, mode: "plain" | "main" | "max"): Step {
@@ -396,7 +343,7 @@ function focus(state: LabState, target: MachineName | SessionId, mode: "plain" |
 	const panes = mode === "max" ? toggleMaximise(focused, name) : focused;
 	const keyboard: Keyboard =
 		tabbed.keyboard.kind === "bar" ? { kind: "bar", returnTo: name } : { kind: "pane", machine: name };
-	return step(withKeyboard(patch(uncovered(tabbed), { panes }), keyboard));
+	return step(withKeyboard(patch(tabbed, { panes }), keyboard));
 }
 
 function openBar(state: LabState): Step {

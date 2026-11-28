@@ -32,13 +32,8 @@
 			white-space: nowrap;
 		}
 
-		.toolbar > :is(.title, .status, .button, .window) {
+		.toolbar > :is(.title, .status, .button) {
 			flex: none;
-		}
-
-		.window {
-			display: flex;
-			gap: 2px;
 		}
 
 		.label {

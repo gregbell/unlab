@@ -84,7 +84,7 @@ export interface FilePort {
 	write(machine: MachineName, file: GuestFile, signal: AbortSignal): Promise<FileOutcome>;
 }
 
-/** What each switch has learned and counted, which the lab's state does not hold. The switch panel reads the same. */
+/** What each switch has learned and counted, which the lab's state does not hold. */
 export interface SwitchReads {
 	macTable(of: SwitchName): readonly LearnedMac[];
 	totals(of: SwitchName): SwitchTotals;
