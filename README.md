@@ -1,9 +1,9 @@
-# unlab
+# <https://unlab.run>
 
 A Linux network lab in one browser tab, built on
 [pithings/unkernel](https://github.com/pithings/unkernel). Pooya Parsa and the
 unkernel contributors made it possible to boot a real Linux kernel in
-WebAssembly. `unlab` connects those machines to a virtual Ethernet switch so you
+WebAssembly. <https://unlab.run> connects those machines to a virtual Ethernet switch so you
 play with networking between linux boxes right in a tab. Send a ping, pull a
 cable, and see what happens to the packets.
 
@@ -12,7 +12,7 @@ cable, and see what happens to the packets.
 [Reach it from your terminal](#reach-the-lab-from-your-terminal) ·
 [Run locally](#run-locally) · [Contribute](#contribute)
 
-To open unlab in its own window, choose **Install** in Chrome’s address bar.
+To open <https://unlab.run> in its own window, choose **Install** in Chrome’s address bar.
 The installed app shares the lab and guest disks from your browser tab. Close
 the tab before launching the app so it can open that lab.
 
@@ -189,7 +189,7 @@ npx unlab.run
 ```
 
 It opens the lab, or finds the one you have open. The first time, your browser asks
-whether unlab.run may reach apps on your device. Allow it, and the prompt is linked:
+whether <https://unlab.run> may reach apps on your device. Allow it, and the prompt is linked:
 
 ```
 Linked to the lab: node1 (alpine), node2 (debian)
@@ -361,13 +361,13 @@ in the browser alike.
 | `capture_save`       | Get the capture as a `.pcap`, in base64. | `run`    |
 
 Commands run inside the guests, not on your computer. Guest output can contain
-text that tries to instruct the agent, so unlab marks it as untrusted.
+text that tries to instruct the agent, so <https://unlab.run> marks it as untrusted.
 
 ### If the agent cannot call the tools
 
 | What you see                     | What to do                                                                                       |
 | -------------------------------- | ------------------------------------------------------------------------------------------------ |
-| The agent lists no unlab tools   | Run `npx unlab.run` until the status line reads `cli: linked`. Then reconnect `unlab` in `/mcp`. |
+| The agent lists no tools for the lab | Run `npx unlab.run` until the status line reads `cli: linked`. Then reconnect `unlab` in `/mcp`. |
 | `The lab is not linked.`         | Run `npx unlab.run`, and allow the browser's question.                                           |
 | `cli: refused`                   | Update with `npx unlab.run@latest`, or reload the lab, as it says.                               |
 | `webmcp: not available`          | Nothing, for an agent through the CLI. For one in the browser, turn on the flag above.           |
@@ -665,7 +665,7 @@ again. Chrome's trial ends on 30 March 2027.
 
 ## Licence and acknowledgements
 
-unlab's code is available under the [MIT licence](LICENSE). Thank you to Pooya
+The code for <https://unlab.run> is available under the [MIT licence](LICENSE). Thank you to Pooya
 Parsa and the [unkernel contributors](https://github.com/pithings/unkernel) for
 the kernel, JavaScript SDK, and distro builds that power every machine in this
 lab.

@@ -1,7 +1,7 @@
-# unlab.run
+# CLI for <https://unlab.run>
 
-Reach the machines of an [unlab](https://unlab.run/) lab from your terminal. The
-lab is real Linux machines in a browser tab. This links them with your computer.
+Reach your Linux machines on <https://unlab.run> from your terminal. The
+machines run in a browser tab. The CLI links them with your computer.
 
 ```sh
 npx unlab.run
