@@ -13,7 +13,8 @@
 			"!!.audit",
 			"!!test-results",
 			"!!playwright-report",
-			"!!.claude"
+			"!!.claude",
+			"!!**/*.md"
 		]
 	},
 	"formatter": {
@@ -60,7 +61,7 @@
 	},
 	"overrides": [
 		{
-			"includes": ["scripts/**", "test/**", "e2e/**"],
+			"includes": ["scripts/**", "test/**", "e2e/**", ".agents/**/scripts/**"],
 			"linter": {
 				"rules": {
 					"suspicious": {

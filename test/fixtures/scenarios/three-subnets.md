@@ -48,8 +48,8 @@ Routing is set inside the machines, once they are ready.
 - r1 reaches `10.3.0.0/24` through r2, at `10.2.0.2`.
 - r2 reaches `10.1.0.0/24` through r1, at `10.2.0.1`.
 
-A machine forgets its routes and forwarding when it boots again, and a reload
-of the page boots every machine. Set them again then.
+A machine forgets its routes and forwarding when it boots again, and a reload of
+the page boots every machine. Set them again then.
 
 ## The lossy cable
 
@@ -60,6 +60,6 @@ The cable of r2's `eth1` loses 10% of the frames that cross it, each way.
 - `topology` shows `core` and `edge`, the trunk at port 8 of each, every NIC in
   its VLAN, and `loss 10%` on the cable of r2's `eth1`.
 - From alice, `ping -c 10 10.3.0.10` gets most of its replies.
-- `capture icmp` shows each echo request on its way from alice: on edge
-  in VLAN 10, over the trunk to r1 on core, out of r1 in VLAN 20, over the trunk
-  again to r2 on edge, and out of r2 in VLAN 30, over the lossy cable, to bob.
+- `capture icmp` shows each echo request on its way from alice: on edge in VLAN
+  10, over the trunk to r1 on core, out of r1 in VLAN 20, over the trunk again
+  to r2 on edge, and out of r2 in VLAN 30, over the lossy cable, to bob.
