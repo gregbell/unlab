@@ -9,6 +9,7 @@ cable, and see what happens to the packets.
 
 **[Open the live lab](https://unlab.run/)** ·
 [Follow your first ping](#follow-your-first-ping) ·
+[Manual](docs/manual/README.md) ·
 [Reach it from your terminal](#reach-the-lab-from-your-terminal) ·
 [Run locally](#run-locally) · [Contribute](#contribute)
 

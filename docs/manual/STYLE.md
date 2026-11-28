@@ -23,11 +23,16 @@ each example states its own prerequisites.
 ## Words
 
 - Use the glossary's terms, and none of the words it lists under _Avoid_.
+- In reader instructions, use "command" and say where to enter it when needed:
+  in the command bar or at the CLI prompt. For a shell command, name the
+  machine whose terminal to use.
 - Use the product's names for things exactly as the screen and the CLI show
   them, even where the glossary would prefer another word. When the product's
   wording conflicts with the glossary, write what the screen says and open an
   issue (see [When the product looks wrong](#when-the-product-looks-wrong)).
-- Define each specialised term where it first appears in a chapter. Chapters
+- Introduce a glossary term when the reader needs it. When the reader is
+  choosing what to boot, for example, name the choices: Alpine or Debian.
+  Define each specialised term you use where it first appears in a chapter. Chapters
   stand alone, so a term defined in another chapter is defined again, briefly,
   or linked.
 - Write "file name", not "pathname"; "invalid", not "illegal".
@@ -69,7 +74,7 @@ states).
 
 ### Command entries
 
-A command entry is the one definitive description of a Lab Command. It sits in
+A command entry is the one definitive description of a command. It sits in
 the chapter that owns the command's subject, and every other mention links to
 it.
 
