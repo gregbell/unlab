@@ -2,31 +2,15 @@
 
 Table of contents
 
-The reader can type commands into a terminal, but needs no prior experience with
-<https://unlab.run> or networking. Explain product terms and expected command
-results; general Linux and networking lessons belong in the Exercises.
-
-Each chapter is one Markdown file under `docs/manual/`. Each topic has one
-owning chapter; other chapters link to it rather than repeat it. Link liberally.
-Use the words in [GLOSSARY.md](../GLOSSARY.md), and match the words on screen.
-
-Getting started is the guided sequence. Each reference chapter begins by
-describing its subject and stands independently, without relying on machines,
-files, or other state created in Getting started. Examples state their own
-prerequisites.
-
-Coverage follows the product into the guest far enough to make its features
-usable. Purely Linux topics and surveys of alternative Linux techniques are
-outside the Manual's scope. Additional disks include a minimal example through
-formatting and mounting, so the reader reaches a usable disk. Running or
-self-hosting <https://unlab.run> stays in the README.
+The chapters to write, in reading order. How to write them is in the
+[style guide](manual/STYLE.md).
 
 ## Introduction
 
 - What <https://unlab.run> is
 - The lab: Linux machines, virtual networks, and persistent storage
 - The role of the optional connection to your computer
-- How to use the Manual and the Exercises
+- How to use the Manual and the Exercises, and the Manual's conventions and notation
 
 ## Getting started
 
@@ -80,7 +64,7 @@ access, SSH, and file transfer—the recommended next step.
 - Help by command or MCP tool name, results, confirmations, and cancellation
 - Command availability in the command bar, CLI, and agent interfaces
 
-Individual commands are described with their subjects and listed in the command
+Individual commands are described with their subjects and listed in the
 index. This chapter defines the shared command language and command bar behavior.
 
 ## Machines
@@ -159,9 +143,8 @@ Write this chapter last: the approvals UI may change.
 - A command skips a machine, finds a busy shell, or reports changed state
 - Traffic loops, unexpected drops, or an empty or unexpected capture export
 
-## Appendices and indexes
+## Appendices and index
 
 - Resource limits
 - CLI configuration files and environment variables
-- Command and MCP tool index
-- Subject index
+- Index
