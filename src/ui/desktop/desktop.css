@@ -1,12 +1,5 @@
 @layer tokens, base, components;
 @layer components {
-	unlab-app[desktop] {
-		padding: 0;
-		display: block;
-		height: 100dvh;
-		min-height: 0;
-		overflow: hidden;
-	}
 	unlab-desktop {
 		--accent: var(--link-hover);
 		--dt-bar: calc(36px + 2 * var(--panel-gap));
@@ -467,9 +460,6 @@
 		flex: 1;
 		min-height: 0;
 		background: transparent;
-	}
-	.dt-interior unlab-capture[mode="full"] .window {
-		display: none;
 	}
 	.dt-interior unlab-capture .rows {
 		overflow: auto;

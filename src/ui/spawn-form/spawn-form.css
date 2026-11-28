@@ -30,15 +30,6 @@
 			line-height: 1.55;
 			color: var(--text-2);
 		}
-		.customize {
-			border-top: 1px solid var(--line-strong);
-			padding-top: 12px;
-		}
-		.customize summary {
-			cursor: pointer;
-			color: var(--link-hover);
-			padding: 8px 0;
-		}
 		.network-summary {
 			color: var(--text-2);
 			margin-bottom: 12px;
@@ -77,16 +68,8 @@
 			gap: 10px;
 		}
 
-		.customize .question {
-			margin-top: 18px;
-		}
-
 		.label {
 			color: var(--text-3);
-		}
-
-		.note {
-			color: var(--text-2);
 		}
 
 		.error {

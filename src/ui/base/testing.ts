@@ -175,7 +175,6 @@ export const remove = (...machines: readonly MachineName[]): LabEvent => ({
 	machines,
 	cause: "bar",
 });
-export const park = (machine: MachineName): LabEvent => ({ type: "ui/park", machine });
 export const webmcp = (webmcp: WebMcp): AgentEvent => ({ type: "agent/webmcp", webmcp });
 export const tick = (now: number): LabEvent => ({ type: "tick", now });
 export const agentCall = (id: number, status: AgentCall["status"] = "done"): AgentEvent => ({

@@ -52,7 +52,6 @@ Next, [connect two switches](docs/labs/connect-two-switches.md) and see which ca
 Drag a window by its title bar, double-click to maximize it, or minimize it to
 the bottom-left dock. Right-click a title bar, a machine, a switch or the desktop
 for its actions. Returning to the lab restores your machines and desktop layout.
-The [classic layout](https://unlab.run/?layout=classic) opens the same saved lab.
 
 ## Lab commands
 
@@ -254,12 +253,12 @@ network this way, by address or by name, unless you start the CLI with `--lan`.
 Open **SSH access** in the logo menu to see the connection and turn the link on or off. A
 lab that has never linked does not look for a CLI.
 
-| Status line    | What to do                                                                            |
+| SSH access     | What to do                                                                            |
 | -------------- | ------------------------------------------------------------------------------------- |
-| `cli: off`     | Run `npx unlab.run`, or click it and turn the link on.                                |
+| `cli: off`     | Run `npx unlab.run`, or turn the link on there.                                       |
 | `cli: waiting` | Run `npx unlab.run`. If it runs, look for your browser's question in the lab's tab.   |
 | `cli: blocked` | Select the icon left of the address, allow access to apps on your device, and reload. |
-| `cli: refused` | Click it to read why. The lab or the CLI may be out of date: `npx unlab.run@latest`.  |
+| `cli: refused` | It says why there. The lab or the CLI may be out of date: `npx unlab.run@latest`.     |
 
 Commands typed into the CLI do not go through the agent panel's `ask me` settings. An
 agent with a shell can type them too, so it can do what you can. An agent's calls through
@@ -365,15 +364,15 @@ text that tries to instruct the agent, so unlab marks it as untrusted.
 
 ### If the agent cannot call the tools
 
-| What you see                     | What to do                                                                                       |
-| -------------------------------- | ------------------------------------------------------------------------------------------------ |
-| The agent lists no unlab tools   | Run `npx unlab.run` until the status line reads `cli: linked`. Then reconnect `unlab` in `/mcp`. |
-| `The lab is not linked.`         | Run `npx unlab.run`, and allow the browser's question.                                           |
-| `cli: refused`                   | Update with `npx unlab.run@latest`, or reload the lab, as it says.                               |
-| `webmcp: not available`          | Nothing, for an agent through the CLI. For one in the browser, turn on the flag above.           |
-| `webmcp: blocked`                | Click it to read the browser's reason.                                                           |
-| `webmcp: paused`                 | Click it, then click **resume tools**.                                                           |
-| `webmcp: 1 call waiting for you` | Click it, then approve or deny the call.                                                         |
+| What you see                     | What to do                                                                                  |
+| -------------------------------- | ------------------------------------------------------------------------------------------- |
+| The agent lists no unlab tools   | Run `npx unlab.run` until SSH access reads `cli: linked`. Then reconnect `unlab` in `/mcp`. |
+| `The lab is not linked.`         | Run `npx unlab.run`, and allow the browser's question.                                      |
+| `cli: refused`                   | Update with `npx unlab.run@latest`, or reload the lab, as it says.                          |
+| `webmcp: not available`          | Nothing, for an agent through the CLI. For one in the browser, turn on the flag above.      |
+| `webmcp: blocked`                | Click it to read the browser's reason.                                                      |
+| `webmcp: paused`                 | Click it, then click **resume tools**.                                                      |
+| `webmcp: 1 call waiting for you` | Click it, then approve or deny the call.                                                    |
 
 ## Network and storage
 

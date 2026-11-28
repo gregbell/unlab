@@ -276,8 +276,6 @@ export class UnlabAgentPanel extends UnlabElement {
 	}
 }
 
-export const AGENT_PANEL_ID = "unlab-agent-panel";
-
 customElements.define("unlab-agent-panel", UnlabAgentPanel);
 
 declare global {

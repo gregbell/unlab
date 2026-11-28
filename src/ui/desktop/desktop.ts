@@ -8,6 +8,7 @@ import {
 	DEFAULT_SWITCH,
 	disksOf,
 	type Machine,
+	machineList,
 	memoryGiven,
 	NOTHING_CARRIED,
 	nicPortsOf,
@@ -19,7 +20,6 @@ import {
 	selectCliSegment,
 	selectFocused,
 	selectPorts,
-	selectRail,
 	selectStorm,
 	selectSubnets,
 	stpOn,
@@ -30,10 +30,16 @@ import {
 import { addressStr } from "../../net/index.ts";
 import { maximiseIcon, parkIcon, restoreIcon } from "../base/icons.ts";
 import { closeIcon, UnlabElement } from "../base/index.ts";
-import { CLI_COMMAND, cliGuidance } from "../cli-link/cli-link.ts";
 import { AUTHOR_URL, LIVE_LAB_URL, REPO_URL, X_ACCOUNT, X_URL } from "../links.ts";
-import { peerPing } from "../machine-details/peer-ping.ts";
+import { CLI_COMMAND, cliGuidance } from "./cli-guidance.ts";
+import { peerPing } from "./peer-ping.ts";
+import "../command-bar/command-bar.ts";
+import "../terminal/terminal.ts";
 import "../share-ssh/share-ssh.ts";
+import "../whats-new/whats-new.ts";
+import "../capture/capture.ts";
+import "../spawn-form/spawn-form.ts";
+import "../agent-panel/agent-panel.ts";
 import {
 	alignWithLab,
 	type Box,
@@ -1074,7 +1080,7 @@ class Desktop extends UnlabElement {
 		return html`<button type="button" class="dt-primary dt-terminal-icon" aria-label=${`Open terminal for ${name}`} title=${`Open terminal for ${name}`} @click=${() => this.console(name)}>${icon("console")}</button>`;
 	}
 	private pingAction(m: Machine) {
-		const { label, line } = peerPing(m.name, this.lab.machines, selectRail(this.lab));
+		const { label, line } = peerPing(m.name, machineList(this.lab));
 		return {
 			label,
 			disabled: !line || !ACCEPTS[m.life.phase].commands,
@@ -1201,7 +1207,7 @@ class Desktop extends UnlabElement {
 		<p>A Linux network lab in your browser. Boot guests, wire them to virtual switches, and watch the packets move between them.</p>
 		<p>Built by <a href=${AUTHOR_URL} target="_blank" rel="noopener noreferrer">Greg Bell</a> with <a href="https://unkernel.dev/" target="_blank" rel="noopener noreferrer">unkernel</a>, the WebAssembly Linux runtime by Pooya Parsa and contributors.</p>
 		<div class="dt-about-links"><a href=${REPO_URL} target="_blank" rel="noopener noreferrer">Source on GitHub ↗</a><a href=${X_URL} target="_blank" rel="noopener noreferrer">${X_ACCOUNT} on X ↗</a></div>
-		<unlab-whats-new inline></unlab-whats-new></article>`;
+		<unlab-whats-new></unlab-whats-new></article>`;
 	}
 	private content(w: Win) {
 		switch (w.kind) {

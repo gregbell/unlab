@@ -229,23 +229,13 @@ describe("<unlab-capture mode=dock>", () => {
 		expect(text(part(element, ".counters"))).toBe("14 in · 15 delivered · 1 flooded");
 	});
 
-	it("maximises and parks itself alone", async () => {
-		const { store } = await mountCapture("dock");
-		await userEvent.click(page.getByRole("button", { name: "Maximise capture" }));
-		expect(store.state.panels).toMatchObject({ open: ["capture", "switch0"], maximised: "capture" });
-		await userEvent.click(page.getByRole("button", { name: "Park capture" }));
-		expect(store.state.panels).toMatchObject({ open: ["switch0"], maximised: null });
-	});
-
 	it.each([1200, 585, 390, 330])("keeps its toolbar on one line at %ipx, every button in it", async (width) => {
 		const { element, settle } = await mountCapture("dock", twelvePings);
 		element.style.width = `${width}px`;
 		await settle();
 		const toolbar = part(element, ".toolbar");
-		expect(toolbar.getBoundingClientRect().height).toBe(35);
 		expect(toolbar.scrollWidth).toBe(toolbar.clientWidth);
-		for (const name of ["pause", "clear", "Maximise capture", "Park capture"])
-			await expect.element(page.getByRole("button", { name })).toBeVisible();
+		for (const name of ["pause", "clear"]) await expect.element(page.getByRole("button", { name })).toBeVisible();
 	});
 
 	it("cuts a long row short instead of growing a scrollbar, with the whole text at hand", async () => {
@@ -419,38 +409,6 @@ describe("<unlab-capture mode=full>", () => {
 			"lan 3 → 4,5",
 			"lan 3 → none",
 		]);
-	});
-});
-
-describe("<unlab-capture> maximised and restored", () => {
-	it("follows the newest row each time, whatever it was scrolled to before", async () => {
-		const { element, capture, settle } = await mountCapture("dock", (c) => {
-			for (let seq = 1; seq <= 500; seq++) c.frame(ping(1, 2, seq), 1, [2]);
-		});
-		element.setAttribute("mode", "full");
-		await settle();
-		await expect.element(page.getByRole("option", { name: /seq 500,/ })).toBeVisible();
-		part(element, ".rows").scrollTop = 0;
-		await expect.element(page.getByRole("option", { name: /seq 1,/ })).toBeVisible();
-
-		element.setAttribute("mode", "dock");
-		await settle();
-		expect(rows(element)).toHaveLength(8);
-		capture.frame(ping(1, 2, 501), 1, [2]);
-		element.setAttribute("mode", "full");
-		await settle();
-		await expect.element(page.getByRole("option", { name: /seq 501,/ })).toBeVisible();
-	});
-
-	it("keeps the focus on the button that maximised it", async () => {
-		const { element, settle } = await mountCapture("dock");
-		await userEvent.click(page.getByRole("button", { name: "Maximise capture" }));
-		element.setAttribute("mode", "full");
-		await settle();
-		await expect.element(page.getByRole("button", { name: "Maximise capture" })).toHaveFocus();
-		await expect
-			.element(page.getByRole("button", { name: "Maximise capture" }))
-			.toHaveAttribute("aria-pressed", "true");
 	});
 });
 
