@@ -55,6 +55,7 @@ import "./topology.ts";
 import type { Device, Selection } from "./topology.ts";
 import "./desktop.css";
 import "./machine-wizard.ts";
+import "./mac-table.ts";
 
 import type { SpawnChoice } from "../spawn-form/form.ts";
 import { type Icon, icon, launcherMark } from "./icons.ts";
@@ -1156,7 +1157,8 @@ class Desktop extends UnlabElement {
 				${conditions ? html`<td>${cableText(p)}</td>` : nothing}
 				${steered ? html`<td>${treeText(p)}</td>` : nothing}
 				<td>${line ? html`<button class="dt-primary" ?disabled=${!p.actionLabel} title=${p.actionLabel ?? nothing} @click=${() => this.run(`link ${p.state === "cut" ? "up" : "down"} ${line}`)}>${p.state === "cut" ? "Reconnect" : "Cut cable"}</button>${cable ? html` <button class="dt-primary" title=${`Remove the cable to ${farEnd(cable)}`} @click=${() => this.run(`uncable ${cable.label}`)}>Remove</button>` : nothing}` : html`<button class="dt-primary" @click=${() => this.patchInterface("", `${name}:${p.port}`)}>Patch</button>`}</td></tr>`;
-			})}</tbody></table></div>`;
+			})}</tbody></table>
+			<unlab-mac-table .switch=${name}></unlab-mac-table></div>`;
 	}
 	private topologyBody() {
 		return html`<unlab-topology class="dt-map n-network" .lab=${this.lab} .selected=${this.picked} .pick=${this.pickOnMap}></unlab-topology>`;

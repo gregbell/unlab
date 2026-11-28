@@ -257,8 +257,11 @@
 		border-bottom: 1px solid var(--dt-divider);
 		font-weight: 400;
 	}
-	.dt-ports td:last-child {
+	.dt-ports :is(th, td):last-child {
 		text-align: right;
+	}
+	.dt-ports .dt-wrap {
+		overflow-wrap: anywhere;
 	}
 	.dt-ports [data-state="up"] {
 		color: var(--ok);
