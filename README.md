@@ -122,7 +122,7 @@ on, such as the ready ones for `exec` and the ones that are off or failed for `b
 | `exec node1 -- ping -c 1 10.88.0.12`        | Send one ping from node1 and read the exit code from its shell.                                                     |
 | `write node1 /etc/motd --mode 644 -- hello` | Put a text in a file on the machine, as root, with the directories it needs. `--owner user:group` sets whose it is. |
 | `sh node2`                                  | Open another shell on node2.                                                                                        |
-| `focus node2 --max`                         | Maximise or restore its pane. Use `--main` to promote it to the main pane.                                          |
+| `focus node2 --max`                         | Maximize or restore its terminal window. Use `--main` to bring it to the front.                                     |
 
 ### Start, stop, or remove machines
 
@@ -143,13 +143,13 @@ on, such as the ready ones for `exec` and the ones that are off or failed for `b
 
 ### Capture traffic
 
-| Command bar example    | What it does                                                                                                      |
-| ---------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `capture arp or node2` | Maximise the capture with a filter for ARP or traffic involving node2. `node2:eth1` keeps one interface's frames. |
-| `capture lan:3 icmp`   | Show the pings that crossed one cable, the one in port 3 of `lan`. `lan` alone is all that the switch carried.    |
-| `capture vlan 10`      | Show the frames that were in VLAN 10. On a trunk, a row also gives the 802.1Q tag the frame had there.            |
-| `capture lan:3`        | See what a bad cable did: a frame that it dropped says so in its row, with the reason: loss, rate or MTU.         |
-| `pcap lan:3`           | Download what crossed that cable as a `.pcap`, the file that **save .pcap** gives with the same filter.           |
+| Command bar example    | What it does                                                                                                           |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `capture arp or node2` | Open the Packet inspector with a filter for ARP or traffic involving node2. `node2:eth1` keeps one interface's frames. |
+| `capture lan:3 icmp`   | Show the pings that crossed one cable, the one in port 3 of `lan`. `lan` alone is all that the switch carried.         |
+| `capture vlan 10`      | Show the frames that were in VLAN 10. On a trunk, a row also gives the 802.1Q tag the frame had there.                 |
+| `capture lan:3`        | See what a bad cable did: a frame that it dropped says so in its row, with the reason: loss, rate or MTU.              |
+| `pcap lan:3`           | Download what crossed that cable as a `.pcap`, the file that **save .pcap** gives with the same filter.                |
 
 In a capture filter, terms that follow one another must all match, and `or`
 starts an alternative. A term is a protocol, a machine, an interface, an address,
@@ -260,7 +260,7 @@ lab that has never linked does not look for a CLI.
 | `cli: blocked` | Select the icon left of the address, allow access to apps on your device, and reload. |
 | `cli: refused` | It says why there. The lab or the CLI may be out of date: `npx unlab.run@latest`.     |
 
-Commands typed into the CLI do not go through the agent panel's `ask me` settings. An
+Commands typed into the CLI do not go through the `ask me` settings in **WebMCP**. An
 agent with a shell can type them too, so it can do what you can. An agent's calls through
 `npx unlab.run mcp` do go through those settings.
 
@@ -289,13 +289,13 @@ You need Node.js 22.12 or later.
 
    > Boot two Alpine machines and check that they can ping each other.
 
-   When it asks to boot the machines, the agent panel opens. Click
+   When it asks to boot the machines, the **WebMCP** window opens. Click
    **Boot node1 and node2**.
 
 The lab's tools appear when the lab links, also in a session that started before.
 The server reaches the lab and nothing else in your browser, and it works in a
-browser without WebMCP. The agent panel marks its calls `via cli`, and the status
-line reads `cli: linked, agent active` while it works.
+browser without WebMCP. The **WebMCP** window marks its calls `via cli`, and **SSH access**
+reads `cli: linked, agent active` while it works.
 
 ### Agents in the browser
 
@@ -306,7 +306,7 @@ feature, so Firefox and Safari do not have it.
 
 1. [Open the lab](https://unlab.run/) in Chrome and open **WebMCP** from the logo menu.
 2. To see a call without an agent, click **try a call**. The
-   call and its result appear in the panel.
+   call and its result appear in the window.
 3. Install
    [WebMCP - Model Context Tool Inspector](https://chromewebstore.google.com/detail/webmcp-model-context-tool/gbpdfapgefenggkahomfgkhfehlcenpd).
    It lists the tools in the tab. To ask for work in plain language, give it a
@@ -322,7 +322,7 @@ The live lab turns WebMCP on in Chrome by itself. For your own copy, open
 
 ### Choose what runs without asking
 
-The agent panel sets each tool to `run`, `ask me`, or `off`. A call to an
+**WebMCP** sets each tool to `run`, `ask me`, or `off`. A call to an
 `ask me` tool waits until you approve or deny it in the lab. **pause tools** hides
 all of them. Your choices survive a reload, and apply to agents through the CLI and
 in the browser alike.
@@ -364,15 +364,15 @@ text that tries to instruct the agent, so unlab marks it as untrusted.
 
 ### If the agent cannot call the tools
 
-| What you see                     | What to do                                                                                  |
-| -------------------------------- | ------------------------------------------------------------------------------------------- |
-| The agent lists no unlab tools   | Run `npx unlab.run` until SSH access reads `cli: linked`. Then reconnect `unlab` in `/mcp`. |
-| `The lab is not linked.`         | Run `npx unlab.run`, and allow the browser's question.                                      |
-| `cli: refused`                   | Update with `npx unlab.run@latest`, or reload the lab, as it says.                          |
-| `webmcp: not available`          | Nothing, for an agent through the CLI. For one in the browser, turn on the flag above.      |
-| `webmcp: blocked`                | Click it to read the browser's reason.                                                      |
-| `webmcp: paused`                 | Click it, then click **resume tools**.                                                      |
-| `webmcp: 1 call waiting for you` | Click it, then approve or deny the call.                                                    |
+| What you see                                     | What to do                                                                                  |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------- |
+| The agent lists no unlab tools                   | Run `npx unlab.run` until SSH access reads `cli: linked`. Then reconnect `unlab` in `/mcp`. |
+| `The lab is not linked.`                         | Run `npx unlab.run`, and allow the browser's question.                                      |
+| `cli: refused`                                   | Update with `npx unlab.run@latest`, or reload the lab, as it says.                          |
+| **WebMCP** says `This tab has no WebMCP`         | Nothing, for an agent through the CLI. For one in the browser, turn on the flag above.      |
+| **WebMCP** says `This browser refused the tools` | Read the browser's reason after `It said`.                                                  |
+| **WebMCP** says `tools paused`                   | Click **resume tools** there.                                                               |
+| A call is `waiting for you` in **WebMCP**        | Approve or deny it there.                                                                   |
 
 ## Network and storage
 
@@ -393,8 +393,8 @@ text that tries to instruct the agent, so unlab marks it as untrusted.
   moves a machine to another switch, ping from it first.
 - Cables may make a loop, and a switch can be cabled to itself. One broadcast then goes
   round until a cable of the loop is cut. Every switch that such frames come into says that
-  it is storming, on its faceplate, in `topology` and in the capture, with the looped frames
-  it takes a second. The lab lets 1,000 looped frames a second along each cable and keeps at
+  it is storming, in its details window, in the Rack manager, in `topology` and in the
+  capture, with the looped frames it takes a second. The lab lets 1,000 looped frames a second along each cable and keeps at
   most 64 waiting there, so the machines and the page still answer. What does not fit is
   dropped and counted. Where a frame has two ways to a switch, the copy that comes in
   second, in the same VLAN, is not marked, but what the switch sends on of it waits its turn
@@ -404,11 +404,11 @@ text that tries to instruct the agent, so unlab marks it as untrusted.
 - A switch takes no part in a spanning tree until `stp on` names it. Switches that have it
   on run rapid spanning tree (RSTP, 802.1w). They send each other BPDUs, choose a root, and
   each keeps one way to it. A port that would close a loop is blocked: it carries nothing,
-  and `topology`, the switch's faceplate and the desktop say `blocked`. The BPDUs are real
-  frames to `01:80:c2:00:00:00`, sent every two seconds, to the machines too, so `tcpdump`
-  in a guest sees them, as `sudo tcpdump -vni eth0 stp` shows. The capture decodes each
-  one, with its root, the cost to it, and the bridge and port that sent it, and `capture stp`
-  keeps them. One tree covers every VLAN, and its BPDUs cross a trunk untagged, so a port it
+  and `topology`, the switch's details window and the Topology window say `blocked`. The
+  BPDUs are real frames to `01:80:c2:00:00:00`, sent every two seconds, to the machines
+  too, so `tcpdump` in a guest sees them, as `sudo tcpdump -vni eth0 stp` shows. The
+  capture decodes each one, with its root, the cost to it, and the bridge and port that
+  sent it, and `capture stp` keeps them. One tree covers every VLAN, and its BPDUs cross a trunk untagged, so a port it
   blocks carries no VLAN. The root is the switch with the lowest bridge ID: its priority,
   32768 unless `priority` sets another, and then its address, which follows from its name.
   `priority lan 4096` makes `lan` the root. Each other switch takes the way to the root
@@ -464,9 +464,9 @@ text that tries to instruct the agent, so unlab marks it as untrusted.
   what was on its way arrive at once. A cable with conditions holds at most 8,192 frames in
   each direction, and what it has no room for is counted among the port's dropped frames.
   Each cable counts what it delivered and what it dropped, by loss, rate and MTU, from when
-  it was plugged in. `topology` has the counts, and so have the port's title on the
-  faceplate and the desktop's port table. A frame that a cable dropped is in the capture,
-  as the switch sent it or as its machine did, with the cable's port and the reason.
+  it was plugged in. `topology` has the counts, and so has the port's row in the switch's
+  details window. A frame that a cable dropped is in the capture, as the switch sent it or
+  as its machine did, with the cable's port and the reason.
 - The capture keeps its newest 10,000 rows. In a storm that is the last seven seconds of
   one loop of three switches, and less than a second of a mesh of four. A frame that has
   looped says so in its row. Pause the capture to read it. The counters and each storm's
@@ -611,7 +611,7 @@ tokens**.
 
 Each guest runs in its own worker. When Linux sends an Ethernet frame, the
 [virtual switch](src/runtime/switch.ts) forwards it and the
-[capture](src/capture/) records it. The capture panel decodes those same bytes.
+[capture](src/capture/) records it. The capture windows decode those same bytes.
 Terminal output goes straight to the terminal, so the UI can update the capture
 once per animation frame.
 
