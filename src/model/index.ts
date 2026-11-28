@@ -78,8 +78,7 @@ export {
 	takenPorts,
 } from "./machines.ts";
 export { type LearnedMac, type MacRow, macRows, macSeen, type SwitchTotals, totalsText } from "./macs.ts";
-export { panelLabel, parkedPanels, visiblePanels } from "./panels.ts";
-export { capacity, gridFor, parkedPanes, visiblePanes } from "./panes.ts";
+export { capacity, gridFor, visiblePanes } from "./panes.ts";
 export * from "./selectors.ts";
 export { createStore, type ReadStore, type Schedule, type Store } from "./store.ts";
 export {
@@ -94,11 +93,9 @@ export {
 	treePortAt,
 	treeRoleText,
 	treeSummary,
-	treeText,
 	treeWord,
 } from "./stp.ts";
 export { planSwitch, portLabel, portName, portText, switchLabel } from "./switches.ts";
-export { type Tile, type Tiling, tile } from "./tiling.ts";
 export * from "./types.ts";
 export { clockHz, DEFAULT_POLICIES, initialState, update } from "./update.ts";
 export { carries, parseVlanId, sameVlan, vlanList, vlanOf, vlanText } from "./vlans.ts";

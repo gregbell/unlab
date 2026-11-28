@@ -3,7 +3,6 @@ import { describe, expect, test } from "vitest";
 import { port0 } from "../../test/support/ports.ts";
 import { disksOf } from "./disks.ts";
 import { savingOf, takenPorts } from "./machines.ts";
-import { selectDetails, selectRail, selectStatus } from "./selectors.ts";
 import {
 	bootEvent,
 	checkpoint,
@@ -55,9 +54,6 @@ function twoSaved(): LabState {
 	);
 }
 
-const details = (s: LabState, label: string) => selectDetails(s)?.rows.find((row) => row.label === label)?.value;
-const focused = (s: LabState): LabState => run(s, { type: "cmd/focus", target: "node1", mode: "plain" });
-
 describe("saving a checkpoint", () => {
 	test("copies the live disks to a new set, and the checkpoint is there once it is whole", () => {
 		const s = labWith(1);
@@ -75,27 +71,24 @@ describe("saving a checkpoint", () => {
 		});
 		let saving = run(s, checkpoint("node1", "before"));
 		expect(machine(saving, "node1").sets).toEqual({ live: 0, next: 2, checkpoints: [] });
-		saving = focused(run(saving, progress(1, 40)));
-		expect(details(saving, "checkpoints")).toBe("saving before 40%");
+		saving = run(saving, progress(1, 40));
+		expect(savingOf(machine(saving, "node1").life)).toMatchObject({ name: "before", percent: 40 });
 		expect(machine(saving, "node1").life.phase).toBe("ready");
 
 		const saved = run(saving, isSaved("node1", 1, 1, 12.5 * 2 ** 20));
 		expect(machine(saved, "node1").sets.checkpoints).toEqual([{ name: "before", set: 1, bytes: 12.5 * 2 ** 20 }]);
 		expect(savingOf(machine(saved, "node1").life)).toBeNull();
-		expect(details(saved, "checkpoints")).toBe("before 12.5 MiB");
-		expect(details(focused(twoSaved()), "checkpoints")).toBe("before 3.0 MiB, after 1.0 MiB · 4.0 MiB in all");
-		expect(details(focused(labWith(1)), "checkpoints")).toBeUndefined();
 	});
 
 	test("one that could not be saved leaves the machine as it was, says why, and its number is not used again", () => {
-		let s = focused(run(labWith(1), checkpoint("node1", "before"), unsaved(1)));
+		let s = run(labWith(1), checkpoint("node1", "before"), unsaved(1));
 		expect(machine(s, "node1")).toMatchObject({
 			life: { phase: "ready" },
 			sets: { live: 0, next: 2, checkpoints: [] },
 		});
-		expect(selectDetails(s)?.reason).toBe("Browser storage is full.");
+		expect(machine(s, "node1").unsaved?.reason).toBe("Browser storage is full.");
 		s = run(s, checkpoint("node1", "before"));
-		expect(selectDetails(s)?.reason).toBeNull();
+		expect(machine(s, "node1").unsaved).toBeNull();
 		expect(savingOf(machine(s, "node1").life)).toMatchObject({ set: 2 });
 		expect(update(s, isSaved("node1", 1)).state, "late news of the first").toBe(s);
 		expect(update(s, unsaved(1)).state).toBe(s);
@@ -155,10 +148,8 @@ describe("going back to a checkpoint", () => {
 			life: { phase: "restoring", plugs: [{ port: port0(1) }] },
 		});
 		expect([...takenPorts(back, "switch0")]).toEqual([1, 2]);
-		const going = focused(run(back, progress(3, 40, 2)));
-		expect(selectRail(going)[0].word).toBe("restoring 40%");
-		expect(selectStatus(going).left[0].text).toBe("1 of 2 ready, 1 restoring");
-		expect(details(going, "link")).toBe("plugged into port 1");
+		const going = run(back, progress(3, 40, 2));
+		expect(machine(going, "node1").life).toMatchObject({ phase: "restoring", percent: 40 });
 		for (const late of [hasStopped("node1", 2), hasStopped("node1", 1), hasFailed("node1", 1), isReady("node1", 1)]) {
 			expect(update(going, late).state, "of the guest that was dropped").toBe(going);
 		}

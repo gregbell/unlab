@@ -32,7 +32,6 @@ describe("dispatch", () => {
 		expect(store.state).toMatchObject({
 			agentPanel: true,
 			now: 5,
-			panels: { maximised: null },
 			capture: { filter: "arp" },
 			agent: { firstCallAt: 5 },
 		});

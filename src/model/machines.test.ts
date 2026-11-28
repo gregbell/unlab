@@ -124,7 +124,6 @@ const TABLE: Readonly<Record<Phase, Readonly<Record<Column, Outcome>>>> = {
 		"session/opened": "ignored",
 		"session/ended": "ignored",
 		"session/shell": "untouched",
-		"session/marked": "untouched",
 		tick: "untouched",
 		"tick past the boot timeout": "failed",
 		"cmd/spawn": "untouched",
@@ -167,7 +166,6 @@ const TABLE: Readonly<Record<Phase, Readonly<Record<Column, Outcome>>>> = {
 		"session/opened": "ignored",
 		"session/ended": "ignored",
 		"session/shell": "untouched",
-		"session/marked": "untouched",
 		tick: "untouched",
 		"tick past the boot timeout": "untouched",
 		"cmd/spawn": "untouched",
@@ -210,7 +208,6 @@ const TABLE: Readonly<Record<Phase, Readonly<Record<Column, Outcome>>>> = {
 		"session/opened": "ignored",
 		"session/ended": "ignored",
 		"session/shell": "untouched",
-		"session/marked": "untouched",
 		tick: "untouched",
 		"tick past the boot timeout": "untouched",
 		"cmd/spawn": "untouched",
@@ -253,7 +250,6 @@ const TABLE: Readonly<Record<Phase, Readonly<Record<Column, Outcome>>>> = {
 		"session/opened": "ignored",
 		"session/ended": "ignored",
 		"session/shell": "untouched",
-		"session/marked": "untouched",
 		tick: "untouched",
 		"tick past the boot timeout": "untouched",
 		"cmd/spawn": "untouched",
@@ -296,7 +292,6 @@ const TABLE: Readonly<Record<Phase, Readonly<Record<Column, Outcome>>>> = {
 		"session/opened": "ignored",
 		"session/ended": "ignored",
 		"session/shell": "untouched",
-		"session/marked": "untouched",
 		tick: "untouched",
 		"tick past the boot timeout": "untouched",
 		"cmd/spawn": "untouched",
@@ -339,7 +334,6 @@ const TABLE: Readonly<Record<Phase, Readonly<Record<Column, Outcome>>>> = {
 		"session/opened": "ignored",
 		"session/ended": "ignored",
 		"session/shell": "untouched",
-		"session/marked": "untouched",
 		tick: "untouched",
 		"tick past the boot timeout": "untouched",
 		"cmd/spawn": "untouched",
@@ -382,7 +376,6 @@ const TABLE: Readonly<Record<Phase, Readonly<Record<Column, Outcome>>>> = {
 		"session/opened": "ignored",
 		"session/ended": "ignored",
 		"session/shell": "untouched",
-		"session/marked": "untouched",
 		tick: "untouched",
 		"tick past the boot timeout": "untouched",
 		"cmd/spawn": "untouched",
@@ -451,8 +444,6 @@ function eventFor(column: Column, s: LabState, name: MachineName, attempt: numbe
 			return { type: "session/ended", session: `${name}:console` };
 		case "session/shell":
 			return { type: "session/shell", session: `${name}:console`, shell: "running" };
-		case "session/marked":
-			return { type: "session/marked", session: `${name}:console`, source: "agent" };
 		case "tick":
 			return { type: "tick", now: s.now + 100 };
 		case "tick past the boot timeout":

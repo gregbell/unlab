@@ -638,7 +638,7 @@ export function bootMachines(state: LabState, nodes: readonly BootNode[], nextN:
 		};
 		const machine = restore ? restoring(spawned, restore, attempt, plugs, []) : spawned;
 		machines[id.name] = machine;
-		sessions[tab] = { id: tab, machine: id.name, kind: "console", state: "open", shell: "unknown", agentLines: false };
+		sessions[tab] = { id: tab, machine: id.name, kind: "console", state: "open", shell: "unknown" };
 		added.push(machine);
 	}
 	const next: LabState = {
@@ -1095,7 +1095,7 @@ export function openShell(state: LabState, name: MachineName): Step {
 	const machine = state.machines[name];
 	if (!machine || !ACCEPTS[machine.life.phase].commands) return step(state);
 	const id: SessionId = `${name}:sh${machine.nextShell}`;
-	const session: Session = { id, machine: name, kind: "shell", state: "opening", shell: "unknown", agentLines: false };
+	const session: Session = { id, machine: name, kind: "shell", state: "opening", shell: "unknown" };
 	const next = put(
 		{ ...state, sessions: { ...state.sessions, [id]: session } },
 		{ ...machine, sessions: [...machine.sessions, id], activeSession: id, nextShell: machine.nextShell + 1 },
@@ -1120,11 +1120,6 @@ export function sessionOpened(state: LabState, id: SessionId): Step {
 
 export function sessionShell(state: LabState, id: SessionId, shell: "prompt" | "running"): Step {
 	return patchSession(state, id, { shell });
-}
-
-/** Only the agent's lines are remembered, because they drive the pane's blue-rule legend. */
-export function sessionMarked(state: LabState, id: SessionId, source: "bar" | "agent"): Step {
-	return source === "agent" ? patchSession(state, id, { agentLines: true }) : step(state);
 }
 
 /** A shell's process exited. Its tab closes, and the tab to its left takes over if it was active. */

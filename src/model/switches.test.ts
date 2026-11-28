@@ -367,19 +367,6 @@ describe("moving a cable", () => {
 	});
 });
 
-describe("the switch on the page", () => {
-	test("is the one that was chosen, through a reload, until it is removed", () => {
-		let s = added(labWith(1), lan, wan);
-		expect(s.shownSwitch).toBe("switch0");
-		s = run(s, { type: "ui/switch-shown", switch: wan });
-		expect(s.shownSwitch).toBe("wan");
-		expect(reloaded(s).shownSwitch).toBe("wan");
-		expect(run(s, removed(lan)).shownSwitch).toBe("wan");
-		expect(run(s, removed(wan)).shownSwitch).toBe("switch0");
-		expect(run(s, removed(wan), { type: "ui/switch-shown", switch: wan }).shownSwitch).toBe("switch0");
-	});
-});
-
 describe("a port's label", () => {
 	test("has the switch when there are several, and for one that is gone", () => {
 		const port = { switch: lan, port: 3 } as const;
