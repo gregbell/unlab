@@ -19,7 +19,7 @@ export const focus = defineVerb({
 	phases: ["booting", "ready", "stopping", "off", "restoring", "failed"],
 	grammar: {
 		target: slots.target(),
-		mode: slots.exclusive<Mode>("--main moves its pane to the front. --max maximises it, or restores it.", "plain", [
+		mode: slots.exclusive<Mode>("--main brings its window to the front. --max maximizes it, or restores it.", "plain", [
 			slots.flag("--main", "main"),
 			slots.flag("--max", "max"),
 		]),

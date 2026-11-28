@@ -112,9 +112,9 @@ export async function macRows(page: Page, on: string): Promise<string[][]> {
 		);
 }
 
-/** Whose addresses a switch has learned, in its MAC table's order: `node1`, or `r1:eth0` for a machine of several NICs. */
+/** Whose addresses a switch has learned, in its MAC table's order: `node1`, `r1:eth0` for a machine of several NICs, or "" for no machine's. */
 export async function learned(page: Page, on: string): Promise<string[]> {
-	return (await macRows(page, on)).flatMap(([, , machine]) => (machine && machine !== "—" ? [machine] : []));
+	return (await macRows(page, on)).map(([, , machine]) => (machine === "—" ? "" : (machine ?? "")));
 }
 
 /** What a switch's details window says of the frames it has taken in, delivered and flooded since it was added. */

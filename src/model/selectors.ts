@@ -250,10 +250,10 @@ export function selectAgentIndicator(state: LabState): AgentIndicator {
 }
 
 export interface StatusSegment {
-	readonly key: "machines" | "sessions" | "webmcp" | "cli";
+	readonly key: "cli";
 	readonly text: string;
-	/** `quiet` when all is well, `down` for a failed machine, `warn` while a call waits or the browser blocks the tools. */
-	readonly tone: "quiet" | "down" | "warn";
+	/** `quiet` when all is well, `warn` when the browser blocks or refuses the link. */
+	readonly tone: "quiet" | "warn";
 }
 
 /** The link with the CLI, which SSH access shows, and an agent that uses the lab through it. */
