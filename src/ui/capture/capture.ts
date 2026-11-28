@@ -6,7 +6,7 @@ import { createRef, type Ref, ref } from "lit/directives/ref.js";
 import type { CaptureRow, EventRow, FrameRow, RouteEnd } from "../../capture/index.ts";
 import { andList, type SwitchName, selectNames, type UiEvent } from "../../model/index.ts";
 import { compileFilter, EVERYONE, narrows, PCAP_TYPE, pcapOf } from "../../net/index.ts";
-import { clearIcon, download, pauseIcon, resumeIcon, Select, UnlabElement, windowButtons } from "../base/index.ts";
+import { clearIcon, download, pauseIcon, resumeIcon, Select, UnlabElement } from "../base/index.ts";
 import { FollowCapture } from "./follow.ts";
 
 export type CaptureMode = "dock" | "full";
@@ -38,10 +38,11 @@ function viaTitle(row: FrameRow): string {
 }
 
 /**
- * The capture: a toolbar, the rows and the counters. `dock`, under the panes,
- * shows the last eight rows, each cut to the width there is. `full` is the
- * maximised panel: the whole buffer, virtualised, with the match count, Save
- * .pcap, a selection the arrow keys move and the frame detail beside it.
+ * The capture: a toolbar, the rows and the counters. `dock` shows the last
+ * eight rows, each cut to the width there is, and with `on-switch` only the
+ * rows of one switch, as many as fit. `full` is the Packet inspector: the
+ * whole buffer, virtualised, with the match count, Save .pcap, a selection the
+ * arrow keys move and the frame detail beside it.
  *
  * It reads frames from the capture while it renders and never copies them
  * into state; `capture.revision` decides when to render. The list is not a
@@ -126,10 +127,6 @@ export class UnlabCapture extends UnlabElement {
 					${clearIcon}<span class="label">clear</span>
 				</button>
 				${full ? html`<button type="button" class="button" title=${narrows(capture.filter) ? "Save the frames shown" : nothing} @click=${this.#save}>save .pcap</button>` : nothing}
-				<span class="window">${windowButtons("capture", full, {
-					maximise: () => this.#dispatch({ type: "ui/panel-maximised", panel: "capture" }),
-					park: () => this.#dispatch({ type: "ui/panel-parked", panel: "capture" }),
-				})}</span>
 			</div>
 			${full ? html`<div class="body"><div class="list-column">${list}</div><unlab-frame-detail></unlab-frame-detail></div>` : list}`;
 	}

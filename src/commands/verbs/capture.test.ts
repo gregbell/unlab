@@ -15,7 +15,7 @@ async function several() {
 }
 
 describe("capture", () => {
-	it("sets the filter and maximises the capture", async () => {
+	it("sets the filter", async () => {
 		const lab = storeLab();
 		await lab.lab(1);
 		expect(lab.parsed("capture icmp node1").preview(lab.store.state)).toMatchObject({
@@ -23,7 +23,6 @@ describe("capture", () => {
 		});
 		expect(lab.parsed("capture").preview(lab.store.state)).toMatchObject({ will: "show every captured frame" });
 		expect(await lab.run("capture icmp")).toMatchObject({ kind: "visible", text: "showing frames matching icmp" });
-		expect(lab.store.state.panels.maximised).toBe("capture");
 		expect(lab.store.state.capture.filter).toBe("icmp");
 	});
 

@@ -152,12 +152,12 @@ test("a machine comes back with its name, and the pane layout with it", () => {
 	let s = labWith(1);
 	s = run(s, spawnEvent(s, 1, { name: "web-1" }));
 	const web = s.rail[1];
-	s = run(s, isReady(web), { type: "ui/park", machine: "node1" }, { type: "ui/maximise", machine: web });
+	s = run(s, isReady(web), { type: "cmd/focus", target: web, mode: "max" });
 	const { state, effects } = restoreWorkspace(initialState(IMAGES, WIDE), saveWorkspace(s));
 	expect(state.rail).toEqual(["node1", "web-1"]);
 	expect(machine(state, web)).toMatchObject({ n: 2, mac: "52:54:00:88:00:0c", sessions: ["web-1:console"] });
 	expect(state.keyboard).toEqual({ kind: "pane", machine: "web-1" });
-	expect(state.panes.maximised).toMatchObject({ machine: "web-1", before: { node1: "user" } });
+	expect(state.panes.maximised).toMatchObject({ machine: "web-1" });
 	expect(effects.flatMap((e) => (e.type === "vm/boot" ? [e.config.identity.name] : []))).toEqual(state.rail);
 	expect(spawnEvent(state, 1)).toMatchObject({ plan: { machines: [{ identity: { name: "node3" } }] } });
 });
@@ -310,20 +310,107 @@ describe("a lab with several switches", () => {
 	});
 });
 
-test("the open panels come back, and none maximised", () => {
-	const s = run(
-		labWith(1),
-		{ type: "ui/panel-parked", panel: "capture" },
-		{ type: "ui/panel-maximised", panel: "switch0" },
-	);
-	const { state } = restoreWorkspace(initialState(IMAGES, WIDE), saveWorkspace(s));
-	expect(state.panels).toEqual({ open: ["switch0"], maximised: null });
+test.each(["open", "collapsed"])("a lab saved with its one dock %s restores", (dock) => {
+	const { state } = restoreWorkspace(initialState(IMAGES, WIDE), JSON.stringify({ ...VERSION_1, dock }));
+	expect(state.rail).toEqual(["node1", "node2", "node3"]);
+	expect(JSON.parse(saveWorkspace(state))).not.toHaveProperty("dock");
 });
 
-test.each([
-	["open", ["capture", "switch0"]],
-	["collapsed", []],
-])("a lab saved with its one dock %s restores with the same panels", (dock, open) => {
-	const { state } = restoreWorkspace(initialState(IMAGES, WIDE), JSON.stringify({ ...VERSION_1, dock }));
-	expect(state.panels.open).toEqual(open);
+/** As a version with a switch panel and a dock saved it, with the switch it showed and the panels it had open. */
+const WITH_PANELS = {
+	version: 12,
+	nextN: 3,
+	switches: ["switch0", "lan"],
+	shown: "lan",
+	cables: [],
+	vlans: [],
+	stp: [],
+	priorities: {},
+	costs: [],
+	nodes: [
+		{
+			n: 1,
+			name: "node1",
+			hue: 1,
+			image: "alpine",
+			memMiB: 256,
+			disks: {
+				root: "4",
+				extra: [],
+			},
+			gateway: true,
+			nics: [
+				{
+					net: "switch0",
+					address: "10.88.0.11/24",
+					port: {
+						switch: "switch0",
+						port: 1,
+					},
+					cut: false,
+					conditions: {},
+				},
+			],
+			sets: {
+				live: 0,
+				next: 1,
+				checkpoints: [],
+			},
+		},
+		{
+			n: 2,
+			name: "node2",
+			hue: 2,
+			image: "alpine",
+			memMiB: 256,
+			disks: {
+				root: "4",
+				extra: [],
+			},
+			gateway: true,
+			nics: [
+				{
+					net: "switch0",
+					address: "10.88.0.12/24",
+					port: {
+						switch: "switch0",
+						port: 2,
+					},
+					cut: true,
+					conditions: {},
+				},
+			],
+			sets: {
+				live: 0,
+				next: 1,
+				checkpoints: [],
+			},
+		},
+	],
+	panels: ["switch0"],
+	order: ["node1", "node2"],
+	parked: ["node2"],
+	focus: "node1",
+	paused: false,
+	policies: { machines_spawn: "run" },
+};
+
+test("a lab saved with a switch panel and a dock restores, and saves again without them", () => {
+	const { state, effects } = restoreWorkspace(initialState(IMAGES, WIDE), JSON.stringify(WITH_PANELS));
+	expect(state.switches).toEqual(["switch0", "lan"]);
+	expect(state.rail).toEqual(["node1", "node2"]);
+	expect(machine(state, "node2").life).toMatchObject({ plugs: [{ kind: "port", port: port0(2), link: "cut" }] });
+	expect(state.keyboard).toEqual({ kind: "pane", machine: "node1" });
+	expect(state.panes.parked).toEqual({ node2: "user" });
+	expect(state.agent.policies.machines_spawn).toBe("run");
+	expect(effects.flatMap((e) => (e.type === "vm/boot" ? [e.config.identity.name] : []))).toEqual(["node1", "node2"]);
+	const again = JSON.parse(saveWorkspace(state));
+	expect(again).not.toHaveProperty("shown");
+	expect(again).not.toHaveProperty("panels");
+	expect(again).toMatchObject({
+		version: WITH_PANELS.version,
+		switches: ["switch0", "lan"],
+		order: ["node1", "node2"],
+	});
+	expect(restoreWorkspace(initialState(IMAGES, WIDE), JSON.stringify(again)).state.rail).toEqual(["node1", "node2"]);
 });

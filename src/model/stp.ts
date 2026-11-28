@@ -225,12 +225,6 @@ export function treeWord(port: Pick<TreePort, "state"> | undefined): typeof BLOC
 	return port.state === "discarding" ? BLOCKED : "learning";
 }
 
-/** `blocked by spanning tree`, where there is room to say what blocked it. */
-export function treeText(port: Pick<TreePort, "state"> | undefined): string | null {
-	const word = treeWord(port);
-	return word === BLOCKED ? `${BLOCKED} by spanning tree` : word;
-}
-
 /** `root port`, `alternate port · blocked`: its role, and its state where it does not carry. */
 export function treeRoleText(port: Pick<TreePort, "role" | "state"> | undefined): string | null {
 	if (!port) return null;

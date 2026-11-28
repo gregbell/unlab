@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { expect, type Page, test } from "@playwright/test";
 import { chromiumExecutable } from "../test/support/chromium.ts";
-import { shell, typed } from "./lab.ts";
+import { portRow, shell, status, switchDetails, typed } from "./lab.ts";
 import { call } from "./webmcp.ts";
 
 test.use({
@@ -26,9 +26,8 @@ interface Row {
 	readonly tagged?: readonly number[];
 }
 
-const ready = (page: Page, text: string) => expect(page.getByText(text)).toBeVisible({ timeout: 90_000 });
+const ready = (page: Page, said: string) => status(page, said, 90_000);
 const bar = (page: Page) => page.locator("unlab-command-bar");
-const panel = (page: Page) => page.locator("unlab-switch");
 const full = (page: Page) => page.locator("unlab-capture[mode=full]");
 
 const reaches = async (page: Page, machine: number, address: string) =>
@@ -82,7 +81,7 @@ test("a port goes in a VLAN by its number or by its NIC, from the bar and its to
 }) => {
 	const errors: string[] = [];
 	page.on("pageerror", (e) => errors.push(e.message));
-	await page.goto("/?layout=classic");
+	await page.goto("/");
 	await expect(page.getByRole("heading", { name: "Your Linux lab in a tab." })).toBeVisible();
 	await typed(page, "spawn 2 lab --no-gateway");
 	await ready(page, "2 of 2 ready");
@@ -95,9 +94,10 @@ test("a port goes in a VLAN by its number or by its NIC, from the bar and its to
 		data: { switch: "switch0", port: 2, mode: "access", vlan: 20 },
 	});
 	expect(await carried(page, "switch0:1", "switch0:2")).toEqual(["switch0:1 vlan 10", "switch0:2 vlan 20"]);
-	await expect(panel(page).locator(".port[data-port='1'] .nic")).toHaveText("v10");
-	await expect(panel(page).locator(".port[data-port='2'] .nic")).toHaveText("v20");
-	await expect(panel(page).locator(".port[data-port='1']")).toHaveAttribute("title", "node1 · vlan 10");
+	const details = await switchDetails(page, "switch0");
+	await expect(portRow(details, 1)).toContainText("node1");
+	await expect(portRow(details, 1)).toContainText("vlan 10");
+	await expect(portRow(details, 2)).toContainText("vlan 20");
 	expect(await reaches(page, 1, "node2")).toBe(false);
 	expect(await reaches(page, 2, "node1")).toBe(false);
 
@@ -145,7 +145,7 @@ test("two VLANs cross one trunk, tagged in the capture and its file, each machin
 }) => {
 	const errors: string[] = [];
 	page.on("pageerror", (e) => errors.push(e.message));
-	await page.goto("/?layout=classic");
+	await page.goto("/");
 	await expect(page.getByRole("heading", { name: "Your Linux lab in a tab." })).toBeVisible();
 	await typed(page, "mkswitch lan");
 	await typed(page, "spawn 2 lab --no-gateway");
@@ -159,7 +159,7 @@ test("two VLANs cross one trunk, tagged in the capture and its file, each machin
 		result: "lan:8 trunk of all VLANs, native 1",
 		data: { switch: "lan", port: 8, mode: "trunk", allowed: "all", native: 1 },
 	});
-	await expect(panel(page).locator(".port[data-port='8'] .nic")).toHaveText("port 8 trunk");
+	await expect(portRow(await switchDetails(page, "switch0"), 8)).toContainText("trunk");
 	expect(await reaches(page, 1, "node3")).toBe(true);
 	expect(await reaches(page, 2, "node4")).toBe(true);
 	expect(await reaches(page, 1, "node4")).toBe(false);

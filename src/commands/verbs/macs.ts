@@ -41,7 +41,7 @@ function listed({ mac, port, vlan, machine, nic, age, flushed }: MacRow): Listed
 	return { mac, port, vlan, ...whose, age, flushed };
 }
 
-/** `52:54:00:88:00:0b · port 1 · node1 · 3 s ago`, as a row of the switch panel's table says it. VLAN 1 goes without saying. */
+/** `52:54:00:88:00:0b · port 1 · node1 · 3 s ago`. VLAN 1 goes without saying. */
 function macLine(row: MacRow): string {
 	const vlan = row.vlan === 1 ? [] : [`vlan ${row.vlan}`];
 	return [row.mac, `port ${row.port}`, ...(row.label === "" ? [] : [row.label]), ...vlan, macSeen(row)].join(" · ");
@@ -53,7 +53,7 @@ export const macs = defineVerb({
 	name: "macs",
 	about: "list what switches have learned, and their counters",
 	description:
-		"List each switch's MAC table and counters, as the switch panel shows them. Each address has its port, its VLAN, the machine and NIC that have it, and its age in seconds. One is flushed while its port's link is down. The counters are the frames the switch took in, the copies it delivered to ports, and those it flooded, since it was added.",
+		"List each switch's MAC table and counters. Each address has its port, its VLAN, the machine and NIC that have it, and its age in seconds. One is flushed while its port's link is down. The counters are the frames the switch took in, the copies it delivered to ports, and those it flooded, since it was added.",
 	danger: false,
 	grammar: { switches: { ...slots.optional(switches), about: `${switches.about} Left out, every switch.` } },
 	example: { switches: "switch0" },

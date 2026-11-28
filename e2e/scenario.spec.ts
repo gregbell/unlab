@@ -1,6 +1,6 @@
 import { expect, type Page, test } from "@playwright/test";
 import { chromiumExecutable } from "../test/support/chromium.ts";
-import { root, shell } from "./lab.ts";
+import { agentPanel, root, shell } from "./lab.ts";
 import { call, finish, registered, start } from "./webmcp.ts";
 
 test.use({
@@ -8,17 +8,14 @@ test.use({
 });
 
 async function openLab(page: Page): Promise<void> {
-	await page.goto("/?layout=classic");
+	await page.goto("/");
 	await expect(page.getByRole("heading", { name: "Your Linux lab in a tab." })).toBeVisible();
 }
 
-/** An agent's spawn, with the person's yes. */
+/** An agent's spawn, with the person's yes in the WebMCP window, brought in front of the terminals. */
 async function spawn(page: Page, input: Record<string, string | number>): Promise<void> {
 	await start(page, "spawn", "machines_spawn", { count: 1, ...input });
-	await page
-		.locator("unlab-agent-panel")
-		.getByRole("button", { name: /^Boot / })
-		.click();
+	await (await agentPanel(page)).getByRole("button", { name: /^Boot / }).click();
 	expect(await finish(page, "spawn")).not.toHaveProperty("error");
 }
 

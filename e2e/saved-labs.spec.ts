@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { expect, type Page, test } from "@playwright/test";
 import { chromiumExecutable } from "../test/support/chromium.ts";
-import { shell, typed } from "./lab.ts";
+import { portRow, shell, status, switchDetails, switchesListed, typed } from "./lab.ts";
 import { call } from "./webmcp.ts";
 
 test.use({
@@ -35,20 +35,20 @@ test("a lab saved before there were several switches opens on one, with a machin
 	await page.addInitScript((saved) => {
 		if (!localStorage.getItem("unlab.workspace.v1")) localStorage.setItem("unlab.workspace.v1", saved);
 	}, SAVED);
-	await page.goto("/?layout=classic");
-	const ready = page.getByText("4 of 5 ready, 1 off");
-	await expect(ready).toBeVisible({ timeout: 90_000 });
+	await page.goto("/");
+	const ready = () => status(page, "4 of 5 ready, 1 off", 90_000);
+	await ready();
 	expect(await cables(page)).toEqual(AS_SAVED);
-	await expect(page.locator("unlab-switch .title")).toHaveText(["switch0"]);
+	await expect(switchesListed(page)).toHaveText(["switch0"]);
 	expect(await shell(page, "node1", "ping -c 1 -W 2 switch1")).toMatchObject({ exitCode: 1 });
 
 	await page.reload();
-	await expect(ready).toBeVisible({ timeout: 90_000 });
+	await ready();
 	expect(await cables(page)).toEqual(AS_SAVED);
 	await typed(page, "link up switch1");
 	await expect(
-		page.locator("unlab-switch").getByRole("button", { name: "Cut the cable from switch1 to port 2" }),
-	).toBeVisible();
+		portRow(await switchDetails(page, "switch0"), 2).getByRole("button", { name: "Cut cable" }),
+	).toHaveAttribute("title", "Cut the cable from switch1 to port 2");
 	expect(await shell(page, "node1", "ping -c 2 -W 2 switch1")).toMatchObject({ exitCode: 0 });
 	expect(await shell(page, "switch1", "hostname; ping -c 1 -W 2 node1")).toMatchObject({
 		exitCode: 0,

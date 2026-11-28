@@ -30,8 +30,6 @@ import {
 	MAX_SWITCHES,
 	type NicSpec,
 	NO_CONDITIONS,
-	PANELS,
-	type PanelName,
 	type Plug,
 	PORTS,
 	type PortCost,
@@ -77,7 +75,6 @@ export function saveWorkspace(state: LabState): string {
 		version: VERSION,
 		nextN: state.nextN,
 		switches: state.switches,
-		shown: state.shownSwitch,
 		cables: state.switchCables.map(({ ends, link, conditions = NO_CONDITIONS }) => ({
 			ends,
 			cut: link === "cut",
@@ -92,7 +89,6 @@ export function saveWorkspace(state: LabState): string {
 		priorities: state.priorities,
 		costs: state.portCosts,
 		nodes,
-		panels: state.panels.open,
 		order: state.panes.order,
 		parked: state.panes.order.filter((n) => (state.panes.maximised?.before ?? state.panes.parked)[n] === "user"),
 		maximised: state.panes.maximised?.machine,
@@ -359,12 +355,6 @@ function readIdentity(n: number, saved: unknown): Identity {
 }
 
 /** Before panels parked one at a time, one `dock` was open or collapsed. */
-function readPanels(saved: Record<string, unknown>): readonly PanelName[] {
-	const { panels, dock } = saved;
-	if (Array.isArray(panels)) return PANELS.filter((name) => panels.includes(name));
-	return dock === "collapsed" ? [] : PANELS;
-}
-
 export function restoreWorkspace(base: LabState, raw: string | null): Step {
 	if (raw === null) return { state: base, effects: [] };
 	const saved = readLab(raw);
@@ -426,8 +416,7 @@ export function restoreWorkspace(base: LabState, raw: string | null): Step {
 		saved.nextN <= Math.max(0, ...nodes.map((n) => n.identity.n))
 	)
 		return invalid();
-	const shownSwitch = switches.find((name) => name === saved.shown) ?? DEFAULT_SWITCH;
-	const wired: LabState = { ...base, switches, shownSwitch, switchCables, stp, priorities };
+	const wired: LabState = { ...base, switches, switchCables, stp, priorities };
 	const booted = bootMachines(wired, nodes, saved.nextN, 0);
 	// A machine that failed holds no port, so the one it held is in VLAN 1 and costs 20000.
 	const state = {
@@ -465,7 +454,6 @@ export function restoreWorkspace(base: LabState, raw: string | null): Step {
 			...state,
 			panes,
 			keyboard: focus ? { kind: "pane", machine: focus } : { kind: "none" },
-			panels: { ...base.panels, open: readPanels(saved) },
 			agent: { ...base.agent, policies, paused: saved.paused === true },
 		},
 	};

@@ -1,16 +1,12 @@
 import "./spawn-form.css";
 import { html, nothing, type TemplateResult } from "lit";
-import { isLineError, MULTICPU_BLOCKER } from "../../commands/index.ts";
-import { DISK_SIZES } from "../../model/index.ts";
 import { Select, UnlabElement } from "../base/index.ts";
-import { defaultChoice, formView, MEMORY, type Memory, type SpawnChoice } from "./form.ts";
-
-const memoryLabel = (mib: Memory): string => (mib >= 1024 ? `${mib / 1024} GiB` : `${mib} MiB`);
+import { defaultChoice, formView, type SpawnChoice } from "./form.ts";
 
 /**
- * Add machines: `spawn` as a form. Each choice is an argument; the line, its
- * validation and execution use the same command as the bar. It starts afresh each time the view opens, because the app mounts
- * it only while the view is open.
+ * Welcome's form: `spawn` as a form. Each choice is an argument; the line, its
+ * validation and execution use the same command as the bar. Customize hands the
+ * choice to the machine wizard. It starts afresh each time Welcome opens.
  */
 export class UnlabSpawnForm extends UnlabElement {
 	static override properties = { choice: { state: true }, running: { state: true } };
@@ -30,7 +26,6 @@ export class UnlabSpawnForm extends UnlabElement {
 	override render(): TemplateResult {
 		const { choice } = this;
 		const lab = this.#lab.value;
-		const firstRun = lab.rail.length === 0;
 		const distro = lab.images.find((image) => image.name === choice.image)?.label ?? choice.image;
 		const view = formView(choice, lab, this.app.commands);
 		const pick = (patch: Partial<SpawnChoice>) => () => {
@@ -41,8 +36,8 @@ export class UnlabSpawnForm extends UnlabElement {
 
 		return html`<div class="sheet">
 			<header class="intro">
-				<h1>${firstRun ? "Your Linux lab in a tab." : "Add machines"}</h1>
-				${firstRun ? html`<p>Boot Alpine or Debian machines on a shared network. They run on your device, and their files stay in this browser.</p>` : nothing}
+				<h1>Your Linux lab in a tab.</h1>
+				<p>Boot Alpine or Debian machines on a shared network. They run on your device, and their files stay in this browser.</p>
 			</header>
 			<div class="choices-column">
 				<div class="question" role="group" aria-labelledby="spawn-count">
@@ -59,43 +54,7 @@ export class UnlabSpawnForm extends UnlabElement {
 						${lab.images.map((image) => option(image.label, choice.image === image.name, { image: image.name }))}
 					</div>
 				</div>
-				${
-					this.customize
-						? html`<button type="button" class="link" @click=${() => this.customize?.(choice)}>Customize machines</button>`
-						: html`<details class="customize">
-					<summary>Customize machines</summary>
-					<div class="question">
-						<div class="label" id="spawn-memory">Memory per machine</div>
-						<div class="choices" role="group" aria-labelledby="spawn-memory">
-							${MEMORY.map((mib) => option(memoryLabel(mib), choice.mem === mib, { mem: mib }))}
-						</div>
-						<p class="note memory-note">${view.memoryNote}</p>
-					</div>
-					<div class="question">
-						<label class="label" for="spawn-cpus">CPUs each</label>
-						<select class="field" id="spawn-cpus" @change=${(event: Event) => {
-							if (event.target instanceof HTMLSelectElement) pick({ cpus: Number(event.target.value) })();
-						}}>
-							${[1, 2, 4, 8, 16].map((n) => html`<option .value=${String(n)} ?selected=${choice.cpus === n} ?disabled=${n > 1 && !!MULTICPU_BLOCKER}>${n}</option>`)}
-						</select>
-						${MULTICPU_BLOCKER ? html`<p class="note">Multiple CPUs unavailable: ${MULTICPU_BLOCKER}.</p>` : nothing}
-					</div>
-					<div class="question">
-						<div class="label" id="spawn-disk">Disk per machine</div>
-						<div class="choices" role="group" aria-labelledby="spawn-disk">
-							${DISK_SIZES.map((disk) => option(`${disk} GiB`, choice.disk === disk, { disk }))}
-						</div>
-					</div>
-					<div class="question">
-						<div class="label" id="spawn-network">Network</div>
-						<div class="choices" role="group" aria-labelledby="spawn-network">
-							${lab.switches.map((name) => option(`plug into ${name}`, choice.net === name, { net: name }))}
-							${option("leave unplugged", choice.net === "none", { net: "none" })}
-						</div>
-						<p class="note">${view.networkNote}</p>
-					</div>
-				</details>`
-				}
+				<button type="button" class="link" @click=${() => this.customize?.(choice)}>Customize machines</button>
 			</div>
 			<div class="result-column">
 				<div class="you-get">
@@ -114,21 +73,15 @@ export class UnlabSpawnForm extends UnlabElement {
 					<button type="button" class="button primary lg" ?disabled=${view.error !== null || this.running} @click=${() => void this.#boot(view.line)}>
 						${view.bootLabel}
 					</button>
-					${firstRun ? nothing : html`<button type="button" class="link" @click=${this.#close}>Cancel</button>`}
 				</div>
 			</div>
 		</div>`;
 	}
 
-	readonly #close = (): void => {
-		this.app.store.dispatchUi({ type: "ui/view", view: "lab" });
-	};
-
 	async #boot(line: string): Promise<void> {
 		this.running = true;
 		try {
-			const result = await this.app.commands.run(line, "button");
-			if (!isLineError(result) && result.kind !== "failed") this.#close();
+			await this.app.commands.run(line, "button");
 		} catch (error) {
 			console.error(`${line} failed`, error);
 		} finally {

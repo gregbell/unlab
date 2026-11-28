@@ -95,6 +95,12 @@ export class UnlabAgentPanel extends UnlabElement {
 	/** The person tried a call that is not in the log yet. */
 	#tried = false;
 
+	/** A move in the page disconnects it, which stops the wait that arms the approve buttons, so the wait starts again. */
+	override connectedCallback(): void {
+		super.connectedCallback();
+		if (!this.#armed) this.#arm();
+	}
+
 	override disconnectedCallback(): void {
 		super.disconnectedCallback();
 		clearTimeout(this.#arming);
@@ -106,6 +112,10 @@ export class UnlabAgentPanel extends UnlabElement {
 		this.#waitingIds = ids;
 		this.#armed = false;
 		this.#show = waiting.length > 0;
+		this.#arm();
+	}
+
+	#arm(): void {
 		clearTimeout(this.#arming);
 		this.#arming = setTimeout(() => {
 			this.#armed = true;
@@ -265,8 +275,6 @@ export class UnlabAgentPanel extends UnlabElement {
 		if (policy) this.app.store.dispatchUi({ type: "ui/policy", tool, policy });
 	}
 }
-
-export const AGENT_PANEL_ID = "unlab-agent-panel";
 
 customElements.define("unlab-agent-panel", UnlabAgentPanel);
 

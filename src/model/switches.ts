@@ -1,7 +1,7 @@
 import { storm, uncableAll } from "./cables.ts";
 import { parseSwitchName } from "./identity.ts";
 import { nameHolder, unplugAll } from "./machines.ts";
-import { andThen, patch, step } from "./step.ts";
+import { andThen, step } from "./step.ts";
 import {
 	type Cause,
 	DEFAULT_SWITCH,
@@ -70,14 +70,9 @@ export function removeSwitch(state: LabState, name: SwitchName, cause: Cause): S
 		switches: [first, ...others.filter((other) => other !== name)],
 		departedSwitches: [...state.departedSwitches, name],
 	};
-	return step(showSwitch(next, next.shownSwitch), [
+	return step(next, [
 		...effects,
 		{ type: "switch/remove", switch: name },
 		{ type: "announce", text: `${name} removed` },
 	]);
-}
-
-/** The switch on the page, or the default one when it is not there. */
-export function showSwitch(state: LabState, name: SwitchName): LabState {
-	return patch(state, { shownSwitch: state.switches.includes(name) ? name : DEFAULT_SWITCH });
 }

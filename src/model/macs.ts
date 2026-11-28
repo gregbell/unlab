@@ -23,7 +23,7 @@ export interface SwitchTotals {
 	readonly flooded: number;
 }
 
-/** A row of a switch's MAC table, as the switch panel and `macs` give it. */
+/** A row of a switch's MAC table, as `macs` gives it. */
 export interface MacRow {
 	readonly mac: string;
 	readonly port: PortNo;

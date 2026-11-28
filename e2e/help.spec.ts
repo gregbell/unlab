@@ -1,6 +1,6 @@
 import { expect, type Page, test } from "@playwright/test";
 import { chromiumExecutable } from "../test/support/chromium.ts";
-import { typed } from "./lab.ts";
+import { status, typed } from "./lab.ts";
 import { call, finish, start } from "./webmcp.ts";
 
 test.use({
@@ -8,7 +8,7 @@ test.use({
 });
 
 async function openLab(page: Page): Promise<void> {
-	await page.goto("/?layout=classic");
+	await page.goto("/");
 	await expect(page.getByRole("heading", { name: "Your Linux lab in a tab." })).toBeVisible();
 }
 
@@ -114,7 +114,7 @@ test("an example from help runs as it stands, typed or called", async ({ page })
 	await openLab(page);
 	const { data } = (await call(page, "lab_help", { verb: "spawn" })) as Told;
 	await typed(page, data.example.line);
-	await expect(page.getByText("1 of 1 ready")).toBeVisible({ timeout: 60_000 });
+	await status(page, "1 of 1 ready", 60_000);
 	expect(await call(page, "machines_list", {})).toMatchObject({
 		data: [{ name: "router", state: "ready", nics: [{ address: "10.1.0.1" }, { address: "10.2.0.1" }] }],
 	});
@@ -126,7 +126,7 @@ test("an example from help runs as it stands, typed or called", async ({ page })
 test("a command for a session that runs a program says so, in the bar and to an agent", async ({ page }) => {
 	await openLab(page);
 	await typed(page, "spawn 1 alpine");
-	await expect(page.getByText("1 of 1 ready")).toBeVisible({ timeout: 60_000 });
+	await status(page, "1 of 1 ready", 60_000);
 	await start(page, "sleep", "shell_exec", { targets: "node1", command: "sleep 8" });
 	const called = async () =>
 		((await call(page, "shell_exec", { targets: "node1", command: "true" })) as { readonly error?: string }).error;
@@ -149,7 +149,7 @@ async function refused(page: Page, line: string): Promise<string> {
 test("what cannot run is refused in one sentence, the same in the bar and through WebMCP", async ({ page }) => {
 	await openLab(page);
 	await typed(page, "spawn 2 alpine --no-gateway");
-	await expect(page.getByText("2 of 2 ready")).toBeVisible({ timeout: 60_000 });
+	await status(page, "2 of 2 ready", 60_000);
 	expect(await call(page, "machines_poweroff", { names: "node2" })).toMatchObject({ data: [{ state: "off" }] });
 
 	const rows: readonly (readonly [line: string, tool: string, input: object, sentence: string])[] = [
@@ -256,10 +256,10 @@ test("what cannot run is refused in one sentence, the same in the bar and throug
 test("the bar completes and previews each verb and option as it does spawn", async ({ page }) => {
 	await openLab(page);
 	await typed(page, "spawn 1 alpine --nics 2 --no-gateway");
-	await expect(page.getByText("1 of 1 ready")).toBeVisible({ timeout: 60_000 });
+	await status(page, "1 of 1 ready", 60_000);
 	await typed(page, "mkswitch lan");
 	await typed(page, "spawn 1 alpine --name web --no-gateway");
-	await expect(page.getByText("2 of 2 ready")).toBeVisible({ timeout: 60_000 });
+	await status(page, "2 of 2 ready", 60_000);
 	expect(await call(page, "checkpoint_save", { machine: "node1", checkpoint: "before" })).not.toHaveProperty("error");
 	expect(await call(page, "machines_poweroff", { names: "web" })).toMatchObject({ data: [{ state: "off" }] });
 

@@ -301,8 +301,6 @@ export class UnlabCommandBar extends UnlabElement {
 		const target = this.#returnTo;
 		this.#returnTo = null;
 		if (!target?.isConnected) return;
-		// A pane that gets the keyboard back puts focus in its terminal itself.
-		if (this.app.store.state.keyboard.kind === "pane" && target.closest("unlab-pane-area")) return;
 		target.focus();
 	}
 

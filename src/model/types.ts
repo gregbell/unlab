@@ -394,8 +394,6 @@ export interface Session {
 	readonly state: "opening" | "open";
 	/** From the OSC 133 tracker. `running` refuses exec. `unknown` until the first prompt mark. */
 	readonly shell: "prompt" | "running" | "unknown";
-	/** Some lines here carry the blue rule; drives the pane's agent legend. */
-	readonly agentLines: boolean;
 }
 
 // ───────────────────────────── panes ─────────────────────────────
@@ -517,17 +515,6 @@ export interface LogEntry {
 
 export type View = "lab" | "spawn";
 
-/** The panels under the panes, left to right, which is also their order in the panel bar. */
-export const PANELS = ["capture", DEFAULT_SWITCH] as const;
-export type PanelName = (typeof PANELS)[number];
-
-export interface Panels {
-	/** In `PANELS` order. The others are parked. */
-	readonly open: readonly PanelName[];
-	/** While one panel is maximised it stands in for the panes and the other panels. Always an open one. */
-	readonly maximised: PanelName | null;
-}
-
 export interface Departed {
 	readonly n: number;
 	readonly attempt: number;
@@ -547,8 +534,6 @@ export interface LabState {
 	readonly switches: readonly [typeof DEFAULT_SWITCH, ...SwitchName[]];
 	/** Those that are gone, until a machine or a switch takes the name. Frames still name them. */
 	readonly departedSwitches: readonly SwitchName[];
-	/** The one whose faceplate is on the page. Always one of `switches`. */
-	readonly shownSwitch: SwitchName;
 	/** The cables between switches, in the order they were put in. No two share a port, with each other or with a NIC. */
 	readonly switchCables: readonly SwitchCable[];
 	/** The ports that something is in and that are not access ports of VLAN 1, one each. A free port is in VLAN 1. */
@@ -568,7 +553,6 @@ export interface LabState {
 	readonly keyboard: Keyboard;
 	readonly view: View;
 	readonly agentPanel: boolean;
-	readonly panels: Panels;
 	readonly capture: CaptureUi;
 	readonly agent: AgentState;
 	readonly cli: CliLink;
@@ -744,7 +728,6 @@ export type RuntimeEvent =
 	| { readonly type: "session/opened"; readonly session: SessionId }
 	| { readonly type: "session/ended"; readonly session: SessionId }
 	| { readonly type: "session/shell"; readonly session: SessionId; readonly shell: "prompt" | "running" }
-	| { readonly type: "session/marked"; readonly session: SessionId; readonly source: "bar" | "agent" }
 	| { readonly type: "tick"; readonly now: number };
 
 /** Dispatched only by command `execute` functions. */
@@ -785,18 +768,8 @@ export type CommandEvent =
 
 /** The only events elements may dispatch. None touches a machine, a port or a link. */
 export type UiEvent =
-	| { readonly type: "ui/pane-focused"; readonly machine: MachineName }
-	| { readonly type: "ui/tab-selected"; readonly session: SessionId }
-	| { readonly type: "ui/park"; readonly machine: MachineName }
-	| { readonly type: "ui/unpark"; readonly machine: MachineName }
-	| { readonly type: "ui/maximise"; readonly machine: MachineName }
-	| { readonly type: "ui/area-resized"; readonly width: number; readonly height: number }
 	| { readonly type: "ui/view"; readonly view: View }
 	| { readonly type: "ui/agent-panel"; readonly open: boolean }
-	| { readonly type: "ui/panel-unparked"; readonly panel: PanelName }
-	| { readonly type: "ui/panel-parked"; readonly panel: PanelName }
-	| { readonly type: "ui/panel-maximised"; readonly panel: PanelName }
-	| { readonly type: "ui/switch-shown"; readonly switch: SwitchName }
 	| { readonly type: "ui/bar"; readonly open: boolean }
 	| { readonly type: "ui/capture-filter"; readonly filter: string }
 	| { readonly type: "ui/capture-pause"; readonly paused: boolean }

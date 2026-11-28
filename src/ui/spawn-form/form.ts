@@ -12,11 +12,9 @@ import {
 	MAX_MACHINES,
 	type MachineName,
 	type NicSpec,
-	PORTS,
 	planSpawn,
 	portLabel,
 	type SpawnRequest,
-	takenPorts,
 } from "../../model/index.ts";
 import { addressStr } from "../../net/index.ts";
 
@@ -53,10 +51,6 @@ export interface NewMachine {
 export interface FormView {
 	/** The most the stepper allows: what the lab and, when plugging in, the switch have room for. 0 when nothing fits. */
 	readonly most: number;
-	/** `768 MiB of memory in total` */
-	readonly memoryNote: string;
-	/** What happens to the switch. */
-	readonly networkNote: string;
 	readonly machines: readonly NewMachine[];
 	/** The bar line for this choice, as the bar would log it. */
 	readonly line: string;
@@ -98,21 +92,7 @@ function requestOf({ image, mem, disk, net }: SpawnChoice): SpawnRequest {
 	};
 }
 
-function memoryTotal(mib: number): string {
-	return mib >= 1024 ? `${Math.round(mib / 102.4) / 10} GiB` : `${mib} MiB`;
-}
-
 const plural = (n: number, one: string): string => `${n} ${one}${n === 1 ? "" : "s"}`;
-
-function networkNote(choice: SpawnChoice, lab: LabState): string {
-	if (choice.net === "none") {
-		return choice.count === 1
-			? "It boots with no cable. Plug it in later from the switch."
-			: "They boot with no cable. Plug them in later from the switch.";
-	}
-	const left = PORTS.length - takenPorts(lab, choice.net).size - choice.count;
-	return `${Math.max(0, left)} of ${PORTS.length} ports left on ${choice.net} afterwards.`;
-}
 
 function machinesOf(choice: SpawnChoice, lab: LabState): readonly NewMachine[] {
 	const plan = planSpawn(lab, choice.count, requestOf(choice));
@@ -136,8 +116,6 @@ export function formView(
 	const error = isLineError(parsed) ? parsed : parsed.validate(lab);
 	return {
 		most: mostOf(choice, lab),
-		memoryNote: `${memoryTotal(choice.count * choice.mem)} of memory in total`,
-		networkNote: networkNote(choice, lab),
 		machines: !error ? machinesOf(choice, lab) : [],
 		line,
 		error,

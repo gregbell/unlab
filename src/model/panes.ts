@@ -24,9 +24,6 @@ type Parking = Pick<Panes, "order" | "parked">;
 
 export const visiblePanes = (p: Parking): readonly MachineName[] => p.order.filter((m) => p.parked[m] === undefined);
 
-/** The parked strip's chips, in pane order. */
-export const parkedPanes = (p: Parking): readonly MachineName[] => p.order.filter((m) => p.parked[m] !== undefined);
-
 /** The machine whose pane has the keyboard, or gets it back when the command bar closes. */
 export function keyboardHolder(keyboard: Keyboard): MachineName | null {
 	if (keyboard.kind === "pane") return keyboard.machine;
@@ -138,12 +135,6 @@ export function toggleMaximise(p: Panes, m: MachineName): Panes {
 	const parked: Partial<Record<MachineName, ParkReason>> = {};
 	for (const other of q.order) if (other !== m) parked[other] = "auto";
 	return { ...q, parked, maximised: { machine: m, before: q.parked } };
-}
-
-export function resizeArea(p: Panes, width: number, height: number): Panes {
-	const grid = gridFor(width, height);
-	if (grid.cols === p.grid.cols && grid.rows === p.grid.rows) return p;
-	return reconcilePanes({ ...p, grid });
 }
 
 /** The parking from before the maximise. Machines added since are in no map, so they come back visible. */

@@ -1176,24 +1176,14 @@ describe("exec", () => {
 		expect(t.screens.get("node1:console").made[0].source).toBe("bar");
 	});
 
-	test("an agent's line carries the agent's mark and is reported", async () => {
+	test("an agent's line carries the agent's mark", async () => {
 		const t = setup();
 		const vm = t.atPrompt(1);
 		const result = t.engine.exec.inject("node1:console", "uname", "agent", never);
 		expect(t.screens.get("node1:console").made[0].source).toBe("agent");
-		expect(t.take()).toEqual([
-			{ type: "session/marked", session: "node1:console", source: "agent" },
-			{ type: "session/shell", session: "node1:console", shell: "running" },
-		]);
+		expect(t.take()).toEqual([{ type: "session/shell", session: "node1:console", shell: "running" }]);
 		vm.sink.consoleBytes(vm.ref, bytes(returns(0)));
 		await result;
-	});
-
-	test("a line from the bar is not reported as marked", () => {
-		const t = setup();
-		t.atPrompt(1);
-		void t.engine.exec.inject("node1:console", "uname", "bar", never);
-		expect(t.events.filter((e) => e.type === "session/marked")).toEqual([]);
 	});
 
 	test("refuses with a sentence while the session is running a program, and types nothing", async () => {

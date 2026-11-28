@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import { port0 } from "../../test/support/ports.ts";
 import { cableAt, isCablePlanError, joined, planCable } from "./cables.ts";
 import { heldPorts, lowestFreePorts, planPlug, planSpawn } from "./machines.ts";
-import { selectAllLinks, selectLinks, selectPorts, selectStorm } from "./selectors.ts";
+import { selectPorts, selectStorm } from "./selectors.ts";
 import {
 	effectsOf,
 	IMAGES,
@@ -378,17 +378,6 @@ describe("the faceplate", () => {
 			actionLabel: "Cut the cable from wan port 7 to lan port 8",
 		});
 		expect(selectPorts(lan)(up)[0]).toEqual({ port: 1, state: "empty", machine: null, word: null, actionLabel: null });
-	});
-
-	test("counts such a cable as a link of each switch it is in, up unless it is cut", () => {
-		let s = cabled(three(), place(lan, 8), place(wan, 7));
-		s = cabled(s, place(lan), place(lan));
-		expect(selectLinks(lan)(s)).toEqual({ up: 3, total: 3, cut: 0 });
-		expect(selectLinks(wan)(s)).toEqual({ up: 1, total: 1, cut: 0 });
-		expect(selectLinks("switch0")(s)).toEqual({ up: 2, total: 2, cut: 0 });
-		s = run(s, link(at(wan, 7), false));
-		expect(selectLinks(lan)(s)).toEqual({ up: 2, total: 3, cut: 1 });
-		expect(selectAllLinks(s)).toEqual({ up: 4, total: 6, cut: 2 });
 	});
 
 	test("of a lab with one switch and no such cable is as it was", () => {

@@ -422,8 +422,8 @@ describe("<unlab-command-bar> CmdConfirm: rm asks first", () => {
 				app.services = services;
 			},
 		});
-		const remove = page.getByRole("button", { name: "remove", exact: true }).element();
-		remove.focus();
+		const opener = page.getByRole("button", { name: "Open terminal for node2" }).element();
+		opener.focus();
 		element.dispatchEvent(new CustomEvent("unlab-open-bar", { detail: "rm node2" }));
 		await expect
 			.poll(() => document.querySelector("unlab-command-bar unlab-confirm .heading")?.textContent)
@@ -432,7 +432,7 @@ describe("<unlab-command-bar> CmdConfirm: rm asks first", () => {
 		expect(document.activeElement).toBe(input());
 		await userEvent.keyboard("{Escape}{Escape}");
 		expect(isOpen()).toBe(false);
-		expect(document.activeElement).toBe(remove);
+		expect(document.activeElement).toBe(opener);
 	});
 });
 

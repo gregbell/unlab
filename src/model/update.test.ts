@@ -3,7 +3,6 @@ import { describe, expect, test } from "vitest";
 import { port0 } from "../../test/support/ports.ts";
 import { identity } from "./identity.ts";
 import { isPlanError, lowestFreePorts, planBoot, planLink, planPlug, takenPorts } from "./machines.ts";
-import { parkedPanels, visiblePanels } from "./panels.ts";
 import { capacity, keyboardHolder, reconcilePanes, visiblePanes } from "./panes.ts";
 import { planSwitch } from "./switches.ts";
 import {
@@ -41,7 +40,6 @@ import {
 	type Next,
 	type NicNo,
 	type NicSpec,
-	type PanelName,
 	PORTS,
 	type PortNo,
 	type PortRef,
@@ -73,7 +71,6 @@ describe("initialState", () => {
 			keyboard: { kind: "none" },
 			view: "lab",
 			agentPanel: false,
-			panels: { open: ["capture", "switch0"], maximised: null },
 			capture: { filter: "", paused: false, selected: null },
 			log: [],
 			images: [{ name: "alpine", label: "alpine 3.24" }],
@@ -159,7 +156,6 @@ describe("spawn", () => {
 				kind: "console",
 				state: "open",
 				shell: "unknown",
-				agentLines: false,
 			},
 			"node2:console": {
 				id: "node2:console",
@@ -167,7 +163,6 @@ describe("spawn", () => {
 				kind: "console",
 				state: "open",
 				shell: "unknown",
-				agentLines: false,
 			},
 		});
 		expect(state.panes.order).toEqual(["node1", "node2"]);
@@ -689,7 +684,6 @@ describe("sessions", () => {
 			kind: "shell",
 			state: "opening",
 			shell: "unknown",
-			agentLines: false,
 		});
 		expect(effects).toEqual([
 			{ type: "screen/create", session: "node1:sh1" },
@@ -721,22 +715,10 @@ describe("sessions", () => {
 		expect(machine(s, "node1").sessions).toEqual(["node1:console", "node1:sh2"]);
 	});
 
-	test("selecting a tab makes it the active one", () => {
-		let s = run(labWith(1), shell("node1"));
-		s = run(s, { type: "ui/tab-selected", session: "node1:console" });
-		expect(machine(s, "node1").activeSession).toBe("node1:console");
-		expect(update(s, { type: "ui/tab-selected", session: "node1:console" }).state).toBe(s);
-		expect(update(s, { type: "ui/tab-selected", session: "node1:sh7" }).state).toBe(s);
-	});
-
-	test("the shell tracker's reports are recorded, and only the agent's lines set the legend", () => {
+	test("the shell tracker's reports are recorded", () => {
 		let s = labWith(1);
 		s = run(s, { type: "session/shell", session: "node1:console", shell: "running" });
 		expect(s.sessions["node1:console"]?.shell).toBe("running");
-		const bar = update(s, { type: "session/marked", session: "node1:console", source: "bar" });
-		expect(bar.state).toBe(s);
-		s = run(s, { type: "session/marked", session: "node1:console", source: "agent" });
-		expect(s.sessions["node1:console"]?.agentLines).toBe(true);
 	});
 });
 
@@ -764,63 +746,35 @@ describe("focus and the keyboard", () => {
 	});
 
 	test("--max maximises, and again restores the exact previous layout", () => {
-		const before = run(labWith(4), { type: "ui/park", machine: "node4" });
+		const before = labWith(4, { width: 1200, height: 200 });
 		const maximised = run(before, { type: "cmd/focus", target: "node2", mode: "max" });
 		expect(visiblePanes(maximised.panes)).toEqual(["node2"]);
 		expect(maximised.keyboard).toEqual({ kind: "pane", machine: "node2" });
 		const restored = run(maximised, { type: "cmd/focus", target: "node2", mode: "max" });
-		expect(visiblePanes(restored.panes)).toEqual(["node1", "node2", "node3"]);
+		expect(visiblePanes(restored.panes)).toEqual(visiblePanes(before.panes));
 		expect(restored.panes.parked).toEqual(before.panes.parked);
 	});
 
 	test("--max on a parked machine brings it back first, so restoring leaves it in view", () => {
-		let s = run(labWith(3), { type: "ui/park", machine: "node2" });
-		s = run(s, { type: "cmd/focus", target: "node2", mode: "max" });
-		expect(visiblePanes(s.panes)).toEqual(["node2"]);
-		s = run(s, { type: "cmd/focus", target: "node2", mode: "max" });
-		expect(visiblePanes(s.panes)).toEqual(["node1", "node2", "node3"]);
-		expect(s.keyboard).toEqual({ kind: "pane", machine: "node2" });
-	});
-
-	test("the header's maximise does the same, and gives the pane the keyboard", () => {
-		const s = run(labWith(3), { type: "ui/maximise", machine: "node3" });
-		expect(visiblePanes(s.panes)).toEqual(["node3"]);
-		expect(s.keyboard).toEqual({ kind: "pane", machine: "node3" });
-		expect(visiblePanes(run(s, { type: "ui/maximise", machine: "node3" }).panes)).toEqual(["node1", "node2", "node3"]);
-	});
-
-	test("focusing a parked machine brings it back first", () => {
-		let s = run(labWith(3), { type: "ui/park", machine: "node2" });
-		expect(s.panes.parked).toEqual({ node2: "user" });
-		s = run(s, { type: "cmd/focus", target: "node2", mode: "plain" });
-		expect(s.panes.parked).toEqual({});
-		expect(s.keyboard).toEqual({ kind: "pane", machine: "node2" });
-	});
-
-	test("clicking a parked chip brings that pane back and focuses it, parking the stalest in exchange", () => {
 		let s = labWith(3, { width: 800, height: 200 });
 		expect(s.panes.parked).toEqual({ node3: "auto" });
-		s = run(s, { type: "cmd/focus", target: "node2", mode: "plain" }, { type: "ui/unpark", machine: "node3" });
-		expect(visiblePanes(s.panes)).toEqual(["node2", "node3"]);
-		expect(s.panes.parked).toEqual({ node1: "auto" });
+		s = run(s, { type: "cmd/focus", target: "node3", mode: "max" });
+		expect(visiblePanes(s.panes)).toEqual(["node3"]);
+		s = run(s, { type: "cmd/focus", target: "node3", mode: "max" });
+		expect(visiblePanes(s.panes)).toContain("node3");
 		expect(s.keyboard).toEqual({ kind: "pane", machine: "node3" });
 	});
 
-	test("a click into a pane is recorded as the focus", () => {
-		const s = run(labWith(2), { type: "ui/pane-focused", machine: "node2" });
-		expect(s.keyboard).toEqual({ kind: "pane", machine: "node2" });
-		expect(update(s, { type: "ui/pane-focused", machine: "node2" }).state).toBe(s);
-		expect(update(s, { type: "ui/pane-focused", machine: "node9" }).state).toBe(s);
-	});
-
-	test("parking the pane that has the keyboard hands it to the pane focused before", () => {
-		let s = labWith(3);
+	test("focusing a parked machine brings its pane back, parking the stalest in exchange", () => {
+		let s = labWith(3, { width: 800, height: 200 });
+		expect(s.panes.parked).toEqual({ node3: "auto" });
 		s = run(
 			s,
-			{ type: "cmd/focus", target: "node3", mode: "plain" },
 			{ type: "cmd/focus", target: "node2", mode: "plain" },
+			{ type: "cmd/focus", target: "node3", mode: "plain" },
 		);
-		s = run(s, { type: "ui/park", machine: "node2" });
+		expect(visiblePanes(s.panes)).toEqual(["node2", "node3"]);
+		expect(s.panes.parked).toEqual({ node1: "auto" });
 		expect(s.keyboard).toEqual({ kind: "pane", machine: "node3" });
 	});
 
@@ -865,27 +819,13 @@ describe("focus and the keyboard", () => {
 		s = run(s, remove("node1"), hasStopped("node1"));
 		expect(s.keyboard).toEqual({ kind: "bar", returnTo: "node2" });
 	});
-
-	test("a resize re-parks only when the grid changes", () => {
-		const s = labWith(3);
-		expect(update(s, { type: "ui/area-resized", width: WIDE.width + 50, height: WIDE.height }).state).toBe(s);
-		const narrow = run(s, { type: "ui/area-resized", width: 450, height: 250 });
-		expect(visiblePanes(narrow.panes)).toEqual(["node1"]);
-		expect(narrow.keyboard).toEqual({ kind: "pane", machine: "node1" });
-	});
 });
 
 describe("views and capture", () => {
-	test("capture sets the filter and maximises the capture, parked or not, from any view", () => {
-		const s = run(
-			labWith(1),
-			{ type: "ui/panel-parked", panel: "capture" },
-			{ type: "ui/view", view: "spawn" },
-			{ type: "cmd/capture", filter: "arp node1" },
-		);
+	test("capture sets the filter and goes back to the lab from any view", () => {
+		const s = run(labWith(1), { type: "ui/view", view: "spawn" }, { type: "cmd/capture", filter: "arp node1" });
 		expect(s.capture.filter).toBe("arp node1");
 		expect(s.view).toBe("lab");
-		expect(s.panels).toMatchObject({ open: ["capture", "switch0"], maximised: "capture" });
 		expect(update(s, { type: "cmd/capture", filter: "arp node1" }).state).toBe(s);
 	});
 
@@ -1037,8 +977,8 @@ describe("agent calls", () => {
 type Intent =
 	| { readonly kind: "spawn"; readonly count: number; readonly nets: readonly NicSpec["net"][] }
 	| { readonly kind: "stage" | "ready" | "failed" | "stopped"; readonly pick: number; readonly skew: number }
-	| { readonly kind: "remove" | "shell" | "park" | "unpark" | "maximise" | "paneFocused"; readonly pick: number }
-	| { readonly kind: "addSwitch" | "removeSwitch" | "showSwitch"; readonly name: SwitchName | null }
+	| { readonly kind: "remove" | "shell"; readonly pick: number }
+	| { readonly kind: "addSwitch" | "removeSwitch"; readonly name: SwitchName | null }
 	| { readonly kind: "power"; readonly pick: number; readonly next: Next }
 	| { readonly kind: "halted"; readonly pick: number; readonly skew: number; readonly next: Next }
 	| { readonly kind: "boot"; readonly pick: number; readonly port: number }
@@ -1056,9 +996,8 @@ type Intent =
 			readonly on: SwitchName | null;
 			readonly port: PortNo | null;
 	  }
-	| { readonly kind: "sessionOpened" | "sessionEnded" | "tab"; readonly pick: number; readonly tab: number }
+	| { readonly kind: "sessionOpened" | "sessionEnded"; readonly pick: number; readonly tab: number }
 	| { readonly kind: "focus"; readonly pick: number; readonly mode: "plain" | "main" | "max" }
-	| { readonly kind: "resize"; readonly width: number; readonly height: number }
 	| { readonly kind: "bar"; readonly open: boolean }
 	| { readonly kind: "tick"; readonly dt: number };
 
@@ -1084,12 +1023,12 @@ const intentArb: fc.Arbitrary<Intent> = fc.oneof(
 	},
 	{
 		weight: 6,
-		arbitrary: fc.record({ kind: kinds("remove", "shell", "park", "unpark", "maximise", "paneFocused"), pick }),
+		arbitrary: fc.record({ kind: kinds("remove", "shell"), pick }),
 	},
 	{
 		weight: 3,
 		arbitrary: fc.record({
-			kind: kinds("addSwitch", "removeSwitch", "showSwitch"),
+			kind: kinds("addSwitch", "removeSwitch"),
 			name: fc.constantFrom(LAN, LAN, switchNamed("wan"), "switch0", null),
 		}),
 	},
@@ -1118,17 +1057,9 @@ const intentArb: fc.Arbitrary<Intent> = fc.oneof(
 	},
 	{
 		weight: 3,
-		arbitrary: fc.record({ kind: kinds("sessionOpened", "sessionEnded", "tab"), pick, tab: fc.nat({ max: 4 }) }),
+		arbitrary: fc.record({ kind: kinds("sessionOpened", "sessionEnded"), pick, tab: fc.nat({ max: 4 }) }),
 	},
 	{ weight: 3, arbitrary: fc.record({ kind: kinds("focus"), pick, mode: fc.constantFrom("plain", "main", "max") }) },
-	{
-		weight: 1,
-		arbitrary: fc.record({
-			kind: kinds("resize"),
-			width: fc.integer({ min: 0, max: 1700 }),
-			height: fc.integer({ min: 0, max: 700 }),
-		}),
-	},
 	{ weight: 1, arbitrary: fc.record({ kind: kinds("bar"), open: fc.boolean() }) },
 	{ weight: 2, arbitrary: fc.record({ kind: kinds("tick"), dt: fc.constantFrom(0, 100, 1000, 60_000, 130_000) }) },
 );
@@ -1167,22 +1098,12 @@ function eventOf(intent: Intent, s: LabState): LabEvent | null {
 		}
 		case "removeSwitch":
 			return { type: "cmd/switch-remove", switch: intent.name ?? LAN, cause: "bar" };
-		case "showSwitch":
-			return { type: "ui/switch-shown", switch: intent.name ?? LAN };
 		case "power":
 			return power(intent.next, named(intent.pick), named(intent.pick + 1));
 		case "remove":
 			return remove(named(intent.pick), named(intent.pick + 1));
 		case "shell":
 			return shell(named(intent.pick));
-		case "park":
-			return { type: "ui/park", machine: named(intent.pick) };
-		case "unpark":
-			return { type: "ui/unpark", machine: named(intent.pick) };
-		case "maximise":
-			return { type: "ui/maximise", machine: named(intent.pick) };
-		case "paneFocused":
-			return { type: "ui/pane-focused", machine: named(intent.pick) };
 		case "boot": {
 			const name = named(intent.pick);
 			const planned = planBoot(s, [name, named(intent.pick + 1)]);
@@ -1211,17 +1132,13 @@ function eventOf(intent: Intent, s: LabState): LabEvent | null {
 			return { type: "cmd/plug", plan: isPlanError(planned) ? stale : planned, cause: "bar" };
 		}
 		case "sessionOpened":
-		case "sessionEnded":
-		case "tab": {
+		case "sessionEnded": {
 			const name = named(intent.pick);
 			const session: SessionId = intent.tab === 0 ? `${name}:console` : `${name}:sh${intent.tab}`;
-			if (intent.kind === "tab") return { type: "ui/tab-selected", session };
 			return { type: intent.kind === "sessionOpened" ? "session/opened" : "session/ended", session };
 		}
 		case "focus":
 			return { type: "cmd/focus", target: named(intent.pick), mode: intent.mode };
-		case "resize":
-			return { type: "ui/area-resized", width: intent.width, height: intent.height };
 		case "bar":
 			return { type: "ui/bar", open: intent.open };
 		case "tick":
@@ -1351,7 +1268,6 @@ function checkLab(s: LabState, world: World): void {
 	expect(s.switches[0]).toBe("switch0");
 	expect(new Set([...s.switches, ...s.rail]).size).toBe(s.switches.length + s.rail.length);
 	expect(s.switches.length).toBeLessThanOrEqual(MAX_SWITCHES);
-	expect(s.switches).toContain(s.shownSwitch);
 
 	expect([...s.panes.order].sort()).toEqual([...s.rail].sort());
 	const visible = visiblePanes(s.panes);
@@ -1379,12 +1295,10 @@ const REPEATABLE = new Set<LabEvent["type"]>([
 	"cmd/remove",
 	"cmd/switch-add",
 	"cmd/switch-remove",
-	"ui/switch-shown",
 	"cmd/boot",
 	"cmd/power",
 	"cmd/link",
 	"cmd/plug",
-	"ui/tab-selected",
 	"ui/bar",
 ]);
 const isRepeatable = (event: LabEvent): boolean =>
@@ -1431,70 +1345,5 @@ describe("any sequence of events", () => {
 			}),
 			{ numRuns: 300 },
 		);
-	});
-});
-
-describe("panels", () => {
-	const park = (panel: PanelName): LabEvent => ({ type: "ui/panel-parked", panel });
-	const unpark = (panel: PanelName): LabEvent => ({ type: "ui/panel-unparked", panel });
-	const maximise = (panel: PanelName): LabEvent => ({ type: "ui/panel-maximised", panel });
-
-	test("each parks and comes back alone, and they keep their order", () => {
-		const s = run(labWith(1), park("capture"));
-		expect([s.panels.open, parkedPanels(s.panels)]).toEqual([["switch0"], ["capture"]]);
-		expect(update(s, park("capture")).state).toBe(s);
-		const both = run(s, park("switch0"), unpark("switch0"), unpark("capture"));
-		expect([both.panels.open, parkedPanels(both.panels)]).toEqual([["capture", "switch0"], []]);
-		expect(update(both, unpark("capture")).state).toBe(both);
-	});
-
-	test("maximising one shows it alone, and again brings the others back", () => {
-		const s = run(labWith(1), maximise("switch0"));
-		expect(visiblePanels(s.panels)).toEqual(["switch0"]);
-		expect(parkedPanels(s.panels)).toEqual([]);
-		expect(visiblePanels(run(s, maximise("switch0")).panels)).toEqual(["capture", "switch0"]);
-	});
-
-	test("a parked panel stays parked while another is maximised, and bringing it back restores them both", () => {
-		const s = run(labWith(1), park("capture"), maximise("switch0"));
-		expect(parkedPanels(s.panels)).toEqual(["capture"]);
-		expect(visiblePanels(run(s, unpark("capture")).panels)).toEqual(["capture", "switch0"]);
-	});
-
-	test("the capture command brings a parked capture back and maximises it", () => {
-		const s = run(labWith(1), park("capture"), { type: "cmd/capture", filter: "arp" });
-		expect(visiblePanels(s.panels)).toEqual(["capture"]);
-		expect(parkedPanels(s.panels)).toEqual([]);
-	});
-
-	test("parking the maximised one brings the panes back", () => {
-		const s = run(labWith(1), maximise("switch0"), park("switch0"));
-		expect(s.panels).toEqual({ open: ["capture"], maximised: null });
-	});
-
-	test.each<[string, LabEvent]>([
-		["focus", { type: "cmd/focus", target: "node2", mode: "plain" }],
-		["a shell", { type: "cmd/shell", machine: "node2" }],
-		["the keyboard in a pane", { type: "ui/pane-focused", machine: "node1" }],
-		["unpark", { type: "ui/unpark", machine: "node2" }],
-		["a maximised pane", { type: "ui/maximise", machine: "node2" }],
-	])("%s brings the panes out from under a maximised one", (_, event) => {
-		expect(run(labWith(2), maximise("capture"), event).panels.maximised).toBeNull();
-	});
-
-	test("the command bar, a missing machine and a new one leave it maximised", () => {
-		let s = run(labWith(2), maximise("capture"), { type: "ui/bar", open: true }, { type: "ui/bar", open: false });
-		s = run(s, { type: "cmd/focus", target: "node7", mode: "plain" }, { type: "ui/unpark", machine: "node7" });
-		s = run(s, spawnEvent(s, 1));
-		expect(s.panels.maximised).toBe("capture");
-	});
-
-	test("nothing is maximised in an empty lab", () => {
-		const s = run(labWith(1), maximise("capture"), { type: "cmd/remove", machines: ["node1"], cause: "button" });
-		expect(s.panels.maximised).toBe("capture");
-		const gone = run(s, hasStopped("node1"));
-		expect(gone.rail).toEqual([]);
-		expect(gone.panels.maximised).toBeNull();
-		expect(run(emptyLab(), { type: "cmd/capture", filter: "arp" }).panels.maximised).toBeNull();
 	});
 });

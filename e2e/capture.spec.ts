@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { expect, type Page, test } from "@playwright/test";
 import { chromiumExecutable } from "../test/support/chromium.ts";
-import { root, shell, typed } from "./lab.ts";
+import { inspector, openLab, root, shell, status, switchCapture, typed } from "./lab.ts";
 import { call } from "./webmcp.ts";
 
 /** When set, the tests also save screenshots of the capture there. */
@@ -29,10 +29,8 @@ interface Row {
 	readonly info: string;
 }
 
-const status = (page: Page, text: string) => expect(page.getByText(text)).toBeVisible({ timeout: 90_000 });
 const bar = (page: Page) => page.locator("unlab-command-bar");
 const full = (page: Page) => page.locator("unlab-capture[mode=full]");
-const dock = (page: Page) => page.locator("unlab-capture[mode=dock]");
 
 async function read(page: Page, filter: string): Promise<readonly Row[]> {
 	const reply = (await call(page, "capture_read", { filter, limit: 1000 })) as { rows?: Row[]; error?: string };
@@ -42,15 +40,14 @@ async function read(page: Page, filter: string): Promise<readonly Row[]> {
 
 /** node1 and node4 in different subnets, with two routers and a switch of their own between them. */
 async function routed(page: Page): Promise<void> {
-	await page.goto("/?layout=classic");
-	await expect(page.getByRole("heading", { name: "Your Linux lab in a tab." })).toBeVisible();
+	await openLab(page);
 	await typed(page, "mkswitch mid");
 	await typed(page, "mkswitch far");
 	await typed(page, "spawn 1 alpine --no-gateway --addr 10.1.0.2/24");
 	await typed(page, "spawn 1 alpine --name r1 --nics 2 --net switch0,mid --no-gateway --addr 10.1.0.1/24,10.2.0.1/24");
 	await typed(page, "spawn 1 alpine --name r2 --nics 2 --net mid,far --no-gateway --addr 10.2.0.2/24,10.3.0.1/24");
 	await typed(page, "spawn 1 alpine --net far --no-gateway --addr 10.3.0.2/24");
-	await status(page, "4 of 4 ready");
+	await status(page, "4 of 4 ready", 90_000);
 	await root(page, "node1", "ip route add default via 10.1.0.1");
 	await root(page, "r1", "sysctl -w net.ipv4.ip_forward=1; ip route add 10.3.0.0/24 via 10.2.0.2");
 	await root(page, "r2", "sysctl -w net.ipv4.ip_forward=1; ip route add 10.1.0.0/24 via 10.2.0.1");
@@ -91,7 +88,7 @@ test("a ping across two routers is captured at every hop in order, each with its
 	// A ping takes less than its clock shows, so hops on different switches have one time.
 	expect(rows.some((row, i) => i > 0 && rows[i - 1].time === row.time && rows[i - 1].switch !== row.switch)).toBe(true);
 
-	// A person sees the same, in the panel that the bar's verb maximises and in a frame's detail.
+	// A person sees the same, in the Packet inspector that the bar's verb opens and in a frame's detail.
 	await typed(page, "capture icmp");
 	const via = full(page).locator(".row.frame .via");
 	await expect(via.last()).toHaveText("switch0 2 → 1");
@@ -103,8 +100,7 @@ test("a ping across two routers is captured at every hop in order, each with its
 	await expect(detail).toContainText("in on mid port 1");
 	await expect(detail).toContainText("mid had learned r2:eth0 on mid port 2, so it forwarded the frame there only.");
 	if (shots) await page.screenshot({ path: `${shots}/two-routers.png` });
-	await page.keyboard.press("Escape");
-	await expect(dock(page).locator(".row.frame .via").first()).toBeVisible();
+	await expect((await switchCapture(page, "switch0")).locator(".row.frame .via").first()).toBeVisible();
 	if (shots) await page.screenshot({ path: `${shots}/two-routers-dock.png` });
 	expect(errors).toEqual([]);
 });
@@ -150,8 +146,8 @@ test("a filter takes a switch or one cable, beside the other terms, the same in 
 	}
 	expect((await read(page, "mid:1 icmp")).length).toBe(8);
 
-	// Typed in the panel itself. Each cable has its own event rows.
-	await page.getByRole("button", { name: "Maximise capture" }).click();
+	// Typed in the inspector itself. Each cable has its own event rows.
+	await inspector(page);
 	const field = full(page).getByRole("textbox", { name: "filter" });
 	await field.fill("far:2 icmp");
 	const events = full(page).locator(".row.event");
@@ -215,7 +211,7 @@ test("a filter takes a switch or one cable, beside the other terms, the same in 
 	const carried = (await read(page, "far icmp")).length;
 	await typed(page, "rmswitch far");
 	await page.keyboard.press("Enter");
-	await expect(dock(page)).toContainText("far port 1 link down. Cable to r2:eth1 unplugged by you.");
+	await expect(await inspector(page)).toContainText("far port 1 link down. Cable to r2:eth1 unplugged by you.");
 	expect((await read(page, "far icmp")).length).toBe(carried);
 	expect((await read(page, "far:2 icmp")).length).toBe(carried);
 });
@@ -261,10 +257,10 @@ test("a capture narrowed to one cable saves each of its frames once, and any oth
 	page,
 }) => {
 	await routed(page);
-	await full(page).or(dock(page)).first().getByRole("button", { name: "Clear" }).click();
+	await (await inspector(page)).getByRole("button", { name: "Clear" }).click();
 	expect(await pinged(page, 5)).toBe(true);
 	// Nothing more comes in, so each way of saving it saves the same frames.
-	await full(page).or(dock(page)).first().getByRole("button", { name: "Pause" }).click();
+	await full(page).getByRole("button", { name: "Pause" }).click();
 	const each = [0, 1, 2, 3, 4].flatMap((seq) => [`request ${seq}`, `reply ${seq}`]);
 
 	for (const cable of ["mid:1", "mid:2", "switch0:1", "far:2"]) {
@@ -307,32 +303,30 @@ test("a capture narrowed to one cable saves each of its frames once, and any oth
 });
 
 test("the capture says when a cable that is down is moved or unplugged, and why it is down", async ({ page }) => {
-	await page.goto("/?layout=classic");
-	await expect(page.getByRole("heading", { name: "Your Linux lab in a tab." })).toBeVisible();
+	await openLab(page);
 	await typed(page, "spawn 2 alpine --no-gateway");
-	await status(page, "2 of 2 ready");
+	await status(page, "2 of 2 ready", 90_000);
 	await typed(page, "poweroff node2");
-	await status(page, "1 of 2 ready");
-	await expect(dock(page)).toContainText("port 2 link down. node2 stopped.");
+	await status(page, "1 of 2 ready", 90_000);
+	const capture = await inspector(page);
+	await expect(capture).toContainText("port 2 link down. node2 stopped.");
 
 	// In a lab of one switch, the ports are named as they are anywhere in it.
 	await typed(page, "link down node1");
 	await typed(page, "plug node1 switch0:5");
-	await expect(dock(page)).toContainText("port 1 link down. Cut cable to node1 unplugged by you.");
-	await expect(dock(page)).toContainText("port 5 link down. Cut cable to node1 plugged in by you.");
+	await expect(capture).toContainText("port 1 link down. Cut cable to node1 unplugged by you.");
+	await expect(capture).toContainText("port 5 link down. Cut cable to node1 plugged in by you.");
 	await typed(page, "mkswitch lan");
 	expect(await call(page, "cable_plug", { nic: "node2", to: "lan" })).toMatchObject({ data: { link: "off" } });
-	await expect(dock(page)).toContainText(
+	await expect(capture).toContainText(
 		"switch0 port 2 link down. Cable to node2, which is off, unplugged by the agent.",
 	);
-	await expect(dock(page)).toContainText(
-		"lan port 1 link down. Cable to node2, which is off, plugged in by the agent.",
-	);
+	await expect(capture).toContainText("lan port 1 link down. Cable to node2, which is off, plugged in by the agent.");
 	expect(await call(page, "cable_unplug", { nic: "node1" })).toMatchObject({ data: { link: "unplugged" } });
-	await expect(dock(page)).toContainText("switch0 port 5 link down. Cut cable to node1 unplugged by the agent.");
+	await expect(capture).toContainText("switch0 port 5 link down. Cut cable to node1 unplugged by the agent.");
 	await typed(page, "rmswitch lan");
 	await page.keyboard.press("Enter");
-	await expect(dock(page)).toContainText("lan port 1 link down. Cable to node2, which is off, unplugged by you.");
+	await expect(capture).toContainText("lan port 1 link down. Cable to node2, which is off, unplugged by you.");
 
 	// A filter keeps the rows of its cable.
 	await typed(page, "capture switch0:5 arp");
