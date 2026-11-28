@@ -6,16 +6,40 @@ network one switch at a time.
 
 In this chapter, `router:eth1` means the interface `eth1` on the machine
 `router`. An interface is the point where a machine attaches to a network.
-`lan:3` means port 3 on the switch `lan`. Enter the commands in the command bar
-or at the CLI prompt.
+`lan:3` means port 3 on the switch `lan`. Select a device in **Rack manager** to
+see its connections, or open **Topology** from the lab menu to see the whole
+network.
 
 ## Interfaces and addressing
 
-When you [create a machine](machines.md#spawn-create-machines), you choose its
+When you [create a machine](machines.md#machine-creation), you choose its
 interfaces, the switch each one plugs into, and the addresses Linux uses on
 them. A machine has one to four interfaces, named `eth0` through `eth3`. In
 commands that take one interface, the machine name alone suffices if it has only
 one.
+
+1. In the machine wizard, select **Network**. The first interface is `eth0`.
+   Select **+ Interface** if the machine needs a second one. A row for `eth1`
+   appears with its own switch and address fields.
+2. Choose a switch for each interface, or choose **Unplugged** to leave its
+   cable out. Each switch choice shows how many ports are free.
+3. To supply the addresses for a single machine, select **Set interface
+   addresses manually**. Enter an address and prefix such as `10.1.0.1/24` in
+   the field for each interface you want to configure. A blank field leaves that
+   interface without a lab address. When creating a batch, you can select
+   **Leave all interfaces without addresses**.
+
+After boot, select the machine in **Rack manager**. Under **Network** you can
+read the assigned address and switch port beside each interface.
+
+By default the first machine gets `10.88.0.11/24` on `eth0`, the second gets
+`10.88.0.12/24`, and so on. Other interfaces start without a lab address. The
+number after the slash is the prefix length, the number of bits that identify
+the network. Supply a prefix from 1 to 32 with a custom IPv4 address. Linux
+receives the configured addresses again at each boot.
+
+To make these choices in the command bar, use the following options with
+[the machine creation command](machines.md#spawn-create-machines).
 
 | Option at creation        | Effect                                                                                                                                                      |
 | ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -24,12 +48,6 @@ one.
 | `--net lan,none`          | Plug the first interface into `lan` and leave the second unplugged. Give one entry per interface when they differ.                                          |
 | `--no-net`                | Start with every interface unplugged and no package gateway.                                                                                                |
 | `--addr 10.1.0.1/24,none` | Set the first interface's lab address and leave the second without one. Give one entry per interface. Create one machine at a time when choosing addresses. |
-
-By default the first machine gets `10.88.0.11/24` on `eth0`, the second gets
-`10.88.0.12/24`, and so on. Other interfaces start without a lab address. The
-number after the slash is the prefix length, the number of bits that identify
-the network. Supply a prefix from 1 to 32 with a custom IPv4 address. Linux
-receives the configured addresses again at each boot.
 
 The two machines in [First ping](getting-started.md#first-ping) can reach each
 other on `switch0`. In
@@ -46,14 +64,16 @@ stops traffic to other machines on that cable. Package access still works after
 a cut or a move to another switch. Gateway traffic bypasses the switch, so it
 does not appear in the switch capture.
 
-Use `--no-gateway` at creation if you want to supply your own routes or DHCP
-service. DHCP lets a machine request its network settings. With the gateway
-enabled, keep your networks outside the two ranges it uses. The gateway leases
-addresses from `10.0.2.0/24` and answers DNS queries for repository names with
-addresses in `198.51.100.0/24`. Starting with `eth0` unplugged also leaves out
-the gateway. Plugging the interface in later gives it a switch port but does not
-add a gateway. With a [CLI connection](connecting-from-your-computer.md), the
-same gateway can reach public websites through your computer.
+In the wizard's **Network** step, clear **Package gateway on eth0** if you want
+to supply your own routes or DHCP service. In the command bar, use
+`--no-gateway` at creation. DHCP lets a machine request its network settings.
+With the gateway enabled, keep your networks outside the two ranges it uses. The
+gateway leases addresses from `10.0.2.0/24` and answers DNS queries for
+repository names with addresses in `198.51.100.0/24`. Starting with `eth0`
+unplugged also leaves out the gateway. Plugging the interface in later gives it
+a switch port but does not add a gateway. With a
+[CLI connection](connecting-from-your-computer.md), the same gateway can reach
+public websites through your computer.
 
 ## Switches and cables
 
@@ -61,12 +81,68 @@ Each switch has eight ports. A machine interface takes one port, and a cable
 between switches takes a port at each end. The lab starts with `switch0` and can
 hold eight switches in total.
 
+1. In **Rack manager**, open **Add** and choose **Add switch…**. The **Switch
+   name** field appears.
+2. Enter an unused name, or leave the field blank for an automatic name.
+3. Select **Add switch**. The new switch appears in the rack with eight free
+   ports.
+
+## Patching a machine interface
+
+Use **Patch** to plug a machine into a switch, move it to another port, or
+unplug it.
+
+1. Select a ready or powered-off machine in **Rack manager**. In
+   **Configuration**, find the interface under **Network**. Its row shows the
+   current switch and port, or **Unplugged**.
+2. Select **Patch** beside that interface. In the **Patch cable** window,
+   **Machine interface** shows the selected interface. **Destination** lists the
+   free ports.
+3. Choose the destination port and select **Connect**. The interface row shows
+   its new port. To free its port instead, choose **Unplug** as the destination
+   and select **Unplug**. The row now reads **Unplugged**.
+
+You can also start at the switch. In **Switch details**, select **Patch** on a
+free port. The destination is already selected.
+
+## Cutting and removing cables
+
+Cut a cable to interrupt traffic and keep both ends in place. In **Switch
+details**, choose **Cut cable** in the occupied port's row. The state changes to
+`cut`. Choose **Reconnect** to restore the cable. For a cable to a machine,
+these controls are available when the machine is ready or off.
+
 A cut cable keeps its port, [VLAN and path cost](#vlans-and-spanning-tree), and
 [cable conditions](#cable-conditions). Moving a machine's cable keeps its
 conditions and its cut state. Removing the cable discards its conditions. When
 the port becomes free, its VLAN and path cost return to their defaults. Wiring
-and configuration survive a browser reload.
-[Topology](#topology-list-the-wiring) shows which ports are free.
+and configuration survive a browser reload. **Switch details** shows
+**Available** beside each free port.
+
+To join two switch ports, use the [`cable` command](#cable-join-switch-ports) in
+the command bar. The cable appears in **Topology**. In **Switch details**, the
+port names the switch and port at the other end. Select **Remove** in either
+port row to free both ends.
+
+## Switch removal
+
+You can remove any switch you added to the lab.
+
+> [!WARNING]
+>
+> Removing a switch discards its port settings, learned addresses, and counters.
+> It removes the cables to other switches and unplugs its machines. The machines
+> keep running.
+
+1. Select the switch in **Rack manager**. **Switch details** shows its ports.
+2. Open **More actions** and choose **Delete switch…**. The command bar asks you
+   to confirm the removal.
+3. Check the switch name and confirm. The switch disappears from the rack.
+
+## Wiring commands
+
+Enter these commands in the command bar or at the CLI prompt to change the
+switches and cables by name.
 
 ### `mkswitch`: Add a switch
 
@@ -171,9 +247,11 @@ Remove a switch that you added. The lab keeps its original switch, `switch0`.
 
 MCP tool: `switch_remove`
 
-> [!WARNING] Removing a switch discards its port settings, learned addresses,
-> and counters. It removes the cables to other switches and unplugs its
-> machines. The machines keep running.
+> [!WARNING]
+>
+> Removing a switch discards its port settings, learned addresses, and counters.
+> It removes the cables to other switches and unplugs its machines. The machines
+> keep running.
 
 To remove an empty switch named `lan`, enter `rmswitch lan`. At the command bar,
 select **Remove lan** to confirm.
@@ -191,6 +269,10 @@ A cable can delay frames, lose some of them, or limit their size or speed. A
 frame is the unit of data a switch receives on a port. Conditions act in both
 directions on the selected cable. They survive cutting, moving the cable, or
 rebooting its machine. Other cables keep their own settings.
+
+To check a cable, open its switch in **Rack manager**. When a cable has a
+condition, **Switch details** shows a **Conditions** column with the settings
+and traffic counts. Set or clear conditions with the command below.
 
 ### `link`: Cut, reconnect, or change cables
 
@@ -232,13 +314,14 @@ node1 up with delay 100 ms and loss 20%
 
 Open **Topology** to see where a cable goes. Hover over a machine or switch to
 read its connections. A cut cable appears as a red dashed line. A dotted line
-goes to a machine that is off or booting. A dash-dotted line marks a port
-blocked by the spanning tree.
+marks a machine that is off, booting, restoring, or stopping. A dash-dotted line
+marks a port blocked by the spanning tree.
 
-In **Rack manager**, select a switch to inspect each numbered port. Select **Cut
-cable** or **Reconnect** on an occupied port. A cable between switches also has
-a **Remove** button. Select **Patch** on a free port to connect a machine
-interface.
+In **Rack manager**, select a switch to inspect each numbered port. Under
+**Ports**, select the machine or far end of a cable to open its details. See
+[Patching a machine interface](#patching-a-machine-interface) to move a cable,
+or [Cutting and removing cables](#cutting-and-removing-cables) to interrupt
+traffic.
 
 ### `topology`: List the wiring
 
@@ -273,10 +356,10 @@ The counts change as you add switches and cables.
 
 A loop gives frames a path back to a switch they have already crossed. A
 broadcast frame can keep going around the loop, creating a storm. A switch
-receiving looped frames reports `storming` in
-[the wiring report](#topology-list-the-wiring). The report gives the rate of
-returning frames and counts the frames the switch dropped. The capture records
-when the storm starts and ends.
+receiving looped frames shows `storming` in **Rack manager**. Select that switch
+and read **Storm** for the rate of returning frames and the number dropped. The
+[wiring report](#topology-list-the-wiring) gives the same figures. The capture
+records when the storm starts and ends.
 
 The lab limits looped traffic in each direction of a cable to 1,000 frames a
 second, with room for 64 waiting frames. To end a storm, cut enough cables to
@@ -289,6 +372,14 @@ loop.
 A virtual LAN (VLAN) groups ports that can exchange traffic on a switch.
 Broadcasts stay in their VLAN. To send traffic for several VLANs across a single
 cable between switches, configure both ends as trunks.
+
+Open the switch in **Rack manager** to inspect these settings. When a port has a
+VLAN configuration beyond the default, **Switch details** shows the **VLAN**
+column. With spanning tree enabled, a participating port shows its role in
+**Spanning tree**. A forwarding port shows the role alone. A port still learning
+addresses also shows `learning`, and a port kept out of use shows `blocked`. Use
+the commands below to change VLAN membership, trunks, and spanning-tree
+settings.
 
 ### `vlan`: Set a port's VLAN
 
@@ -436,10 +527,10 @@ lan · 0 learned
 
 ## Packet capture
 
-Open **Packet capture** in the desktop menu and choose **Packet inspector** to
-inspect the frames crossing your switches. For a view of one switch, choose that
-switch from the same menu. Capture runs while the lab is open, including when
-the inspector is closed.
+Select **Open capture** beside a switch in **Rack manager** to see the frames
+crossing that switch. To inspect all switches together, open **Packet capture**
+in the lab menu and choose **Packet inspector**. Capture runs while the lab is
+open, including when the inspector is closed.
 
 Select a frame in the inspector to read its headers and bytes. The port numbers
 show where the frame entered the switch and where it went next. A frame can have
@@ -451,6 +542,11 @@ Select **pause** to stop adding rows while you read. The switches keep
 forwarding frames and counting them. Select **resume** to record new rows.
 **clear** empties the capture and keeps the counters. The buffer holds the
 newest 10,000 rows, including events. A reload starts a new capture.
+
+To download the frames for a switch or cable, include its name in the filter in
+**Packet inspector** and select **save .pcap**. See
+[what the file contains](#pcap-save-captured-frames) if your filter also names a
+machine or protocol.
 
 ## Capture filters
 

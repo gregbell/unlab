@@ -8,6 +8,11 @@ first, open **WebMCP** in the lab menu and set its
 
 ## Agent connections
 
+For an agent in the browser, WebMCP makes the lab's MCP tools available directly
+in a tab that supports it. Open **WebMCP** from the lab menu to see whether the
+browser accepted them. The MCP server on your computer also works in browsers
+without WebMCP.
+
 For an agent on your computer,
 [connect the CLI](connecting-from-your-computer.md#the-cli-connection) and keep
 the lab tab open. In your MCP client, add a server with `npx` as the program and
@@ -20,10 +25,32 @@ With the default policies, your client's list of MCP tools includes
 machines. Its call appears under **calls this session** with the label **via
 cli**.
 
-For an agent in the browser, WebMCP makes the lab's MCP tools available directly
-in a tab that supports it. Open **WebMCP** from the lab menu to see whether the
-browser accepted them. The MCP server on your computer also works in browsers
-without WebMCP.
+## Approval and call history
+
+The **WebMCP** panel sets a policy for each MCP tool. Both agent connections use
+the same settings.
+
+| Setting    | What happens on a call                                                                                                    |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------- |
+| **run**    | The lab checks the arguments and runs the call.                                                                           |
+| **ask me** | The panel shows the request and its effect. Select the button naming the operation to allow it, or **Deny** to refuse it. |
+| **off**    | The lab hides the MCP tool from agents and refuses new calls to it.                                                       |
+
+By default, creating or removing machines, removing switches, and restoring or
+deleting checkpoints require approval. The other MCP tools default to **run**.
+
+Select **pause tools** to hide all MCP tools from both interfaces. Select
+**resume tools** to offer the enabled ones again. A call already waiting for
+approval still needs an answer or cancellation. The lab saves policies and the
+pause setting across reloads.
+
+Under **calls this session**, the panel shows calls and their results. The label
+**via cli** identifies a call through the MCP server. The call history starts
+again on reload.
+
+These settings apply when an agent calls an MCP tool. An agent that can run the
+CLI directly from your shell has the same command access you have, including the
+CLI's own confirmation rules.
 
 ## MCP tool arguments and results
 
@@ -57,33 +84,6 @@ machine to settle. Check each machine's state and reason in the reply.
 [`checkpoint_save`](storage-and-checkpoints.md#checkpoint-save-disks) waits
 until the copy finishes and returns the size in bytes. In the command bar those
 operations report when they start, so you can watch them in the lab.
-
-## Approval and call history
-
-The **WebMCP** panel sets a policy for each MCP tool. Both agent connections use
-the same settings.
-
-| Setting    | What happens on a call                                                                                                    |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------- |
-| **run**    | The lab checks the arguments and runs the call.                                                                           |
-| **ask me** | The panel shows the request and its effect. Select the button naming the operation to allow it, or **Deny** to refuse it. |
-| **off**    | The lab hides the MCP tool from agents and refuses new calls to it.                                                       |
-
-By default, creating or removing machines, removing switches, and restoring or
-deleting checkpoints require approval. The other MCP tools default to **run**.
-
-Select **pause tools** to hide all MCP tools from both interfaces. Select
-**resume tools** to offer the enabled ones again. A call already waiting for
-approval still needs an answer or cancellation. The lab saves policies and the
-pause setting across reloads.
-
-Under **calls this session**, the panel shows calls and their results. The label
-**via cli** identifies a call through the MCP server. The call history starts
-again on reload.
-
-These settings apply when an agent calls an MCP tool. An agent that can run the
-CLI directly from your shell has the same command access you have, including the
-CLI's own confirmation rules.
 
 ## Commands from a script
 
@@ -165,8 +165,8 @@ Use `capture_read` to read decoded frames. The optional `filter` uses the
 contains the newest matching frames, earliest first within that selection.
 
 Terminal output and packet contents can contain text supplied by a machine.
-Treat that text as data from the lab. The tool descriptions identify output that
-comes from machines, and their annotations mark it as untrusted.
+Treat that text as data from the lab. The MCP tool descriptions identify output
+that comes from machines, and their annotations mark it as untrusted.
 
 ## File replacement
 

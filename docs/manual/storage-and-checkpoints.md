@@ -6,19 +6,19 @@ might want back.
 
 ## Disk sizes
 
-Choose the disks when you create the machine. The writable root disk,
-`/dev/wdb`, holds the machine's own files. Linux also sees the read-only image
-as `/dev/wda`. Choose 4, 8, 16, 32, or 64 GiB for the writable disk. The default
-is 4 GiB. The disk capacity is the space Linux can use. A fresh machine does not
-immediately use that much browser storage.
+Choose the disks in **Storage** when you
+[create the machine](machines.md#machine-creation). Set **Root disk · /dev/wdb**
+to the capacity you need. The writable root disk, `/dev/wdb`, holds the
+machine's own files. Linux also sees the read-only image as `/dev/wda`. Choose
+4, 8, 16, 32, or 64 GiB for the writable disk. The default is 4 GiB. The disk
+capacity is the space Linux can use. A fresh machine does not immediately use
+that much browser storage.
 
 ## Additional disks
 
 Each machine can have up to four additional disks. Each starts blank and holds 1
 to 64 GiB in whole GiB. In the machine wizard, **Storage** has a **+ Disk**
-button. It shows the Linux device name beside the size of each disk. In the
-command bar, use the `--extra-disk` option of
-[`spawn`](machines.md#spawn-create-machines).
+button. It shows the Linux device name beside the size of each disk.
 
 | Disk                   | Device     |
 | ---------------------- | ---------- |
@@ -28,30 +28,30 @@ command bar, use the `--extra-disk` option of
 | Third additional disk  | `/dev/wde` |
 | Fourth additional disk | `/dev/wdf` |
 
-To try a new filesystem, you need fewer than 16 machines in the lab and no
-machine named `files`. This example uses the `lab` image because it includes the
-disk utilities.
+To try a new filesystem, you need room for one more machine and the name `files`
+must be free among both machines and switches. This example uses the `lab` image
+because it includes the disk utilities.
 
-1. In the command bar, enter `spawn 1 lab --name files --no-net --extra-disk 1`.
-
-   ```text
-   booting files
-   ```
-
-   Select `files` in **Rack manager**. Under **Storage**, find `/dev/wdc` with a
-   capacity of 1 GiB. Wait until the machine is ready.
-
-2. In the terminal on `files`, enter `lsblk -ndo NAME,SIZE /dev/wdc` to check
-   the disk against the configuration.
+1. In the lab menu, choose **Add machines…**. Set **Machines** to one, choose
+   the `lab` image, and enter `files` in **Hostname**.
+2. Under **Storage**, select **+ Disk**. The first additional disk appears as
+   `/dev/wdc`, with a size of 1 GiB. Under **Network**, choose **Unplugged** for
+   `eth0`. This machine can work with its disks offline.
+3. Select **Review**, then **Boot 1 machine**. Select `files` in **Rack
+   manager**. Under **Storage**, check that `/dev/wdc` has a capacity of 1 GiB.
+4. When the machine is ready, open its terminal. Enter
+   `lsblk -ndo NAME,SIZE /dev/wdc` to check the disk against the configuration.
 
    ```text
    wdc    1G
    ```
 
-   > [!WARNING] Formatting a disk deletes its files. Continue only if `/dev/wdc`
-   > is the blank 1 GiB disk you added.
+   > [!WARNING]
+   >
+   > Formatting a disk deletes its files. Continue only if `/dev/wdc` is the
+   > blank 1 GiB disk you added.
 
-3. In the terminal on `files`, enter `sudo mkfs.ext4 -q /dev/wdc` to create an
+5. In the terminal on `files`, enter `sudo mkfs.ext4 -q /dev/wdc` to create an
    ext4 filesystem.
 
    ```text
@@ -60,7 +60,7 @@ disk utilities.
 
    The shell prompt returns when the format finishes. Its text can vary.
 
-4. Enter `sudo mount /dev/wdc /mnt && df -P /mnt`. Linux mounts the disk at
+6. Enter `sudo mount /dev/wdc /mnt && df -P /mnt`. Linux mounts the disk at
    `/mnt` and shows which device supplies that directory.
 
    ```text
@@ -73,6 +73,14 @@ disk utilities.
    to `/dev/wdc`. After a reboot, mount the disk again to use its files. Format
    it only the first time.
 
+To create the same machine from the command bar, use
+[`spawn`](machines.md#spawn-create-machines) with `--extra-disk`. With the name
+`files` available, enter `spawn 1 lab --name files --no-net --extra-disk 1`.
+
+```text
+booting files
+```
+
 ## Browser storage
 
 Reopen the lab in the same browser profile to recover its disks, network, and
@@ -81,7 +89,7 @@ disks. Reloading ends running programs and shell sessions. If you mounted a disk
 by hand, mount it again to use its files. A machine that was off stays off.
 
 A checkpoint uses the same browser storage as the lab. Clearing the site's data
-deletes both. [Removing a machine](machines.md#rm-remove-machines) also deletes
+deletes both. [Removing a machine](machines.md#machine-removal) also deletes
 every checkpoint of that machine.
 
 ## Checkpoints
@@ -132,9 +140,10 @@ was off. You can restore the same checkpoint again.
 
 MCP tool: `checkpoint_restore`
 
-> [!WARNING] Restoring stops the machine and discards everything written to its
-> disks since the checkpoint. Save another checkpoint first if you need those
-> files.
+> [!WARNING]
+>
+> Restoring stops the machine and discards everything written to its disks since
+> the checkpoint. Save another checkpoint first if you need those files.
 
 If `node2` has a checkpoint named `before`, enter `restore node2 before` in the
 command bar and confirm the restore.
@@ -158,8 +167,9 @@ its other checkpoints.
 
 MCP tool: `checkpoint_remove`
 
-> [!WARNING] After you delete a checkpoint, you cannot restore the machine to
-> that copy.
+> [!WARNING]
+>
+> After you delete a checkpoint, you cannot restore the machine to that copy.
 
 If `node2` has a checkpoint named `before` that you no longer need, enter
 `forget node2 before` in the command bar and confirm the deletion.

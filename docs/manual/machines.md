@@ -2,8 +2,8 @@
 
 Choose what each machine runs and how much memory, disk space, and network
 equipment it needs. You can change its power state later and keep its files for
-the next boot. Enter the commands in the command bar at the top of the desktop
-or at the CLI prompt on [your computer](connecting-from-your-computer.md).
+the next boot. Open **Rack manager** from the lab menu to add a machine or
+select one you already have.
 
 ## Images and names
 
@@ -25,10 +25,20 @@ such as `all` and `localhost`.
 
 ## Machine creation
 
-Use **Add machines…** from **Rack manager** or the lab menu to choose the image,
-compute resources, disks, and network interfaces before booting. **Review**
-shows the choices for the batch. For a custom hostname, set **Machines** to one.
-A larger batch gets one automatic name per machine.
+Use the machine wizard to choose what each machine has at its first boot.
+
+1. In **Rack manager**, select **Add**, then **Add machines…**. Under
+   **Identity**, choose the image and number of machines. With **Machines** set
+   to one, you can enter a **Hostname**. A batch gets automatic names.
+2. Select **Compute** to set **Virtual CPUs** and **Memory (MiB)** per machine.
+   **Storage** shows the [disks](storage-and-checkpoints.md#disk-sizes), and
+   **Network** shows the
+   [interfaces and their switches](networks.md#interfaces-and-addressing).
+3. Select **Review** to see the settings together. Use **Edit** beside a setting
+   to change it. Expand **Boot command** to see how to create the same machines
+   from the command bar.
+4. Select the boot button for your chosen count. The new machines appear in
+   **Rack manager**. Select a name to follow its boot in **Configuration**.
 
 ### `spawn`: Create machines
 
@@ -105,10 +115,20 @@ machines count toward that memory total.
 ## Power states
 
 A ready machine accepts shell commands. A machine that is off keeps its disks
-and cables. In the command bar, a power command reports when the change starts.
-Enter [`ls`](#ls-list-machines) to see when a machine reaches `ready` or `off`,
-or why it `failed`. Through MCP, power commands wait and report the resulting
-state, including the reason for a failure or forced shutdown.
+and cables.
+
+1. Select the machine in **Rack manager**. Its **Configuration** window shows
+   its current state beside its name.
+2. Open **More actions**. For a ready machine, choose **Reboot** to restart it
+   or **Power off** to shut it down. For an off or failed machine, choose
+   **Boot**.
+3. Watch the state beside the name. A successful boot ends at `ready`, a
+   shutdown at `off`. If the machine shows `failed`, the reason appears below.
+
+In the command bar, a power command reports when the change starts. Enter
+[`ls`](#ls-list-machines) to see when a machine reaches `ready` or `off`, or why
+it `failed`. Through MCP, power commands wait and report the resulting state,
+including the reason for a failure or forced shutdown.
 
 ### `boot`: Start machines
 
@@ -117,8 +137,10 @@ boot <machines>
 ```
 
 Start machines that are off or failed using their existing disks. An off machine
-keeps its ports. A failed machine releases its ports. To boot it again, you need
-a free port for each interface that was plugged in when you created it.
+keeps its ports. A failed machine releases its ports. When you boot it again,
+each interface assigned to a switch needs a free port on that switch. If you
+moved the cable before the failure, the machine uses the new switch. An
+interface you unplugged stays unplugged.
 
 MCP tool: `machines_boot`
 
@@ -175,7 +197,18 @@ fails, open the machine's configuration to read the reason.
 ## Machine removal
 
 Remove a machine when you have finished with its files. To keep them for later,
-[power it off](#poweroff-shut-down-machines).
+[power it off](#power-states).
+
+> [!WARNING]
+>
+> Removing a machine permanently deletes all of its disks and
+> [checkpoints](storage-and-checkpoints.md#checkpoints).
+
+1. Select the machine in **Rack manager** to open its **Configuration** window.
+2. Open **More actions** and choose **Delete VM…**. The command bar shows the
+   machine name and disks to be removed.
+3. Review the name and disks, then confirm. The machine disappears from **Rack
+   manager**.
 
 ### `rm`: Remove machines
 
@@ -187,11 +220,9 @@ Remove the named machines from the lab and free their switch ports.
 
 MCP tool: `machines_remove`
 
-> [!WARNING] Removing a machine permanently deletes all of its disks and
-> [checkpoints](storage-and-checkpoints.md#checkpoints).
-
 If you have finished with `node2`, enter `rm node2`. Review the machine name and
-disks in the confirmation, then confirm the removal.
+disks in the confirmation. Confirming permanently deletes its disks and
+checkpoints.
 
 ```text
 removed node2

@@ -4,13 +4,10 @@ Can node1 still reach node2 if you move node2 to a different switch? Start at
 the end of [Follow your first ping](../../README.md#follow-your-first-ping),
 with both Alpine machines connected to `switch0` and the ping working.
 
-1. **Move node2 to its own switch.** In the lab command bar at the top of the
-   desktop, run each line separately. Press Enter after each command.
-
-   ```text
-   mkswitch lan
-   plug node2 lan:1
-   ```
+1. **Move node2 to its own switch.** In **Rack manager**, open **Add** and
+   choose **Add switch…**. Enter `lan` in **Switch name** and select **Add
+   switch**. Select `node2` in the rack. Under **Network**, select **Patch**
+   beside `eth0`. Choose `lan:1` in **Destination** and select **Connect**.
 
    In **Topology**, node1 connects to **switch0** and node2 connects to **lan**.
    Both machines still have their original IP addresses.
@@ -25,7 +22,9 @@ with both Alpine machines connected to `switch0` and the ping working.
    Expect `100% packet loss`. Each machine has a cable to its switch, but there
    is no cable between the switches.
 
-3. **Join the switches.** In the lab command bar, connect port 8 on each switch.
+3. **Join the switches.** Open the command bar at the top of the desktop. Enter
+   the [cable command](../manual/networks.md#cable-join-switch-ports) to connect
+   port 8 on each switch.
 
    ```text
    cable switch0:8 lan:8
@@ -34,12 +33,8 @@ with both Alpine machines connected to `switch0` and the ping working.
    **Topology** now shows a cable between the switches. Run the same ping in
    node1's terminal. Expect `0% packet loss`.
 
-4. **Follow the ping across the new cable.** Enter this filter in the command
-   bar.
-
-   ```text
-   capture lan:8 icmp
-   ```
+4. **Follow the ping across the new cable.** From the lab menu, choose **Packet
+   capture**, then **Packet inspector**. Type `lan:8 icmp` in the filter field.
 
    In **Packet inspector**, find `lan 8 → 1` on the echo request. It entered on
    port 8 from switch0 and left on port 1 toward node2. The echo reply shows the
@@ -47,13 +42,9 @@ with both Alpine machines connected to `switch0` and the ping working.
 
 ## Put the lab back
 
-In the command bar, move node2 back to its original port before removing the
-switch you added. Run each line separately.
+In the rack, select `node2`. Use **Patch** beside `eth0` to move it back to
+`switch0:2`. Both machines now connect to `switch0` in **Topology**.
 
-```text
-plug node2 switch0:2
-rmswitch lan
-```
-
-Select **Remove lan** to confirm. This also removes the cable between switches.
-In **Topology**, both machines connect to **switch0** again.
+Select `lan` in the rack, open **More actions**, and choose **Delete switch…**.
+Select **Remove lan** to confirm. The switch and its cable disappear from
+**Topology**.

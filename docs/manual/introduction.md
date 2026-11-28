@@ -5,6 +5,11 @@ network with virtual switches and cables.
 
 ## The lab
 
+Open **Rack manager** to [create machines](machines.md#machine-creation),
+[change their power state](machines.md#power-states), and
+[plug them into switches](networks.md#patching-a-machine-interface). Open
+**Topology** from the lab menu to see which machines share a switch.
+
 You can run Alpine or Debian on a machine. Open its terminal to work on files or
 install software. With a [package gateway](networks.md#package-gateway), a
 machine can download packages from its configured repositories through the
@@ -38,14 +43,16 @@ machine to a second switch and watch which ports carry the ping and its reply.
 
 ## Conventions
 
+Bold text shows the words you see on screen. Select the logo at the top left of
+the desktop to open the lab menu.
+
 Enter commands in the
 [command bar](commands-and-the-command-bar.md#command-bar-keys) at the top of
 the desktop or at the CLI prompt. Enter shell commands in the machine's
 terminal.
 
-Bold text shows the words you see on screen. The Manual uses monospace for what
-you type, command output, and names such as `switch0`. Key names such as Enter
-appear in ordinary text.
+The Manual uses monospace for what you type, command output, and names such as
+`switch0`. Key names such as Enter appear in ordinary text.
 
 Each command entry starts with a synopsis showing which arguments you can use.
 

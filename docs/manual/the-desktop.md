@@ -1,19 +1,24 @@
 # The desktop
 
-Use the desktop to see what is in the lab, open a terminal, or follow the cables
-between machines. Select the logo at the top left to open the lab menu. From
-there you can reopen **Rack manager** or **Topology**.
+Use **Rack manager** to add machines, change their power state, and plug their
+interfaces into switches. Open **Topology** to follow the cables. Select the
+logo at the top left to reopen either window from the lab menu.
 
 ## Rack manager and configuration
 
-**Rack manager** lists machines and switches. Select a machine name to open its
-**Configuration** window, or select the terminal icon beside the name to type on
-the machine. The configuration shows the machine's power state, any boot
-failure, the image, CPUs, memory, disks, and network interfaces. See
-[Machines](machines.md) for the settings you choose at creation.
+**Rack manager** lists machines and switches. Its **Add** menu lets you
+[create machines](machines.md#machine-creation),
+[add a switch](networks.md#switches-and-cables), or
+[move a cable](networks.md#patching-a-machine-interface).
+
+Select a machine name to open its **Configuration** window. **More actions**
+contains its [power controls](machines.md#power-states). Under **Network**, each
+interface has a **Patch** button beside its current connection. To type on the
+machine, select the terminal icon beside its name.
 
 Select a switch in the rack to open **Switch details**. Its port rows show where
-each cable goes. See [Networks](networks.md) for port settings and traffic
+each cable goes. Use the button in a port row to cut or reconnect its cable. See
+[Networks](networks.md#topology-and-counters) for port settings and traffic
 counters.
 
 ## Topology
@@ -30,11 +35,12 @@ the console, where Linux prints its boot messages and starts a shell. An
 additional shell lets you keep a program running in one terminal and type in
 another. Right-click a ready machine in the rack and select **New terminal**.
 
-Each shell has a session name. For a machine named `node2`, the console is
-`node2:console` and the first additional shell is `node2:sh1`. To return to that
-shell, enter [`focus node2:sh1`](#focus-select-a-terminal) in the command bar.
-The inventory from [`ls`](machines.md#ls-list-machines) lists the sessions on
-each machine.
+Select an open terminal to type in it. If you minimized it, select its button in
+the dock. Each shell has a session name. For a machine named `node2`, the
+console is `node2:console` and the first additional shell is `node2:sh1`. To
+return to that shell by name, enter
+[`focus node2:sh1`](#focus-select-a-terminal) in the command bar. The inventory
+from [`ls`](machines.md#ls-list-machines) lists the sessions on each machine.
 
 Closing a terminal window leaves its shell running. Exiting an additional shell
 ends that session. Rebooting a machine ends its running shells. When you reload
@@ -47,8 +53,8 @@ you left open or minimized.
 sh <machine>
 ```
 
-Open an additional shell on a ready machine and move the keyboard to it. Use
-this command in the browser's command bar.
+Open an additional shell on a ready machine and move the keyboard to it. Use the
+command bar or the CLI prompt. The terminal opens in the browser.
 
 With `node2` ready and no additional shell opened on it yet, enter `sh node2`.
 
@@ -66,8 +72,8 @@ focus <machine or session> [--main | --max]
 ```
 
 Bring the terminal you last used on a machine to the front, or select a session
-by name. Enter the command in the browser's command bar. If the machine is
-ready, you can type in the terminal immediately.
+by name. Enter the command in the command bar or at the CLI prompt. If the
+machine is ready, you can type in the terminal immediately.
 
 | Option   | Meaning                                                                                                                                                          |
 | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |

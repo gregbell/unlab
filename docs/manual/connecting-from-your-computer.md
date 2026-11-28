@@ -20,7 +20,9 @@ You can keep the CLI connected while someone uses Tailcat.
 Run the CLI on Linux or macOS with Node.js 22.12 or later, OpenSSH, and Chrome
 or Chromium 150 or later.
 
-1. In a terminal on your computer, start the CLI.
+1. In the lab menu, open **SSH access**. Under **On your computer**, you see the
+   command for this lab. Run it in a terminal on your computer. For
+   <https://unlab.run>, enter:
 
    ```sh
    npx unlab.run
@@ -36,9 +38,8 @@ or Chromium 150 or later.
    If a CLI is already running, the new prompt shares its connection.
 
 2. If the browser asks whether the lab can reach apps on this device, allow it.
-   On the lab desktop, open the menu behind the logo and select **SSH access**.
-   It shows **cli: linked** when the connection is ready. Your terminal lists
-   the machines above the prompt, for example:
+   **SSH access** shows **cli: linked** when the connection is ready. Your
+   terminal lists the machines above the prompt, for example:
 
    ```text
    Linked to the lab: node1 (alpine), node2 (alpine)
@@ -132,12 +133,12 @@ terminal on the same computer. Keep the CLI running. In that terminal, run
 Include /home/alex/.config/unlab/ssh_config
 ```
 
-The directory depends on your account and
-[CLI configuration](appendices.md#cli-files). Add the printed line to the top of
-`~/.ssh/config`. OpenSSH can then use `<machine>.unlab` as a destination. For
-example, enter `ssh node1.unlab hostname` for a ready machine named `node1`. To
-use the configuration for a single invocation, give its file name to OpenSSH
-with `-F`. With the default CLI directory, the same command is:
+This line is for a Linux account named `alex`. The directory depends on your
+account and [CLI configuration](appendices.md#cli-files). Add the printed line
+to the top of `~/.ssh/config`. OpenSSH can then use `<machine>.unlab` as a
+destination. For example, enter `ssh node1.unlab hostname` for a ready machine
+named `node1`. To use the configuration for a single invocation, give its file
+name to OpenSSH with `-F`. With the default CLI directory, the same command is:
 
 ```sh
 ssh -F ~/.config/unlab/ssh_config node1.unlab hostname
@@ -199,9 +200,10 @@ localhost:8080 is not forwarded any more.
 ## SSH through Tailcat
 
 Tailcat carries an SSH connection from another computer to a machine in your
-browser. Ask the other person to install Tailcat and send you their SSH public
-key, for example the contents of `~/.ssh/id_ed25519.pub`. Whoever holds the
-matching private key can administer this machine and its disks. See the
+browser. Start the machine and wait for `ready`. Ask the other person to install
+Tailcat and send you one OpenSSH public key (Ed25519, RSA, or ECDSA), for
+example the contents of `~/.ssh/id_ed25519.pub`. Whoever holds the matching
+private key can administer this machine and its disks. See the
 [Tailcat installation instructions](https://github.com/tailscale/tailcat/blob/main/INSTALL.md).
 
 1. Open the machine's **Configuration** window. Select **Share via SSH**. The

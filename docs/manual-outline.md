@@ -16,55 +16,23 @@ The chapters to write, in reading order. How to write them is in the
 ## Getting started
 
 1. **Start Linux machines in your browser.** Open <https://unlab.run>, choose
-   **Boot 2 machines** in the Welcome window, open a machine's terminal, and run
-   `hostname`.
-2. **Keep a file across a reload.** Answer **What happens when I close the
-   tab?** here. Write the machine's name to a file with
+   **Boot 2 machines** in the Welcome window and check the two cables in the
+   rack.
+2. **Ping the other machine.** Select **Ping node2** in the first machine's
+   Configuration window and read the replies in its terminal.
+3. **Cut and reconnect a cable.** Open the switch, cut the cable to the second
+   machine, and test the connection. Reconnect the cable and check for a reply.
+4. **Keep a file across a reload.** Answer **What happens when I close the
+   tab?** here. Check the name with `hostname`. Write it to a file with
    `hostname > ~/my-machine`, refresh, and read it back with `cat ~/my-machine`.
    Reopening the lab in the same browser profile restores the desktop layout and
    each machine's disks. Machines that were running boot again with fresh shell
    sessions. Machines that were off stay off.
-3. **Install software on Alpine or Debian.** Show how to install `curl` with
+5. **Install software on Alpine or Debian.** Show how to install `curl` with
    `apk` or `apt` in the guest and check it with `curl --version`. Through the
    package gateway, the guest can fetch packages from the configured
    repositories without the CLI connected. Ordinary public websites are still
    out of reach from the guest.
-4. **Ping the other machine.** Find its address in its Configuration window or
-   with `ip addr`, and send a ping from the first machine. Show the expected
-   reply. Point to Machines for adding more, to Networks, including its Packet
-   capture section, for further reference, and to the Exercises for
-   investigations.
-
-Getting started is complete in the browser. Continue directly to
-[Connecting from your computer](#connecting-from-your-computer) for internet
-access, SSH, and file transfer—the recommended next step.
-
-## Connecting from your computer
-
-### Two ways to connect
-
-- What the CLI and Tailcat each give you, and why you would choose one or both
-
-### Through the CLI
-
-- Requirements, browser permission, connecting, connection status, and
-  disconnecting
-- CLI invocation, prompt controls, how long the connection lasts, and version
-  information
-- CLI options: browser opening, lab origin, listener port, wait, and logging
-- What the connection carries: package repositories, the internet and what it
-  does not carry, and local network access
-- SSH from the CLI prompt or your own OpenSSH client
-- SSH configuration, credentials, the guest's in-memory SSH server, and
-  independence from the virtual network
-- File transfer with `scp` and `rsync`
-- Port forwarding
-
-### Through Tailcat
-
-- Connecting via SSH without the CLI: **Share via SSH** in a machine's
-  Configuration window, your public key, and the `tailcat ssh` command
-- How long it lasts: until you stop it, reboot the guest, or reload the tab
 
 ## The desktop
 
@@ -73,22 +41,6 @@ access, SSH, and file transfer—the recommended next step.
 - Console focus, the main pane, and maximization
 - Window arrangement, minimization, and reopening
 - Notes
-
-## Commands and the command bar
-
-- Lab Commands and shell commands
-- Command syntax, arguments, options, escaping, and `--` passthrough
-- Host-shell quoting when invoking the CLI
-- Machine names, lists, patterns, state-dependent eligibility, and skipped
-  targets
-- Machine, shell-session, interface, switch, and port names
-- The command bar: keyboard interaction, recent commands, completion,
-  corrections, and previews
-- Help by command or MCP tool name, results, confirmations, and cancellation
-- Command availability in the command bar, CLI, and agent interfaces
-
-Individual commands are described with their subjects and listed in the index.
-This chapter defines the shared command language and command bar behavior.
 
 ## Machines
 
@@ -150,6 +102,49 @@ This chapter defines the shared command language and command bar behavior.
 - Frame details, ports, VLAN tags, events, and drops
 - Decoded frame reads through the agent interface
 - `.pcap` export scope, output destination, and interface differences
+
+## Commands and the command bar
+
+- Lab Commands and shell commands
+- Command syntax, arguments, options, escaping, and `--` passthrough
+- Host-shell quoting when invoking the CLI
+- Machine names, lists, patterns, state-dependent eligibility, and skipped
+  targets
+- Machine, shell-session, interface, switch, and port names
+- The command bar: keyboard interaction, recent commands, completion,
+  corrections, and previews
+- Help by command or MCP tool name, results, confirmations, and cancellation
+- Command availability in the command bar, CLI, and agent interfaces
+
+Individual commands are described with their subjects and listed in the index.
+This chapter defines the shared command language and command bar behavior.
+
+## Connecting from your computer
+
+### Two ways to connect
+
+- What the CLI and Tailcat each give you, and why you would choose one or both
+
+### Through the CLI
+
+- Requirements, browser permission, connecting, connection status, and
+  disconnecting
+- CLI invocation, prompt controls, how long the connection lasts, and version
+  information
+- CLI options: browser opening, lab origin, listener port, wait, and logging
+- What the connection carries: package repositories, the internet and what it
+  does not carry, and local network access
+- SSH from the CLI prompt or your own OpenSSH client
+- SSH configuration, credentials, the guest's in-memory SSH server, and
+  independence from the virtual network
+- File transfer with `scp` and `rsync`
+- Port forwarding
+
+### Through Tailcat
+
+- Connecting via SSH without the CLI: **Share via SSH** in a machine's
+  Configuration window, your public key, and the `tailcat ssh` command
+- How long it lasts: until you stop it, reboot the guest, or reload the tab
 
 ## Automation and agents
 

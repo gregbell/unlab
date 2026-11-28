@@ -5,6 +5,23 @@ Linux a shell command. The
 [CLI prompt](connecting-from-your-computer.md#the-cli-connection) also accepts
 commands for the lab.
 
+## Command bar keys
+
+Click **Command palette** at the top of the desktop, or press Command+K on macOS
+or Ctrl+/ elsewhere. The empty bar shows commands and up to three recent lines,
+newest first. As you type, the bar suggests values for the word at the cursor.
+The preview shows what the completed line would do in the current lab, including
+defaults.
+
+| Key                         | Effect                                                                                                                                                                          |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Tab                         | Insert the selected suggestion. After an error, insert the suggested correction so you can edit it.                                                                             |
+| Up, Down                    | Move between suggestions. From an empty line, Up recalls lines that you ran from the bar. Down moves forward through that history.                                              |
+| Enter                       | Accept a suggestion or run the current line. The hint beside the input shows which. On an error with a suggested correction, take the correction and submit the corrected line. |
+| Ctrl+Enter or Command+Enter | Submit the line and keep the bar open after a change you can see on the desktop.                                                                                                |
+| 1 through 8                 | From an empty bar, focus the machine in that position in the [rack's list of machines](the-desktop.md#rack-manager-and-configuration), if available.                            |
+| Escape                      | At a confirmation, return to the line. Otherwise close the bar.                                                                                                                 |
+
 ## Command syntax
 
 The first word names the command. Give the arguments in the order shown in its
@@ -15,10 +32,11 @@ next word, as in `--mem 512`. Options can appear between positional arguments or
 after them. Give an option once. Where the synopsis offers alternatives in the
 same brackets, choose at most one.
 
-For `exec` and `write`, a separate `--` marks the end of the lab's arguments.
-Before it, use a backslash to put a space in a file name, as in
-`/tmp/my\ notes`. Type two backslashes for one backslash in a file name. Shell
-quotation marks do not group words here.
+For [`exec`](automation-and-agents.md#exec-run-a-shell-command) and
+[`write`](automation-and-agents.md#write-replace-a-text-file), a separate `--`
+marks the end of the lab's arguments. Before it, use a backslash to put a space
+in a file name, as in `/tmp/my\ notes`. Type two backslashes for one backslash
+in a file name. Shell quotation marks do not group words here.
 
 For [`exec`](automation-and-agents.md#exec-run-a-shell-command), enter the shell
 command after `--`. Use pipes, redirects, and quotes as you would in the
@@ -69,22 +87,6 @@ the command cannot use in their current state and reports the reason. If none
 qualify, the command stops. A name that does not exist or a pattern with no
 matches makes the whole selection invalid.
 
-## Command bar keys
-
-Click the command bar or press Command+K on macOS or Ctrl+/ elsewhere. The empty
-bar shows commands and up to three recent lines, newest first. As you type, the
-bar suggests values for the word at the cursor. The preview shows what the
-completed line would do in the current lab, including defaults.
-
-| Key                         | Effect                                                                                                                                                                          |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Tab                         | Insert the selected suggestion. After an error, insert the suggested correction so you can edit it.                                                                             |
-| Up, Down                    | Move between suggestions. From an empty line, Up recalls lines that you ran from the bar. Down moves forward through that history.                                              |
-| Enter                       | Accept a suggestion or run the current line. The hint beside the input shows which. On an error with a suggested correction, take the correction and submit the corrected line. |
-| Ctrl+Enter or Command+Enter | Submit the line and keep the bar open after a change you can see on the desktop.                                                                                                |
-| 1 through 8                 | From an empty bar, focus the machine in that position in the [rack's list of machines](the-desktop.md#rack-manager-and-configuration), if available.                            |
-| Escape                      | At a confirmation, return to the line. Otherwise close the bar.                                                                                                                 |
-
 ## Results and confirmation
 
 Commands that return a list or a report keep it in the bar. Press Up to edit the
@@ -105,7 +107,7 @@ A packet capture saved from the CLI goes to the browser's downloads. The CLI
 also has its own commands for SSH, forwarding, and connection status. See
 [Connecting from your computer](connecting-from-your-computer.md).
 
-An agent uses the Model Context Protocol (MCP) to call a tool by name. Each
+An agent uses the Model Context Protocol (MCP) to call an MCP tool by name. Each
 command entry lists its MCP tool when it has one. Commands for opening shells,
 focusing windows, and showing the packet capture have no corresponding MCP tool.
 An agent can read terminal text and captured frames directly. See

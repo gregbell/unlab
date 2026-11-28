@@ -55,6 +55,11 @@ example states its own prerequisites.
 - A chapter is organised by the jobs a reader has in mind, from the basic to the
   specialised. At each point, address the most important question the preceding
   text raises.
+- When the desktop has a control for a job, teach that route first. Name the
+  window, the control, and the visible result. Follow it with the command entry
+  or a link to it. If the desktop only shows a setting, say where to inspect it
+  and give the command that changes it. Use the machine's terminal for work
+  inside Linux.
 - Open with a paragraph saying what the chapter's subject is. Follow it with any
   rule that holds for the whole chapter, stated once (for example, how Networks
   writes interface and port names).
