@@ -2,7 +2,10 @@
 
 Find a command, MCP tool, control, or subject in the [Manual](README.md).
 
-[2](#2) · [A](#a) · [B](#b) · [C](#c) · [D](#d) · [E](#e) · [F](#f) · [G](#g) · [H](#h) · [I](#i) · [J](#j) · [K](#k) · [L](#l) · [M](#m) · [N](#n) · [O](#o) · [P](#p) · [Q](#q) · [R](#r) · [S](#s) · [T](#t) · [U](#u) · [V](#v) · [W](#w) · [X](#x) · [Y](#y)
+[2](#2) · [A](#a) · [B](#b) · [C](#c) · [D](#d) · [E](#e) · [F](#f) · [G](#g) ·
+[H](#h) · [I](#i) · [J](#j) · [K](#k) · [L](#l) · [M](#m) · [N](#n) · [O](#o) ·
+[P](#p) · [Q](#q) · [R](#r) · [S](#s) · [T](#t) · [U](#u) · [V](#v) · [W](#w) ·
+[X](#x) · [Y](#y)
 
 ## 2
 
@@ -63,13 +66,17 @@ Find a command, MCP tool, control, or subject in the [Manual](README.md).
 - [`capture`](networks.md#capture-show-matching-frames)
 - [capture buffer](networks.md#packet-capture)
 - [Capture filters](networks.md#capture-filters)
-- [`capture_read`](automation-and-agents.md#terminal-and-capture-reads) (MCP tool)
+- [`capture_read`](automation-and-agents.md#terminal-and-capture-reads) (MCP
+  tool)
 - [`capture_save`](networks.md#pcap-save-captured-frames) (MCP tool)
 - [capture, packets](networks.md#packet-capture)
 - [`checkpoint`](storage-and-checkpoints.md#checkpoint-save-disks)
-- [`checkpoint_remove`](storage-and-checkpoints.md#forget-delete-a-checkpoint) (MCP tool)
-- [`checkpoint_restore`](storage-and-checkpoints.md#restore-restore-disks-and-boot) (MCP tool)
-- [`checkpoint_save`](storage-and-checkpoints.md#checkpoint-save-disks) (MCP tool)
+- [`checkpoint_remove`](storage-and-checkpoints.md#forget-delete-a-checkpoint)
+  (MCP tool)
+- [`checkpoint_restore`](storage-and-checkpoints.md#restore-restore-disks-and-boot)
+  (MCP tool)
+- [`checkpoint_save`](storage-and-checkpoints.md#checkpoint-save-disks) (MCP
+  tool)
 - [Checkpoints](storage-and-checkpoints.md#checkpoints)
 - [CIDR prefix](networks.md#interfaces-and-addressing)
 - [`--clear`](networks.md#link-cut-reconnect-or-change-cables)
@@ -213,7 +220,8 @@ Find a command, MCP tool, control, or subject in the [Manual](README.md).
 - [lab](introduction.md#the-lab)
 - [lab image](machines.md#images-and-names)
 - [lab open in another tab](troubleshooting.md#opening-and-restoring-the-lab)
-- [`lab_help`](commands-and-the-command-bar.md#help-look-up-a-command) (MCP tool)
+- [`lab_help`](commands-and-the-command-bar.md#help-look-up-a-command) (MCP
+  tool)
 - [`--lan`](connecting-from-your-computer.md#internet-access)
 - [learned addresses](networks.md#macs-list-learned-addresses)
 - [`link`](networks.md#link-cut-reconnect-or-change-cables)
@@ -428,7 +436,8 @@ Find a command, MCP tool, control, or subject in the [Manual](README.md).
 - [`switch_priority`](networks.md#priority-choose-a-preferred-root) (MCP tool)
 - [`switch_remove`](networks.md#rmswitch-remove-a-switch) (MCP tool)
 - [`switch_stp`](networks.md#stp-enable-or-disable-spanning-tree) (MCP tool)
-- [`switch_uncable`](networks.md#uncable-remove-a-cable-between-switches) (MCP tool)
+- [`switch_uncable`](networks.md#uncable-remove-a-cable-between-switches) (MCP
+  tool)
 - [`switch0`](networks.md#switches-and-cables)
 - [Switches and cables](networks.md#switches-and-cables)
 - [Switches and packet capture](troubleshooting.md#switches-and-packet-capture)

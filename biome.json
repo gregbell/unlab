@@ -14,7 +14,7 @@
 			"!!test-results",
 			"!!playwright-report",
 			"!!.claude",
-			"!!**/SKILL.md"
+			"!!**/*.md"
 		]
 	},
 	"formatter": {

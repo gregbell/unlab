@@ -10,29 +10,29 @@ The reader can type commands into a terminal, but needs no prior experience with
 results. General Linux and networking lessons belong in the
 [Exercises](../exercises/).
 
-Coverage follows the product into the guest far enough to make a feature
-usable, and stops there. A minimal guest example is in scope when the feature
-is useless without it: an additional disk is shown through formatting and
-mounting. Purely Linux topics, and surveys of alternative Linux techniques, are
-out of scope. Running or self-hosting <https://unlab.run> stays in the README.
+Coverage follows the product into the guest far enough to make a feature usable,
+and stops there. A minimal guest example is in scope when the feature is useless
+without it: an additional disk is shown through formatting and mounting. Purely
+Linux topics, and surveys of alternative Linux techniques, are out of scope.
+Running or self-hosting <https://unlab.run> stays in the README.
 
-Getting started is the one guided sequence. Every other chapter stands alone:
-it relies on no machine, file, or other state created in another chapter, and
-each example states its own prerequisites.
+Getting started is the one guided sequence. Every other chapter stands alone: it
+relies on no machine, file, or other state created in another chapter, and each
+example states its own prerequisites.
 
 ## Words
 
 - Use the glossary's terms, and none of the words it lists under _Avoid_.
 - In reader instructions, use "command" and say where to enter it when needed:
-  in the command bar or at the CLI prompt. For a shell command, name the
-  machine whose terminal to use.
+  in the command bar or at the CLI prompt. For a shell command, name the machine
+  whose terminal to use.
 - Use the product's names for things exactly as the screen and the CLI show
   them, even where the glossary would prefer another word. When the product's
   wording conflicts with the glossary, write what the screen says and open an
   issue (see [When the product looks wrong](#when-the-product-looks-wrong)).
 - Introduce a glossary term when the reader needs it. When the reader is
-  choosing what to boot, for example, name the choices: Alpine or Debian.
-  Define each specialised term you use where it first appears in a chapter. Chapters
+  choosing what to boot, for example, name the choices: Alpine or Debian. Define
+  each specialised term you use where it first appears in a chapter. Chapters
   stand alone, so a term defined in another chapter is defined again, briefly,
   or linked.
 - Write "file name", not "pathname"; "invalid", not "illegal".
@@ -52,12 +52,12 @@ each example states its own prerequisites.
 
 ## Chapter shape
 
-- A chapter is organised by the jobs a reader has in mind, from the basic to
-  the specialised. At each point, address the most important question the
-  preceding text raises.
-- Open with a paragraph saying what the chapter's subject is. Follow it with
-  any rule that holds for the whole chapter, stated once (for example, how
-  Networks writes interface and port names).
+- A chapter is organised by the jobs a reader has in mind, from the basic to the
+  specialised. At each point, address the most important question the preceding
+  text raises.
+- Open with a paragraph saying what the chapter's subject is. Follow it with any
+  rule that holds for the whole chapter, stated once (for example, how Networks
+  writes interface and port names).
 - Each topic has one owning chapter. Other chapters link to it rather than
   repeat it. Link liberally.
 - Keep sections short. Split a section as soon as it covers two jobs.
@@ -74,9 +74,8 @@ states).
 
 ### Command entries
 
-A command entry is the one definitive description of a command. It sits in
-the chapter that owns the command's subject, and every other mention links to
-it.
+A command entry is the one definitive description of a command. It sits in the
+chapter that owns the command's subject, and every other mention links to it.
 
 ````markdown
 ### `mkswitch`: Add a switch
@@ -121,8 +120,8 @@ fails.
 
 - Follow every command example with its expected output in a block.
 - Mark elided output with `…`.
-- After the block, name the values that vary from lab to lab: addresses,
-  sizes, times, counters.
+- After the block, name the values that vary from lab to lab: addresses, sizes,
+  times, counters.
 - Output printed by the guest (`ping`, `apk`, `apt`) is illustrative: show a
   typical run and say which parts vary.
 
@@ -136,8 +135,8 @@ fails.
 | Keys                                               | Words                      | Enter, Ctrl+K              |
 | Placeholders in a synopsis                         | `<angle brackets>`         | `<machine>`                |
 
-- Use a `> [!WARNING]` callout only before an action that loses data: removing
-  a machine or its disks, restoring a checkpoint, removing a switch. Write every
+- Use a `> [!WARNING]` callout only before an action that loses data: removing a
+  machine or its disks, restoring a checkpoint, removing a switch. Write every
   other note as ordinary prose.
 - Use no screenshots. Name the UI in text.
 - Use tables for reference (options, limits, states) and for troubleshooting
@@ -161,14 +160,13 @@ fails.
   reader might look for ("cable, cutting" and "cutting a cable"), linked to its
   section. Update it whenever a section is added, renamed, or removed.
 - `e2e/manual-getting-started.spec.ts` follows Getting started step by step, as
-  a reader would. Change it in the same commit as any change to Getting
-  started.
+  a reader would. Change it in the same commit as any change to Getting started.
 
 ## When the product looks wrong
 
 The Manual describes the product as it is. When the product itself seems wrong
-(wording that breaks the glossary, a missing control, behaviour that
-contradicts its own help), write the Manual against the current product and
-open a `needs-triage` issue describing the problem, following
+(wording that breaks the glossary, a missing control, behaviour that contradicts
+its own help), write the Manual against the current product and open a
+`needs-triage` issue describing the problem, following
 [the tracker guide](../agents/issue-tracker.md). Change product code only when
 the task asks for it.
